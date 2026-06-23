@@ -1,0 +1,260 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Premium Deep Black palette */
+  --color-zinc-950: #050505;
+  --color-zinc-900: #0a0a0c;
+  --color-zinc-850: #111114;
+  --color-zinc-800: #17171c;
+  --color-zinc-750: #1e1e24;
+  --color-zinc-700: #25252e;
+  --color-zinc-650: #31313c;
+  --color-zinc-600: #424250;
+  --color-zinc-550: #555566;
+  --color-zinc-450: #9e9eb0;
+  --color-zinc-405: #c2c2d6;
+  --color-zinc-105: #f4f4f8;
+
+  /* Refined Glow Accents */
+  --color-indigo-400: #818cf8;
+  --color-indigo-500: #6366f1;
+  --color-purple-500: #a855f7;
+  --color-purple-600: #9333ea;
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+
+  /* Map custom typography hierarchy precisely as requested by user */
+  --text-xs: 0.75rem;       /* 12px */
+  --text-sm: 0.875rem;     /* 14px (Texto auxiliar: 14px, peso 400) */
+  --text-base: 1.0rem;      /* 16px (Texto normal: 16px, peso 400) */
+  --text-lg: 1.125rem;     /* 18px */
+  --text-xl: 1.25rem;      /* 20px (Título secundário: 20px, peso 600) */
+  --text-2xl: 1.5rem;      /* 24px */
+  --text-3xl: 1.75rem;     /* 28px (Título principal: 28px, peso 700) */
+  --text-4xl: 2.25rem;     /* 36px */
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  background-color: #050505;
+  color: #FAFAFA;
+  font-family: var(--font-sans);
+  font-size: 16px;          /* 16px base size (Texto normal) */
+  line-height: 1.5;         /* Comfortable breathing room */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s, color 0.2s;
+  letter-spacing: -0.011em;
+}
+
+/* Hard school metrics and logs overrides for tiny custom text classes (e.g. text-[10px]) to make them highly readable */
+.text-\[8px\] {
+  font-size: 0.8rem !important;
+  letter-spacing: 0.05em !important;
+}
+
+.text-\[9px\] {
+  font-size: 0.85rem !important;
+  letter-spacing: 0.05em !important;
+}
+
+.text-\[10px\] {
+  font-size: 0.9rem !important;
+  letter-spacing: 0.02em !important;
+}
+
+.text-\[11px\] {
+  font-size: 0.95rem !important;
+  line-height: 1.5 !important;
+}
+
+.text-\[12px\] {
+  font-size: 1.02rem !important;
+}
+
+/* Minimalist layout overrides: eliminate excessive visual noise and cluttered borders */
+.border-white\/5,
+.border-white\/10,
+.border-white\/15,
+.border-zinc-800,
+.border-zinc-900,
+.border-zinc-850 {
+  border-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Soft and elegant minimal cards */
+.bg-zinc-950,
+.bg-zinc-900,
+.bg-\[\#111111\] {
+  background-color: #0d0d10 !important;
+  border-radius: 16px !important;
+}
+
+/* Extra minimalist spacing and typography pairings */
+h1, h2, h3, h4 {
+  font-family: var(--font-display) !important;
+  letter-spacing: -0.03em !important;
+}
+
+/* Standardized Buttons for Professional Operational Workflow */
+button:not(.btn-sm):not(.h-auto):not([class*="p-1"]):not([class*="p-2"]):not([class*="w-8"]):not([class*="w-9"]):not([class*="w-10"]):not([class*="w-6"]):not([class*="rounded-full"]):not([class*="tab"]) {
+  height: 40px !important;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+  border-radius: 8px !important;
+  font-size: 14px !important; /* text-sm/auxiliar */
+  font-weight: 500 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  transition: all 0.15s ease-in-out !important;
+  cursor: pointer !important;
+}
+
+button:hover {
+  filter: brightness(1.05);
+}
+
+button:active {
+  transform: scale(0.98);
+  filter: brightness(0.95);
+}
+
+/* Soft transition effects */
+button {
+  transition: all 0.15s ease-in-out;
+}
+
+/* Light Mode Global Theme Overrides for high fidelity UI */
+body.light {
+  background-color: #F5F7FA !important;
+  color: #111827 !important;
+}
+
+body.light #nexus_container {
+  background-color: #F5F7FA !important;
+  color: #111827 !important;
+}
+
+body.light header {
+  background-color: #FFFFFF !important;
+  border-bottom: 1px solid #E5E7EB !important;
+  color: #111827 !important;
+}
+
+body.light aside {
+  background-color: #FFFFFF !important;
+  border-right: 1px solid #E5E7EB !important;
+  color: #111827 !important;
+}
+
+body.light main {
+  background-color: #F5F7FA !important;
+}
+
+body.light select,
+body.light input,
+body.light textarea {
+  background-color: #FFFFFF !important;
+  border-color: #E5E7EB !important;
+  color: #111827 !important;
+}
+
+body.light .bg-zinc-950,
+body.light .bg-zinc-900,
+body.light .bg-[#0d0d0d],
+body.light .bg-[#111111],
+body.light .bg-[#050505],
+body.light .bg-zinc-850,
+body.light .bg-zinc-800,
+body.light .bg-zinc-950\/60,
+body.light .bg-zinc-900\/65,
+body.light .bg-zinc-900\/60,
+body.light .bg-zinc-950\/40,
+body.light .bg-white\/\[0\.02\] {
+  background-color: #FFFFFF !important;
+}
+
+body.light .bg-white\/5,
+body.light .bg-zinc-105,
+body.light .bg-[#0d0d10] {
+  background-color: #F3F4F6 !important;
+}
+
+body.light .border-white\/5,
+body.light .border-white\/10,
+body.light .border-white\/15,
+body.light .border-zinc-805,
+body.light .border-zinc-800,
+body.light .border-zinc-850,
+body.light .border-zinc-900,
+body.light .border-zinc-200\/10 {
+  border-color: #E5E7EB !important;
+}
+
+body.light .text-zinc-105,
+body.light .text-zinc-200,
+body.light .text-zinc-300,
+body.light .text-zinc-100,
+body.light .text-white,
+body.light h1,
+body.light h2,
+body.light h3,
+body.light h4,
+body.light h5,
+body.light .text-zinc-900 {
+  color: #111827 !important;
+}
+
+body.light .text-zinc-405,
+body.light .text-zinc-450,
+body.light .text-zinc-400,
+body.light .text-zinc-500,
+body.light .text-zinc-550,
+body.light .text-zinc-650 {
+  color: #6B7280 !important;
+}
+
+body.light .bg-zinc-900,
+body.light .bg-[#111111],
+body.light .bg-zinc-950 {
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05) !important;
+}
+
+body.light ::-webkit-scrollbar-track {
+  background: #F3F4F6;
+}
+body.light ::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+}
+body.light ::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #050505;
+}
+::-webkit-scrollbar-thumb {
+  background: #202020;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #333333;
+}
+
+/* Custom layouts and styles corresponding to the requested Design Theme */
+.text-stroke-subtle {
+  -webkit-text-stroke: 1px rgba(255, 255, 255, 0.1);
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Nexus Edu AI",
+  "description": "Sistema Operativo Escolar Inteligente unificado para otimizar processos pedagógicos, controlo financeiro e automações complexas integradas a IA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
