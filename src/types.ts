@@ -158,6 +158,20 @@ export interface DigitalSignatureRequest {
 export type TaskPriority = 'Baixa' | 'Normal' | 'Alta' | 'Urgente' | 'Crítica';
 export type TaskState = 'Pendente' | 'Em Curso' | 'Aguardando Aprovação' | 'Concluída' | 'Cancelada' | 'Atrasada';
 
+export interface TaskHistoryEvent {
+  id: string;
+  timestamp: string;
+  action: string;
+  user: string;
+  details?: string;
+}
+
+export interface TaskAttachment {
+  name: string;
+  url: string;
+  size?: string;
+}
+
 export interface SchoolTask {
   id: string;
   title: string;
@@ -172,6 +186,15 @@ export interface SchoolTask {
   createdAutomatically?: boolean;
   referenceId?: string;
   referenceType?: 'matricula' | 'documento' | 'financeiro';
+  observations?: string;
+  history?: TaskHistoryEvent[];
+  attachments?: TaskAttachment[];
+  updatedAt?: string; // YYYY-MM-DD HH:MM
+  createdBy?: string;
+  executedBy?: string;
+  completedBy?: string;
+  completedAt?: string; // YYYY-MM-DD HH:MM
+  dependencies?: string[]; // Precedent task IDs
 }
 
 

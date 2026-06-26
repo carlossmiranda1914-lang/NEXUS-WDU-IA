@@ -56,18 +56,18 @@ export default function Gamification({
     const baseAttendXp = Math.floor(std.attendanceRate * 5);
     const totalPoints = baseGradXp + baseAttendXp + bonusXp;
     
-    // Level calculated from points: Level 1 starts at 0, level increases every 400 XP
+    // Nível calculado por pontuação de mérito
     const level = Math.floor(totalPoints / 400) + 1;
     const nextLevelXp = level * 400;
     const currentLevelBaseXp = (level - 1) * 400;
     const progressPercent = Math.min(100, Math.round(((totalPoints - currentLevelBaseXp) / (nextLevelXp - currentLevelBaseXp)) * 100));
 
-    // Badge determination
-    let badge = 'Saber Inicial';
-    if (level >= 5) badge = 'Erudito Imperial';
-    else if (level >= 4) badge = 'Doutorado Elite';
-    else if (level >= 3) badge = 'Sabedor Supremo';
-    else if (level >= 2) badge = 'Cientista Júnior';
+    // Determinação de Categoria Académica
+    let badge = 'Desempenho Base';
+    if (level >= 5) badge = 'Alto Desempenho Institucional';
+    else if (level >= 4) badge = 'Excelência Académica';
+    else if (level >= 3) badge = 'Mérito Distinto';
+    else if (level >= 2) badge = 'Inovador Pedagógico';
 
     return {
       ...std,
@@ -91,10 +91,10 @@ export default function Gamification({
     const currentLevelBaseXp = (level - 1) * 300;
     const progressPercent = Math.min(100, Math.round(((totalPoints - currentLevelBaseXp) / (nextLevelXp - currentLevelBaseXp)) * 100));
 
-    let badge = 'Professor Apoiador';
-    if (level >= 5) badge = 'Grão-Mestre Mentor';
-    else if (level >= 4) badge = 'Catedrático de Honra';
-    else if (level >= 3) badge = 'Inovador Digital';
+    let badge = 'Docente Colaborador';
+    if (level >= 5) badge = 'Líder em Excelência Pedagógica';
+    else if (level >= 4) badge = 'Catedrático de Mérito';
+    else if (level >= 3) badge = 'Líder Tecnológico';
     else if (level >= 2) badge = 'Educador Avançado';
 
     return {
@@ -109,16 +109,16 @@ export default function Gamification({
 
   // Challenges list
   const initialStudentChallenges = [
-    { id: 'sc_1', title: 'Calculadora Cósmica', desc: 'Obter média de Matemática ou Álgebra superior a 9.0/10.', points: 150, progress: 85, category: 'Notas', complete: false },
-    { id: 'sc_2', title: 'Frequência de Platina', desc: 'Manter a taxa de assiduidade escolar acima de 95% no trimestre.', points: 200, progress: 100, category: 'Assiduidade', complete: true },
-    { id: 'sc_3', title: 'Líder de Equipa', desc: 'Participar ativamente em 3 ou mais dinâmicas escolares extracurriculares.', points: 100, progress: 66, category: 'Participação', complete: false },
-    { id: 'sc_4', title: 'Comportamento Perfeito', desc: 'Registrar grau de comportamento "Excelente" sem qualquer advertência.', points: 250, progress: 100, category: 'Conduta', complete: true }
+    { id: 'sc_1', title: 'Metas Matemáticas', desc: 'Obter média de Matemática ou Álgebra superior a 9.0/10.', points: 150, progress: 85, category: 'Notas', complete: false },
+    { id: 'sc_2', title: 'Frequência de Excelência', desc: 'Manter a taxa de assiduidade escolar acima de 95% no trimestre.', points: 200, progress: 100, category: 'Assiduidade', complete: true },
+    { id: 'sc_3', title: 'Liderança e Participação', desc: 'Participar ativamente em 3 ou mais dinâmicas escolares extracurriculares.', points: 100, progress: 66, category: 'Participação', complete: false },
+    { id: 'sc_4', title: 'Conduta Exemplar', desc: 'Registrar grau de comportamento "Excelente" sem qualquer advertência.', points: 250, progress: 100, category: 'Conduta', complete: true }
   ];
 
   const initialTeacherChallenges = [
-    { id: 'tc_1', title: 'Mestre da Automação', desc: 'Disparar ou criar pelo menos 3 fluxos automáticos de comunicação no painel.', points: 300, progress: 100, category: 'Digital', complete: true },
-    { id: 'tc_2', title: 'Inovador de Conteúdo AI', desc: 'Gerar 5 ou mais resumos/quizzes utilizando o novo módulo de IA Pedagógica.', points: 250, progress: 40, category: 'Pedagógico', complete: false },
-    { id: 'tc_3', title: 'Produtividade Estelar', desc: 'Manter o Score Geral de Produtividade do corpo letivo acima de 90%.', points: 400, progress: 92, category: 'Performance', complete: false }
+    { id: 'tc_1', title: 'Eficiência Operacional Digital', desc: 'Disparar ou criar pelo menos 3 fluxos automáticos de comunicação no painel.', points: 300, progress: 100, category: 'Digital', complete: true },
+    { id: 'tc_2', title: 'Desenvolvimento Pedagógico Assistido por IA', desc: 'Gerar 5 ou mais resumos/quizzes utilizando o novo módulo de IA Pedagógica.', points: 250, progress: 40, category: 'Pedagógico', complete: false },
+    { id: 'tc_3', title: 'Índice de Produtividade do Corpo Docente', desc: 'Manter o Score Geral de Produtividade do corpo letivo acima de 90%.', points: 400, progress: 92, category: 'Performance', complete: false }
   ];
 
   const [studentChallenges, setStudentChallenges] = useState(initialStudentChallenges);
@@ -140,7 +140,7 @@ export default function Gamification({
     
     onBonusPointsToStudent(selectedStudentId, numPoints);
     const studName = students.find(s => s.id === selectedStudentId)?.name || 'Aluno';
-    displayToast(`Atribuídos +${numPoints} XP para ${studName}! 🎉`);
+    displayToast(`Atribuída bonificação de +${numPoints} Pontos para ${studName}!`);
   };
 
   const handleApplyTeacherBonus = () => {
@@ -153,7 +153,7 @@ export default function Gamification({
 
     onBonusPointsToTeacher(selectedTeacherId, numPoints);
     const teachName = teachers.find(t => t.id === selectedTeacherId)?.name || 'Professor';
-    displayToast(`Atribuídos +${numPoints} XP para o Prof. ${teachName}! 🏆`);
+    displayToast(`Atribuída bonificação de +${numPoints} Pontos para o Prof. ${teachName}!`);
   };
 
   const triggerCompleteChallenge = (id: string, type: 'stud' | 'teach') => {

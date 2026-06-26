@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, Calendar, Search, Users, Sparkles, AlertCircle, Plus, GraduationCap, Clock, CheckCircle, FileText, CheckCircle2, Edit, X } from 'lucide-react';
+import { Mail, Calendar, Search, Users, Sparkles, AlertCircle, Plus, GraduationCap, Clock, CheckCircle, FileText, CheckCircle2, Edit, X, Trash2 } from 'lucide-react';
 import { Teacher, UserRole } from '../types';
 
 function fuzzyMatches(text: string, query: string): boolean {
@@ -21,11 +21,12 @@ interface TeachersListProps {
   currentUserRole?: UserRole;
   onAddTeacher: (teacher: Omit<Teacher, 'id'>) => void;
   onUpdateTeacher?: (id: string, updated: Partial<Teacher>) => void;
+  onDeleteTeacher?: (id: string) => void;
   onSelectTeacherForChat: (teacherName: string) => void;
   globalSearchTerm?: string;
 }
 
-export default function TeachersList({ teachers, currentUserRole, onAddTeacher, onUpdateTeacher, onSelectTeacherForChat, globalSearchTerm }: TeachersListProps) {
+export default function TeachersList({ teachers, currentUserRole, onAddTeacher, onUpdateTeacher, onDeleteTeacher, onSelectTeacherForChat, globalSearchTerm }: TeachersListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [cardTab, setCardTab] = useState<Record<string, 'schedule' | 'documents'>>({});
@@ -54,6 +55,37 @@ export default function TeachersList({ teachers, currentUserRole, onAddTeacher, 
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
+
+  // Resizable columns state for Teachers
+  const [teachColWidths, setTeachColWidths] = useState<Record<string, number>>({
+    teacher: 240,
+    subjects: 180,
+    classes: 180,
+    productivity: 150,
+    status: 120,
+    actions: 110
+  });
+
+  const startTeachResize = (field: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = teachColWidths[field] || 150;
+
+    const doResize = (moveEvent: MouseEvent) => {
+      const currentX = moveEvent.clientX;
+      const newWidth = Math.max(75, startWidth + (currentX - startX));
+      setTeachColWidths(prev => ({ ...prev, [field]: newWidth }));
+    };
+
+    const stopResize = () => {
+      document.removeEventListener('mousemove', doResize);
+      document.removeEventListener('mouseup', stopResize);
+    };
+
+    document.addEventListener('mousemove', doResize);
+    document.addEventListener('mouseup', stopResize);
+  };
 
   const filteredTeachers = teachers.filter(teacher => {
     const activeSearch = globalSearchTerm || searchTerm;
@@ -323,22 +355,43 @@ export default function TeachersList({ teachers, currentUserRole, onAddTeacher, 
         </div>
       </div>
 
-      {/* Grid de Professores ou Tabela de Professores */}
+      {/* Grid de Professores ou Tabela de Professores with sticky headers, horizontal scroll, and resizable columns */}
       {viewMode === 'table' ? (
-        <div className="overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-900 animate-fade-in animate-duration-150" id="teachers-table-container">
-          <table className="w-full text-left font-sans text-xs border-collapse min-w-[700px]">
+        <div className="overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-900/10 scrollbar-thin" id="teachers-table-container">
+          <table className="w-full text-left font-sans text-xs border-collapse" style={{ tableLayout: 'fixed' }}>
             <thead>
-              <tr className="border-b border-zinc-800 bg-zinc-950/40 text-zinc-400 font-mono">
-                <th className="p-4 cursor-pointer hover:text-indigo-400 select-none" onClick={() => handleSort('name')}>
-                  Professor {sortField === 'name' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                </th>
-                <th className="p-4 font-mono">Disciplinas</th>
-                <th className="p-4 font-mono">Turmas Alocadas</th>
-                <th className="p-4 cursor-pointer hover:text-indigo-400 select-none text-center" onClick={() => handleSort('productivityScore')}>
-                  Rendimento Letivo {sortField === 'productivityScore' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                </th>
-                <th className="p-4 text-center font-mono font-bold">Estado</th>
-                <th className="p-4 text-right">Ações</th>
+              <tr className="border-b border-zinc-800 bg-zinc-950/40 text-zinc-400 font-mono text-[10.5px] uppercase">
+                {[
+                  { key: 'teacher', label: 'Professor', sortable: true, field: 'name' },
+                  { key: 'subjects', label: 'Disciplinas' },
+                  { key: 'classes', label: 'Turmas Alocadas' },
+                  { key: 'productivity', label: 'Rendimento Letivo', align: 'center', sortable: true, field: 'productivityScore' },
+                  { key: 'status', label: 'Estado', align: 'center' },
+                  { key: 'actions', label: 'Ações', align: 'right' }
+                ].map(h => {
+                  const width = teachColWidths[h.key] || 150;
+                  return (
+                    <th 
+                      key={h.key}
+                      style={{ width, minWidth: width, maxWidth: width }}
+                      className={`py-3.5 px-4 relative group select-none hover:bg-zinc-800/30 transition-colors ${
+                        h.align === 'right' ? 'text-right' : h.align === 'center' ? 'text-center' : 'text-left'
+                      } ${h.sortable ? 'cursor-pointer hover:text-indigo-400' : ''}`}
+                      onClick={() => h.sortable && h.field && handleSort(h.field as any)}
+                    >
+                      <span title={h.label} className="truncate block">
+                        {h.label} {h.sortable && h.field && sortField === h.field ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                      </span>
+                      {h.key !== 'actions' && (
+                        <div 
+                          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-500 bg-zinc-800/30 z-20 transition-colors"
+                          onMouseDown={(e) => startTeachResize(h.key, e)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/40">
@@ -470,48 +523,71 @@ export default function TeachersList({ teachers, currentUserRole, onAddTeacher, 
 
                   return (
                     <tr key={teacher.id} className="hover:bg-zinc-855/35 transition-all border-b border-zinc-800/40">
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
+                      <td 
+                        style={{ width: teachColWidths['teacher'], minWidth: teachColWidths['teacher'], maxWidth: teachColWidths['teacher'] }}
+                        className="p-4 truncate"
+                        title={`${teacher.name} (${teacher.email})`}
+                      >
+                        <div className="flex items-center gap-3 truncate">
                           <div className="w-8 h-8 rounded bg-zinc-950 border border-zinc-800 flex items-center justify-center text-indigo-400 font-bold shrink-0 font-mono">
                             {teacher.name.charAt(0)}
                           </div>
-                          <div>
-                            <span className="font-semibold text-zinc-200 block text-xs">{teacher.name}</span>
-                            <span className="text-[10px] text-zinc-500 font-mono">{teacher.email}</span>
+                          <div className="truncate">
+                            <span className="font-semibold text-zinc-200 block text-xs truncate">{teacher.name}</span>
+                            <span className="text-[10px] text-zinc-500 font-mono block truncate">{teacher.email}</span>
                           </div>
                         </div>
                       </td>
-                      <td className="p-4">
-                        <div className="flex flex-wrap gap-1">
+                      <td 
+                        style={{ width: teachColWidths['subjects'], minWidth: teachColWidths['subjects'], maxWidth: teachColWidths['subjects'] }}
+                        className="p-4 truncate"
+                        title={teacher.subjects.join(', ')}
+                      >
+                        <div className="flex flex-wrap gap-1 truncate max-w-full">
                           {teacher.subjects.map(item => (
-                            <span key={item} className="text-[9px] font-mono bg-zinc-950 text-zinc-300 border border-zinc-800 px-1.5 py-0.5 rounded">
+                            <span key={item} className="text-[9px] font-mono bg-zinc-955 text-zinc-300 border border-zinc-800 px-1.5 py-0.5 rounded truncate">
                               {item}
                             </span>
                           ))}
                         </div>
                       </td>
-                      <td className="p-4">
-                        <div className="flex flex-wrap gap-1">
+                      <td 
+                        style={{ width: teachColWidths['classes'], minWidth: teachColWidths['classes'], maxWidth: teachColWidths['classes'] }}
+                        className="p-4 truncate"
+                        title={teacher.classes.join(', ')}
+                      >
+                        <div className="flex flex-wrap gap-1 truncate max-w-full">
                           {teacher.classes.map(item => (
-                            <span key={item} className="text-[9px] font-mono bg-zinc-955 text-emerald-400/80 border border-emerald-500/10 px-1.5 py-0.5 rounded">
+                            <span key={item} className="text-[9px] font-mono bg-zinc-955 text-emerald-400/80 border border-emerald-500/10 px-1.5 py-0.5 rounded truncate">
                               {item}
                             </span>
                           ))}
                         </div>
                       </td>
-                      <td className="p-4 text-center">
+                      <td 
+                        style={{ width: teachColWidths['productivity'], minWidth: teachColWidths['productivity'], maxWidth: teachColWidths['productivity'] }}
+                        className="p-4 text-center truncate"
+                        title={`${teacher.productivityScore}%`}
+                      >
                         <span className="font-semibold text-emerald-400 font-mono bg-emerald-500/5 px-2 py-0.5 border border-emerald-500/10 rounded">
                           {teacher.productivityScore}%
                         </span>
                       </td>
-                      <td className="p-4 text-center">
+                      <td 
+                        style={{ width: teachColWidths['status'], minWidth: teachColWidths['status'], maxWidth: teachColWidths['status'] }}
+                        className="p-4 text-center truncate"
+                        title={teacher.status === 'active' ? 'Ativo' : 'Inativo'}
+                      >
                         <span className={`text-[9px] uppercase font-mono font-semibold px-2 py-0.5 rounded ${
                           teacher.status === 'active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-800 text-zinc-400'
                         }`}>
                           {teacher.status === 'active' ? 'Ativo' : 'Inativo'}
                         </span>
                       </td>
-                      <td className="p-4 text-right">
+                      <td 
+                        style={{ width: teachColWidths['actions'], minWidth: teachColWidths['actions'], maxWidth: teachColWidths['actions'] }}
+                        className="p-4 text-right"
+                      >
                         <div className="flex items-center justify-end gap-2">
                           {(currentUserRole === 'admin' || currentUserRole === 'director') && (
                             <button
@@ -817,24 +893,35 @@ export default function TeachersList({ teachers, currentUserRole, onAddTeacher, 
                 <div className="flex items-center gap-2">
                   {/* Permissões do Corpo Docente */}
                   {(currentUserRole === 'admin' || currentUserRole === 'director') ? (
-                    <button
-                      onClick={() => {
-                        setEditTeacherName(teacher.name);
-                        setEditTeacherEmail(teacher.email);
-                        setEditTeacherPhone(teacher.phone || '');
-                        setEditTeacherSubjects(teacher.subjects.join(', '));
-                        setEditTeacherClasses(teacher.classes.join(', '));
-                        setEditTeacherProductivity(teacher.productivityScore);
-                        setEditTeacherStatus(teacher.status);
-                        setEditingTeacherId(teacher.id);
-                      }}
-                      className="text-xs text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-3 py-1.5 rounded transition-colors cursor-pointer flex items-center gap-1.5"
-                    >
-                      <Edit className="w-3 h-3" /> Editar
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setEditTeacherName(teacher.name);
+                          setEditTeacherEmail(teacher.email);
+                          setEditTeacherPhone(teacher.phone || '');
+                          setEditTeacherSubjects(teacher.subjects.join(', '));
+                          setEditTeacherClasses(teacher.classes.join(', '));
+                          setEditTeacherProductivity(teacher.productivityScore);
+                          setEditTeacherStatus(teacher.status);
+                          setEditingTeacherId(teacher.id);
+                        }}
+                        className="text-xs text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-3 py-1.5 rounded transition-colors cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Edit className="w-3 h-3" /> Editar
+                      </button>
+                      {onDeleteTeacher && (
+                        <button
+                          onClick={() => onDeleteTeacher(teacher.id)}
+                          className="text-xs text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 px-3 py-1.5 rounded transition-colors cursor-pointer flex items-center gap-1.5"
+                          title="Eliminar Professor"
+                        >
+                          <Trash2 className="w-3 h-3" /> Eliminar
+                        </button>
+                      )}
+                    </div>
                   ) : (
-                    <span className="text-[10px] text-zinc-550 font-mono border border-zinc-800/80 bg-zinc-950 px-2 py-1.5 rounded flex items-center gap-1" title="Apenas Órgãos Superiores (Direção/Admin) podem editar perfis.">
-                      Locked 🔒
+                    <span className="text-[10px] text-zinc-500 font-mono border border-zinc-800/80 bg-zinc-950 px-2.5 py-1.5 rounded flex items-center gap-1.5" title="Apenas Órgãos Superiores (Direção/Admin) podem editar perfis.">
+                      Restrito (Leitura)
                     </span>
                   )}
                   <button

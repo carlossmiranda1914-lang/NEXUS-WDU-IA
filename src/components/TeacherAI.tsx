@@ -112,12 +112,12 @@ export default function TeacherAI({ students, teachers }: TeacherAIProps) {
       <section className="flex flex-col md:flex-row justify-between border-b border-white/5 pb-6 gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold tracking-[0.2em] text-indigo-400 uppercase font-mono">Academic Core Integration</span>
+            <span className="text-[11px] font-bold tracking-[0.2em] text-indigo-400 uppercase font-mono">Integração Pedagógica Geral</span>
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.5)]"></span>
           </div>
           <h1 className="text-4xl font-bold font-display tracking-tight mt-1 text-white">Consola de IA Pedagógica</h1>
-          <p className="text-xs text-zinc-450 mt-1.5 font-mono">
-            Geração hiper-personalizada de recursos, questionários e planos de estudo sob os motores líderes OpenAI, Claude e Gemini.
+          <p className="text-xs text-zinc-455 mt-1.5 font-mono">
+            Geração hiper-personalizada de recursos, questionários e planos de estudo sob os sistemas líderes OpenAI, Claude e Gemini.
           </p>
         </div>
       </section>
@@ -133,7 +133,7 @@ export default function TeacherAI({ students, teachers }: TeacherAIProps) {
 
           {/* AI Engines selection with branding details */}
           <div className="space-y-2">
-            <label className="text-[10px] font-bold tracking-widest text-white/40 uppercase font-mono block">Motor Inteligente (AI Model)</label>
+            <label className="text-[10px] font-bold tracking-widest text-white/40 uppercase font-mono block">Sistema Inteligente (Modelo AI)</label>
             <div className="grid grid-cols-3 gap-2">
               {[
                 { id: 'openai', name: 'OpenAI GPT-4', color: 'text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10' },
@@ -355,7 +355,7 @@ export default function TeacherAI({ students, teachers }: TeacherAIProps) {
                   <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
                   <div className="space-y-1">
                     <p className="text-xs text-white font-semibold font-mono">A compilar métricas e inteligência didática...</p>
-                    <p className="text-[10px] text-zinc-500 font-mono">Isto pode demorar 5-15 segundos no motor {selectedEngine.toUpperCase()}</p>
+                    <p className="text-[10px] text-zinc-500 font-mono">Isto pode demorar 5-15 segundos no sistema {selectedEngine.toUpperCase()}</p>
                   </div>
                 </div>
               ) : generatedOutput ? (

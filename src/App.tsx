@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
@@ -21,7 +21,9 @@ import {
   ClipboardCheck,
   FolderOpen,
   Database,
-  PenTool
+  PenTool,
+  FileSpreadsheet,
+  ListTodo
 } from 'lucide-react';
 
 import { Student, Teacher, Invoice, Announcement, ChatMessage, AutomationFlow, UserRole, AuditLog, NotificationPreset, ApprovalRequest, ApprovalFlowType, DigitalSignatureRequest, DigitalSignatureDocType, SchoolTask } from './types';
@@ -80,6 +82,7 @@ import ParentPortal from './components/ParentPortal';
 import InstitutionalApprovals from './components/InstitutionalApprovals';
 import DigitalSignatureSystem, { defaultSignatures } from './components/DigitalSignatureSystem';
 import TasksCenter from './components/TasksCenter';
+import GoogleSheetsCenter from './components/GoogleSheetsCenter';
 
 function fuzzyMatches(text: string, query: string): boolean {
   if (!query) return true;
@@ -100,23 +103,37 @@ const TAB_NAMES: Record<string, string> = {
   students: 'Alunos & Matrículas',
   teachers: 'Corpo Docente',
   financials: 'Finanças & Contas',
-  documents: 'Dossier & Automações',
+  documents: 'Dossier & Processos Automáticos',
   communications: 'Comunicação',
   config: 'Definições do Sistema',
-  workflows: 'Central de Workflows',
+  workflows: 'Central de Processos',
   approvals: 'Aprovações Internas',
   signatures: 'Assinatura Digital',
-  tasks: 'Centro de Tarefas'
+  tasks: 'Centro de Tarefas',
+  sheets: 'Google Sheets'
 };
 
 const DEFAULT_PERMISSIONS: Record<UserRole, string[]> = {
-  admin: ['dashboard', 'students', 'teachers', 'financials', 'documents', 'communications', 'config', 'workflows', 'approvals', 'signatures', 'tasks'],
-  director: ['dashboard', 'students', 'teachers', 'financials', 'documents', 'communications', 'config', 'workflows', 'approvals', 'signatures', 'tasks'],
-  secretariat: ['dashboard', 'students', 'documents', 'communications', 'approvals', 'signatures', 'tasks'],
-  financial: ['dashboard', 'financials', 'documents', 'communications', 'approvals', 'signatures', 'tasks'],
+  admin: ['dashboard', 'students', 'teachers', 'financials', 'documents', 'communications', 'config', 'workflows', 'approvals', 'signatures', 'tasks', 'sheets'],
+  director: ['dashboard', 'students', 'teachers', 'financials', 'documents', 'communications', 'config', 'workflows', 'approvals', 'signatures', 'tasks', 'sheets'],
+  secretariat: ['dashboard', 'students', 'documents', 'communications', 'approvals', 'signatures', 'tasks', 'sheets'],
+  financial: ['dashboard', 'financials', 'documents', 'communications', 'approvals', 'signatures', 'tasks', 'sheets'],
   teacher: ['students', 'teachers', 'documents', 'communications', 'approvals', 'signatures', 'tasks'],
   parent: ['dashboard', 'signatures', 'tasks'],
   student: ['dashboard', 'students', 'documents', 'communications', 'signatures', 'tasks']
+};
+
+export const getFriendlyRoleName = (role: UserRole): string => {
+  const map: Record<UserRole, string> = {
+    admin: 'Administrador',
+    director: 'Diretor',
+    secretariat: 'Secretaria',
+    financial: 'Financeiro',
+    teacher: 'Professor',
+    parent: 'Encarregado',
+    student: 'Aluno'
+  };
+  return map[role] || 'Utilizador';
 };
 
 export const TABS_LAYOUT_CONFIG: Record<string, {
@@ -208,6 +225,11 @@ export const TABS_LAYOUT_CONFIG: Record<string, {
     type: 'Centro de Trabalho Operacional',
     containerClass: "w-full max-w-[1600px] mx-auto space-y-6",
     description: "Centro integrado de gestão de tarefas operacionais, caixa de entrada pessoal e simulações."
+  },
+  sheets: {
+    type: 'Sincronização & Integração de Dados',
+    containerClass: "w-full max-w-[1600px] mx-auto space-y-6",
+    description: "Integração oficial com Google Sheets e Google Drive para exportação e importação de alunos."
   }
 };
 
@@ -327,6 +349,7 @@ const defaultNotificationPresets: NotificationPreset[] = [
 ];
 
 export default function App() {
+  const constraintsRef = useRef<HTMLDivElement>(null);
   const [firebaseUser, setFirebaseUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [loginEmail, setLoginEmail] = useState<string>('');
@@ -351,6 +374,7 @@ export default function App() {
   const [documentsSubTab, setDocumentsSubTab] = useState<'list' | 'automations'>('list');
   const [configSubTab, setConfigSubTab] = useState<'settings' | 'migration'>('settings');
   const [isCopilotOpen, setIsCopilotOpen] = useState<boolean>(false);
+  const [showRecoveryInfo, setShowRecoveryInfo] = useState<boolean>(false);
 
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('nexus_theme') as 'light' | 'dark') || 'light';
@@ -465,20 +489,11 @@ export default function App() {
   };
 
   // Core School State Engine (React hydrated from local mock db)
-  const [students, setStudents] = useState<Student[]>(() => {
-    const saved = localStorage.getItem('nexus_students');
-    return saved ? JSON.parse(saved) : initialStudents;
-  });
+  const [students, setStudents] = useState<Student[]>([]);
 
-  const [teachers, setTeachers] = useState<Teacher[]>(() => {
-    const saved = localStorage.getItem('nexus_teachers');
-    return saved ? JSON.parse(saved) : initialTeachers;
-  });
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
 
-  const [invoices, setInvoices] = useState<Invoice[]>(() => {
-    const saved = localStorage.getItem('nexus_invoices');
-    return saved ? JSON.parse(saved) : initialInvoices;
-  });
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
 
   const visibleStudents = students.filter(student => {
     if (currentUserRole === 'student' || currentUserRole === 'parent') {
@@ -502,10 +517,7 @@ export default function App() {
     return true;
   });
 
-  const [announcements, setAnnouncements] = useState<Announcement[]>(() => {
-    const saved = localStorage.getItem('nexus_announcements');
-    return saved ? JSON.parse(saved) : initialAnnouncements;
-  });
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
 
   // Real-time dynamic states
   const [notificationPresets, setNotificationPresets] = useState<NotificationPreset[]>(() => {
@@ -521,15 +533,9 @@ export default function App() {
   const [realtimeNotifications, setRealtimeNotifications] = useState<Array<{ id: string; title: string; message: string; type: 'success' | 'info' | 'warning' | 'alert'; timestamp: string }>>([]);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
 
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem('nexus_messages');
-    return saved ? JSON.parse(saved) : initialMessages;
-  });
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
-  const [automationFlows, setAutomationFlows] = useState<AutomationFlow[]>(() => {
-    const saved = localStorage.getItem('nexus_automations');
-    return saved ? JSON.parse(saved) : initialAutomations;
-  });
+  const [automationFlows, setAutomationFlows] = useState<AutomationFlow[]>([]);
 
   const [schoolDocs, setSchoolDocs] = useState<SchoolDoc[]>(() => {
     const saved = localStorage.getItem('nexus_school_docs');
@@ -544,13 +550,10 @@ export default function App() {
 
   const [signatures, setSignatures] = useState<DigitalSignatureRequest[]>(() => {
     const saved = localStorage.getItem('nexus_signatures');
-    return saved ? JSON.parse(saved) : defaultSignatures(initialStudents, defaultSchoolDocuments, initialInvoices);
+    return saved ? JSON.parse(saved) : defaultSignatures([], defaultSchoolDocuments, []);
   });
 
-  const [tasks, setTasks] = useState<SchoolTask[]>(() => {
-    const saved = localStorage.getItem('nexus_tasks');
-    return saved ? JSON.parse(saved) : initialTasks;
-  });
+  const [tasks, setTasks] = useState<SchoolTask[]>([]);
 
   // Sync state engine to localstorage for instant persistence
   useEffect(() => {
@@ -805,13 +808,13 @@ export default function App() {
         getLiveApprovals()
       ]);
       
-      if (liveSt && liveSt.length > 0) setStudents(liveSt);
-      if (liveTc && liveTc.length > 0) setTeachers(liveTc);
-      if (liveIv && liveIv.length > 0) setInvoices(liveIv);
-      if (liveAn && liveAn.length > 0) setAnnouncements(liveAn);
-      if (liveMs && liveMs.length > 0) setMessages(liveMs);
-      if (liveAu && liveAu.length > 0) setAutomationFlows(liveAu);
-      if (liveAp && liveAp.length > 0) setApprovals(liveAp);
+      if (liveSt) setStudents(liveSt);
+      if (liveTc) setTeachers(liveTc);
+      if (liveIv) setInvoices(liveIv);
+      if (liveAn) setAnnouncements(liveAn);
+      if (liveMs) setMessages(liveMs);
+      if (liveAu) setAutomationFlows(liveAu);
+      if (liveAp) setApprovals(liveAp);
       console.log("🟢 Live PostgreSQL Data loaded successfully.");
     } catch (err) {
       console.warn("⚠️ Local storage caching fallback: ", err);
@@ -1006,53 +1009,156 @@ export default function App() {
       upsertLiveStudent(student).catch(err => console.error("Error creating student:", err));
     }
 
-    // Auto-create 3 tasks on enrollment
-    const docTask: SchoolTask = {
-      id: `TSK-${Math.floor(2000 + Math.random() * 8000)}`,
-      title: `Verificar documentos - ${student.name}`,
-      description: `Validar documentação académica e comprovativo de residência para a matrícula recém-criada (${student.id}).`,
+    const today = new Date().toISOString().split('T')[0];
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
+
+    const t1Id = `TSK-REC-${student.id}`;
+    const t2Id = `TSK-VAL-${student.id}`;
+    const t3Id = `TSK-APR-${student.id}`;
+    const t4Id = `TSK-FIN-${student.id}`;
+    const t5Id = `TSK-CRE-${student.id}`;
+
+    // 1. Receber documentos
+    const t1: SchoolTask = {
+      id: t1Id,
+      title: `Receber documentos de matrícula - ${student.name}`,
+      description: `Coletar e organizar a ficha de matrícula assinada, documento de identificação e boletim escolar de ${student.name} (${student.id}).`,
+      assignedTo: 'Secretaria Executiva',
+      department: 'Secretaria',
+      priority: 'Normal',
+      status: 'Pendente',
+      createdAt: today,
+      dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      limitDate: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0],
+      createdAutomatically: true,
+      createdBy: 'Sistema (Fluxo Matrícula)',
+      referenceId: student.id,
+      referenceType: 'matricula',
+      dependencies: [],
+      history: [
+        {
+          id: `H-1-${t1Id}`,
+          timestamp,
+          action: 'Tarefa de recepção criada automaticamente',
+          user: 'Sistema (Fluxo Matrícula)',
+          details: 'Primeira etapa operacional do fluxo de matrícula.'
+        }
+      ]
+    };
+
+    // 2. Validar documentos (Depende de T1)
+    const t2: SchoolTask = {
+      id: t2Id,
+      title: `Validar documentos académicos - ${student.name}`,
+      description: `Verificar autenticidade, histórico escolar e validade legal da documentação submetida para o aluno ${student.name} (${student.id}).`,
       assignedTo: 'Secretaria Executiva',
       department: 'Secretaria',
       priority: 'Alta',
       status: 'Pendente',
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: today,
       dueDate: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0],
       limitDate: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString().split('T')[0],
       createdAutomatically: true,
+      createdBy: 'Sistema (Fluxo Matrícula)',
       referenceId: student.id,
-      referenceType: 'matricula'
+      referenceType: 'matricula',
+      dependencies: [t1Id],
+      history: [
+        {
+          id: `H-1-${t2Id}`,
+          timestamp,
+          action: 'Tarefa de validação criada automaticamente',
+          user: 'Sistema (Fluxo Matrícula)',
+          details: `Dependente da recepção documental (${t1Id}).`
+        }
+      ]
     };
-    const finTask: SchoolTask = {
-      id: `TSK-${Math.floor(2000 + Math.random() * 8000)}`,
-      title: `Criar plano financeiro - ${student.name}`,
-      description: `Definir regime de propinas, descontos elegíveis e plano de parcelamento para o aluno (${student.id}).`,
+
+    // 3. Aprovar matrícula administrativamente (Depende de T2)
+    const t3: SchoolTask = {
+      id: t3Id,
+      title: `Aprovar matrícula administrativamente - ${student.name}`,
+      description: `Homologação formal do processo de inscrição do aluno ${student.name} (${student.id}) para atribuição de turma e dossier letivo.`,
+      assignedTo: 'Direção Executiva',
+      department: 'Direção',
+      priority: 'Alta',
+      status: 'Pendente',
+      createdAt: today,
+      dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      limitDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      createdAutomatically: true,
+      createdBy: 'Sistema (Fluxo Matrícula)',
+      referenceId: student.id,
+      referenceType: 'matricula',
+      dependencies: [t2Id],
+      history: [
+        {
+          id: `H-1-${t3Id}`,
+          timestamp,
+          action: 'Tarefa de aprovação administrativa criada',
+          user: 'Sistema (Fluxo Matrícula)',
+          details: `Aguardando a validação completa de documentos (${t2Id}).`
+        }
+      ]
+    };
+
+    // 4. Criar plano financeiro (Depende de T3)
+    const t4: SchoolTask = {
+      id: t4Id,
+      title: `Criar plano financeiro e propinas - ${student.name}`,
+      description: `Definir regime de mensalidades, descontos aplicáveis, isenções ou bolsas de estudo para o aluno ${student.name} (${student.id}).`,
       assignedTo: 'Financeiro Executivo',
       department: 'Financeiro',
       priority: 'Normal',
       status: 'Pendente',
-      createdAt: new Date().toISOString().split('T')[0],
-      dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      limitDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      createdAt: today,
+      dueDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      limitDate: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       createdAutomatically: true,
+      createdBy: 'Sistema (Fluxo Matrícula)',
       referenceId: student.id,
-      referenceType: 'matricula'
+      referenceType: 'matricula',
+      dependencies: [t3Id],
+      history: [
+        {
+          id: `H-1-${t4Id}`,
+          timestamp,
+          action: 'Tarefa de plano financeiro criada',
+          user: 'Sistema (Fluxo Matrícula)',
+          details: `Dependente da homologação formal da matrícula (${t3Id}).`
+        }
+      ]
     };
-    const contractTask: SchoolTask = {
-      id: `TSK-${Math.floor(2000 + Math.random() * 8000)}`,
-      title: `Gerar contrato de prestação de serviços - ${student.name}`,
-      description: `Emitir o contrato oficial assinado digitalmente pelo encarregado de educação e diretor escolar.`,
+
+    // 5. Emitir credenciais de acesso (Depende de T4)
+    const t5: SchoolTask = {
+      id: t5Id,
+      title: `Emitir credenciais de acesso - ${student.name}`,
+      description: `Criar conta letiva na plataforma escolar e enviar o e-mail de boas-vindas com dados de login para o aluno/encarregado de ${student.name}.`,
       assignedTo: 'Secretaria Executiva',
       department: 'Secretaria',
-      priority: 'Alta',
+      priority: 'Normal',
       status: 'Pendente',
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: today,
       dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       limitDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       createdAutomatically: true,
+      createdBy: 'Sistema (Fluxo Matrícula)',
       referenceId: student.id,
-      referenceType: 'matricula'
+      referenceType: 'matricula',
+      dependencies: [t4Id],
+      history: [
+        {
+          id: `H-1-${t5Id}`,
+          timestamp,
+          action: 'Tarefa de emissão de acessos criada',
+          user: 'Sistema (Fluxo Matrícula)',
+          details: `Ativação letiva dependente da configuração financeira do aluno (${t4Id}).`
+        }
+      ]
     };
-    setTasks(prev => [docTask, finTask, contractTask, ...prev]);
+
+    setTasks(prev => [t1, t2, t3, t4, t5, ...prev]);
   };
 
   const handleUpdateStudent = (id: string, updatedFields: Partial<Student>) => {
@@ -1062,6 +1168,40 @@ export default function App() {
       if (updatedSt && supabaseConfigured) {
         upsertLiveStudent(updatedSt).catch(err => console.error("Error updating student:", err));
       }
+
+      // Automatically trigger approval task for Directorate if grades are modified
+      if (updatedFields.grades && updatedSt) {
+        const studentName = updatedSt.name;
+        const today = new Date().toISOString().split('T')[0];
+        const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
+        const gradesTask: SchoolTask = {
+          id: `TSK-AVAL-${id}-${Math.floor(100 + Math.random() * 899)}`,
+          title: `Homologar notas oficiais - ${studentName}`,
+          description: `Revisar e homologar a pauta de avaliação de notas submetida no diário escolar para o aluno ${studentName} (${id}).`,
+          assignedTo: 'Direção Executiva',
+          department: 'Direção',
+          priority: 'Alta',
+          status: 'Aguardando Aprovação',
+          createdAt: today,
+          dueDate: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0],
+          limitDate: new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString().split('T')[0],
+          createdAutomatically: true,
+          createdBy: 'Sistema (Fluxo Avaliações)',
+          referenceId: id,
+          referenceType: 'matricula',
+          history: [
+            {
+              id: `H-1-TSK-AVAL-${id}`,
+              timestamp,
+              action: 'Pauta de notas registada',
+              user: 'Sistema (Fluxo Avaliações)',
+              details: 'Lançamento de notas de disciplinas requer homologação de pauta pela direção.'
+            }
+          ]
+        };
+        setTasks(prevTasks => [gradesTask, ...prevTasks]);
+      }
+
       return next;
     });
   };
@@ -1094,6 +1234,13 @@ export default function App() {
     });
   };
 
+  const handleDeleteTeacher = (id: string) => {
+    setTeachers(prev => prev.filter(t => t.id !== id));
+    if (supabaseConfigured) {
+      deleteLiveTeacher(id).catch(err => console.error("Error deleting teacher:", err));
+    }
+  };
+
   const handleUpdateInvoiceStatus = (id: string, status: 'paid' | 'pending' | 'overdue') => {
     setInvoices(prev => {
       const nextInvoices = prev.map(i => {
@@ -1119,20 +1266,34 @@ export default function App() {
 
           // Trigger: Pagamento em atraso -> criar tarefa automática para financeiro
           if (status === 'overdue') {
+            const taskId = `TSK-COB-${i.id}`;
+            const today = new Date().toISOString().split('T')[0];
+            const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
             const lateTask: SchoolTask = {
-              id: `TSK-${Math.floor(2000 + Math.random() * 8000)}`,
+              id: taskId,
               title: `Cobrar propinas em atraso - ${i.studentName}`,
               description: `A fatura ${i.id} de €${i.amount} está em atraso desde ${i.dueDate}. Enviar notificação e contactar o encarregado.`,
               assignedTo: 'Financeiro Executivo',
               department: 'Financeiro',
               priority: 'Crítica',
               status: 'Atrasada',
-              createdAt: new Date().toISOString().split('T')[0],
-              dueDate: new Date().toISOString().split('T')[0],
+              createdAt: today,
+              dueDate: today,
               limitDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
               createdAutomatically: true,
+              createdBy: 'Sistema (Fluxo Financeiro)',
               referenceId: i.id,
-              referenceType: 'financeiro'
+              referenceType: 'financeiro',
+              dependencies: [],
+              history: [
+                {
+                  id: `H-1-${taskId}`,
+                  timestamp,
+                  action: 'Cobrança urgente iniciada',
+                  user: 'Sistema (Fluxo Financeiro)',
+                  details: `Fatura ${i.id} de valor €${i.amount} vencida em ${i.dueDate}.`
+                }
+              ]
             };
             setTasks(prev => [lateTask, ...prev]);
           }
@@ -1177,6 +1338,37 @@ export default function App() {
     if (supabaseConfigured) {
       upsertLiveAnnouncement(announcement).catch(err => console.error("Error creating announcement:", err));
     }
+
+    // Automatically trigger task to publish across secondary communication channels
+    const taskId = `TSK-COM-${id}`;
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    const commTask: SchoolTask = {
+      id: taskId,
+      title: `Divulgar anúncio nos canais secundários - ${newAnn.title}`,
+      description: `Garantir que o comunicado "${newAnn.title}" seja divulgado nos canais auxiliares, grupos institucionais de WhatsApp e email geral.`,
+      assignedTo: 'Secretaria Executiva',
+      department: 'Secretaria',
+      priority: 'Normal',
+      status: 'Pendente',
+      createdAt: date,
+      dueDate: date,
+      limitDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      createdAutomatically: true,
+      createdBy: 'Sistema (Fluxo Comunicação)',
+      referenceId: id,
+      referenceType: 'documento',
+      dependencies: [],
+      history: [
+        {
+          id: `H-1-${taskId}`,
+          timestamp,
+          action: 'Tarefa de divulgação criada automaticamente',
+          user: 'Sistema (Fluxo Comunicação)',
+          details: `Iniciado após publicação do aviso formal ${id}.`
+        }
+      ]
+    };
+    setTasks(prev => [commTask, ...prev]);
   };
 
   const handleAddMessage = (newMsg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
@@ -1273,52 +1465,97 @@ export default function App() {
   const handleAddSchoolDocs = (doc: SchoolDoc) => {
     setSchoolDocs(prev => [doc, ...prev]);
 
-    // Trigger: Novo documento -> Criar tarefas automáticas (Validar, Classificar, Aprovar)
+    const today = new Date().toISOString().split('T')[0];
+    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
+
+    const valTaskId = `TSK-VALDOC-${doc.id}`;
+    const classTaskId = `TSK-CLASSDOC-${doc.id}`;
+    const aprTaskId = `TSK-APRDOC-${doc.id}`;
+
+    // 1. Validar documento
     const valTask: SchoolTask = {
-      id: `TSK-${Math.floor(2000 + Math.random() * 8000)}`,
-      title: `Validar documento - ${doc.name}`,
-      description: `Verificar integridade digital e autenticidade da assinatura do ficheiro carregado (${doc.id}).`,
+      id: valTaskId,
+      title: `Validar documento - ${doc.title}`,
+      description: `Verificar integridade digital, legibilidade e autenticidade do ficheiro submetido (${doc.id}).`,
       assignedTo: 'Secretaria Executiva',
       department: 'Secretaria',
       priority: 'Normal',
       status: 'Pendente',
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: today,
       dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       limitDate: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0],
       createdAutomatically: true,
+      createdBy: 'Sistema (Fluxo Documentos)',
       referenceId: doc.id,
-      referenceType: 'documento'
+      referenceType: 'documento',
+      dependencies: [],
+      history: [
+        {
+          id: `H-1-${valTaskId}`,
+          timestamp,
+          action: 'Tarefa de validação iniciada',
+          user: 'Sistema (Fluxo Documentos)',
+          details: `Iniciada automaticamente após carregamento do documento ${doc.title}.`
+        }
+      ]
     };
+
+    // 2. Classificar documento (Depende de 1)
     const classTask: SchoolTask = {
-      id: `TSK-${Math.floor(2000 + Math.random() * 8000)}`,
-      title: `Classificar documento - ${doc.name}`,
-      description: `Arquivar e indexar o documento nos dossiers adequados com as devidas tags de pesquisa escolares.`,
+      id: classTaskId,
+      title: `Classificar documento - ${doc.title}`,
+      description: `Arquivar, indexar e rotular digitalmente o documento "${doc.title}" nas pastas adequadas de arquivo geral de ${doc.id}.`,
       assignedTo: 'Secretaria Executiva',
       department: 'Secretaria',
       priority: 'Baixa',
       status: 'Pendente',
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: today,
       dueDate: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0],
       limitDate: new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString().split('T')[0],
       createdAutomatically: true,
+      createdBy: 'Sistema (Fluxo Documentos)',
       referenceId: doc.id,
-      referenceType: 'documento'
+      referenceType: 'documento',
+      dependencies: [valTaskId],
+      history: [
+        {
+          id: `H-1-${classTaskId}`,
+          timestamp,
+          action: 'Tarefa de classificação criada',
+          user: 'Sistema (Fluxo Documentos)',
+          details: `Requer a conclusão prévia da validação documental (${valTaskId}).`
+        }
+      ]
     };
+
+    // 3. Aprovar documento (Depende de 2)
     const appTask: SchoolTask = {
-      id: `TSK-${Math.floor(2000 + Math.random() * 8000)}`,
-      title: `Aprovar documento - ${doc.name}`,
-      description: `Homologação formal do documento para arquivamento definitivo na nuvem académica pela direção.`,
+      id: aprTaskId,
+      title: `Aprovar documento - ${doc.title}`,
+      description: `Homologação final e assinatura formal do diretor sobre o documento "${doc.title}" de arquivo letivo.`,
       assignedTo: 'Direção Executiva',
       department: 'Direção',
       priority: 'Normal',
       status: 'Pendente',
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: today,
       dueDate: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString().split('T')[0],
       limitDate: new Date(Date.now() + 120 * 60 * 60 * 1000).toISOString().split('T')[0],
       createdAutomatically: true,
+      createdBy: 'Sistema (Fluxo Documentos)',
       referenceId: doc.id,
-      referenceType: 'documento'
+      referenceType: 'documento',
+      dependencies: [classTaskId],
+      history: [
+        {
+          id: `H-1-${aprTaskId}`,
+          timestamp,
+          action: 'Tarefa de homologação de arquivo criada',
+          user: 'Sistema (Fluxo Documentos)',
+          details: `Dependente da classificação física e digital prévia pela secretaria (${classTaskId}).`
+        }
+      ]
     };
+
     setTasks(prev => [valTask, classTask, appTask, ...prev]);
   };
 
@@ -1363,13 +1600,15 @@ export default function App() {
   // Filter sidebar items according to executive guidelines: "Cada utilizador deve ver apenas o necessário"
   const sidebarItems = [
     { id: 'dashboard', name: 'Painel Geral', icon: LayoutDashboard },
+    { id: 'tasks', name: 'Centro de Tarefas', icon: ListTodo },
     { id: 'students', name: 'Alunos & Matrículas', icon: Users },
     { id: 'teachers', name: 'Corpo Docente', icon: GraduationCap },
     { id: 'financials', name: 'Finanças & Contas', icon: DollarSign },
-    { id: 'documents', name: 'Dossier & Automações', icon: FolderOpen },
+    { id: 'documents', name: 'Dossier & Processos Automáticos', icon: FolderOpen },
+    { id: 'sheets', name: 'Google Sheets', icon: FileSpreadsheet },
     { id: 'communications', name: 'Comunicação', icon: Megaphone },
     { id: 'config', name: 'Definições', icon: Sliders },
-    { id: 'workflows', name: 'Central de Workflows', icon: Zap },
+    { id: 'workflows', name: 'Central de Processos', icon: Zap },
     { id: 'approvals', name: 'Aprovações Internas', icon: ClipboardCheck },
     { id: 'signatures', name: 'Assinatura Digital', icon: PenTool }
   ].filter(item => {
@@ -1382,7 +1621,7 @@ export default function App() {
       title: currentUserRole === 'parent' ? "Espaço do Enc." : "Visão Geral",
       items: [
         { id: 'dashboard', name: currentUserRole === 'parent' ? 'Portal do Responsável' : 'Painel Geral', icon: LayoutDashboard },
-        { id: 'tasks', name: 'Centro de Tarefas', icon: ClipboardCheck }
+        { id: 'tasks', name: 'Centro de Tarefas', icon: ListTodo }
       ]
     },
     {
@@ -1396,14 +1635,15 @@ export default function App() {
       title: "Administrativo",
       items: [
         { id: 'financials', name: 'Finanças & Contas', icon: DollarSign },
-        { id: 'documents', name: 'Dossier & Automações', icon: FolderOpen },
+        { id: 'documents', name: 'Dossier & Processos Automáticos', icon: FolderOpen },
+        { id: 'sheets', name: 'Google Sheets', icon: FileSpreadsheet },
         { id: 'communications', name: 'Comunicação', icon: Megaphone }
       ]
     },
     {
-      title: "Processos & Automação",
+      title: "Processos & Execução",
       items: [
-        { id: 'workflows', name: 'Central de Workflows', icon: Zap },
+        { id: 'workflows', name: 'Central de Processos', icon: Zap },
         { id: 'approvals', name: 'Aprovações Internas', icon: ClipboardCheck },
         { id: 'signatures', name: 'Assinatura Digital', icon: PenTool }
       ]
@@ -1426,10 +1666,10 @@ export default function App() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center font-sans">
+      <div className={`min-h-screen ${theme === 'light' ? 'bg-[#F8FAFC]' : 'bg-zinc-950'} flex flex-col items-center justify-center font-sans`}>
         <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-sm font-semibold tracking-wide text-zinc-400 font-mono">Autenticando no Nexus Core Node...</p>
+          <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className={`text-base font-semibold tracking-wide ${theme === 'light' ? 'text-zinc-650' : 'text-zinc-400'}`}>A estabelecer ligação segura com a Plataforma...</p>
         </div>
       </div>
     );
@@ -1471,74 +1711,114 @@ export default function App() {
         </div>
 
         <div className={`w-full max-w-sm ${theme === 'light' ? 'bg-white border-zinc-200 shadow-xl text-zinc-900' : 'bg-zinc-900 border-white/5 text-zinc-100'} border rounded-3xl p-8 relative z-10 space-y-6 transition-all duration-200`}>
-          <div className="text-center space-y-2">
-            <div className={`inline-flex items-center gap-2 ${theme === 'light' ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400'} border px-3 py-1 rounded-full text-[9px] font-bold tracking-wider uppercase font-mono`}>
-              PORTAL INSTITUCIONAL
+          <div className="text-center space-y-3">
+            <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${theme === 'light' ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-500/10 text-indigo-400'}`}>
+              <GraduationCap className="w-8 h-8" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight font-display">Nexus Edu AI</h1>
-            <p className={`text-[11px] ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} max-w-xs mx-auto`}>
-              Autenticação segura para professores, diretores e famílias.
-            </p>
+            <div className="space-y-1">
+              <h1 className="text-[28px] font-bold tracking-tight font-display text-zinc-900 dark:text-zinc-100">Nexus Edu AI</h1>
+              <p className={`text-[14px] ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} max-w-xs mx-auto`}>
+                Plataforma Escolar Inteligente e Gestão Unificada
+              </p>
+            </div>
           </div>
 
           {loginError && (
-            <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-[10px] text-rose-500 font-semibold font-mono text-center leading-relaxed">
+            <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-sm text-rose-500 font-semibold text-center leading-relaxed">
               {loginError}
             </div>
           )}
 
           <form onSubmit={handleModularLogin} className="space-y-5">
-            <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold tracking-wider ${theme === 'light' ? 'text-zinc-550' : 'text-white/40'} uppercase font-mono block`}>Endereço de Email</label>
+            <div className="space-y-2">
+              <label className={`text-[14px] font-semibold tracking-wide ${theme === 'light' ? 'text-zinc-700' : 'text-zinc-300'} block`}>
+                Endereço de Email
+              </label>
               <input
                 type="email"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
                 placeholder="exemplo@nexus.edu"
-                className={`w-full ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-105 focus:border-indigo-500'} border rounded-xl px-3 py-2.5 text-xs outline-none transition-all`}
+                className={`w-full h-11 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-xl px-4 text-base outline-none transition-all`}
                 required
               />
             </div>
 
-            <div className="space-y-1.5">
-              <label className={`text-[10px] font-bold tracking-wider ${theme === 'light' ? 'text-zinc-550' : 'text-white/40'} uppercase font-mono block`}>Palavra-passe</label>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className={`text-[14px] font-semibold tracking-wide ${theme === 'light' ? 'text-zinc-700' : 'text-zinc-300'} block`}>
+                  Palavra-passe
+                </label>
+              </div>
               <input
                 type="password"
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
                 placeholder="Insira a sua senha"
-                className={`w-full ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-105 focus:border-indigo-500'} border rounded-xl px-3 py-2.5 text-xs outline-none transition-all`}
+                className={`w-full h-11 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-xl px-4 text-base outline-none transition-all`}
                 required
               />
             </div>
 
-            <div className={`p-3.5 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 shadow-inner' : 'bg-white/[0.02] border-white/5'} border rounded-2xl`}>
-              <span className={`text-[8.5px] font-bold tracking-wider ${theme === 'light' ? 'text-zinc-500' : 'text-white/30'} uppercase block font-mono`}>Contas de Demonstração (Cargos Autoderivados)</span>
-              <div className={`text-[10px] ${theme === 'light' ? 'text-zinc-650' : 'text-zinc-400'} font-mono leading-relaxed mt-1.5 space-y-1`}>
-                <div className="flex justify-between"><strong>Administrador:</strong> <span>admin@nexus.edu / admin123</span></div>
-                <div className="flex justify-between"><strong>Diretor:</strong> <span>direcao@nexus.edu / direcao123</span></div>
-                <div className="flex justify-between"><strong>Secretaria:</strong> <span>secretaria@nexus.edu / secretaria123</span></div>
-                <div className="flex justify-between"><strong>Financeiro:</strong> <span>financeiro@nexus.edu / financeiro123</span></div>
-                <div className="flex justify-between"><strong>Professor:</strong> <span>professor@nexus.edu / professor123</span></div>
-                <div className="flex justify-between"><strong>Responsável:</strong> <span>encarregado@nexus.edu / encarregado123</span></div>
-                <div className="flex justify-between"><strong>Aluno:</strong> <span>aluno@nexus.edu / aluno123</span></div>
-              </div>
-            </div>
-
             <button
               type="submit"
-              className="w-full bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white py-2.5 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer shadow-lg shadow-indigo-600/10 text-center uppercase font-mono h-10 flex items-center justify-center font-semibold"
+              className="w-full h-11 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-xl text-[16px] tracking-wide transition-all cursor-pointer shadow-lg shadow-indigo-600/10 text-center flex items-center justify-center font-semibold"
             >
-              Autenticar e Entrar
+              Entrar na Plataforma
             </button>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRecoveryInfo(true)}
+                className={`text-[14px] font-medium hover:underline cursor-pointer ${theme === 'light' ? 'text-indigo-600' : 'text-indigo-400'}`}
+              >
+                Recuperar acesso
+              </button>
+            </div>
           </form>
         </div>
+
+        {/* RECOVERY MODAL */}
+        <AnimatePresence>
+          {showRecoveryInfo && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[99999]">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className={`w-full max-w-md ${theme === 'light' ? 'bg-white text-zinc-900' : 'bg-zinc-900 text-zinc-100'} p-6 rounded-2xl border ${theme === 'light' ? 'border-zinc-200' : 'border-zinc-800'} space-y-4`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-xl ${theme === 'light' ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-500/10 text-indigo-400'}`}>
+                    <GraduationCap className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-[20px] font-bold font-display">Recuperação de Acesso</h3>
+                </div>
+                <p className="text-[14px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+                  Para recuperar ou redefinir a sua palavra-passe, por favor entre em contacto direto com a <strong>Direção Escolar</strong> ou os <strong>Serviços de Secretaria</strong> do seu agrupamento escolar.
+                </p>
+                <p className="text-[14px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+                  Por motivos de conformidade com a proteção de dados (RGPD), as alterações de credenciais devem ser validadas presencialmente ou através dos canais oficiais instituídos.
+                </p>
+                <div className="pt-2 flex justify-end">
+                  <button
+                    onClick={() => setShowRecoveryInfo(false)}
+                    className="h-10 px-6 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm cursor-pointer transition-all"
+                  >
+                    Entendido
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
 
   return (
-    <div id="nexus_container" className={`min-h-screen ${theme === 'light' ? 'bg-slate-50 text-zinc-800' : 'bg-zinc-950 text-zinc-105'} flex flex-col font-sans selection:bg-indigo-500/10 transition-colors duration-200`}>
+    <div ref={constraintsRef} id="nexus_container" className={`min-h-screen ${theme === 'light' ? 'bg-slate-50 text-zinc-800' : 'bg-zinc-950 text-zinc-105'} flex flex-col font-sans selection:bg-indigo-500/10 transition-colors duration-200`}>
       
       {/* HEADER PRINCIPAL (Sleek Minimalist Theme) */}
       <header className={`h-20 ${theme === 'light' ? 'bg-white border-b border-zinc-200 text-zinc-900' : 'bg-zinc-900 border-b border-white/5 text-white'} flex items-center justify-between px-6 md:px-10 sticky top-0 z-50 backdrop-blur-md`}>
@@ -1579,16 +1859,6 @@ export default function App() {
         {/* Minimalist Profile & Controls */}
         <div className="hidden md:flex items-center gap-4">
           <div className="flex items-center gap-3">
-            {/* Realtime Socket Status Badge */}
-            <div className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-mono tracking-tight transition-all duration-300 ${
-              isLiveConnected 
-                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
-                : 'bg-zinc-800/40 border-zinc-700/30 text-zinc-500'
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${isLiveConnected ? 'bg-emerald-400 animate-pulse' : 'bg-emerald-650'} shrink-0`} />
-              <span>{isLiveConnected ? 'HUB REALTIME' : 'CONECTANDO WS...'}</span>
-            </div>
-
             {/* Theme Toggle Button */}
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -1616,7 +1886,7 @@ export default function App() {
               </span>
               <div className={`flex items-center gap-1 text-[10px] font-sans ${theme === 'light' ? 'text-zinc-550' : 'text-white/40'} mt-0.5`}>
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                <span className={`font-bold uppercase text-[10px] ${theme === 'light' ? 'text-zinc-600' : 'text-zinc-400'}`}>{currentUserRole}</span>
+                <span className={`font-bold uppercase text-[10px] ${theme === 'light' ? 'text-zinc-600' : 'text-zinc-400'}`}>{getFriendlyRoleName(currentUserRole)}</span>
               </div>
             </div>
 
@@ -1873,18 +2143,18 @@ export default function App() {
                     <ShieldAlert className="w-8 h-8 text-red-500 animate-pulse" />
                   </div>
                   <div className="space-y-2">
-                    <h3 className="text-lg font-bold uppercase tracking-wide font-display text-red-500">Módulo de Acesso Restrito</h3>
-                    <p className={`text-xs leading-relaxed ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                      Desculpe, o perfil de utilizador <strong className="font-mono text-amber-500 uppercase">{currentUserRole}</strong> não está pré-autorizado ou teve o seu privilégio de acesso suspenso pela administração escolar.
+                    <h3 className="text-xl font-bold font-display text-red-500">Módulo de Acesso Restrito</h3>
+                    <p className={`text-[16px] leading-relaxed ${theme === 'light' ? 'text-zinc-600' : 'text-zinc-300'}`}>
+                      Desculpe, o perfil de utilizador <strong>{getFriendlyRoleName(currentUserRole)}</strong> não está autorizado para visualizar esta secção ou o seu privilégio foi suspenso pela administração escolar.
                     </p>
                   </div>
-                  <div className={`text-[10px] font-mono p-3 rounded-lg border leading-relaxed text-left space-y-1 ${
-                    theme === 'light' ? 'bg-zinc-50 border-zinc-200 text-zinc-500' : 'bg-zinc-950 border-zinc-850 text-zinc-400'
+                  <div className={`text-[14px] p-4 rounded-xl border leading-relaxed text-left space-y-2 ${
+                    theme === 'light' ? 'bg-zinc-50 border-zinc-200 text-zinc-600' : 'bg-zinc-950 border-zinc-850 text-zinc-400'
                   }`}>
-                    <p>🚨 status: <strong>ACESSO_BLOQUEADO</strong></p>
-                    <p>🧩 módulo tentado: <code>{TAB_NAMES[activeTab] || activeTab}</code></p>
-                    <p>🕒 data / hora: <span>{new Date().toLocaleTimeString('pt-PT')}</span></p>
-                    <p>💬 ação corretiva: Mude o nível de permissão no painel de <code>Configuração</code> (Administrador) para restaurar o privilégio.</p>
+                    <p><strong>Estado:</strong> Acesso Bloqueado</p>
+                    <p><strong>Secção de destino:</strong> {TAB_NAMES[activeTab] || activeTab}</p>
+                    <p><strong>Data de tentativa:</strong> {new Date().toLocaleDateString('pt-PT')} às {new Date().toLocaleTimeString('pt-PT')}</p>
+                    <p className="text-[12px] border-t pt-2 mt-2 border-zinc-200/50">Caso necessite de aceder a esta funcionalidade, por favor contacte o Administrador do agrupamento para atualizar as definições de privilégios.</p>
                   </div>
                 </div>
               ) : (
@@ -1957,6 +2227,7 @@ export default function App() {
                           currentUserRole={currentUserRole}
                           onAddTeacher={handleAddTeacher}
                           onUpdateTeacher={handleUpdateTeacher}
+                          onDeleteTeacher={handleDeleteTeacher}
                           onSelectTeacherForChat={(tchName) => {
                             setActiveTab('communications');
                           }}
@@ -2051,6 +2322,15 @@ export default function App() {
                     />
                   )}
 
+                  {activeTab === 'sheets' && (
+                    <GoogleSheetsCenter 
+                      students={students}
+                      setStudents={setStudents}
+                      invoices={invoices}
+                      theme={theme}
+                    />
+                  )}
+
                   {activeTab === 'config' && (
                     <SystemConfig 
                       currentRole={currentUserRole}
@@ -2078,15 +2358,27 @@ export default function App() {
         </main>
       </div>
 
-      {/* FLOATING COPILOT TOGGLE TRIGGER BUTTON */}
-      <button
+      {/* FLOATING DRAGGABLE COPILOT TOGGLE TRIGGER BUTTON */}
+      <motion.button
         id="copilot_floating_trigger"
+        drag
+        dragConstraints={constraintsRef}
+        dragElastic={0.15}
+        dragMomentum={false}
+        whileHover={{ scale: 1.1, rotate: 4 }}
+        whileTap={{ scale: 0.92 }}
         onClick={() => setIsCopilotOpen(true)}
-        className="fixed bottom-6 right-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 px-6 rounded-full shadow-lg hover:shadow-indigo-500/10 flex items-center gap-2.5 transition-all duration-200 z-[9999] hover:scale-105 active:scale-95 cursor-pointer border border-indigo-400/20 shadow-indigo-650/40"
+        className="fixed bottom-6 right-6 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-2xl flex items-center justify-center transition-all duration-150 z-[9999] cursor-grab active:cursor-grabbing border border-indigo-400/30 w-12 h-12 md:w-13 md:h-13 shadow-indigo-900/50"
+        title="Nexus Copilot IA (Arraste-me para qualquer lado!)"
       >
-        <Bot className="w-5 h-5" />
-        <span className="text-sm font-sans tracking-wide">Nexus Copilot AI</span>
-      </button>
+        <div className="relative flex items-center justify-center">
+          <Bot className="w-5.5 h-5.5 text-white animate-pulse" />
+          <span className="absolute -top-1.5 -right-1.5 flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+          </span>
+        </div>
+      </motion.button>
 
       {/* FLOATING COPILOT SLIDE-OUT DRAWER OVERLAY */}
       <AnimatePresence>

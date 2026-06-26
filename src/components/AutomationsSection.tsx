@@ -370,10 +370,10 @@ export default function AutomationsSection({ flows, onToggleFlow, onSimulateFlow
     const createdLog: AutomationLog = {
       id: `L-${Date.now().toString().slice(-4)}`,
       time: timeStr,
-      flowTitle: 'Workflow Customizado Criado',
+      flowTitle: 'Processo Customizado Criado',
       trigger: 'Definição de Nova Regra',
       status: 'info',
-      detail: `Criado novo automatismo de n8n: "${newFlow.title}". Trigger: [${newFlow.trigger}] -> Ação: [${newFlow.action}].`,
+      detail: `Criado novo processo automatizado: "${newFlow.title}". Trigger: [${newFlow.trigger}] -> Ação: [${newFlow.action}].`,
       elapsedMs: 45,
       timeSavedMins: 0
     };
@@ -614,7 +614,7 @@ export default function AutomationsSection({ flows, onToggleFlow, onSimulateFlow
                 <div className="space-y-4 animate-fadeIn">
                   <div className="flex items-center gap-2 border-b border-zinc-900 pb-2 mb-2 text-zinc-400">
                     <CheckCircle2 className="w-4 h-4 text-amber-500" />
-                    <span>WORKFLOW: ausência do estudante → WhatsApp de alerta ao encarregado</span>
+                    <span>PROCESSO: ausência do estudante → WhatsApp de alerta ao encarregado</span>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -666,7 +666,7 @@ export default function AutomationsSection({ flows, onToggleFlow, onSimulateFlow
                 <div className="space-y-4 animate-fadeIn">
                   <div className="flex items-center gap-2 border-b border-zinc-900 pb-2 mb-2 text-zinc-400">
                     <CheckCircle2 className="w-4 h-4 text-amber-500" />
-                    <span>WORKFLOW: pagamento em atraso/overdue → e-mail institucional de aviso</span>
+                    <span>PROCESSO: pagamento em atraso → e-mail de aviso do encarregado</span>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -721,7 +721,7 @@ export default function AutomationsSection({ flows, onToggleFlow, onSimulateFlow
                 <div className="space-y-4 animate-fadeIn">
                   <div className="flex items-center gap-2 border-b border-zinc-900 pb-2 mb-2 text-zinc-400">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    <span>WORKFLOW: nova matrícula aprovada → gerar acessos Workspace e Moodle</span>
+                    <span>PROCESSO: nova matrícula aprovada → gerar acessos ao Workspace e Moodle</span>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -785,7 +785,7 @@ export default function AutomationsSection({ flows, onToggleFlow, onSimulateFlow
                 <div className="space-y-4 animate-fadeIn">
                   <div className="flex items-center gap-2 border-b border-zinc-900 pb-2 mb-2 text-zinc-400">
                     <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    <span>WORKFLOW: ficheiro enviado → leitura por OCR e organização estruturada cloud</span>
+                    <span>PROCESSO: ficheiro enviado → leitura por OCR e organização em arquivo seguro</span>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -959,30 +959,30 @@ export default function AutomationsSection({ flows, onToggleFlow, onSimulateFlow
             ) : (
               <div className="text-center py-10 border border-dashed border-zinc-800 rounded-xl text-zinc-500 text-xs">
                 <Sliders className="w-8 h-8 mx-auto mb-2 opacity-30 text-indigo-400" />
-                <span>Nenhuma notificação instanciada. Execute um cenário de teste para gerar previsões e outputs.</span>
+                <span>Nenhuma notificação instanciada. Execute uma simulação para gerar previsões e resultados.</span>
               </div>
             )}
           </div>
 
           {/* 4. REAL-TIME EVENT CONSOLE LOGS & STREAM */}
-          <div className="bg-[#111111] border border-zinc-800 rounded-2xl p-5 space-y-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
               <h3 className="text-xs font-bold text-white uppercase font-mono tracking-wider flex items-center gap-1.5">
                 <Layers className="w-4 h-4 text-emerald-400" />
-                Histórico de Eventos n8n
+                Diário de Atividades do Sistema
               </h3>
               <button
                 onClick={() => setLogs([])}
                 className="text-[9px] font-mono text-zinc-550 hover:text-zinc-300 transition cursor-pointer"
               >
-                Limpar Loggers
+                Limpar Registos
               </button>
             </div>
 
             <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
               {logs.length === 0 ? (
                 <div className="text-center py-12 text-zinc-500 text-xs font-mono">
-                  Sem eventos registados recentemente.
+                  Sem atividades registadas recentemente.
                 </div>
               ) : (
                 logs.map(log => (

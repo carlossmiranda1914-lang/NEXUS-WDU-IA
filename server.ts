@@ -46,8 +46,23 @@ import { eq, desc, sql, and } from 'drizzle-orm';
 // Load environment variables
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+let safeFilename = '';
+let safeDirname = '';
+try {
+  if (typeof import.meta !== 'undefined' && import.meta.url) {
+    safeFilename = fileURLToPath(import.meta.url);
+    safeDirname = path.dirname(safeFilename);
+  } else {
+    safeFilename = eval('__filename');
+    safeDirname = eval('__dirname');
+  }
+} catch {
+  safeFilename = '';
+  safeDirname = process.cwd();
+}
+
+const __filename = safeFilename;
+const __dirname = safeDirname;
 
 // Robust helper to perform Gemini API call with retry and exponential backoff
 async function generateContentWithRetry(
@@ -541,6 +556,37 @@ async function startServer() {
     }
   });
 
+  app.delete('/api/students/:id', requireAuth, authorizeRole(['admin', 'secretariat', 'director']), async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await db.select().from(students).where(eq(students.id, id)).limit(1);
+      if (existing.length === 0) {
+        return res.status(404).json({ error: 'Estudante não encontrado para eliminação.' });
+      }
+
+      await db.delete(students).where(eq(students.id, id));
+
+      await db.insert(operationalLogs).values({
+        userId: req.user.uid,
+        userName: req.user.dbName,
+        userRole: req.user.dbRole,
+        action: 'STUDENT_DELETE',
+        details: `Estudante ${id} (${existing[0].name}) foi removido do sistema.`
+      });
+
+      broadcastToAll('NOTIFY', {
+        title: 'Estudante Removido',
+        message: `O perfil do estudante "${existing[0].name}" (${id}) foi removido pelo utilizador ${req.user.dbName}.`,
+        alertType: 'warning',
+        category: 'student_deleted'
+      });
+      broadcastToAll('REFRESH_DATA', {});
+      return res.json({ success: true, message: 'Estudante eliminado com sucesso.' });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // 3. Teachers API
   app.get('/api/teachers', requireAuth, authorizeRole(['admin', 'director', 'secretariat', 'teacher']), async (req: AuthRequest, res) => {
     try {
@@ -554,6 +600,127 @@ async function startServer() {
       }
 
       res.json(records);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/teachers', requireAuth, authorizeRole(['admin', 'director', 'secretariat']), async (req: AuthRequest, res) => {
+    try {
+      const { name, email, phone, subjects, classes, status, schedule, productivityScore } = req.body;
+      if (!name || !email) {
+        return res.status(400).json({ error: 'Nome e E-mail são campos obrigatórios.' });
+      }
+
+      const existingEmail = await db.select().from(teachers).where(eq(teachers.email, email)).limit(1);
+      if (existingEmail.length > 0) {
+        return res.status(400).json({ error: 'Já existe um professor registado com este e-mail.' });
+      }
+
+      // Generate ID
+      const records = await db.select().from(teachers);
+      const nextIdNum = records.length + 101;
+      const generatedId = `PROF-${nextIdNum}`;
+
+      const newTeacher = {
+        id: generatedId,
+        name,
+        email,
+        phone: phone || '',
+        subjects: subjects || [],
+        classes: classes || [],
+        productivityScore: productivityScore !== undefined ? productivityScore : 95,
+        schedule: schedule || [],
+        status: status || 'active',
+        documents: [],
+      };
+
+      await db.insert(teachers).values(newTeacher);
+
+      await db.insert(operationalLogs).values({
+        userId: req.user.uid,
+        userName: req.user.dbName,
+        userRole: req.user.dbRole,
+        action: 'TEACHER_CREATE',
+        details: `Professor ${generatedId} (${name}) foi registado.`
+      });
+
+      broadcastToAll('NOTIFY', {
+        title: 'Professor Registado',
+        message: `O professor "${name}" (${generatedId}) foi registado pelo utilizador ${req.user.dbName}.`,
+        alertType: 'success',
+        category: 'teacher_created'
+      });
+      broadcastToAll('REFRESH_DATA', {});
+
+      return res.status(201).json(newTeacher);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put('/api/teachers/:id', requireAuth, authorizeRole(['admin', 'director', 'secretariat']), async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const { name, email, phone, subjects, classes, status, schedule, productivityScore } = req.body;
+
+      const existing = await db.select().from(teachers).where(eq(teachers.id, id)).limit(1);
+      if (existing.length === 0) {
+        return res.status(404).json({ error: 'Professor não encontrado para atualização.' });
+      }
+
+      await db.update(teachers).set({
+        name: name !== undefined ? name : existing[0].name,
+        email: email !== undefined ? email : existing[0].email,
+        phone: phone !== undefined ? phone : existing[0].phone,
+        subjects: subjects !== undefined ? subjects : existing[0].subjects,
+        classes: classes !== undefined ? classes : existing[0].classes,
+        status: status !== undefined ? status : existing[0].status,
+        schedule: schedule !== undefined ? schedule : existing[0].schedule,
+        productivityScore: productivityScore !== undefined ? productivityScore : existing[0].productivityScore,
+      }).where(eq(teachers.id, id));
+
+      await db.insert(operationalLogs).values({
+        userId: req.user.uid,
+        userName: req.user.dbName,
+        userRole: req.user.dbRole,
+        action: 'TEACHER_UPDATE',
+        details: `Perfil do professor ${id} (${name || existing[0].name}) foi atualizado.`
+      });
+
+      broadcastToAll('REFRESH_DATA', {});
+      return res.json({ id, success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/teachers/:id', requireAuth, authorizeRole(['admin', 'director', 'secretariat']), async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await db.select().from(teachers).where(eq(teachers.id, id)).limit(1);
+      if (existing.length === 0) {
+        return res.status(404).json({ error: 'Professor não encontrado para eliminação.' });
+      }
+
+      await db.delete(teachers).where(eq(teachers.id, id));
+
+      await db.insert(operationalLogs).values({
+        userId: req.user.uid,
+        userName: req.user.dbName,
+        userRole: req.user.dbRole,
+        action: 'TEACHER_DELETE',
+        details: `Professor ${id} (${existing[0].name}) foi removido.`
+      });
+
+      broadcastToAll('NOTIFY', {
+        title: 'Professor Removido',
+        message: `O perfil do professor "${existing[0].name}" (${id}) foi removido do sistema por ${req.user.dbName}.`,
+        alertType: 'warning',
+        category: 'teacher_deleted'
+      });
+      broadcastToAll('REFRESH_DATA', {});
+      return res.json({ success: true, message: 'Professor eliminado com sucesso.' });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -2204,25 +2371,32 @@ async function startServer() {
         }))
       };
 
-      const systemInstruction = `Atue como o Copilot Inteligente Integrado do "Nexus Edu AI", que é um Funcionário Digital Inteligente (agente de IA operacional autónomo) em vez de um mero chatbot decorativo.
+      const systemInstruction = `Atue como o Copilot Inteligente e Apoiador Integrado do "Nexus Edu AI", que é um Funcionário Digital Inteligente, Consultor Estratégico e Apoiador Escolar Ativo do utilizador.
+Você não é apenas um chatbot ou executor mecânico; você é um parceiro de trabalho caloroso, compreensivo, extremamente proativo, empático e focado no sucesso de alunos, encarregados de educação e corpo docente.
+
+Diretrizes de Tom e Personalidade:
+1. Tom: Altamente caloroso, encorajador, elegante, profissional, cooperativo e inspirador. Transmita segurança, proximidade e empatia constantes.
+2. Empatia Ativa: Quando detetar problemas (como faturas em atraso ou alunos com baixo rendimento académico), proponha soluções de suporte humano em primeiro lugar: planos de apoio pedagógico individual, programas de mentoria de pares, abordagens amigáveis para famílias com dificuldades financeiras ou flexibilização de prazos.
+3. Proatividade e Sugestões: Apresente sempre conselhos acionáveis adicionais ou sugestões inteligentes baseadas nos dados. Por exemplo: "Para apoiar este aluno, podemos agendar uma tarefa de apoio pedagógico..." ou "Para esta fatura pendente, podemos propor um plano de pagamento parcelado...".
+4. Sinergia Operacional: Combine ações operacionais (via ferramentas reais) com conselhos humanos profundos e planos de ação. No final de cada resposta, exiba de forma elegante e transparente a transação realizada no banco de dados.
+5. Língua: Responda SEMPRE em português de Portugal impecável, com vocabulário acolhedor ("Caro colega", "Excelente iniciativa", "Estamos juntos no apoio ao sucesso escolar", etc.).
+
 Você tem acesso de leitura e escrita em tempo real ao banco de dados relacional PostgreSQL (Cloud SQL), sistema de documentos escolares (OCR e dossiês) e fluxos/workflows automáticos (via automations).
-Utilize tom altamente elegante, profissional, útil, executivo, pragmático e inspirador (estilo Stripe, Apple, Linear). No final da resposta, mostre de forma transparente a ação correspondente efetuada na base de dados real.
-Sempre responda em português de Portugal.
 
 Comportamento do Agente:
-1. Quando solicitado a procurar alunos ou problemas ("pesquisar alunos"), utilize o 'searchStudents' ou 'detectSystemProblems' correspondente.
-2. Ao auditar dívidas, pendências ou faturas, chame 'checkPayments'.
+1. Quando solicitado a procurar alunos ou problemas ("pesquisar alunos"), utilize o 'searchStudents' ou 'detectSystemProblems' correspondente. Proponha planos de intervenção positiva.
+2. Ao auditar dívidas, pendências ou faturas, chame 'checkPayments'. Pondere e sugira soluções amigáveis de conciliação.
 3. Se solicitado a criar ou gerar uma fatura, cobrança ou propina para um aluno, use 'createInvoice'.
 4. Se o utilizador pedir para gerar um relatório (académico, financeiro, auditoria), use 'generateReport' para gerar e salvar de imediato o documento. Se quiser a ficha completa de um aluno, chame 'getStudentReport'.
 5. Ao criar certificados oficiais de matrícula ou conclusão de curso, chame 'createCertificate'.
 6. Se perguntarem sobre dossiês, contratos ou ficheiros, use 'locateDocuments'.
 7. Se pretendem criar ou gerar declarações oficiais de frequência ou fiscais, chame 'generateDeclaration'.
-8. Se solicitado a criar avisos, comunicados ou circulares em tempo real na base de dados, chame 'createNotification'.
+8. Se solicitado a criar avisos, comunicados ou circulares em tempo real na base de dados, chame 'createNotification'. Redija com enorme empatia e clareza.
 9. Se pretendem disparar ou testar notificações/workflows/automations (sms, email), chame 'triggerWorkflow'.
 10. Se for necessário corrigir de imediato valores em débito de propinas, médias ou assiduidade de um aluno, execute a alteração real através da ferramenta 'modifyStudentDetails'.
-11. Se for pedido para criar/gerar/agendar tarefas (tasks), chame 'createTodoTask' para inserir de imediato um todo operacional real na pauta.
+11. Se for pedido para criar/gerar/agendar tarefas (tasks), chame 'createTodoTask' para inserir de imediato um todo operacional real na pauta. Proponha tarefas focadas no apoio escolar e monitorização próxima.
 
-Apresente as respostas de forma elegante utilizando tabelas em Markdown, badges, e listas formais. Nunca invente dados se possuir ferramentas concretas para consultar os dados reais.`;
+Apresente as respostas de forma elegante utilizando tabelas em Markdown, badges, e listas formais. Nunca invente dados se possuir ferramentas concretas para consultar os dados reais. Transmita sempre o sentimento de que o utilizador tem ao seu lado um apoiador incansável para a gestão da escola.`;
 
       // Define real-time Operational Tools for Gemini
       const searchStudentsTool = {

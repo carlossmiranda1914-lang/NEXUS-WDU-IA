@@ -40,6 +40,37 @@ export default function StudentsList({ students, currentUserRole, onAddStudent, 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
+  // Resizable columns for Students list
+  const [stdColWidths, setStdColWidths] = useState<Record<string, number>>({
+    name: 240,
+    class: 130,
+    grade: 140,
+    attendance: 140,
+    balance: 150,
+    card: 110
+  });
+
+  const startStdResize = (field: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = stdColWidths[field] || 150;
+
+    const doResize = (moveEvent: MouseEvent) => {
+      const currentX = moveEvent.clientX;
+      const newWidth = Math.max(75, startWidth + (currentX - startX));
+      setStdColWidths(prev => ({ ...prev, [field]: newWidth }));
+    };
+
+    const stopResize = () => {
+      document.removeEventListener('mousemove', doResize);
+      document.removeEventListener('mouseup', stopResize);
+    };
+
+    document.addEventListener('mousemove', doResize);
+    document.addEventListener('mouseup', stopResize);
+  };
+
   // Financial temporary hooks
   const [tempPlan, setTempPlan] = useState('Mensal');
   const [tempScholarship, setTempScholarship] = useState('Nenhuma');
@@ -360,8 +391,8 @@ export default function StudentsList({ students, currentUserRole, onAddStudent, 
                   className="flex items-center gap-1.5 text-[11px] text-zinc-500 font-mono bg-zinc-950 px-3 py-1.5 rounded border border-zinc-850"
                   title="Apenas Órgãos Superiores (Direção/Admin) têm permissão para editar perfis."
                 >
-                  <span className="w-1.5 h-1.5 bg-yellow-500/80 rounded-full animate-pulse mr-1"></span>
-                  Perfil Bloqueado 🔒
+                  <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full mr-1"></span>
+                  Perfil Protegido (Apenas Leitura)
                 </div>
               )}
 
@@ -1210,29 +1241,44 @@ export default function StudentsList({ students, currentUserRole, onAddStudent, 
 
           {/* Renderização condicional de Tabela ou Grelha de Cartões */}
           {viewMode === 'table' ? (
-            <div className="overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-900" id="student-table-container">
-              <table className="w-full text-left font-sans text-xs border-collapse min-w-[700px]">
+            <div className="overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-900/10 scrollbar-thin" id="student-table-container">
+              <table className="w-full text-left font-sans text-xs border-collapse" style={{ tableLayout: 'fixed' }}>
                 <thead>
-                  <tr className="border-b border-zinc-800 bg-zinc-950/40 text-zinc-400 font-mono">
-                    <th className="p-4 cursor-pointer hover:text-indigo-400 select-none" onClick={() => handleSort('name')}>
-                      Nome {sortField === 'name' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                    </th>
-                    <th className="p-4 cursor-pointer hover:text-indigo-400 select-none" onClick={() => handleSort('class')}>
-                      Turma {sortField === 'class' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                    </th>
-                    <th className="p-4 cursor-pointer hover:text-indigo-400 select-none text-center" onClick={() => handleSort('averageGrade')}>
-                      Média Escolar {sortField === 'averageGrade' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                    </th>
-                    <th className="p-4 cursor-pointer hover:text-indigo-400 select-none text-center" onClick={() => handleSort('attendanceRate')}>
-                      Assiduidade {sortField === 'attendanceRate' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                    </th>
-                    <th className="p-4 cursor-pointer hover:text-indigo-400 select-none text-right" onClick={() => handleSort('outstandingFees')}>
-                      Saldo Regulado {sortField === 'outstandingFees' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-                    </th>
-                    <th className="p-4 text-center">Ficha</th>
+                  <tr className="border-b border-zinc-800 bg-zinc-950/40 text-zinc-400 font-mono text-[10.5px] uppercase">
+                    {[
+                      { key: 'name', label: 'Nome', sortable: true, field: 'name' },
+                      { key: 'class', label: 'Turma', sortable: true, field: 'class' },
+                      { key: 'grade', label: 'Média Escolar', align: 'center', sortable: true, field: 'averageGrade' },
+                      { key: 'attendance', label: 'Assiduidade', align: 'center', sortable: true, field: 'attendanceRate' },
+                      { key: 'balance', label: 'Saldo Regulado', align: 'right', sortable: true, field: 'outstandingFees' },
+                      { key: 'card', label: 'Ficha', align: 'center' }
+                    ].map(h => {
+                      const width = stdColWidths[h.key] || 150;
+                      return (
+                        <th 
+                          key={h.key}
+                          style={{ width, minWidth: width, maxWidth: width }}
+                          className={`p-3.5 relative group select-none hover:bg-zinc-800/30 transition-colors ${
+                            h.align === 'right' ? 'text-right' : h.align === 'center' ? 'text-center' : 'text-left'
+                          } ${h.sortable ? 'cursor-pointer hover:text-indigo-400' : ''}`}
+                          onClick={() => h.sortable && h.field && handleSort(h.field as any)}
+                        >
+                          <span title={h.label} className="truncate block">
+                            {h.label} {h.sortable && h.field && sortField === h.field ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                          </span>
+                          {h.key !== 'card' && (
+                            <div 
+                              className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-500 bg-zinc-800/30 z-20 transition-colors"
+                              onMouseDown={(e) => startStdResize(h.key, e)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          )}
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-800/40">
+                <tbody className="divide-y divide-zinc-800/45">
                   {paginatedStudents.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="p-8 text-center text-zinc-500 italic bg-zinc-900">
@@ -1247,44 +1293,68 @@ export default function StudentsList({ students, currentUserRole, onAddStudent, 
                         <tr
                           key={student.id}
                           onClick={() => setSelectedStudent(student)}
-                          className="hover:bg-zinc-850/40 cursor-pointer transition-all border-b border-zinc-800/40"
+                          className="hover:bg-zinc-850/30 cursor-pointer transition-all border-b border-zinc-800/40"
                         >
-                          <td className="p-4">
-                            <div className="flex items-center gap-3">
+                          <td 
+                            style={{ width: stdColWidths['name'], minWidth: stdColWidths['name'], maxWidth: stdColWidths['name'] }}
+                            className="p-4 truncate"
+                            title={`${student.name} (${student.id})`}
+                          >
+                            <div className="flex items-center gap-3 truncate">
                               <div className="w-8 h-8 rounded bg-zinc-950 border border-zinc-800 flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0 font-mono">
                                 {student.name.charAt(0)}
                               </div>
-                              <div>
-                                <span className="font-semibold text-zinc-200 block text-xs">{student.name}</span>
-                                <span className="text-[9px] text-zinc-500 font-mono uppercase block">{student.id}</span>
+                              <div className="truncate">
+                                <span className="font-semibold text-zinc-200 block text-xs truncate">{student.name}</span>
+                                <span className="text-[9px] text-zinc-500 font-mono uppercase block truncate">{student.id}</span>
                               </div>
                             </div>
                           </td>
-                          <td className="p-4 text-xs text-zinc-300">
+                          <td 
+                            style={{ width: stdColWidths['class'], minWidth: stdColWidths['class'], maxWidth: stdColWidths['class'] }}
+                            className="p-4 text-xs text-zinc-300 truncate"
+                            title={student.class}
+                          >
                             {student.class}
                           </td>
-                          <td className="p-4 text-center text-xs">
+                          <td 
+                            style={{ width: stdColWidths['grade'], minWidth: stdColWidths['grade'], maxWidth: stdColWidths['grade'] }}
+                            className="p-4 text-center text-xs truncate"
+                            title={`${student.averageGrade}/10`}
+                          >
                             <span className="font-semibold text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 px-2 py-0.5 rounded font-mono">
                               {student.averageGrade}/10
                             </span>
                           </td>
-                          <td className="p-4 text-center text-xs">
+                          <td 
+                            style={{ width: stdColWidths['attendance'], minWidth: stdColWidths['attendance'], maxWidth: stdColWidths['attendance'] }}
+                            className="p-4 text-center text-xs truncate"
+                            title={`${student.attendanceRate}%`}
+                          >
                             <span className={`font-semibold font-mono ${student.attendanceRate < 85 ? 'text-rose-400' : 'text-zinc-300'}`}>
                               {student.attendanceRate}%
                             </span>
                           </td>
-                          <td className="p-4 text-right text-xs font-mono font-medium">
+                          <td 
+                            style={{ width: stdColWidths['balance'], minWidth: stdColWidths['balance'], maxWidth: stdColWidths['balance'] }}
+                            className="p-4 text-right text-xs font-mono font-medium truncate"
+                            title={student.outstandingFees > 0 ? `€${student.outstandingFees}` : 'Liquidado'}
+                          >
                             {student.outstandingFees > 0 ? (
-                              <span className="text-rose-400 bg-rose-500/5 px-2 py-1 border border-rose-500/10 rounded">
+                              <span className="text-rose-400 bg-rose-500/5 px-2 py-1 border border-rose-500/10 rounded inline-block">
                                 €{student.outstandingFees}
                               </span>
                             ) : (
-                              <span className="text-emerald-400 bg-emerald-500/5 px-2 py-1 border border-emerald-500/10 rounded">
+                              <span className="text-emerald-400 bg-emerald-500/5 px-2 py-1 border border-emerald-500/10 rounded inline-block">
                                 Liquidado
                               </span>
                             )}
                           </td>
-                          <td className="p-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <td 
+                            style={{ width: stdColWidths['card'], minWidth: stdColWidths['card'], maxWidth: stdColWidths['card'] }}
+                            className="p-4 text-center" 
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             <button
                               type="button"
                               className="bg-indigo-600/15 hover:bg-indigo-600/25 text-indigo-400 text-[10px] font-semibold px-2 py-1 rounded border border-indigo-500/25 cursor-pointer btn-sm"

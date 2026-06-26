@@ -309,7 +309,7 @@ export default function SystemConfig({
       }
     } catch (err: any) {
       setSyncStatus('failed');
-      setSyncLogs(`\n❌ ERRO CRÍTICO DE REDE: ${err.message || err}`);
+      setSyncLogs(`\n[ERRO CRÍTICO DE REDE]: ${err.message || err}`);
     }
   };
 
@@ -336,7 +336,7 @@ export default function SystemConfig({
       });
 
       setImportStatus('success');
-      setSyncLogs(`🟢 Base de Dados Escolar carregada na consola escolar!\n` +
+      setSyncLogs(`[SUCESSO] Base de Dados Escolar carregada na consola escolar!\n` +
         `- Alunos importados: ${liveSt.length}\n` +
         `- Professores importados: ${liveTc.length}\n` +
         `- Faturas e Títulos: ${liveIv.length}\n` +
@@ -346,8 +346,8 @@ export default function SystemConfig({
       );
     } catch (err: any) {
       setImportStatus('failed');
-      setSyncLogs(`❌ FALHA DE IMPORTAÇÃO: ${err.message || err}\n\n` +
-        `👉 Dica: Garanta que o Script de Banco fornecido na consola de gestão foi executado primeiro para que as relações e as tabelas estejam estruturadas no Servidor de Dados.`);
+      setSyncLogs(`[ERRO] FALHA DE IMPORTAÇÃO: ${err.message || err}\n\n` +
+        `Orientação: Garanta que o Script de Banco fornecido na consola de gestão foi executado primeiro para que as relações e as tabelas estejam estruturadas no Servidor de Dados.`);
     }
   };
 

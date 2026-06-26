@@ -123,6 +123,42 @@ export default function FinancialPanel({
   const [activePaymentInvoice, setActivePaymentInvoice] = useState<Invoice | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
+  // Column Width Resizing State for Receipts / Expenses Spreadsheet
+  const [colWidths, setColWidths] = useState<Record<string, number>>({
+    id: 110,
+    aluno: 210,
+    responsavel: 210,
+    turma: 110,
+    mensalidade: 130,
+    vencimento: 115,
+    estado: 110,
+    metodo: 130,
+    valpago: 110,
+    valpendente: 110,
+    observacoes: 240,
+  });
+
+  const startResize = (field: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = colWidths[field] || 120;
+
+    const doResize = (moveEvent: MouseEvent) => {
+      const currentX = moveEvent.clientX;
+      const newWidth = Math.max(70, startWidth + (currentX - startX));
+      setColWidths(prev => ({ ...prev, [field]: newWidth }));
+    };
+
+    const stopResize = () => {
+      document.removeEventListener('mousemove', doResize);
+      document.removeEventListener('mouseup', stopResize);
+    };
+
+    document.addEventListener('mousemove', doResize);
+    document.addEventListener('mouseup', stopResize);
+  };
+
   // Share overlay simulator
   const [shareStatus, setShareStatus] = useState<string | null>(null);
   const [shareEmailText, setShareEmailText] = useState('');
@@ -612,7 +648,7 @@ export default function FinancialPanel({
   const handleShareToCloud = (cloudProvider: string) => {
     setShareStatus(`A ligar integradores para o ${cloudProvider}...`);
     setTimeout(() => {
-      setShareStatus(`✅ Sincronização executada! Livro de ${activeSheet} carregado de forma atômica no canal seguro de auditoria do ${cloudProvider}!`);
+      setShareStatus(`Sincronização executada! Livro de ${activeSheet} carregado de forma atómica no canal seguro de auditoria do ${cloudProvider}!`);
       setTimeout(() => setShareStatus(null), 4000);
     }, 1500);
   };
@@ -945,7 +981,7 @@ export default function FinancialPanel({
               <thead>
                 <tr className="bg-zinc-900 text-zinc-400 border-b border-zinc-850 font-mono text-[10px] select-none uppercase">
                   {/* Outer column header cells */}
-                  <th className="p-2 w-10 text-center border-r border-zinc-850 select-none">
+                  <th className="p-3 w-11 text-center border-r border-zinc-850 select-none">
                     <input
                       type="checkbox"
                       checked={activeRows.length > 0 && selectedRowIds.size === activeRows.length}
@@ -953,33 +989,42 @@ export default function FinancialPanel({
                       className="cursor-pointer"
                     />
                   </th>
-                  <th className="p-2 border-r border-zinc-850 text-center font-bold text-zinc-500 w-8 select-none">#</th>
+                  <th className="p-3 border-r border-zinc-850 text-center font-bold text-zinc-500 w-10 select-none">#</th>
                   
                   {/* Excel column names keys mapped */}
                   {[
-                    { field: 'id', label: 'A • ID', w: '90px' },
-                    { field: 'aluno', label: 'B • Aluno / Beneficiário', w: '180px' },
-                    { field: 'responsavel', label: 'C • Responsável', w: '180px' },
-                    { field: 'turma', label: 'D • Turma / Cat', w: '90px' },
-                    { field: 'mensalidade', label: 'E • Mensalidade Base', w: '110px' },
-                    { field: 'vencimento', label: 'F • Vencimento', w: '100px' },
-                    { field: 'estado', label: 'G • Estado', w: '95px' },
-                    { field: 'metodo', label: 'H • Meio Liquidação', w: '110px' },
-                    { field: 'valpago', label: 'I • Valor Pago', w: '90px' },
-                    { field: 'valpendente', label: 'J • Valor Pendente', w: '90px' },
-                    { field: 'observacoes', label: 'K • Observações', w: '180px' },
-                  ].map(h => (
-                    <th 
-                      key={h.field} 
-                      style={{ minWidth: h.w }}
-                      className="p-2.5 border-r border-zinc-850 hover:bg-zinc-800 transition cursor-pointer relative"
-                      onClick={() => setSortBy({ field: h.field, direction: sortBy?.field === h.field && sortBy.direction === 'asc' ? 'desc' : 'asc' })}
-                    >
-                      <div className="flex items-center gap-1 justify-between select-none p-1">
-                        <span>{h.label}</span>
-                      </div>
-                    </th>
-                  ))}
+                    { field: 'id', label: 'A • ID' },
+                    { field: 'aluno', label: 'B • Aluno / Beneficiário' },
+                    { field: 'responsavel', label: 'C • Responsável' },
+                    { field: 'turma', label: 'D • Turma / Cat' },
+                    { field: 'mensalidade', label: 'E • Mensalidade Base' },
+                    { field: 'vencimento', label: 'F • Vencimento' },
+                    { field: 'estado', label: 'G • Estado' },
+                    { field: 'metodo', label: 'H • Meio Liquidação' },
+                    { field: 'valpago', label: 'I • Valor Pago' },
+                    { field: 'valpendente', label: 'J • Valor Pendente' },
+                    { field: 'observacoes', label: 'K • Observações' },
+                  ].map(h => {
+                    const width = colWidths[h.field] || 120;
+                    return (
+                      <th 
+                        key={h.field} 
+                        style={{ width, minWidth: width, maxWidth: width }}
+                        className="p-3 border-r border-zinc-850 hover:bg-zinc-800/80 transition cursor-pointer relative select-none group"
+                        onClick={() => setSortBy({ field: h.field, direction: sortBy?.field === h.field && sortBy.direction === 'asc' ? 'desc' : 'asc' })}
+                      >
+                        <div className="flex items-center gap-1 justify-between select-none p-0.5 truncate">
+                          <span title={h.label}>{h.label}</span>
+                        </div>
+                        {/* Interactive Drag Resize Handle */}
+                        <div 
+                          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-500 bg-zinc-800/50 z-20 transition-colors"
+                          onMouseDown={(e) => startResize(h.field, e)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
 
@@ -995,7 +1040,7 @@ export default function FinancialPanel({
                         className={`hover:bg-zinc-900/60 transition ${isRowChecked ? 'bg-indigo-500/5' : ''}`}
                       >
                         {/* Selector checkbox cell */}
-                        <td className="p-2 text-center border-r border-zinc-900 select-none">
+                        <td className="p-3 text-center border-r border-zinc-900 select-none">
                           <input
                             type="checkbox"
                             checked={isRowChecked}
@@ -1005,12 +1050,20 @@ export default function FinancialPanel({
                         </td>
                         
                         {/* Row line numbers index column */}
-                        <td className="p-2.5 border-r border-zinc-900 text-center font-mono text-[10px] text-zinc-600 bg-zinc-950/80 font-bold select-none">
+                        <td className="p-3 border-r border-zinc-900 text-center font-mono text-[10px] text-zinc-600 bg-zinc-950/80 font-bold select-none">
                           {idx + 1}
                         </td>
 
                         {/* ID (Read-only) */}
-                        <td className="p-2.5 border-r border-zinc-900 font-mono text-[10px] text-zinc-400 bg-zinc-950/40 select-text">
+                        <td 
+                          style={{ 
+                            width: colWidths['id'] || 110, 
+                            minWidth: colWidths['id'] || 110, 
+                            maxWidth: colWidths['id'] || 110 
+                          }}
+                          className="p-3 border-r border-zinc-900 font-mono text-[10px] text-zinc-400 bg-zinc-950/40 select-text truncate"
+                          title={row.id}
+                        >
                           {row.id}
                         </td>
 
@@ -1019,6 +1072,7 @@ export default function FinancialPanel({
                           const val = row[col];
                           const isSelected = selectedCell?.rowId === row.id && selectedCell?.colName === col;
                           const isEditing = editingCell?.rowId === row.id && editingCell?.colName === col;
+                          const width = colWidths[col] || 120;
 
                           return (
                             <td 
@@ -1031,9 +1085,11 @@ export default function FinancialPanel({
                                 setEditingCell({ rowId: row.id, colName: col });
                                 setTempCellText(getCellValue(row.id, col, String(val)));
                               }}
-                              className={`p-2 border-r border-zinc-900 cursor-cell font-mono text-xs overflow-hidden max-w-[170px] truncate relative transition-all duration-150 ${
+                              style={{ width, minWidth: width, maxWidth: width }}
+                              className={`p-3 border-r border-zinc-900 cursor-cell font-mono text-xs overflow-hidden truncate relative transition-all duration-150 ${
                                 isSelected ? 'ring-2 ring-indigo-500 ring-inset bg-indigo-500/5' : ''
                               }`}
+                              title={String(val || '')}
                             >
                               {isEditing ? (
                                 <input
@@ -1275,7 +1331,7 @@ export default function FinancialPanel({
 
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <span className="text-[10px] text-zinc-500 leading-normal max-w-sm">
-                  ⚠️ Certifique-se de que cada linha possui o nome do aluno e o valor pago correspondente.
+                  Nota: Certifique-se de que cada linha possui o nome do aluno e o valor pago correspondente.
                 </span>
                 <button
                   type="button"

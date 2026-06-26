@@ -31,16 +31,40 @@ pool.on('error', (err) => {
 // The raw drizzle instance
 const rawDb = drizzle(pool, { schema });
 
+// Helper to extract raw SQL string from Drizzle's query chunks or SQL objects
+function getSqlString(rawSql: any): string {
+  if (typeof rawSql === 'string') return rawSql;
+  if (!rawSql) return '';
+  if (typeof rawSql.sql === 'string') return rawSql.sql;
+  
+  if (Array.isArray(rawSql.queryChunks)) {
+    return rawSql.queryChunks
+      .map((chunk: any) => {
+        if (typeof chunk === 'string') return chunk;
+        if (chunk && chunk.value) {
+          if (Array.isArray(chunk.value)) return chunk.value.join(' ');
+          return String(chunk.value);
+        }
+        if (chunk && typeof chunk.sql === 'string') return chunk.sql;
+        return String(chunk || '');
+      })
+      .join(' ');
+  }
+  return String(rawSql || '');
+}
+
 // In-Memory fallback database synchronized with initial datasets
 export const inMemoryDb = {
   users: [] as any[],
-  students: JSON.parse(JSON.stringify(initialStudents)) as any[],
-  teachers: JSON.parse(JSON.stringify(initialTeachers)) as any[],
-  invoices: JSON.parse(JSON.stringify(initialInvoices)) as any[],
-  announcements: JSON.parse(JSON.stringify(initialAnnouncements)) as any[],
-  chat_messages: JSON.parse(JSON.stringify(initialMessages)) as any[],
-  automations: JSON.parse(JSON.stringify(initialAutomations)) as any[],
+  students: [] as any[],
+  teachers: [] as any[],
+  invoices: [] as any[],
+  announcements: [] as any[],
+  chat_messages: [] as any[],
+  automations: [] as any[],
   uploaded_documents: [] as any[],
+  approvals: [] as any[],
+  todo_tasks: [] as any[],
   operational_logs: [
     {
       id: 1,
@@ -48,7 +72,7 @@ export const inMemoryDb = {
       userName: 'Nexus Server',
       userRole: 'system',
       action: 'FALLBACK_INIT',
-      details: 'High-fidelity in-memory self-healing state initialized and synchronized.'
+      details: 'Clean, production-ready operational in-memory fallback state initialized.'
     }
   ] as any[]
 };
@@ -65,6 +89,8 @@ function getTargetTable(sql: string): string {
   if (normalized.includes('"automations"') || normalized.includes(' automations ')) return 'automations';
   if (normalized.includes('"uploaded_documents"') || normalized.includes(' uploaded_documents ')) return 'uploaded_documents';
   if (normalized.includes('"operational_logs"') || normalized.includes(' operational_logs ')) return 'operational_logs';
+  if (normalized.includes('"todo_tasks"') || normalized.includes(' todo_tasks ')) return 'todo_tasks';
+  if (normalized.includes('"approvals"') || normalized.includes(' approvals ')) return 'approvals';
   return '';
 }
 
@@ -279,7 +305,7 @@ function makeQueryProxy(obj: any): any {
       if (prop === 'execute') {
         return function (rawSql: any) {
           const p = (async () => {
-            const sqlStr = String(rawSql?.sql || rawSql || '');
+            const sqlStr = getSqlString(rawSql);
             if (!process.env.SQL_HOST) {
               return executeInMemoryEmulation(sqlStr, []);
             }

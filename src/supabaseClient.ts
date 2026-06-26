@@ -40,8 +40,12 @@ export async function upsertLiveStudent(student: Student): Promise<void> {
 }
 
 export async function deleteLiveStudent(id: string): Promise<void> {
-  // Safe simulations or archive instead of deletion
-  console.log('Solicitada exclusão de aluno:', id);
+  const headers = await getHeaders();
+  const res = await fetch(`/api/students/${id}`, {
+    method: 'DELETE',
+    headers
+  });
+  if (!res.ok) throw new Error('Falha ao excluir estudante no banco de dados.');
 }
 
 // 2. Teachers Operations
@@ -53,11 +57,36 @@ export async function getLiveTeachers(): Promise<Teacher[]> {
 }
 
 export async function upsertLiveTeacher(teacher: Teacher): Promise<void> {
-  console.log('Solicitado upsert de professor:', teacher.name);
+  const headers = await getHeaders();
+  // Try to PUT first. If it returns 404, then do POST.
+  try {
+    const putRes = await fetch(`/api/teachers/${teacher.id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(teacher)
+    });
+    if (putRes.ok) {
+      return;
+    }
+  } catch (err) {
+    console.warn('[SUPABASE] PUT failed, falling back to POST:', err);
+  }
+
+  const res = await fetch('/api/teachers', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(teacher)
+  });
+  if (!res.ok) throw new Error('Falha ao salvar professor no banco relacional.');
 }
 
 export async function deleteLiveTeacher(id: string): Promise<void> {
-  console.log('Solicitada exclusão de professor:', id);
+  const headers = await getHeaders();
+  const res = await fetch(`/api/teachers/${id}`, {
+    method: 'DELETE',
+    headers
+  });
+  if (!res.ok) throw new Error('Falha ao excluir professor no banco de dados.');
 }
 
 // 3. Invoices / Financial Operations

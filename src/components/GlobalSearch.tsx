@@ -432,7 +432,7 @@ export default function GlobalSearch({
             <Search className="w-4 h-4 text-zinc-400 group-hover:text-indigo-400 transition-colors" />
             <span className="text-xs font-medium">Buscador Institucional Global...</span>
           </div>
-          <kbd className="hidden sm:inline-flex items-center gap-0.5 px-2 py-0.5 text-[9px] font-bold font-mono text-zinc-400 bg-zinc-950 border border-zinc-850 rounded-md">
+          <kbd style={{ backgroundColor: '#ededf7' }} className="hidden sm:inline-flex items-center gap-0.5 px-2 py-0.5 text-[9px] font-bold font-mono text-zinc-400 bg-zinc-950 border border-zinc-850 rounded-md">
             ⌘K
           </kbd>
         </button>

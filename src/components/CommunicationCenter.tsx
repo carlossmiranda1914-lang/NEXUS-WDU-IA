@@ -417,9 +417,9 @@ export default function CommunicationCenter({
   };
 
   const channelLabels = {
-    'gral': '📢 canal-geral-escola',
-    'direction-teachers': '🔒 direcao-corpo-pedagogico',
-    'administration-secretariat': '🔒 secretaria-e-administracao'
+    'gral': 'canal-geral-escola',
+    'direction-teachers': 'direcao-corpo-pedagogico (restrito)',
+    'administration-secretariat': 'secretaria-e-administracao (restrito)'
   };
 
   const currentMessages = messages.filter(m => m.channel === activeChannel);
@@ -436,7 +436,7 @@ export default function CommunicationCenter({
       )}
 
       {/* JUMBOTRON HEADER CARD */}
-      <div className="p-6 bg-zinc-900 border border-zinc-850 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div style={{ backgroundColor: '#dfdff2' }} className="p-6 bg-zinc-900 border border-zinc-850 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-indigo-500/10 text-indigo-400 rounded-xl border border-indigo-500/20">
             <Layers className="w-8 h-8" />
@@ -457,7 +457,7 @@ export default function CommunicationCenter({
 
         {/* Action controls / quick view count */}
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-zinc-950 border border-zinc-850 rounded-lg text-center min-w-[70px]">
+          <div style={{ backgroundColor: '#f4f4f8' }} className="p-2 bg-zinc-950 border border-zinc-850 rounded-lg text-center min-w-[70px]">
             <span className="text-[9px] font-mono text-zinc-500 uppercase block">Enviados</span>
             <span className="text-sm font-bold text-zinc-300 font-mono">{commsHistory.length}</span>
           </div>
@@ -537,7 +537,7 @@ export default function CommunicationCenter({
 
           {/* TAB 1: NEW MESSAGE DISPATCHER WIZARD */}
           {activeTab === 'dispatcher' && (
-            <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-6 space-y-6">
+            <div style={{ backgroundColor: '#dfdfe8' }} className="bg-zinc-950 border border-zinc-850 rounded-2xl p-6 space-y-6">
               
               <div className="flex items-center justify-between border-b border-zinc-850 pb-4">
                 <div>
@@ -566,10 +566,10 @@ export default function CommunicationCenter({
                       }}
                       className="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-xl px-3 py-2 outline-none focus:border-indigo-500"
                     >
-                      <option value="comunicado">📢 Comunicado Formal (Mural de Pautas)</option>
-                      <option value="email">✉️ E-mail Institucional (Rich Styled Template)</option>
-                      <option value="notification">📱 Notificação Push (App Mobile & Tablet)</option>
-                      <option value="mensagem">💬 Mensagem de Chat Escolar Interno (Direto)</option>
+                      <option value="comunicado">Comunicado Formal (Mural de Pautas)</option>
+                      <option value="email">E-mail Institucional (Template Padronizado)</option>
+                      <option value="notification">Notificação Push (Aplicações Móveis)</option>
+                      <option value="mensagem">Mensagem de Chat Escolar Interno (Direto)</option>
                     </select>
                   </div>
 
@@ -687,14 +687,14 @@ export default function CommunicationCenter({
 
           {/* TAB 2: AUTOMATION TRIGGER SCENARIOS */}
           {activeTab === 'automations' && (
-            <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-6 space-y-6">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-6">
               
               <div className="text-left space-y-1 border-b border-zinc-850 pb-4">
                 <h2 className="text-sm font-bold text-zinc-100 flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-indigo-400" /> Regulamento de Automações Académicas
                 </h2>
                 <p className="text-xs text-zinc-400">
-                  Garantia de conformidade em 5 cenários críticos. Ligue e desligue regras ou force simulações de disparo para teste clínico da secretaria.
+                  Garantia de conformidade em 5 cenários críticos. Ative ou desative as regras de processo ou efetue simulações de envio pela secretaria escolar.
                 </p>
               </div>
 
@@ -768,7 +768,7 @@ export default function CommunicationCenter({
 
           {/* TAB 3: COMPLETE SENT HISTORY & AUDIT LOG */}
           {activeTab === 'history' && (
-            <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-6 space-y-6">
+            <div style={{ backgroundColor: '#dfdfe8' }} className="bg-zinc-950 border border-zinc-850 rounded-2xl p-6 space-y-6">
               
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-850 pb-4">
                 <div className="text-left space-y-1">
@@ -879,7 +879,7 @@ export default function CommunicationCenter({
 
           {/* TAB 4: REALTIME OPERATIONS CHAT FEED */}
           {activeTab === 'chat' && (
-            <div id="comms_chat_workspace" className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden flex flex-col h-[520px]">
+            <div id="comms_chat_workspace" style={{ backgroundColor: '#dfdfe8' }} className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden flex flex-col h-[520px]">
               
               {/* Header chat info */}
               <div className="px-6 py-4 border-b border-zinc-850 flex items-center justify-between bg-zinc-900/50 shrink-0">
@@ -967,7 +967,7 @@ export default function CommunicationCenter({
           )}
 
           {activeTab === 'notifications_config' && (
-            <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-6 space-y-6">
+            <div style={{ backgroundColor: '#dfdfe8' }} className="bg-zinc-950 border border-zinc-850 rounded-2xl p-6 space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-850 pb-4">
                 <div className="text-left space-y-1">
                   <h2 className="text-sm font-bold text-zinc-200">Personalização Integrada de Alertas Reais</h2>
@@ -1067,7 +1067,7 @@ export default function CommunicationCenter({
                         },
                         {
                           category: 'automation_invoice',
-                          name: 'Cobrança de Fatura Expirada (Workflow Auto)',
+                          name: 'Cobrança de Fatura Expirada (Processo Automático)',
                           description: 'Avisos preventivos automáticos de regularização financeira em atraso.',
                           enabled: true,
                           allowedRoles: ['admin', 'financial', 'parent'],
@@ -1075,7 +1075,7 @@ export default function CommunicationCenter({
                         },
                         {
                           category: 'automation_enrollment',
-                          name: 'Provisionamento de Contas e-Learning (Workflow Auto)',
+                          name: 'Provisionamento de Contas e-Learning (Processo Automático)',
                           description: 'Criação e ligação lógica de contas do aluno no LMS Moodle institucional.',
                           enabled: true,
                           allowedRoles: ['admin', 'secretariat'],
@@ -1083,7 +1083,7 @@ export default function CommunicationCenter({
                         },
                         {
                           category: 'automation_grade',
-                          name: 'Alerta Preventivo de Rendimento (Workflow Auto)',
+                          name: 'Alerta Preventivo de Rendimento (Processo Automático)',
                           description: 'Sinalização sob risco de insucesso escolar quando a média é crítica.',
                           enabled: true,
                           allowedRoles: ['admin', 'director', 'teacher', 'parent'],
@@ -1210,7 +1210,7 @@ export default function CommunicationCenter({
           <div className="lg:col-span-4 space-y-6 text-left">
             
             {/* Quick Templates Panel (Macro actions) */}
-            <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-5 space-y-4">
+            <div style={{ backgroundColor: '#d9d9e3' }} className="bg-zinc-950 border border-zinc-850 rounded-2xl p-5 space-y-4">
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-400 font-mono">Modelos Académicos Prontos</h3>
                 <p className="text-[11px] text-zinc-500">Selecione e carregue modelos de comunicação oficiais para acelerar a redação e compliance municipal.</p>
@@ -1237,7 +1237,7 @@ export default function CommunicationCenter({
             </div>
 
             {/* Quick analytics card / info */}
-            <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-5 space-y-3">
+            <div style={{ backgroundColor: '#f0f0fb' }} className="bg-zinc-950 border border-zinc-850 rounded-2xl p-5 space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 font-mono">Dicas de Comunicação</h3>
               <ul className="text-xs text-zinc-400 space-y-2.5 leading-relaxed font-sans">
                 <li className="flex items-start gap-2">

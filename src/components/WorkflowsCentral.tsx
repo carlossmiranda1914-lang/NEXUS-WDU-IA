@@ -106,7 +106,7 @@ export default function WorkflowsCentral({
         entityName: 'Comprovativo Propina Junho.pdf',
         history: [
           'Ficheiro submetido pelo portal escolar',
-          'Motor OCR Inteligente acionado localmente',
+          'Sistema de Leitura Eletrónica Inteligente acionado localmente',
           'Leitura de texto extraída com precisão de 99.4%',
           'Classificado como: Comprovativo de Pagamento Bancário',
           'Associado ao Aluno: Alice Siqueira (ALU-101)',
@@ -288,7 +288,7 @@ export default function WorkflowsCentral({
     setMatriculaRunning(true);
     setMatriculaStep(0);
     setCompletedStudent(null);
-    setMatriculaLogs([`[INÍCIO] Iniciação do Motor de Workflows Nexus para Matrícula de Estudante: ${newStudName}`]);
+    setMatriculaLogs([`[INÍCIO] Iniciação do Sistema de Processos Nexus para Matrícula de Estudante: ${newStudName}`]);
 
     const stepMsgs = [
       `[PASSO 1/10] Registo provisório de Aluno instanciado na pasta letiva: [Nome: ${newStudName}, Classe: ${newStudClass}]`,
@@ -428,7 +428,7 @@ export default function WorkflowsCentral({
 
     const stepLogs = [
       `[PASSO 1/6 - Executar OCR]: Matriz do arquivo binário analisada com 300 DPI. Aplicação de binarização gráfica e leitura do texto concluída.`,
-      `[PASSO 2/6 - Classificar]: Motor neuronal lê cabeçalho de metadados e classifica o tipo do documento como [Dossier Oficial da Secretaria].`,
+      `[PASSO 2/6 - Classificar]: O sistema inteligente lê o cabeçalho de metadados e classifica o tipo do documento como [Dossier Oficial da Secretaria].`,
       `[PASSO 3/6 - Associar Entidade]: Pesquisa na base escolar realizada. Metadados do documento vinculados ao Perfil Escolar de Aluno correspondente.`,
       `[PASSO 4/6 - Criar Tarefas]: Tarefa secundária agendada na mesa de avaliação física da secretaria para homologação presencial rápida.`,
       `[PASSO 5/6 - Criar Alertas]: Alerta crítico preventivo de verificação registado. Notificação interna agendada 30 dias antes da expiração de validade relevante.`,
@@ -528,7 +528,7 @@ export default function WorkflowsCentral({
         `Criador visual de regras instanciado`,
         `Gatilho SE definido como: "${newRule.trigger}"`,
         ...filteredCons.map((c, i) => `Consequência ENTÃO [${i+1}] configurada: "${c}"`),
-        `Compilação lógica realizada com sucesso e guardada no motor de agendamentos.`
+        `Configuração lógica realizada com sucesso e integrada no sistema de processos automáticos.`
       ]
     };
     setInstances(prev => [newInstance, ...prev]);
@@ -601,7 +601,7 @@ export default function WorkflowsCentral({
               <Zap className="w-5 h-5 animate-pulse" />
             </span>
             <h1 className="text-xl font-bold text-zinc-100 uppercase tracking-tight font-sans">
-              Central de Workflows
+              Central de Processos
             </h1>
           </div>
           <p className="text-xs text-zinc-400 mt-1 max-w-2xl leading-relaxed">
@@ -659,7 +659,7 @@ export default function WorkflowsCentral({
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40'
             }`}
           >
-            Workflow Financeiro
+            Processo Financeiro
           </button>
           <button
             onClick={() => setActiveSubView('builder')}
@@ -679,7 +679,7 @@ export default function WorkflowsCentral({
         
         {/* Stats 1: Active workflows */}
         <div className="bg-zinc-900 border border-zinc-800/80 p-4 rounded-xl flex flex-col justify-between hover:border-indigo-500/30 transition-all group">
-          <span className="text-[10px] uppercase font-mono tracking-wider text-sky-400 font-bold block text-left">WFs Ativos</span>
+          <span className="text-[10px] uppercase font-mono tracking-wider text-sky-400 font-bold block text-left">Processos Ativos</span>
           <div className="flex items-baseline justify-between mt-2">
             <h3 className="text-2xl font-bold font-sans text-zinc-100 group-hover:text-sky-300 transition-colors">{runningWorkflows + (simulatingRuleId ? 1 : 0)}</h3>
             <span className="w-2 h-2 rounded-full bg-sky-450 animate-ping shrink-0" />
@@ -688,7 +688,7 @@ export default function WorkflowsCentral({
 
         {/* Stats 2: Completed */}
         <div className="bg-zinc-900 border border-zinc-800/80 p-4 rounded-xl flex flex-col justify-between hover:border-emerald-500/30 transition-all group">
-          <span className="text-[10px] uppercase font-mono tracking-wider text-emerald-400 font-bold block text-left">WFs Concluídos</span>
+          <span className="text-[10px] uppercase font-mono tracking-wider text-emerald-400 font-bold block text-left">Concluídos</span>
           <div className="flex items-baseline justify-between mt-2">
             <h3 className="text-2xl font-bold font-sans text-emerald-400 group-hover:text-emerald-300 transition-colors">{completedWorkflows}</h3>
             <span className="text-[8px] bg-emerald-500/10 px-1.5 py-0.5 rounded text-emerald-400 font-mono font-bold">100% OK</span>
@@ -697,7 +697,7 @@ export default function WorkflowsCentral({
 
         {/* Stats 3: Pending */}
         <div className="bg-zinc-900 border border-zinc-800/80 p-4 rounded-xl flex flex-col justify-between hover:border-amber-500/30 transition-all group">
-          <span className="text-[10px] uppercase font-mono tracking-wider text-amber-500 font-bold block text-left">WFs Pendentes</span>
+          <span className="text-[10px] uppercase font-mono tracking-wider text-amber-500 font-bold block text-left">Pendentes</span>
           <div className="flex items-baseline justify-between mt-2">
             <h3 className="text-2xl font-bold font-sans text-amber-400 group-hover:text-amber-300 transition-colors">1</h3>
             <span className="text-[8px] bg-amber-500/10 px-1.5 py-0.5 rounded text-amber-400 font-mono font-bold">Aguardar</span>
@@ -706,16 +706,16 @@ export default function WorkflowsCentral({
 
         {/* Stats 4: Blocked processes */}
         <div className="bg-zinc-900 border border-zinc-800/80 p-4 rounded-xl flex flex-col justify-between hover:border-orange-500/30 transition-all group">
-          <span className="text-[10px] uppercase font-mono tracking-wider text-orange-400 font-bold block text-left">Bloqueados</span>
+          <span className="text-[10px] uppercase font-mono tracking-wider text-orange-400 font-bold block text-left">Suspensos</span>
           <div className="flex items-baseline justify-between mt-2">
             <h3 className="text-2xl font-bold font-sans text-orange-400 group-hover:text-orange-300 transition-colors">{blockedWorkflows}</h3>
-            <span className="text-[8.5px] text-zinc-500 font-mono">Cont. falho</span>
+            <span className="text-[8.5px] text-zinc-500 font-mono">Dados incompletos</span>
           </div>
         </div>
 
         {/* Stats 5: Error logs */}
         <div className="bg-zinc-900 border border-zinc-800/80 p-4 rounded-xl flex flex-col justify-between hover:border-rose-500/30 transition-all group">
-          <span className="text-[10px] uppercase font-mono tracking-wider text-rose-500 font-bold block text-left">Erros ativos</span>
+          <span className="text-[10px] uppercase font-mono tracking-wider text-rose-500 font-bold block text-left">Incidentes</span>
           <div className="flex items-baseline justify-between mt-2">
             <h3 className="text-2xl font-bold font-sans text-rose-400 group-hover:text-rose-300 transition-colors">{errorWorkflows}</h3>
             <span className="text-[8px] bg-rose-500/10 px-1.5 py-0.5 rounded text-rose-400 font-mono font-bold">Zero crítico</span>
@@ -792,7 +792,7 @@ export default function WorkflowsCentral({
                         )}
                         {inst.status === 'blocked' && (
                           <span className="text-[9px] uppercase font-mono font-bold bg-orange-500/10 text-orange-400 border border-orange-500/20 px-2 py-0.8 rounded flex items-center gap-1">
-                            ⚠️ BLOQUEADO
+                            BLOQUEADO
                           </span>
                         )}
                         {inst.status === 'error' && (
@@ -907,7 +907,7 @@ export default function WorkflowsCentral({
                               : 'bg-zinc-900/50 text-zinc-600 border-zinc-850 cursor-not-allowed'
                           }`}
                         >
-                          <Play className="w-2.5 h-2.5" /> Disparar Teste
+                          <Play className="w-2.5 h-2.5" /> Simular Processo
                         </button>
                       </div>
 
@@ -921,7 +921,7 @@ export default function WorkflowsCentral({
             <div className="bg-zinc-900 border border-zinc-800/80 rounded-xl p-5 space-y-3.5 text-left">
               <h2 className="text-xs font-bold text-zinc-200 font-mono uppercase tracking-wider">Canais de Lançamento Ativos</h2>
               <p className="text-[11px] text-zinc-450 leading-relaxed">
-                As ações automáticas dos workflows escolares utilizam as comportas e gateways de integração instaladas:
+                As ações automáticas dos processos escolares utilizam as comportas e canais de comunicação integrados:
               </p>
               <div className="grid grid-cols-2 gap-2 text-[10.5px] font-mono">
                 <div className="p-2 bg-zinc-950 border border-zinc-850 rounded-lg flex items-center gap-1.5 justify-start">
@@ -957,7 +957,7 @@ export default function WorkflowsCentral({
                 Matrícula em Lote & Pipeline de Integração Escolar
               </h2>
               <p className="text-xs text-zinc-400 mt-1 max-w-xl">
-                Automatize de ponta-a-ponta a oficialização de um novo aluno em menos de 10 segundos. O motor de workflow executará os 10 passos sequenciais e integrará faturas, tutorias e credenciais.
+                Automatize de ponta-a-ponta a oficialização de um novo aluno em menos de 10 segundos. O sistema de processos executará os 10 passos sequenciais e integrará faturas, tutorias e credenciais.
               </p>
             </div>
             {matriculaRunning && (
@@ -978,7 +978,7 @@ export default function WorkflowsCentral({
               <div className="space-y-3 font-sans text-xs text-left">
                 {/* School documents required alert */}
                 <div className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-400 font-mono text-[9.5px] leading-relaxed">
-                  ⚠️ <strong>Aviso legal:</strong> A ativação definitiva requer a posterior validação em OCR dos documentos carregados pelo encarregado de educação.
+                  <strong>Aviso legal:</strong> A ativação definitiva requer a posterior validação em OCR dos documentos carregados pelo encarregado de educação.
                 </div>
 
                 <div className="space-y-1">
@@ -1093,9 +1093,9 @@ export default function WorkflowsCentral({
                 <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-850 mt-4 text-left">
                   <div className="flex items-center justify-between border-b border-zinc-850 pb-2 mb-2">
                     <span className="text-[9px] font-bold tracking-wider font-mono uppercase text-zinc-450 flex items-center gap-1">
-                      <span>⌨</span> LOGS DE EXECUÇÃO DO WORKFLOW
+                      <span>⌨</span> HISTÓRICO DE PROCESSAMENTO DO PROCESSO
                     </span>
-                    <span className="text-[8.5px] font-mono text-zinc-600">ID: WFK-MT-{newStudClass.replace(/\s+/g, '')}</span>
+                    <span className="text-[8.5px] font-mono text-zinc-600">ID: PR-MT-{newStudClass.replace(/\s+/g, '')}</span>
                   </div>
                   <div className="h-40 overflow-y-auto font-mono text-[10px] text-zinc-400 leading-relaxed pr-1 space-y-1.5 select-text">
                     {matriculaLogs.map((logLine, index) => (
@@ -1108,7 +1108,7 @@ export default function WorkflowsCentral({
                       </div>
                     ))}
                     {matriculaLogs.length === 0 && (
-                      <p className="text-zinc-650 italic text-[9.5px]">Aguardando disparo do motor para iniciar visualização de auditoria...</p>
+                      <p className="text-zinc-650 italic text-[9.5px]">Aguardar início do processo para visualizar o histórico de auditoria...</p>
                     )}
                   </div>
                 </div>
@@ -1145,7 +1145,7 @@ export default function WorkflowsCentral({
             <div>
               <h2 className="text-base font-bold text-zinc-200 flex items-center gap-2">
                 <FileText className="w-5 h-5 text-indigo-400" />
-                Workflow Documental & Reconhecimento Ótico (OCR)
+                Processo Documental & Reconhecimento Ótico (OCR)
               </h2>
               <p className="text-xs text-zinc-400 mt-1 max-w-xl">
                 Alimente o leitor inteligente de secretaria. O sistema executará 6 passos para escanear, classificar, verificar vencimentos e vincular os documentos ao aluno correto de forma autónoma.
@@ -1169,7 +1169,7 @@ export default function WorkflowsCentral({
 
                 <div className="space-y-2">
                   <p className="text-[11px] text-zinc-450 leading-relaxed font-sans mb-3">
-                    Clique num dos documentos comuns abaixo para simular o workflow automático de catalogação OCR:
+                    Clique num dos documentos comuns abaixo para simular o processo automático de catalogação OCR:
                   </p>
                   
                   {[
@@ -1253,8 +1253,8 @@ export default function WorkflowsCentral({
                   {/* Console logs output */}
                   <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-850 flex flex-col justify-between h-[230px]">
                     <div className="border-b border-zinc-850 pb-2 mb-2 flex items-center justify-between text-[9px] font-mono font-bold text-zinc-450 uppercase">
-                      <span>Rastreio Evento OCR</span>
-                      <span className="text-[8.5px] text-zinc-650">v1.2 neural-engine</span>
+                      <span>Histórico do Documento (OCR)</span>
+                      <span className="text-[8.5px] text-zinc-650">Sistema de Leitura Eletrónica</span>
                     </div>
                     <div className="flex-1 overflow-y-auto font-mono text-[9px] text-zinc-400 leading-relaxed pr-1 space-y-1 select-text">
                       {ocrLogs.map((log, idx) => (
@@ -1348,10 +1348,10 @@ export default function WorkflowsCentral({
             <div>
               <h2 className="text-base font-bold text-zinc-200 flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-indigo-400" />
-                Workflow de Recebimento & Sincronia Financeira
+                Processo de Recebimento & Sincronia Financeira
               </h2>
               <p className="text-xs text-zinc-400 mt-1 max-w-xl">
-                Automatize o fluxo completo de quitação de propinas. Ao receber a compensação bancária, o motor executa 5 passos e liquida saldos, emite recibo fiscal e atualiza dashboards.
+                Automatize o fluxo completo de quitação de propinas. Ao receber a compensação bancária, o sistema executa 5 passos e liquida saldos, emite recibo fiscal e atualiza os painéis.
               </p>
             </div>
             {paymentReconciling && (
@@ -1468,8 +1468,8 @@ export default function WorkflowsCentral({
                   {/* Console traces log */}
                   <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-850 flex flex-col justify-between h-[230px]">
                     <div className="border-b border-zinc-850 pb-2 mb-2 flex items-center justify-between text-[9px] font-mono font-bold text-zinc-450 uppercase">
-                      <span>Log Conciliação Ativa</span>
-                      <span className="text-[8.5px] text-zinc-650">SHA-256 digital pass</span>
+                      <span>Histórico de Conciliação Ativa</span>
+                      <span className="text-[8.5px] text-zinc-650">Certificação Digital</span>
                     </div>
                     <div className="flex-1 overflow-y-auto font-mono text-[9px] text-zinc-400 leading-relaxed pr-1 space-y-1 select-text text-left">
                       {paymentLogs.map((log, idx) => (
@@ -1510,7 +1510,7 @@ export default function WorkflowsCentral({
                       </div>
                     ) : (
                       <div className="h-full flex items-center justify-center text-zinc-600 font-sans text-xs italic text-center">
-                        Aguardando conclusão do workflow para gerar quitação oficial.
+                        Aguardar conclusão do processo para gerar quitação oficial.
                       </div>
                     )}
                   </div>
@@ -1663,9 +1663,9 @@ export default function WorkflowsCentral({
 
               {builtRulesCount > 0 && (
                 <div className="p-3 bg-indigo-500/10 border border-indigo-400/30 rounded-xl space-y-1 text-left animate-fadeIn">
-                  <div className="text-[10.5px] font-bold font-mono text-indigo-400">✓ Automação Ativada & Compilada</div>
+                  <div className="text-[10.5px] font-bold font-mono text-indigo-400">✓ Processo Automático Ativado</div>
                   <p className="text-[9.5px] text-zinc-450 font-sans leading-relaxed">
-                    A regra de automação foi adicionada e integrada com sucesso ao motor inteligente escolar de regras recorrentes.
+                    A regra de processo automático foi adicionada e integrada com sucesso ao sistema inteligente escolar de regras recorrentes.
                   </p>
                 </div>
               )}
@@ -1737,7 +1737,7 @@ export default function WorkflowsCentral({
 
               <div className="bg-zinc-950 border border-zinc-850 rounded-xl p-4 space-y-4">
                 <span className="text-[10px] font-mono uppercase font-bold text-zinc-400 tracking-wider block border-b border-zinc-900 pb-1.5">
-                  Regras Ativas e Compiladas no Motor [{customRules.length}]
+                  Regras Ativas e Operacionais no Sistema [{customRules.length}]
                 </span>
 
                 <div className="space-y-3 max-h-[450px] overflow-y-auto pr-1">
@@ -1806,13 +1806,13 @@ export default function WorkflowsCentral({
         <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
           <div className="flex items-center gap-2">
             <History className="w-4 h-4 text-emerald-450" />
-            <h2 className="text-sm font-bold text-zinc-200">Painel Geral de Auditoria de Workflows</h2>
+            <h2 className="text-sm font-bold text-zinc-200">Painel Geral de Auditoria de Processos</h2>
           </div>
           <span className="text-[8.5px] font-mono text-zinc-500">ISO/IEC 27011 conformidade letiva</span>
         </div>
 
         <p className="text-xs text-zinc-400 leading-relaxed font-sans">
-          Cada acionamento, homologação ou alteração sob as automações é cifrada e guardada de forma imutável com carimbo de log temporal. Previne fraudes fiscais e documentais em todos os módulos integrados.
+          Cada acionamento, homologação ou alteração nos processos automáticos é registada de forma segura com carimbo histórico temporal. Previne erros e fraudes em todos os módulos integrados.
         </p>
 
         <div className="overflow-x-auto">

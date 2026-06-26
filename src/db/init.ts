@@ -203,172 +203,18 @@ export async function initializeDatabase() {
 
     console.log('[DB-INIT] Tables checked and created.');
 
-    // 2. Perform Seeding
-    // A. Students Seeding
-    const studentCountResult = await db.execute(sql`SELECT count(*) FROM students`);
-    const studentCount = parseInt((studentCountResult.rows[0] as any)?.count || '0');
-    if (studentCount === 0) {
-      console.log('[DB-INIT] Seeding initial students...');
-      for (const s of initialStudents) {
-        await db.insert(students).values({
-          id: s.id,
-          name: s.name,
-          class: s.class,
-          attendanceRate: s.attendanceRate,
-          averageGrade: s.averageGrade,
-          status: s.status,
-          outstandingFees: s.outstandingFees,
-          guardiansName: s.guardiansName,
-          guardiansContact: s.guardiansContact,
-          behaviorDegree: s.behaviorDegree,
-          documents: s.documents,
-          behaviorHistory: s.behaviorHistory,
-          grades: s.grades,
-        });
-      }
-    }
-
-    // B. Teachers Seeding
-    const teacherCountResult = await db.execute(sql`SELECT count(*) FROM teachers`);
-    const teacherCount = parseInt((teacherCountResult.rows[0] as any)?.count || '0');
-    if (teacherCount === 0) {
-      console.log('[DB-INIT] Seeding initial teachers...');
-      for (const t of initialTeachers) {
-        await db.insert(teachers).values({
-          id: t.id,
-          name: t.name,
-          email: t.email,
-          phone: t.phone || '',
-          subjects: t.subjects,
-          classes: t.classes,
-          productivityScore: t.productivityScore,
-          schedule: t.schedule,
-          status: t.status,
-          documents: t.documents || [],
-        });
-      }
-    }
-
-    // C. Invoices Seeding
-    const invoicesCountResult = await db.execute(sql`SELECT count(*) FROM invoices`);
-    const invoicesCount = parseInt((invoicesCountResult.rows[0] as any)?.count || '0');
-    if (invoicesCount === 0) {
-      console.log('[DB-INIT] Seeding initial invoices...');
-      for (const inv of initialInvoices) {
-        await db.insert(invoices).values({
-          id: inv.id,
-          studentId: inv.studentId,
-          studentName: inv.studentName,
-          amount: inv.amount,
-          dueDate: inv.dueDate,
-          status: inv.status,
-          category: inv.category,
-        });
-      }
-    }
-
-    // D. Announcements Seeding
-    const announcementsCountResult = await db.execute(sql`SELECT count(*) FROM announcements`);
-    const announcementsCount = parseInt((announcementsCountResult.rows[0] as any)?.count || '0');
-    if (announcementsCount === 0) {
-      console.log('[DB-INIT] Seeding initial announcements...');
-      for (const ann of initialAnnouncements) {
-        await db.insert(announcements).values({
-          id: ann.id,
-          title: ann.title,
-          content: ann.content,
-          author: ann.author,
-          role: ann.role,
-          date: ann.date,
-          target: ann.target,
-        });
-      }
-    }
-
-    // E. Automations Seeding
-    const automationsCountResult = await db.execute(sql`SELECT count(*) FROM automations`);
-    const automationsCount = parseInt((automationsCountResult.rows[0] as any)?.count || '0');
-    if (automationsCount === 0) {
-      console.log('[DB-INIT] Seeding initial automations...');
-      for (const aut of initialAutomations) {
-        await db.insert(automations).values({
-          id: aut.id,
-          title: aut.title,
-          description: aut.description,
-          trigger: aut.trigger,
-          action: aut.action,
-          active: aut.active,
-          type: aut.type,
-          executions: aut.executions,
-        });
-      }
-    }
-
-    // F. Chat Messages Seeding
-    const chatMsgCountResult = await db.execute(sql`SELECT count(*) FROM chat_messages`);
-    const chatMsgCount = parseInt((chatMsgCountResult.rows[0] as any)?.count || '0');
-    if (chatMsgCount === 0) {
-      console.log('[DB-INIT] Seeding initial chat messages...');
-      for (const m of initialMessages) {
-        await db.insert(chatMessages).values({
-          sender: m.sender,
-          role: m.role,
-          content: m.content,
-          timestamp: m.timestamp,
-          channel: m.channel,
-        });
-      }
-    }
-
-    // F2. Todo Tasks Seeding
-    const tasksCountResult = await db.execute(sql`SELECT count(*) FROM todo_tasks`);
-    const tasksCount = parseInt((tasksCountResult.rows[0] as any)?.count || '0');
-    if (tasksCount === 0) {
-      console.log('[DB-INIT] Seeding initial todo tasks...');
-      const initialTodoTasks = [
-        {
-          id: 'TASK-101',
-          title: 'Rever faturas vencidas do 8º Ano B',
-          description: 'Identificar encarregados de educação com propinas em atraso e programar disparo de aviso.',
-          dueDate: '2026-06-25',
-          priority: 'alta',
-          status: 'pendente',
-          assignedTo: 'Financeiro'
-        },
-        {
-          id: 'TASK-102',
-          title: 'Emitir certificado de matrícula de Mariana Costa',
-          description: 'Gerar o respectivo certificado oficial assinado digitalmente pelo Diretor Pedagógico.',
-          dueDate: '2026-06-26',
-          priority: 'média',
-          status: 'pendente',
-          assignedTo: 'Secretaria'
-        },
-        {
-          id: 'TASK-103',
-          title: 'Auditar pautas acadêmicas do 9º Ano',
-          description: 'Analisar e retificar notas de exames introduzidas no final do 2º Período.',
-          dueDate: '2026-06-30',
-          priority: 'baixa',
-          status: 'concluído',
-          assignedTo: 'all'
-        }
-      ];
-      for (const t of initialTodoTasks) {
-        await db.insert(todoTasks).values(t);
-      }
-    }
-
+    // Seeding has been disabled to ensure a clean, production-ready operational state with zero dummy records.
+    
     // G. Create System Log confirm initialization
     await db.insert(operationalLogs).values({
       userId: 'system',
       userName: 'Nexus Server',
       userRole: 'system',
       action: 'DB_INITIALIZATION',
-      details: 'Cloud SQL Database successfully self-healed, provisioned and seeded with operational mock records.',
+      details: 'Cloud SQL Database successfully self-healed, provisioned for clean slate operational usage.',
     });
 
-    console.log('[DB-INIT] Database successfully initialized and seeded.');
+    console.log('[DB-INIT] Database successfully initialized.');
   } catch (error) {
     console.error('[DB-INIT] Failed to initialize database:', error);
   }

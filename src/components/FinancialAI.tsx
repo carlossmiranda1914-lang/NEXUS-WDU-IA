@@ -154,7 +154,7 @@ Aqui está a minha profunda auditoria analítica gerada de forma automatizada. S
       }]);
     } catch (error) {
       console.error(error);
-      setFullAuditReport(`### ⚠️ Auditoria Financeira do Planeamento (Nexus AI)
+      setFullAuditReport(`### Auditoria Financeira do Planeamento (Nexus AI)
 
 Não foi possível contactar o servidor principal. Apresentamos uma simulação baseada nas heurísticas locais:
 - **Taxa de Liquidez**: Saudável
@@ -244,25 +244,25 @@ Não foi possível contactar o servidor principal. Apresentamos uma simulação 
           <div className="grid grid-cols-1 gap-3">
             {/* Alertas */}
             <div className="bg-zinc-900/40 border border-zinc-800/85 rounded-xl p-3">
-              <span className="text-[9px] uppercase tracking-wider font-bold text-rose-450 font-mono">🚨 Alertas Críticos</span>
+              <span className="text-[9px] uppercase tracking-wider font-bold text-rose-450 font-mono">Alertas Críticos</span>
               <p className="text-xs text-zinc-300 mt-1.5 leading-relaxed">{automaticInsights.alerts}</p>
             </div>
 
             {/* Riscos */}
             <div className="bg-zinc-900/40 border border-zinc-800/85 rounded-xl p-3">
-              <span className="text-[9px] uppercase tracking-wider font-bold text-amber-500 font-mono">⚠️ Prevenção de Riscos</span>
+              <span className="text-[9px] uppercase tracking-wider font-bold text-amber-500 font-mono">Prevenção de Riscos</span>
               <p className="text-xs text-zinc-300 mt-1.5 leading-relaxed">{automaticInsights.riscos}</p>
             </div>
 
             {/* Oportunidades */}
             <div className="bg-zinc-900/40 border border-zinc-800/85 rounded-xl p-3">
-              <span className="text-[9px] uppercase tracking-wider font-bold text-emerald-450 font-mono">💡 Oportunidades & OPEX</span>
+              <span className="text-[9px] uppercase tracking-wider font-bold text-emerald-450 font-mono">Oportunidades & OPEX</span>
               <p className="text-xs text-zinc-300 mt-1.5 leading-relaxed">{automaticInsights.oportunidades}</p>
             </div>
 
             {/* Previsões */}
             <div className="bg-zinc-900/40 border border-zinc-800/85 rounded-xl p-3">
-              <span className="text-[9px] uppercase tracking-wider font-bold text-indigo-400 font-mono">🔮 Previsões (30 dias)</span>
+              <span className="text-[9px] uppercase tracking-wider font-bold text-indigo-400 font-mono">Previsões (30 dias)</span>
               <p className="text-xs text-zinc-300 mt-1.5 leading-relaxed font-medium">{automaticInsights.previsoes}</p>
             </div>
           </div>

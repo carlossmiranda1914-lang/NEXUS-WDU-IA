@@ -18,7 +18,7 @@ export default function AIAssistant({ students, teachers, invoices, onRefreshDat
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; timestamp?: string }[]>([
     {
       role: 'assistant',
-      content: 'Olá! Sou o **Nexus Copilot**, o seu funcionário digital inteligente integrado. \n\nTenho acesso para consulta em tempo real à **base de dados central**, aos **documentos escolares processados digitalmente** e aos **fluxos de automação**. \n\nDiferente de um assistente decorativo comum, eu consigo efetuar ações operacionais reais: pesquisar alunos com risco académico, auditar e conciliar pagamentos pendentes, catalogar documentos e até disparar automações de comunicação. \n\nO que gostaria de delegar à minha responsabilidade hoje?',
+      content: 'Olá! Sou o **Nexus Copilot**, o seu funcionário digital inteligente integrado. \n\nTenho acesso para consulta em tempo real à **base de dados central**, aos **documentos escolares processados digitalmente** e aos **fluxos de processos automáticos**. \n\nDiferente de um assistente decorativo comum, eu consigo efetuar ações operacionais reais: pesquisar alunos com risco académico, auditar e conciliar pagamentos pendentes, catalogar documentos e até disparar processos de comunicação automática. \n\nO que gostaria de delegar à minha responsabilidade hoje?',
       timestamp: new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -267,10 +267,10 @@ export default function AIAssistant({ students, teachers, invoices, onRefreshDat
 
               <div className="bg-zinc-900/60 p-3 rounded-lg border border-zinc-800/80">
                 <span className="text-[10px] text-zinc-400 flex items-center justify-between mb-1">
-                  WORKFLOW ENGINE
-                  <span className="font-mono text-emerald-400">simulação n8n</span>
+                  SISTEMA DE PROCESSOS
+                  <span className="font-mono text-emerald-400">execução ativa</span>
                 </span>
-                <p className="text-xs font-semibold text-zinc-100">Automatizações de Saída</p>
+                <p className="text-xs font-semibold text-zinc-100">Processos de Saída</p>
                 <p className="text-[10px] text-zinc-400 mt-1 font-mono">
                   Envio SMS de Cobrança, E-mail de Avisos e Triggers Automatizados.
                 </p>
@@ -451,7 +451,7 @@ export default function AIAssistant({ students, teachers, invoices, onRefreshDat
               <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800">
                 <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-2 mb-2">
                   <Zap className="w-4 h-4 text-emerald-400" />
-                  Fluxos de Automação n8n & Cron Ativos
+                  Fluxos de Processos Automáticos Ativos
                 </h3>
                 <p className="text-xs text-zinc-400 mb-3">
                   O Copilot possui gatilhos ativos para acionar relatórios SMS ou notificações em massa destinadas aos encarregados de educação.
@@ -485,7 +485,7 @@ export default function AIAssistant({ students, teachers, invoices, onRefreshDat
                   Ordens Rápidas de Operação Real
                 </h3>
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  Estes botões ordenam que o funcionário digital acione imediatamente as suas ferramentas integradas para realizar leituras ou mutações reais na base de dados, arquivos e workflows.
+                  Estes botões ordenam que o funcionário digital acione imediatamente as suas ferramentas integradas para realizar leituras ou mutações reais na base de dados, arquivos e processos.
                 </p>
               </div>
 
@@ -537,7 +537,7 @@ export default function AIAssistant({ students, teachers, invoices, onRefreshDat
                       handleSendMessage();
                     }
                   }}
-                  placeholder="Ordene tarefas complexas de leitura, escrita ou automação..."
+                  placeholder="Ordene tarefas complexas de leitura, escrita ou processos automáticos..."
                   rows={1}
                   className="w-full resize-none bg-zinc-950 border border-zinc-800 hover:border-zinc-700 focus:border-emerald-500 rounded-lg py-3 px-4 pr-12 text-xs text-zinc-100 placeholder-zinc-550 outline-none focus:ring-1 focus:ring-emerald-500 h-11"
                 />

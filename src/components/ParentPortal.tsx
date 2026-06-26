@@ -698,7 +698,7 @@ export default function ParentPortal({
                       Com base nas classificações de <strong>9.5 em Matemática</strong> e <strong>8.8 em Português</strong>, a sua educanda Alice apresenta um rendimento bastante estável e superior à média nacional de 9º ano.
                     </p>
                     <p className="text-xs text-zinc-450 leading-relaxed font-sans">
-                      💡 <strong>Dica Pedagógica:</strong> Manter a rotina atual de Robótica e focar no próximo exame experimental de Português no dia 25 de Junho.
+                      <strong>Orientação Pedagógica:</strong> Manter a rotina atual de Robótica e focar no próximo exame experimental de Português no dia 25 de Junho.
                     </p>
                   </div>
 
@@ -1134,7 +1134,7 @@ export default function ParentPortal({
                     </div>
 
                     <div className="p-3 text-[10.5px] rounded bg-indigo-500/5 text-indigo-400 font-mono leading-relaxed">
-                      💡 <strong>Deduzir no IRS:</strong> Todas as faturas liquidadas neste portal são registadas e transferidas automaticamente para o e-fatura sob a categoria de "Despesas de Educação".
+                      <strong>Deduzir no IRS:</strong> Todas as faturas liquidadas neste portal são registadas e transferidas automaticamente para o e-fatura sob a categoria de "Despesas de Educação".
                     </div>
                   </div>
                 )}
@@ -1418,7 +1418,7 @@ export default function ParentPortal({
                   </div>
 
                   <div className="p-3 text-[10.5px] rounded bg-indigo-500/5 text-indigo-400 font-mono leading-relaxed">
-                    💬 Prezado encarregado, utilize este canal seguro de chat regulamentado pela direção escolar para reportar de forma privada e em tempo real justificações, dúvidas disciplinares ou solicitar marcação de reuniões individuais.
+                    Prezado encarregado, utilize este canal seguro de chat regulamentado pela direção escolar para reportar de forma privada e em tempo real justificações, dúvidas disciplinares ou solicitar marcação de reuniões individuais.
                   </div>
                 </div>
 

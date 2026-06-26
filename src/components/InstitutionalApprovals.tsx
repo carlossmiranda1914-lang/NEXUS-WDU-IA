@@ -62,6 +62,38 @@ export default function InstitutionalApprovals({
   const [actionComment, setActionComment] = useState('');
   const [isActionSubmitting, setIsActionSubmitting] = useState(false);
 
+  // Column width state for Institutional Approvals
+  const [appColWidths, setAppColWidths] = useState<Record<string, number>>({
+    id: 110,
+    title: 240,
+    flow: 180,
+    requester: 160,
+    date: 150,
+    status: 160,
+    actions: 110
+  });
+
+  const startAppResize = (field: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = appColWidths[field] || 150;
+
+    const doResize = (moveEvent: MouseEvent) => {
+      const currentX = moveEvent.clientX;
+      const newWidth = Math.max(75, startWidth + (currentX - startX));
+      setAppColWidths(prev => ({ ...prev, [field]: newWidth }));
+    };
+
+    const stopResize = () => {
+      document.removeEventListener('mousemove', doResize);
+      document.removeEventListener('mouseup', stopResize);
+    };
+
+    document.addEventListener('mousemove', doResize);
+    document.addEventListener('mouseup', stopResize);
+  };
+
   // Flow role permissions helper
   // Secretariat -> Director: only Secretariat can create, Director can approve
   // Teacher -> Director: only Teacher can create, Director can approve
@@ -347,18 +379,40 @@ export default function InstitutionalApprovals({
           </div>
         </div>
 
-        {/* LIST TABLE AREA */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[700px]">
+        {/* LIST TABLE AREA with sticky headers, horizontal scroll, and resizable columns */}
+        <div className="overflow-x-auto scrollbar-thin rounded-xl border border-zinc-800 bg-zinc-900/10">
+          <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed' }}>
             <thead>
-              <tr className="border-b border-zinc-850/40 text-[10.5px] font-mono tracking-wider text-zinc-500 uppercase">
-                <th className="py-3 px-4 font-bold">Processo ID</th>
-                <th className="py-3 px-4 font-bold">Título do Pedido</th>
-                <th className="py-3 px-4 font-bold">Fluxo Trâmite</th>
-                <th className="py-3 px-4 font-bold">Requerente</th>
-                <th className="py-3 px-4 font-bold">Data Entrada</th>
-                <th className="py-3 px-4 font-bold text-center">Estado</th>
-                <th className="py-3 px-4 text-right font-bold">Ações</th>
+              <tr className="border-b border-zinc-850/45 bg-zinc-950/40 text-[10.5px] font-mono tracking-wider text-zinc-500 uppercase">
+                {[
+                  { key: 'id', label: 'Processo ID' },
+                  { key: 'title', label: 'Título do Pedido' },
+                  { key: 'flow', label: 'Fluxo Trâmite' },
+                  { key: 'requester', label: 'Requerente' },
+                  { key: 'date', label: 'Data Entrada' },
+                  { key: 'status', label: 'Estado' },
+                  { key: 'actions', label: 'Ações', align: 'right' }
+                ].map(h => {
+                  const width = appColWidths[h.key] || 150;
+                  return (
+                    <th 
+                      key={h.key}
+                      style={{ width, minWidth: width, maxWidth: width }}
+                      className={`py-3.5 px-4 font-bold relative group select-none hover:bg-zinc-900/30 transition-colors ${
+                        h.align === 'right' ? 'text-right' : h.align === 'center' ? 'text-center' : 'text-left'
+                      }`}
+                    >
+                      <span title={h.label} className="truncate block">{h.label}</span>
+                      {h.key !== 'actions' && (
+                        <div 
+                          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-500 bg-zinc-800/30 z-20 transition-colors"
+                          onMouseDown={(e) => startAppResize(h.key, e)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-850/30">
@@ -387,40 +441,70 @@ export default function InstitutionalApprovals({
                       className="hover:bg-zinc-900/20 text-xs transition-colors group cursor-pointer"
                       onClick={() => setSelectedRequest(req)}
                     >
-                      <td className="py-3.5 px-4 font-mono font-bold text-indigo-400">{req.id}</td>
-                      <td className="py-3.5 px-4">
-                        <div className="space-y-0.5">
-                          <p className="font-semibold text-zinc-200 group-hover:text-white transition-colors">{req.title}</p>
-                          <p className="text-[11px] text-zinc-450 line-clamp-1">{req.description}</p>
+                      <td 
+                        style={{ width: appColWidths['id'], minWidth: appColWidths['id'], maxWidth: appColWidths['id'] }}
+                        className="py-4 px-4 font-mono font-bold text-indigo-400 truncate"
+                        title={req.id}
+                      >
+                        {req.id}
+                      </td>
+                      <td 
+                        style={{ width: appColWidths['title'], minWidth: appColWidths['title'], maxWidth: appColWidths['title'] }}
+                        className="py-4 px-4 truncate"
+                        title={`${req.title}\n\n${req.description}`}
+                      >
+                        <div className="space-y-0.5 truncate">
+                          <p className="font-semibold text-zinc-200 group-hover:text-white transition-colors truncate">{req.title}</p>
+                          <p className="text-[11px] text-zinc-450 truncate">{req.description}</p>
                         </div>
                       </td>
-                      <td className="py-3.5 px-4">
-                        <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400 font-medium text-[10px]">
+                      <td 
+                        style={{ width: appColWidths['flow'], minWidth: appColWidths['flow'], maxWidth: appColWidths['flow'] }}
+                        className="py-4 px-4 truncate"
+                        title={getFlowTypeBadgeLabel(req.flowType)}
+                      >
+                        <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400 font-medium text-[10px] inline-block max-w-full truncate">
                           {getFlowTypeBadgeLabel(req.flowType)}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4">
-                        <div className="space-y-0.5">
-                          <p className="font-medium text-zinc-300">{req.requesterName}</p>
-                          <p className="text-[10px] font-mono uppercase text-zinc-500">{req.requesterRole}</p>
+                      <td 
+                        style={{ width: appColWidths['requester'], minWidth: appColWidths['requester'], maxWidth: appColWidths['requester'] }}
+                        className="py-4 px-4 truncate"
+                        title={`${req.requesterName} (${req.requesterRole})`}
+                      >
+                        <div className="space-y-0.5 truncate">
+                          <p className="font-medium text-zinc-300 truncate">{req.requesterName}</p>
+                          <p className="text-[10px] font-mono uppercase text-zinc-500 truncate">{req.requesterRole}</p>
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 text-zinc-450 font-mono">
-                        <div className="space-y-0.5">
-                          <p>{req.createdAtDate}</p>
-                          <p className="text-[10px]">{req.createdAtTime}</p>
+                      <td 
+                        style={{ width: appColWidths['date'], minWidth: appColWidths['date'], maxWidth: appColWidths['date'] }}
+                        className="py-4 px-4 text-zinc-450 font-mono truncate"
+                        title={`${req.createdAtDate} às ${req.createdAtTime}`}
+                      >
+                        <div className="space-y-0.5 truncate">
+                          <p className="truncate">{req.createdAtDate}</p>
+                          <p className="text-[10px] truncate">{req.createdAtTime}</p>
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 text-center">
+                      <td 
+                        style={{ width: appColWidths['status'], minWidth: appColWidths['status'], maxWidth: appColWidths['status'] }}
+                        className="py-4 px-4 text-center truncate"
+                        title={statusInfo.label}
+                      >
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono tracking-wide ${statusInfo.color}`}>
                           <StatusIcon className="w-3 h-3 shrink-0" />
                           {statusInfo.label}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <td 
+                        style={{ width: appColWidths['actions'], minWidth: appColWidths['actions'], maxWidth: appColWidths['actions'] }}
+                        className="py-4 px-4 text-right" 
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <button
                           onClick={() => setSelectedRequest(req)}
-                          className="px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white font-semibold rounded-lg text-xs cursor-pointer transition-colors"
+                          className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white font-semibold rounded-lg text-[11px] cursor-pointer transition-colors"
                         >
                           Analisar
                         </button>

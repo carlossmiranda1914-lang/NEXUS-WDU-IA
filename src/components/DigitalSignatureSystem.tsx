@@ -168,6 +168,38 @@ export default function DigitalSignatureSystem({
   const [targetSignRequest, setTargetSignRequest] = useState<DigitalSignatureRequest | null>(null);
   const [inspectCertificate, setInspectCertificate] = useState<DigitalSignatureRequest | null>(null);
 
+  // Column Width Resizing State for Digital Signature table
+  const [sigColWidths, setSigColWidths] = useState<Record<string, number>>({
+    id: 110,
+    doc_type: 230,
+    signer: 210,
+    module: 160,
+    log: 150,
+    status: 160,
+    actions: 110
+  });
+
+  const startSigResize = (field: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sigColWidths[field] || 150;
+
+    const doResize = (moveEvent: MouseEvent) => {
+      const currentX = moveEvent.clientX;
+      const newWidth = Math.max(75, startWidth + (currentX - startX));
+      setSigColWidths(prev => ({ ...prev, [field]: newWidth }));
+    };
+
+    const stopResize = () => {
+      document.removeEventListener('mousemove', doResize);
+      document.removeEventListener('mouseup', stopResize);
+    };
+
+    document.addEventListener('mousemove', doResize);
+    document.addEventListener('mouseup', stopResize);
+  };
+
   // Form State
   const [newTitle, setNewTitle] = useState('');
   const [newType, setNewType] = useState<DigitalSignatureDocType>('Contrato');
@@ -438,7 +470,7 @@ export default function DigitalSignatureSystem({
               }`}
             >
               <User className="w-3.5 h-3.5" />
-              Portal de Assinante (Pais/Pais de Teste)
+              Portal do Assinante (Encarregados de Educação)
             </button>
           </div>
 
@@ -547,18 +579,40 @@ export default function DigitalSignatureSystem({
             </div>
           </div>
 
-          {/* Table displaying processes */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[800px]">
+          {/* Table displaying processes with sticky headers, horizontal scroll, and resizable columns */}
+          <div className="overflow-x-auto scrollbar-thin rounded-xl border border-zinc-800 bg-zinc-900/10">
+            <table className="w-full text-left border-collapse" style={{ tableLayout: 'fixed' }}>
               <thead>
-                <tr className="border-b border-zinc-850/40 text-[10.5px] font-mono tracking-wider text-zinc-500 uppercase">
-                  <th className="py-3 px-4 font-bold">Código</th>
-                  <th className="py-3 px-4 font-bold">Documento / Tipo</th>
-                  <th className="py-3 px-4 font-bold">Responsável Co-Signatário</th>
-                  <th className="py-3 px-4 font-bold">Vínculo Módulo</th>
-                  <th className="py-3 px-4 font-bold">Log Data/Hora</th>
-                  <th className="py-3 px-4 font-bold text-center">Estado</th>
-                  <th className="py-3 px-4 text-right font-bold">Ações</th>
+                <tr className="border-b border-zinc-850/45 bg-zinc-950/40 text-[10.5px] font-mono tracking-wider text-zinc-500 uppercase">
+                  {[
+                    { key: 'id', label: 'Código' },
+                    { key: 'doc_type', label: 'Documento / Tipo' },
+                    { key: 'signer', label: 'Responsável Co-Signatário' },
+                    { key: 'module', label: 'Vínculo Módulo' },
+                    { key: 'log', label: 'Log Data/Hora' },
+                    { key: 'status', label: 'Estado' },
+                    { key: 'actions', label: 'Ações', align: 'right' }
+                  ].map(h => {
+                    const width = sigColWidths[h.key] || 150;
+                    return (
+                      <th 
+                        key={h.key}
+                        style={{ width, minWidth: width, maxWidth: width }}
+                        className={`py-3.5 px-4 font-bold relative group select-none hover:bg-zinc-900/30 transition-colors ${
+                          h.align === 'right' ? 'text-right' : h.align === 'center' ? 'text-center' : 'text-left'
+                        }`}
+                      >
+                        <span title={h.label} className="truncate block">{h.label}</span>
+                        {h.key !== 'actions' && (
+                          <div 
+                            className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-indigo-500 bg-zinc-800/30 z-20 transition-colors"
+                            onMouseDown={(e) => startSigResize(h.key, e)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        )}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-850/30 text-xs">
@@ -593,39 +647,56 @@ export default function DigitalSignatureSystem({
 
                     return (
                       <tr key={sig.id} className="hover:bg-zinc-900/20 transition-colors group">
-                        <td className="py-4 px-4 font-mono font-bold text-indigo-400">{sig.id}</td>
-                        <td className="py-4 px-4">
-                          <div className="space-y-1">
-                            <p className="font-semibold text-zinc-200 group-hover:text-white transition-colors">{sig.title}</p>
+                        <td 
+                          style={{ width: sigColWidths['id'], minWidth: sigColWidths['id'], maxWidth: sigColWidths['id'] }}
+                          className="py-4.5 px-4 font-mono font-bold text-indigo-400 truncate"
+                          title={sig.id}
+                        >
+                          {sig.id}
+                        </td>
+                        <td 
+                          style={{ width: sigColWidths['doc_type'], minWidth: sigColWidths['doc_type'], maxWidth: sigColWidths['doc_type'] }}
+                          className="py-4.5 px-4 truncate"
+                          title={`${sig.title} (${sig.documentType})`}
+                        >
+                          <div className="space-y-1 truncate">
+                            <p className="font-semibold text-zinc-200 group-hover:text-white transition-colors truncate">{sig.title}</p>
                             <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-mono border ${typeBadge}`}>
                               {sig.documentType}
                             </span>
                           </div>
                         </td>
-                        <td className="py-4 px-4">
-                          <div className="space-y-0.5">
-                            <p className="text-zinc-300 font-medium">{sig.signerName}</p>
-                            <span className="text-[10px] text-zinc-500 font-mono flex items-center gap-1">
-                              <Mail className="w-3 h-3" /> {sig.signerEmail}
+                        <td 
+                          style={{ width: sigColWidths['signer'], minWidth: sigColWidths['signer'], maxWidth: sigColWidths['signer'] }}
+                          className="py-4.5 px-4 truncate"
+                          title={`${sig.signerName} (${sig.signerEmail})`}
+                        >
+                          <div className="space-y-0.5 truncate">
+                            <p className="text-zinc-300 font-medium truncate">{sig.signerName}</p>
+                            <span className="text-[10px] text-zinc-500 font-mono flex items-center gap-1 truncate">
+                              <Mail className="w-3 h-3 shrink-0" /> {sig.signerEmail}
                             </span>
                           </div>
                         </td>
-                        <td className="py-4 px-4">
+                        <td 
+                          style={{ width: sigColWidths['module'], minWidth: sigColWidths['module'], maxWidth: sigColWidths['module'] }}
+                          className="py-4.5 px-4 truncate"
+                        >
                           {sig.referenceModule ? (
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 truncate">
                               {sig.referenceModule === 'matriculas' && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-500/5 px-2 py-0.5 rounded border border-emerald-500/20">
-                                  <Bookmark className="w-3 h-3" /> Matrícula: {sig.referenceId}
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-500/5 px-2 py-0.5 rounded border border-emerald-500/20 truncate" title={`Matrícula: ${sig.referenceId}`}>
+                                  <Bookmark className="w-3 h-3 shrink-0" /> Matrícula: {sig.referenceId}
                                 </span>
                               )}
                               {sig.referenceModule === 'financeiro' && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-pink-400 bg-pink-500/5 px-2 py-0.5 rounded border border-pink-500/20">
-                                  <DollarSign className="w-3 h-3" /> Fat: {sig.referenceId}
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-pink-400 bg-pink-500/5 px-2 py-0.5 rounded border border-pink-500/20 truncate" title={`Fat: ${sig.referenceId}`}>
+                                  <DollarSign className="w-3 h-3 shrink-0" /> Fat: {sig.referenceId}
                                 </span>
                               )}
                               {sig.referenceModule === 'documentos' && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-indigo-400 bg-indigo-500/5 px-2 py-0.5 rounded border border-indigo-500/20">
-                                  <Link2 className="w-3 h-3" /> Doc: {sig.referenceId}
+                                <span className="inline-flex items-center gap-1 text-[10px] font-mono text-indigo-400 bg-indigo-500/5 px-2 py-0.5 rounded border border-indigo-500/20 truncate" title={`Doc: ${sig.referenceId}`}>
+                                  <Link2 className="w-3 h-3 shrink-0" /> Doc: {sig.referenceId}
                                 </span>
                               )}
                             </div>
@@ -633,59 +704,71 @@ export default function DigitalSignatureSystem({
                             <span className="text-zinc-600">—</span>
                           )}
                         </td>
-                        <td className="py-4 px-4 font-mono text-zinc-450">
+                        <td 
+                          style={{ width: sigColWidths['log'], minWidth: sigColWidths['log'], maxWidth: sigColWidths['log'] }}
+                          className="py-4.5 px-4 font-mono text-zinc-450 truncate"
+                        >
                           {sig.status === 'signed' || sig.status === 'archived' ? (
-                            <div className="space-y-0.5">
-                              <p className="text-emerald-450 font-medium flex items-center gap-1">
-                                <CheckCircle className="w-3.5 h-3.5" /> Assinado
+                            <div className="space-y-0.5 truncate">
+                              <p className="text-emerald-450 font-medium flex items-center gap-1 truncate">
+                                <CheckCircle className="w-3.5 h-3.5 shrink-0" /> Assinado
                               </p>
-                              <span className="text-[10px] text-zinc-500">{sig.signedAtDate} às {sig.signedAtTime}</span>
+                              <span className="text-[10px] text-zinc-500 block truncate">{sig.signedAtDate} às {sig.signedAtTime}</span>
                             </div>
                           ) : (
-                            <div className="space-y-0.5">
-                              <p className="text-zinc-500">Solicitado</p>
-                              <span className="text-[10px] text-zinc-550">{sig.sentAtDate} às {sig.sentAtTime}</span>
+                            <div className="space-y-0.5 truncate">
+                              <p className="text-zinc-500 truncate">Solicitado</p>
+                              <span className="text-[10px] text-zinc-550 block truncate">{sig.sentAtDate} às {sig.sentAtTime}</span>
                             </div>
                           )}
                         </td>
-                        <td className="py-4 px-4 text-center">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono tracking-wide ${statusBadge}`}>
+                        <td 
+                          style={{ width: sigColWidths['status'], minWidth: sigColWidths['status'], maxWidth: sigColWidths['status'] }}
+                          className="py-4.5 px-4 text-center truncate"
+                        >
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono tracking-wide ${statusBadge}`} title={statusLabel}>
                             {statusLabel}
                           </span>
                         </td>
-                        <td className="py-4 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <td 
+                          style={{ width: sigColWidths['actions'], minWidth: sigColWidths['actions'], maxWidth: sigColWidths['actions'] }}
+                          className="py-4.5 px-4 text-right" 
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <div className="flex justify-end gap-1.5">
                             {sig.status === 'draft' && (
                               <button
                                 onClick={() => handleSendDraft(sig)}
                                 className="px-2 py-1 bg-indigo-500/10 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/20 text-[11px] font-bold rounded-lg cursor-pointer transition-colors"
                               >
-                                Enviar Pedido
+                                Enviar
                               </button>
                             )}
 
                             {sig.status === 'signed' && (
                               <button
                                 onClick={() => handleArchiveSignature(sig)}
-                                className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-indigo-400 hover:text-indigo-300 font-bold rounded-lg text-[11px] cursor-pointer flex items-center gap-1"
+                                className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-indigo-400 hover:text-indigo-300 font-bold rounded-lg text-[11px] cursor-pointer flex items-center gap-1"
+                                title="Arquivar"
                               >
                                 <Archive className="w-3 h-3" />
-                                Arquivar
+                                Arq
                               </button>
                             )}
 
                             {(sig.status === 'signed' || sig.status === 'archived') && (
                               <button
                                 onClick={() => setInspectCertificate(sig)}
-                                className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-[11px] font-semibold cursor-pointer flex items-center gap-1"
+                                className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-lg text-[11px] font-semibold cursor-pointer flex items-center gap-1"
+                                title="Ver Certificado"
                               >
                                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                                Comprovativo
+                                Doc
                               </button>
                             )}
 
                             {sig.status === 'sent' && (
-                              <span className="text-[10px] font-mono text-zinc-500 italic pr-2 mt-1">Pendente</span>
+                              <span className="text-[10px] font-mono text-zinc-500 italic pr-2 mt-1 block truncate">Pendente</span>
                             )}
 
                             <button

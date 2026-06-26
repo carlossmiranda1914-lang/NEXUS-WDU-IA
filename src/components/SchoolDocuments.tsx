@@ -492,7 +492,9 @@ export function PDFInteractiveViewer({ fileDataUrl, fileName, title }: PDFIntera
 
         {error && (
           <div className="text-center space-y-2 py-12">
-            <div className="w-10 h-10 rounded-full bg-red-950/40 text-red-400 flex items-center justify-center mx-auto text-lg">⚠️</div>
+            <div className="w-10 h-10 rounded-full bg-red-950/40 text-red-400 flex items-center justify-center mx-auto text-lg">
+              <AlertCircle className="w-5 h-5 text-red-500" />
+            </div>
             <p className="text-xs font-mono text-red-400 max-w-sm mx-auto">{error}</p>
           </div>
         )}
