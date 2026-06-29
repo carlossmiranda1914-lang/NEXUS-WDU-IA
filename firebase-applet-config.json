@@ -1,9 +1,10 @@
 {
-  "projectId": "balmy-analyst-5lrqd",
-  "appId": "1:862226194743:web:fe90053cd6c55ccf983ab2",
-  "apiKey": "AIzaSyApYm5r43U3FfFd2zEUVDTiODLorn3JJgk",
-  "authDomain": "balmy-analyst-5lrqd.firebaseapp.com",
-  "storageBucket": "balmy-analyst-5lrqd.firebasestorage.app",
-  "messagingSenderId": "862226194743",
+  "projectId": "nexus-edu-platform",
+  "appId": "1:332465869346:web:a04cccda2b26ff2274f07b",
+  "apiKey": "AIzaSyC5xDTYWlCPCfHPRp2oWkW-iMBWeFDxpt0",
+  "authDomain": "nexus-edu-platform.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-nexuseduai-c38b7c53-df6f-48c7-bd0a-1f48e5a82103",
+  "storageBucket": "nexus-edu-platform.firebasestorage.app",
+  "messagingSenderId": "332465869346",
   "measurementId": ""
 }

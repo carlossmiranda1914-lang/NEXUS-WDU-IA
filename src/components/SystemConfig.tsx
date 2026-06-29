@@ -39,8 +39,6 @@ interface SystemConfigProps {
   }) => void;
   rolePermissions: Record<UserRole, string[]>;
   onUpdatePermissions: (updated: Record<UserRole, string[]>) => void;
-  onResetToZero: () => void;
-  onRestoreDemo: () => void;
   auditLogs?: AuditLog[];
   onClearAuditLogs?: () => void;
   firebaseUser?: any;
@@ -103,8 +101,6 @@ export default function SystemConfig({
   onImportLiveDatabase,
   rolePermissions,
   onUpdatePermissions,
-  onResetToZero,
-  onRestoreDemo,
   auditLogs = [],
   onClearAuditLogs,
   firebaseUser

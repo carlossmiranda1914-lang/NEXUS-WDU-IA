@@ -35,9 +35,12 @@ import {
   MoreVertical,
   ShieldAlert,
   Archive,
-  RefreshCw
+  RefreshCw,
+  Network
 } from 'lucide-react';
 import { SchoolTask, TaskPriority, TaskState, UserRole, TaskHistoryEvent, TaskAttachment } from '../types';
+import { supabaseConfigured, upsertLiveTask, deleteLiveTask, getDeletedLiveTasks, restoreLiveTask, getDependencyImpact, getHeaders } from '../supabaseClient';
+import TasksOperationalDashboard from './TasksOperationalDashboard';
 
 interface TasksCenterProps {
   tasks: SchoolTask[];
@@ -83,6 +86,50 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
 
   // Selected task detail for lateral panel
   const [selectedTask, setSelectedTask] = useState<SchoolTask | null>(null);
+
+  // Archived Tasks and Dependency Impact states
+  const [isArchivedModalOpen, setIsArchivedModalOpen] = useState(false);
+  const [archivedTasksList, setArchivedTasksList] = useState<SchoolTask[]>([]);
+  const [isImpactModalOpen, setIsImpactModalOpen] = useState(false);
+  const [impactData, setImpactData] = useState<any>(null);
+  const [taskForImpact, setTaskForImpact] = useState<SchoolTask | null>(null);
+
+  const fetchAndShowArchived = async () => {
+    try {
+      const res = await getDeletedLiveTasks();
+      setArchivedTasksList(res);
+      setIsArchivedModalOpen(true);
+    } catch (err: any) {
+      alert(`Erro ao carregar tarefas arquivadas: ${err.message}`);
+    }
+  };
+
+  const handleRestoreTask = async (id: string) => {
+    try {
+      const result = await restoreLiveTask(id);
+      if (result.success) {
+        setTasks(prev => {
+          if (prev.some(t => t.id === id)) return prev;
+          return [...prev, result.task];
+        });
+        setArchivedTasksList(prev => prev.filter(t => t.id !== id));
+        alert('Tarefa restaurada com sucesso!');
+      }
+    } catch (err: any) {
+      alert(`Erro ao restaurar tarefa: ${err.message}`);
+    }
+  };
+
+  const handleCheckImpact = async (task: SchoolTask) => {
+    try {
+      setTaskForImpact(task);
+      const data = await getDependencyImpact(task.id);
+      setImpactData(data);
+      setIsImpactModalOpen(true);
+    } catch (err: any) {
+      alert(`Erro ao calcular impacto de dependências: ${err.message}`);
+    }
+  };
 
   // Interactive detail forms
   const [obsText, setObsText] = useState('');
@@ -374,6 +421,13 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
     if (selectedTask?.id === id) {
       setSelectedTask(updated);
     }
+
+    if (supabaseConfigured) {
+      upsertLiveTask(updated).catch(err => {
+        console.error("Error updating task on Postgres:", err);
+        alert(`Erro ao atualizar a tarefa: ${err.message}`);
+      });
+    }
   };
 
   // Action: Create Task manually
@@ -410,6 +464,13 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
     setTasks(prev => [newTask, ...prev]);
     setIsCreateModalOpen(false);
 
+    if (supabaseConfigured) {
+      upsertLiveTask(newTask).catch(err => {
+        console.error("Error creating task on Postgres:", err);
+        alert(`Erro ao criar a tarefa: ${err.message}`);
+      });
+    }
+
     // Reset Form
     setNewTitle('');
     setNewDescription('');
@@ -420,10 +481,26 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
   };
 
   // Action: Delete Task
-  const handleDeleteTask = (id: string) => {
+  const handleDeleteTask = async (id: string) => {
     if (confirm('Tem a certeza que deseja eliminar esta tarefa operacional permanentemente?')) {
+      const taskToRestore = tasks.find(t => t.id === id);
+      const previousTasks = [...tasks];
+
+      // Optimistically remove from state
       setTasks(prev => prev.filter(t => t.id !== id));
       setSelectedTask(null);
+
+      if (supabaseConfigured) {
+        try {
+          await deleteLiveTask(id);
+        } catch (err: any) {
+          console.error("Error deleting task on Postgres:", err);
+          // Restore previous state since deletion failed
+          setTasks(previousTasks);
+          if (taskToRestore) setSelectedTask(taskToRestore);
+          alert(`Erro ao eliminar a tarefa:\n${err.message}`);
+        }
+      }
     }
   };
 
@@ -545,7 +622,14 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
     };
 
     setTasks(prev => [docTask, finTask, contractTask, ...prev]);
-    alert(`3 tarefas operacionais automáticas criadas com sucesso para o aluno ${studentName}!`);
+    if (supabaseConfigured) {
+      Promise.all([
+        upsertLiveTask(docTask),
+        upsertLiveTask(finTask),
+        upsertLiveTask(contractTask)
+      ]).catch(err => console.error("Error creating matricula tasks:", err));
+    }
+    alert(`3 fatias de tarefas operacionais reais foram geradas e salvas na base de dados para o aluno ${studentName}!`);
   };
 
   const triggerNewDocument = () => {
@@ -638,7 +722,14 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
     };
 
     setTasks(prev => [valTask, classTask, appTask, ...prev]);
-    alert(`3 tarefas operacionais automáticas criadas com sucesso para o documento: ${docName}!`);
+    if (supabaseConfigured) {
+      Promise.all([
+        upsertLiveTask(valTask),
+        upsertLiveTask(classTask),
+        upsertLiveTask(appTask)
+      ]).catch(err => console.error("Error creating document validation tasks:", err));
+    }
+    alert(`3 tarefas operacionais reais foram persistidas no Postgres para o documento: ${docName}!`);
   };
 
   const triggerLatePayment = () => {
@@ -677,7 +768,10 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
     };
 
     setTasks(prev => [lateTask, ...prev]);
-    alert(`Nova tarefa operacional crítica criada automaticamente para o departamento financeiro!`);
+    if (supabaseConfigured) {
+      upsertLiveTask(lateTask).catch(err => console.error("Error creating late payment task:", err));
+    }
+    alert(`Nova tarefa operacional crítica salva diretamente no PostgreSQL para o departamento financeiro!`);
   };
 
   // Status and Priority CSS badges helpers
@@ -722,6 +816,17 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={fetchAndShowArchived}
+            className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-semibold cursor-pointer shadow-sm transition-all active:scale-95 ${
+              isLight 
+                ? 'border-[#E2E8F0] bg-[#FFFFFF] text-[#475569] hover:bg-slate-50' 
+                : 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-850'
+            }`}
+          >
+            <Archive className="w-4 h-4 text-amber-500" />
+            Tarefas Arquivadas
+          </button>
           <button
             onClick={() => setIsCreateModalOpen(true)}
             className="flex items-center gap-1.5 px-4 py-2 bg-indigo-650 hover:bg-indigo-600 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-sm transition-all active:scale-95 border border-indigo-550"
@@ -942,7 +1047,7 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
           </span>
         </div>
         
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-2.5">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-2.5">
           {/* Tab 1: Minhas Tarefas */}
           <button
             onClick={() => {
@@ -1128,11 +1233,43 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
               </span>
             </div>
           </button>
+
+          {/* Tab 7: Métricas & SLA Dashboard */}
+          <button
+            onClick={() => {
+              setActiveOperationalTab('dashboard');
+            }}
+            className={`p-3 rounded-xl border text-left transition-all relative overflow-hidden flex flex-col justify-between cursor-pointer group ${
+              activeOperationalTab === 'dashboard'
+                ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
+                : isLight
+                  ? 'bg-[#FFFFFF] text-[#0F172A] border-[#E2E8F0] hover:border-emerald-500/40'
+                  : 'bg-zinc-900 text-zinc-100 border-zinc-805 hover:border-emerald-500/30'
+            }`}
+          >
+            <div className="flex items-center justify-between w-full">
+              <TrendingUp className={`w-4 h-4 ${activeOperationalTab === 'dashboard' ? 'text-emerald-200' : isLight ? 'text-emerald-600' : 'text-emerald-400'}`} />
+              <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full ${
+                activeOperationalTab === 'dashboard' ? 'bg-emerald-500 text-white' : isLight ? 'bg-emerald-50 text-emerald-700' : 'bg-emerald-950/40 text-emerald-350'
+              }`}>
+                KPI
+              </span>
+            </div>
+            <div className="mt-4">
+              <span className="block text-xs font-bold tracking-tight">Métricas & SLA</span>
+              <span className={`block text-[9px] font-normal leading-tight mt-0.5 ${activeOperationalTab === 'dashboard' ? 'text-emerald-100' : isLight ? 'text-[#475569]' : 'text-zinc-400'}`}>
+                SLA e Produtividade
+              </span>
+            </div>
+          </button>
         </div>
       </div>
 
       {/* FILTER & TABLE AREA */}
-      <div className="space-y-4">
+      {activeOperationalTab === 'dashboard' ? (
+        <TasksOperationalDashboard isLight={isLight} />
+      ) : (
+        <div className="space-y-4">
         
         {/* FILTER BAR ROW */}
         <div className={`${isLight ? 'bg-[#FFFFFF] border-[#E2E8F0]' : 'bg-zinc-900 border-zinc-800'} p-4 rounded-xl border shadow-sm space-y-3`}>
@@ -1360,6 +1497,7 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
         </div>
 
       </div>
+      )}
 
       {/* DETAILED LATERAL PANEL (Sliding Drawer Sheet) */}
       <AnimatePresence>
@@ -1691,13 +1829,26 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
 
               {/* PANEL FOOTER ACTIONS */}
               <div className={`p-4 flex items-center justify-between shrink-0 border-t ${isLight ? 'bg-[#F8FAFC] border-[#E2E8F0]' : 'bg-zinc-50 dark:bg-zinc-950 border-zinc-800'}`}>
-                <button
-                  onClick={() => handleDeleteTask(selectedTask.id)}
-                  className="flex items-center gap-1 text-rose-500 hover:text-white hover:bg-rose-600 px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer border border-transparent hover:border-rose-700"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Eliminar Tarefa
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleCheckImpact(selectedTask)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg font-semibold transition cursor-pointer text-xs ${
+                      isLight 
+                        ? 'border-indigo-200 text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100' 
+                        : 'border-zinc-800 text-indigo-400 bg-indigo-950/20 hover:bg-zinc-900'
+                    }`}
+                  >
+                    <Network className="w-3.5 h-3.5 text-indigo-500" />
+                    Impacto
+                  </button>
+                  <button
+                    onClick={() => handleDeleteTask(selectedTask.id)}
+                    className="flex items-center gap-1 text-rose-500 hover:text-white hover:bg-rose-600 px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer border border-transparent hover:border-rose-700 text-xs"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Eliminar
+                  </button>
+                </div>
 
                 {selectedTask.status !== 'Concluída' ? (
                   <button
@@ -1862,6 +2013,234 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
 
             </form>
 
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: TAREFAS ARQUIVADAS (SOFT DELETE) */}
+      {isArchivedModalOpen && (
+        <div className={`fixed inset-0 backdrop-blur-xs flex items-center justify-center z-[1000] p-4 ${isLight ? 'bg-[#0F172A]/45' : 'bg-black/60'}`}>
+          <div className={`w-full max-w-3xl rounded-2xl shadow-xl border overflow-hidden flex flex-col max-h-[85vh] ${isLight ? 'bg-white border-[#E2E8F0]' : 'bg-zinc-900 border-zinc-800'}`}>
+            {/* Header */}
+            <div className={`p-4 border-b flex items-center justify-between ${isLight ? 'bg-slate-50 border-[#E2E8F0]' : 'bg-zinc-950 border-zinc-800'}`}>
+              <div className="flex items-center gap-2">
+                <Archive className="w-5 h-5 text-amber-500" />
+                <h3 className={`text-sm font-bold ${isLight ? 'text-[#0F172A]' : 'text-zinc-200'}`}>
+                  Arquivo de Tarefas Operacionais (Soft Deleted)
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsArchivedModalOpen(false)}
+                className={`p-1.5 rounded-lg border transition ${isLight ? 'border-slate-200 hover:bg-slate-100 text-[#475569]' : 'border-zinc-800 hover:bg-zinc-800 text-zinc-400'}`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 overflow-y-auto space-y-4">
+              <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-zinc-400'}`}>
+                Estas tarefas foram arquivadas logicamente (soft delete) para preservar registos de auditoria escolar. Pode restaurá-las a qualquer momento de volta ao centro de tarefas ativas.
+              </p>
+
+              {archivedTasksList.length === 0 ? (
+                <div className={`p-10 text-center border border-dashed rounded-xl ${isLight ? 'border-[#E2E8F0] text-slate-400' : 'border-zinc-800 text-zinc-500'}`}>
+                  <Archive className="w-8 h-8 mx-auto mb-2 opacity-40 text-slate-500" />
+                  <p className="text-xs font-medium">Nenhuma tarefa no arquivo histórico no momento.</p>
+                </div>
+              ) : (
+                <div className={`overflow-x-auto border rounded-xl ${isLight ? 'border-[#E2E8F0]' : 'border-zinc-800'}`}>
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className={`${isLight ? 'bg-slate-50 text-slate-600' : 'bg-zinc-950 text-zinc-400'} font-bold uppercase tracking-wider border-b ${isLight ? 'border-[#E2E8F0]' : 'border-zinc-800'}`}>
+                      <tr>
+                        <th className="p-3">ID / Título</th>
+                        <th className="p-3">Departamento</th>
+                        <th className="p-3">Eliminado Por / Em</th>
+                        <th className="p-3 text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${isLight ? 'divide-slate-100' : 'divide-zinc-800'}`}>
+                      {archivedTasksList.map(task => (
+                        <tr key={task.id} className={isLight ? 'hover:bg-slate-50' : 'hover:bg-zinc-850/30'}>
+                          <td className="p-3">
+                            <span className="font-mono font-bold text-indigo-500 block text-[11px]">{task.id}</span>
+                            <span className={`font-medium ${isLight ? 'text-slate-800' : 'text-zinc-300'}`}>{task.title}</span>
+                          </td>
+                          <td className="p-3">
+                            <span className="text-[10px] px-2 py-0.5 border rounded-full bg-slate-50 text-slate-600 border-slate-200 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-400">
+                              {task.department}
+                            </span>
+                          </td>
+                          <td className="p-3 text-slate-500 dark:text-zinc-400 text-[11px]">
+                            <div className="font-semibold text-rose-500">{task.deletedBy || 'Não registado'}</div>
+                            <div className="font-mono text-[10px] opacity-80">{task.deletedAt ? new Date(task.deletedAt).toLocaleString('pt-PT') : 'N/D'}</div>
+                          </td>
+                          <td className="p-3 text-right">
+                            <button
+                              onClick={() => handleRestoreTask(task.id)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold text-xs transition cursor-pointer"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              Restaurar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className={`p-4 border-t flex justify-end ${isLight ? 'bg-slate-50 border-[#E2E8F0]' : 'bg-zinc-950 border-zinc-800'}`}>
+              <button
+                onClick={() => setIsArchivedModalOpen(false)}
+                className={`px-4 py-1.5 rounded-xl font-semibold cursor-pointer text-xs ${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-350'}`}
+              >
+                Fechar Arquivo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ANÁLISE DE IMPACTO DE DEPENDÊNCIAS */}
+      {isImpactModalOpen && taskForImpact && impactData && (
+        <div className={`fixed inset-0 backdrop-blur-xs flex items-center justify-center z-[1000] p-4 ${isLight ? 'bg-[#0F172A]/45' : 'bg-black/60'}`}>
+          <div className={`w-full max-w-2xl rounded-2xl shadow-xl border overflow-hidden flex flex-col max-h-[85vh] ${isLight ? 'bg-white border-[#E2E8F0]' : 'bg-zinc-900 border-zinc-800'}`}>
+            {/* Header */}
+            <div className={`p-4 border-b flex items-center justify-between ${isLight ? 'bg-slate-50 border-[#E2E8F0]' : 'bg-zinc-950 border-zinc-800'}`}>
+              <div className="flex items-center gap-2">
+                <Network className="w-5 h-5 text-indigo-500" />
+                <h3 className={`text-sm font-bold ${isLight ? 'text-[#0F172A]' : 'text-zinc-200'}`}>
+                  Análise de Impacto Operacional
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setIsImpactModalOpen(false);
+                  setImpactData(null);
+                  setTaskForImpact(null);
+                }}
+                className={`p-1.5 rounded-lg border transition ${isLight ? 'border-slate-200 hover:bg-slate-100 text-[#475569]' : 'border-zinc-800 hover:bg-zinc-800 text-zinc-400'}`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 overflow-y-auto space-y-5">
+              {/* Task info summary */}
+              <div className={`p-4 rounded-xl border ${isLight ? 'bg-indigo-50/40 border-indigo-100' : 'bg-indigo-950/10 border-indigo-900/30'}`}>
+                <span className="text-[10px] font-bold font-mono text-indigo-500 block">ALVO DA ANÁLISE</span>
+                <span className={`text-xs font-bold ${isLight ? 'text-slate-800' : 'text-zinc-200'}`}>
+                  {taskForImpact.id} - {taskForImpact.title}
+                </span>
+                <p className="text-[11px] mt-1 text-slate-500 dark:text-zinc-400">
+                  Setor: {taskForImpact.department} | Estado: {taskForImpact.status}
+                </p>
+              </div>
+
+              {/* Status and Numbers summary */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className={`p-3.5 border rounded-xl text-center ${
+                  impactData.canDelete 
+                    ? (isLight ? 'bg-emerald-50/50 border-emerald-100 text-emerald-800' : 'bg-emerald-950/15 border-emerald-900/30 text-emerald-400')
+                    : (isLight ? 'bg-rose-50/50 border-rose-100 text-rose-800' : 'bg-rose-950/15 border-rose-900/30 text-rose-400')
+                }`}>
+                  <span className="block text-[9px] font-bold uppercase tracking-wider mb-1 opacity-85">Status de Remoção</span>
+                  <div className="text-sm font-bold flex items-center justify-center gap-1">
+                    {impactData.canDelete ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                        Seguro Eliminar
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-rose-500" />
+                        Bloqueado
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className={`p-3.5 border rounded-xl text-center ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-zinc-950 border-zinc-800'}`}>
+                  <span className="block text-[9px] font-bold uppercase tracking-wider mb-1 text-slate-500 dark:text-zinc-400">Dependentes Diretos</span>
+                  <span className="text-xl font-bold font-mono">{impactData.directDependents}</span>
+                </div>
+
+                <div className={`p-3.5 border rounded-xl text-center ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-zinc-950 border-zinc-800'}`}>
+                  <span className="block text-[9px] font-bold uppercase tracking-wider mb-1 text-slate-500 dark:text-zinc-400">Total Afetadas em Cascata</span>
+                  <span className="text-xl font-bold font-mono text-indigo-500">{impactData.totalAffectedTasks}</span>
+                </div>
+              </div>
+
+              {/* Warning box if blocked */}
+              {!impactData.canDelete && (
+                <div className={`p-3 border rounded-xl text-xs flex gap-2 ${isLight ? 'bg-amber-50/60 border-amber-200 text-amber-800' : 'bg-amber-950/15 border-amber-900/40 text-amber-400'}`}>
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500 mt-0.5" />
+                  <div>
+                    <span className="font-bold block mb-0.5">Integridade Referencial Ativa</span>
+                    Esta tarefa possui dependentes operacionais ativos. A exclusão física ou lógica está bloqueada por motivos de segurança até que os dependentes sejam modificados.
+                  </div>
+                </div>
+              )}
+
+              {/* Dependent Hierarchy List */}
+              <div className="space-y-2">
+                <span className={`text-[10px] font-bold uppercase tracking-wider block ${isLight ? 'text-slate-500' : 'text-zinc-500'}`}>
+                  Árvore de Dependências Descendentes
+                </span>
+
+                {impactData.tasks.length === 0 ? (
+                  <div className={`p-6 text-center border border-dashed rounded-xl text-xs ${isLight ? 'border-slate-200 text-slate-400' : 'border-zinc-850 text-zinc-550'}`}>
+                    Nenhuma tarefa depende desta atividade diretamente ou indiretamente.
+                  </div>
+                ) : (
+                  <div className={`border rounded-xl divide-y overflow-hidden max-h-[220px] overflow-y-auto text-xs ${isLight ? 'border-slate-100 divide-slate-100' : 'border-zinc-800 divide-zinc-850'}`}>
+                    {impactData.tasks.map((task: any) => (
+                      <div key={task.id} className={`p-2.5 flex items-center justify-between ${isLight ? 'hover:bg-slate-50' : 'hover:bg-zinc-850/20'}`}>
+                        <div className="min-w-0 pr-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-indigo-500">{task.id}</span>
+                            <span className="text-[10px] px-1.5 py-0.2 border rounded-full bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-400">
+                              Nível {task.depth}
+                            </span>
+                            {task.direct && (
+                              <span className="text-[9px] px-1.5 py-0.2 border rounded bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900/40 dark:text-amber-400 font-medium">
+                                Direto
+                              </span>
+                            )}
+                          </div>
+                          <p className={`font-medium truncate mt-0.5 ${isLight ? 'text-slate-800' : 'text-zinc-300'}`}>{task.title}</p>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`text-[9px] px-2 py-0.5 rounded font-semibold ${getStatusBadge(task.status)}`}>
+                            {task.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className={`p-4 border-t flex justify-end gap-2 ${isLight ? 'bg-slate-50 border-[#E2E8F0]' : 'bg-zinc-950 border-zinc-800'}`}>
+              <button
+                onClick={() => {
+                  setIsImpactModalOpen(false);
+                  setImpactData(null);
+                  setTaskForImpact(null);
+                }}
+                className={`px-4 py-1.5 rounded-xl font-semibold cursor-pointer text-xs ${isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-350'}`}
+              >
+                Fechar Análise
+              </button>
+            </div>
           </div>
         </div>
       )}

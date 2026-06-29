@@ -1,14 +1,6 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import * as schema from './schema.ts';
-import {
-  initialStudents,
-  initialTeachers,
-  initialInvoices,
-  initialAnnouncements,
-  initialAutomations,
-  initialMessages
-} from '../mockData.ts';
 
 const { Pool } = pg;
 
@@ -65,6 +57,8 @@ export const inMemoryDb = {
   uploaded_documents: [] as any[],
   approvals: [] as any[],
   todo_tasks: [] as any[],
+  school_tasks: [] as any[],
+  task_versions: [] as any[],
   operational_logs: [
     {
       id: 1,
@@ -90,6 +84,8 @@ function getTargetTable(sql: string): string {
   if (normalized.includes('"uploaded_documents"') || normalized.includes(' uploaded_documents ')) return 'uploaded_documents';
   if (normalized.includes('"operational_logs"') || normalized.includes(' operational_logs ')) return 'operational_logs';
   if (normalized.includes('"todo_tasks"') || normalized.includes(' todo_tasks ')) return 'todo_tasks';
+  if (normalized.includes('"school_tasks"') || normalized.includes(' school_tasks ')) return 'school_tasks';
+  if (normalized.includes('"task_versions"') || normalized.includes(' task_versions ')) return 'task_versions';
   if (normalized.includes('"approvals"') || normalized.includes(' approvals ')) return 'approvals';
   return '';
 }
@@ -306,12 +302,22 @@ function makeQueryProxy(obj: any): any {
         return function (rawSql: any) {
           const p = (async () => {
             const sqlStr = getSqlString(rawSql);
+            const isProduction = process.env.NODE_ENV === 'production';
+            const disableFallback = process.env.DISABLE_DB_FALLBACK === 'true';
+            
             if (!process.env.SQL_HOST) {
+              if (isProduction || disableFallback) {
+                throw new Error('Database error: SQL_HOST is not defined and in-memory fallback is disabled.');
+              }
               return executeInMemoryEmulation(sqlStr, []);
             }
             try {
               return await target.execute(rawSql);
             } catch (err: any) {
+              if (isProduction || disableFallback) {
+                console.error('[DB-PROXY] Database execution failed in production/strict mode:', err);
+                throw err;
+              }
               console.info(`[DB-HEAL-EXEC] Local operational synchronisation active.`);
               return executeInMemoryEmulation(sqlStr, []);
             }
@@ -336,15 +342,25 @@ function makeQueryProxy(obj: any): any {
             }
           }
 
+          const isProduction = process.env.NODE_ENV === 'production';
+          const disableFallback = process.env.DISABLE_DB_FALLBACK === 'true';
+
           // Trigger execution
           const promise = (async () => {
             if (!process.env.SQL_HOST) {
+              if (isProduction || disableFallback) {
+                throw new Error('Database error: SQL_HOST is not defined and in-memory fallback is disabled.');
+              }
               return executeInMemoryEmulation(sql, params);
             }
             try {
               // Try the real PostgreSQL query
               return await target;
             } catch (error: any) {
+              if (isProduction || disableFallback) {
+                console.error('[DB-PROXY] Database query failed in production/strict mode:', error);
+                throw error;
+              }
               console.info(`[DB-HEAL-ENG] Local operational state synchronized.`);
               try {
                 return executeInMemoryEmulation(sql, params);

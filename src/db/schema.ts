@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp, boolean, doublePrecision, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, integer, timestamp, boolean, doublePrecision, jsonb, date } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // 1. Users Profile Table (linked directly to Firebase Authentication UID)
@@ -158,5 +158,59 @@ export const todoTasks = pgTable('todo_tasks', {
   assignedTo: text('assigned_to').notNull().default('all'), // 'all' or specific role/name
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+// 12. New School Tasks Table (PostgreSQL)
+export const schoolTasks = pgTable('school_tasks', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  description: text('description').notNull(),
+  assignedTo: text('assigned_to').notNull().default('Não atribuído'),
+  department: text('department').notNull().default('Secretaria'),
+  priority: text('priority').notNull().default('Normal'),
+  status: text('status').notNull().default('Pendente'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  dueDate: date('due_date').notNull(),
+  limitDate: date('limit_date').notNull(),
+  createdAutomatically: boolean('created_automatically').default(false),
+  referenceId: text('reference_id'),
+  referenceType: text('reference_type'),
+  observations: text('observations'),
+  history: jsonb('history').default([]), // TaskHistoryEvent[]
+  attachments: jsonb('attachments').default([]), // TaskAttachment[]
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  createdBy: text('created_by'),
+  executedBy: text('executed_by'),
+  completedBy: text('completed_by'),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  dependencies: jsonb('dependencies').default([]), // string[] (precedent task IDs)
+  isDeleted: boolean('is_deleted').default(false).notNull(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  deletedBy: text('deleted_by'),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  firstResponseAt: timestamp('first_response_at', { withTimezone: true }),
+  slaDeadline: timestamp('sla_deadline', { withTimezone: true }),
+  slaStatus: text('sla_status').default('On Track'),
+  // Phase 11 - Enterprise Multi-Tenancy
+  tenantId: text('tenant_id').notNull().default('default-tenant'),
+  schoolId: text('school_id').notNull().default('default-school'),
+  organizationId: text('organization_id').notNull().default('default-org'),
+});
+
+// 13. Task Versions and Snapshots (Phase 11 - Advanced Audit & Snapshots for Rollbacks)
+export const taskVersions = pgTable('task_versions', {
+  id: serial('id').primaryKey(),
+  taskId: text('task_id').notNull(),
+  version: integer('version').notNull(),
+  snapshot: jsonb('snapshot').notNull(), // Full JSON dump of the schoolTasks row at this specific version
+  changedBy: text('changed_by').notNull(),
+  changedAt: timestamp('changed_at', { withTimezone: true }).defaultNow().notNull(),
+  action: text('action').notNull(), // 'CREATE' | 'UPDATE' | 'RESTORE' | 'DELETE' | 'ARCHIVE'
+  requestId: text('request_id'),
+  correlationId: text('correlation_id'),
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  diff: jsonb('diff'), // JSON record detailing specific field updates
+});
+
 
 

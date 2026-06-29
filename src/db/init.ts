@@ -1,14 +1,6 @@
 import { db } from './index.ts';
 import { sql } from 'drizzle-orm';
 import {
-  initialStudents,
-  initialTeachers,
-  initialInvoices,
-  initialAnnouncements,
-  initialAutomations,
-  initialMessages
-} from '../mockData.ts';
-import {
   users,
   students,
   teachers,
@@ -18,7 +10,7 @@ import {
   automations,
   operationalLogs,
   approvals,
-  todoTasks
+  schoolTasks
 } from './schema.ts';
 
 export async function initializeDatabase() {
@@ -189,16 +181,131 @@ export async function initializeDatabase() {
     `);
 
     await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS todo_tasks (
+      CREATE TABLE IF NOT EXISTS school_tasks (
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT NOT NULL,
-        due_date TEXT NOT NULL,
-        priority TEXT NOT NULL DEFAULT 'média',
-        status TEXT NOT NULL DEFAULT 'pendente',
-        assigned_to TEXT NOT NULL DEFAULT 'all',
-        created_at TIMESTAMP DEFAULT NOW()
+        assigned_to TEXT NOT NULL DEFAULT 'Não atribuído',
+        department TEXT NOT NULL DEFAULT 'Secretaria',
+        priority TEXT NOT NULL DEFAULT 'Normal',
+        status TEXT NOT NULL DEFAULT 'Pendente',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+        due_date DATE NOT NULL,
+        limit_date DATE NOT NULL,
+        created_automatically BOOLEAN DEFAULT false,
+        reference_id TEXT,
+        reference_type TEXT,
+        observations TEXT,
+        history JSONB DEFAULT '[]'::jsonb,
+        attachments JSONB DEFAULT '[]'::jsonb,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        created_by TEXT,
+        executed_by TEXT,
+        completed_by TEXT,
+        completed_at TIMESTAMP WITH TIME ZONE,
+        dependencies JSONB DEFAULT '[]'::jsonb,
+        is_deleted BOOLEAN DEFAULT false NOT NULL,
+        deleted_at TIMESTAMP WITH TIME ZONE,
+        deleted_by TEXT,
+        started_at TIMESTAMP WITH TIME ZONE,
+        first_response_at TIMESTAMP WITH TIME ZONE,
+        sla_deadline TIMESTAMP WITH TIME ZONE,
+        sla_status TEXT DEFAULT 'On Track'
       );
+    `);
+
+    // Dynamically upgrade existing school_tasks table to production-ready native columns
+    try {
+      await db.execute(sql`ALTER TABLE school_tasks ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT false NOT NULL`);
+      await db.execute(sql`ALTER TABLE school_tasks ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE`);
+      await db.execute(sql`ALTER TABLE school_tasks ADD COLUMN IF NOT EXISTS deleted_by TEXT`);
+    } catch (colErr) {
+      console.log('[DB-INIT] Handled school_tasks soft-delete columns exception:', colErr);
+    }
+
+    try {
+      await db.execute(sql`ALTER TABLE school_tasks ADD COLUMN IF NOT EXISTS started_at TIMESTAMP WITH TIME ZONE`);
+      await db.execute(sql`ALTER TABLE school_tasks ADD COLUMN IF NOT EXISTS first_response_at TIMESTAMP WITH TIME ZONE`);
+      await db.execute(sql`ALTER TABLE school_tasks ADD COLUMN IF NOT EXISTS sla_deadline TIMESTAMP WITH TIME ZONE`);
+      await db.execute(sql`ALTER TABLE school_tasks ADD COLUMN IF NOT EXISTS sla_status TEXT DEFAULT 'On Track'`);
+    } catch (slaErr) {
+      console.log('[DB-INIT] Handled school_tasks SLA columns exception:', slaErr);
+    }
+
+    try {
+      await db.execute(sql`
+        ALTER TABLE school_tasks 
+        ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE 
+        USING (created_at::timestamp with time zone)
+      `);
+    } catch (err) {
+      console.log('[DB-INIT] Handled school_tasks created_at migration:', err);
+    }
+
+    try {
+      await db.execute(sql`
+        ALTER TABLE school_tasks 
+        ALTER COLUMN updated_at TYPE TIMESTAMP WITH TIME ZONE 
+        USING (updated_at::timestamp with time zone)
+      `);
+    } catch (err) {
+      console.log('[DB-INIT] Handled school_tasks updated_at migration:', err);
+    }
+
+    try {
+      await db.execute(sql`
+        ALTER TABLE school_tasks 
+        ALTER COLUMN completed_at TYPE TIMESTAMP WITH TIME ZONE 
+        USING (completed_at::timestamp with time zone)
+      `);
+    } catch (err) {
+      console.log('[DB-INIT] Handled school_tasks completed_at migration:', err);
+    }
+
+    try {
+      await db.execute(sql`
+        ALTER TABLE school_tasks 
+        ALTER COLUMN due_date TYPE DATE 
+        USING (due_date::date)
+      `);
+    } catch (err) {
+      console.log('[DB-INIT] Handled school_tasks due_date migration:', err);
+    }
+
+    try {
+      await db.execute(sql`
+        ALTER TABLE school_tasks 
+        ALTER COLUMN limit_date TYPE DATE 
+        USING (limit_date::date)
+      `);
+    } catch (err) {
+      console.log('[DB-INIT] Handled school_tasks limit_date migration:', err);
+    }
+
+    // Create required indexes for school_tasks
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_school_tasks_dept_status ON school_tasks(department, status);
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_school_tasks_status_dept ON school_tasks(status, department);
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_school_tasks_assigned_status ON school_tasks(assigned_to, status);
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_school_tasks_created_at ON school_tasks(created_at);
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_school_tasks_completed_at ON school_tasks(completed_at);
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_school_tasks_assigned ON school_tasks(assigned_to);
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_school_tasks_ref ON school_tasks(reference_id, reference_type);
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_school_tasks_due ON school_tasks(due_date);
     `);
 
     console.log('[DB-INIT] Tables checked and created.');

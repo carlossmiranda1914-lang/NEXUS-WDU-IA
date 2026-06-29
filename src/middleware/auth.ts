@@ -12,84 +12,45 @@ export const requireAuth = async (
   next: NextFunction
 ) => {
   const authHeader = req.headers.authorization;
+  console.log('[DEBUG-AUTH-FLOW] 6. No backend mostrar: Authorization recebido:', authHeader);
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.warn('[AUTH-MIDDLEWARE] Blocked request: Missing or malformed Authorization header:', req.path);
     return res.status(401).json({ error: 'Unauthorized: Missing token' });
   }
 
   const token = authHeader.split('Bearer ')[1];
+  console.log(`[AUTH-MIDDLEWARE] Processing auth token for path: ${req.method} ${req.path}`);
+  
   try {
-    let decodedToken: any;
-    if (token && token.startsWith('bypass-token-')) {
-      const role = token.split('bypass-token-')[1] || 'student';
-      decodedToken = {
-        uid: `bypass_uid_${role}`,
-        email: `${role}@nexus.edu`,
-        name: role.charAt(0).toUpperCase() + role.slice(1) + ' Simulado',
-      };
-    } else {
-      try {
-        decodedToken = await adminAuth.verifyIdToken(token);
-      } catch (adminError: any) {
-        console.warn('[AUTH-MIDDLEWARE] ID token verification bypassed/failed. Executing resilient token healing...');
-        
-        // Let's see if we can decode it manually if it is a JWT
-        const parts = token.split('.');
-        if (parts.length === 3) {
-          try {
-            const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
-            decodedToken = {
-              uid: payload.user_id || payload.uid || payload.sub || `bypass_uid_${payload.role || 'user'}`,
-              email: payload.email || `${payload.role || 'user'}@nexus.edu`,
-              name: payload.name || payload.email?.split('@')[0] || 'Utilizador Descodificado',
-            };
-          } catch (jwtErr) {
-            // Not a valid JSON payload
-          }
-        }
-        
-        // Otherwise treat as simple string role
-        if (!decodedToken) {
-          const cleanToken = token.trim().toLowerCase();
-          let detectedRole = 'student';
-          if (cleanToken.includes('admin')) detectedRole = 'admin';
-          else if (cleanToken.includes('director')) detectedRole = 'director';
-          else if (cleanToken.includes('teacher') || cleanToken.includes('prof')) detectedRole = 'teacher';
-          else if (cleanToken.includes('secret') || cleanToken.includes('secretariat')) detectedRole = 'secretariat';
-          else if (cleanToken.includes('parent') || cleanToken.includes('encarregado')) detectedRole = 'parent';
-          
-          decodedToken = {
-            uid: `bypass_uid_${cleanToken}`,
-            email: `${cleanToken}@nexus.edu`,
-            name: token.charAt(0).toUpperCase() + token.slice(1) + ' Autodetectado',
-          };
-        }
-      }
-    }
-    
-    // Automatically register or pull user profile from database
-    const email = decodedToken.email || `firebase_${decodedToken.uid}@nexus.edu`;
-    const name = decodedToken.name || decodedToken.email?.split('@')[0] || 'Utilizador Nexus';
-    
-    // Default system seed rules for user roles based on email
-    let defaultRole = 'student';
-    if (email.includes('admin') || email.includes('carlossmiranda1914@gmail.com')) {
-      defaultRole = 'admin';
-    } else if (email.includes('director')) {
-      defaultRole = 'director';
-    } else if (email.includes('secret') || email.includes('secretariat')) {
-      defaultRole = 'secretariat';
-    } else if (email.includes('teacher') || email.includes('prof')) {
-      defaultRole = 'teacher';
-    } else if (email.includes('parent') || email.includes('encarregado')) {
-      defaultRole = 'parent';
-    } else if (email.includes('finance') || email.includes('financial')) {
-      defaultRole = 'financial';
+    const decodedToken = await adminAuth.verifyIdToken(token);
+    console.log('[DEBUG-AUTH-FLOW] 7. Mostrar o resultado de verifyIdToken() (Firebase Admin): SUCCESS', decodedToken);
+
+    if (!decodedToken || !decodedToken.uid) {
+      console.error('[AUTH-MIDDLEWARE] Critical: Token could not be verified or has no UID.');
+      return res.status(401).json({ error: 'Unauthorized: Invalid token payload' });
     }
 
-    const dbUser = await getOrCreateUser(decodedToken.uid, email, name, defaultRole);
+    const email = decodedToken.email;
+    if (!email) {
+      console.error('[AUTH-MIDDLEWARE] Critical: Token does not contain an email address.');
+      return res.status(401).json({ error: 'Unauthorized: Token must contain email' });
+    }
+    const name = decodedToken.name || email.split('@')[0] || 'Utilizador Nexus';
     
+    console.log(`[AUTH-MIDDLEWARE] Syncing user profile with PostgreSQL: uid=${decodedToken.uid}, email=${email}`);
+    
+    const dbUser = await getOrCreateUser(decodedToken.uid, email, name);
+    console.log('[DEBUG-AUTH-FLOW] 8. Mostrar o utilizador encontrado no PostgreSQL:', dbUser);
+    
+    if (!dbUser) {
+      console.error('[AUTH-MIDDLEWARE] Failed to persist/fetch user profile in PostgreSQL.');
+      return res.status(401).json({ error: 'Unauthorized: Failed to resolve database user profile' });
+    }
+
     // Safety verification for suspended user accounts (except profile page itself to allow graceful logout)
-    if (dbUser && dbUser.status === 'suspended' && req.path !== '/api/profile') {
+    if (dbUser.status === 'suspended' && req.path !== '/api/profile') {
+      console.warn(`[AUTH-MIDDLEWARE] Access blocked: Account is suspended for user=${dbUser.email}`);
       return res.status(403).json({ error: 'Conta Suspensa: O acesso aos recursos foi temporariamente bloqueado pela direção.' });
     }
 
@@ -102,18 +63,11 @@ export const requireAuth = async (
       dbStatus: dbUser.status
     };
     
+    console.log(`[AUTH-MIDDLEWARE] Authorization successful for user=${req.user.email} with role=${req.user.dbRole}`);
     next();
-  } catch (error) {
-    console.warn('[AUTH-MIDDLEWARE] Unexpected auth middleware fallback issue resolved:', error);
-    // As a final safety block, assign a virtual session to avoid breaking UI flows
-    req.user = {
-      uid: 'bypass_uid_fallback',
-      email: 'fallback@nexus.edu',
-      name: 'Utilizador Carregado',
-      dbId: 9999,
-      dbRole: 'admin',
-      dbName: 'Administrador Nexus'
-    };
-    next();
+  } catch (error: any) {
+    console.error('[DEBUG-AUTH-FLOW] 10. Mostrar qualquer exceção completa - middleware requireAuth:', error);
+    console.error('[DEBUG-AUTH-FLOW] Stack Trace completo do middleware requireAuth:', error.stack);
+    return res.status(401).json({ error: `Unauthorized: ${error.message || String(error)}` });
   }
 };

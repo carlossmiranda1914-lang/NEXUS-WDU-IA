@@ -814,7 +814,7 @@ export default function SchoolDocuments({
         const displaySize = Number(sizeMB) > 0.1 ? `${sizeMB} MB` : `${sizeKB} KB`;
         const todayStr = new Date().toISOString().split('T')[0];
 
-        const token = auth.currentUser ? await auth.currentUser.getIdToken() : `bypass-token-${currentUserRole}`;
+        const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
         const response = await fetch('/api/documents', {
           method: 'POST',
           headers: {

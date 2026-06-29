@@ -6,10 +6,18 @@ import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
+import crypto from 'crypto';
+
 
 // Import Drizzle, initialize, schemas, etc.
 import { db } from './src/db/index.ts';
 import { initializeDatabase } from './src/db/init.ts';
+
+// Modularized Enterprise School Tasks imports
+import { registerSchoolTaskRoutes } from './src/modules/school-tasks/school-task.controller.ts';
+import { SchoolTaskWebSocketManager } from './src/modules/school-tasks/websocket-manager.ts';
+import { eventBus } from './src/modules/school-tasks/event-bus.ts';
+
 
 let wssInstance: WebSocketServer | null = null;
 
@@ -38,10 +46,10 @@ import {
   uploadedDocuments,
   operationalLogs,
   approvals,
-  todoTasks
+  schoolTasks
 } from './src/db/schema.ts';
 import { requireAuth, AuthRequest } from './src/middleware/auth.ts';
-import { eq, desc, sql, and } from 'drizzle-orm';
+import { eq, desc, sql, and, ne } from 'drizzle-orm';
 
 // Load environment variables
 dotenv.config();
@@ -105,13 +113,11 @@ async function startServer() {
   const wss = new WebSocketServer({ server });
   wssInstance = wss;
 
-  wss.on('connection', (ws) => {
-    console.log('[REALTIME-WS] A client connected to the Live School Hub.');
-    ws.send(JSON.stringify({ 
-      type: 'HEARTBEAT', 
-      payload: { connected: true, msg: 'Conectado com sucesso ao Hub Realtime do Nexus' } 
-    }));
+  wss.on('connection', (ws, req) => {
+    // Delegate to multi-tenant real-time manager
+    SchoolTaskWebSocketManager.handleConnection(ws, req);
 
+    // Legacy backwards-compatibility listener for general broadcasts
     ws.on('message', (msg) => {
       try {
         const parsed = JSON.parse(msg.toString());
@@ -153,7 +159,7 @@ async function startServer() {
   // Roles defined: 'admin' | 'director' | 'secretariat' | 'teacher' | 'parent' | 'student' | 'financial'
   const authorizeRole = (allowedRoles: string[]) => {
     return async (req: AuthRequest, res: any, next: any) => {
-      const role = req.user?.dbRole || 'student';
+      const role = req.user?.dbRole;
       if (allowedRoles.includes(role)) {
         return next();
       }
@@ -179,13 +185,17 @@ async function startServer() {
   // 1. User Profile API
   app.get('/api/profile', requireAuth, async (req: AuthRequest, res) => {
     try {
-      res.json({
+      const responseData = {
         uid: req.user.uid,
         email: req.user.email,
         name: req.user.dbName,
         role: req.user.dbRole
-      });
+      };
+      console.log('[DEBUG-AUTH-FLOW] 9. Mostrar a resposta enviada ao frontend para GET /api/profile:', responseData);
+      res.json(responseData);
     } catch (err: any) {
+      console.error('[DEBUG-AUTH-FLOW] 10. Mostrar qualquer exceção completa - GET /api/profile:', err);
+      console.error('[DEBUG-AUTH-FLOW] Stack trace:', err.stack);
       res.status(500).json({ error: err.message });
     }
   });
@@ -193,7 +203,10 @@ async function startServer() {
   // 1b. Change Current Role simulation (crucial for local testing in CRM/SIS admin contexts)
   app.post('/api/profile/role', requireAuth, async (req: AuthRequest, res) => {
     const { role } = req.body;
-    if (!role) return res.status(400).json({ error: 'Falta parametrizar o papel.' });
+    if (!role) {
+      console.warn('[DEBUG-AUTH-FLOW] POST /api/profile/role bad request: missing role parameter');
+      return res.status(400).json({ error: 'Falta parametrizar o papel.' });
+    }
     
     try {
       await db.update(users).set({ role }).where(eq(users.uid, req.user.uid));
@@ -207,8 +220,12 @@ async function startServer() {
         details: `Utilizador alterou o papel de privilégios para: ${role}`
       });
 
-      res.json({ success: true, role });
+      const responseData = { success: true, role };
+      console.log('[DEBUG-AUTH-FLOW] 9. Mostrar a resposta enviada ao frontend para POST /api/profile/role:', responseData);
+      res.json(responseData);
     } catch (err: any) {
+      console.error('[DEBUG-AUTH-FLOW] 10. Mostrar qualquer exceção completa - POST /api/profile/role:', err);
+      console.error('[DEBUG-AUTH-FLOW] Stack trace:', err.stack);
       res.status(500).json({ error: err.message });
     }
   });
@@ -232,17 +249,20 @@ async function startServer() {
 
       const generatedUid = `uid_${email.replace(/[@.]/g, '_')}`;
 
-      const newUser = await db.insert(users).values({
+      const valuesToInsert: any = {
         uid: generatedUid,
         email: email.trim().toLowerCase(),
         name: name.trim(),
-        role: role || 'student',
         phone: phone || '',
         department: department || 'Outros',
         status: status || 'active',
         createdAt: new Date(),
         lastAccess: null
-      }).returning();
+      };
+      if (role) {
+        valuesToInsert.role = role;
+      }
+      const newUser = await db.insert(users).values(valuesToInsert).returning();
 
       // LOG IT
       await db.insert(operationalLogs).values({
@@ -313,7 +333,7 @@ async function startServer() {
   // 2. Students SIS API
   app.get('/api/students', requireAuth, async (req: AuthRequest, res) => {
     try {
-      const role = req.user?.dbRole || 'student';
+      const role = req.user?.dbRole;
       let records = await db.select().from(students).orderBy(students.id);
 
       // Enforce strict context boundaries and robust security isolation
@@ -590,7 +610,7 @@ async function startServer() {
   // 3. Teachers API
   app.get('/api/teachers', requireAuth, authorizeRole(['admin', 'director', 'secretariat', 'teacher']), async (req: AuthRequest, res) => {
     try {
-      const role = req.user?.dbRole || 'student';
+      const role = req.user?.dbRole;
       let records = await db.select().from(teachers).orderBy(teachers.id);
 
       // Enforce raw isolation boundaries in backend
@@ -729,7 +749,7 @@ async function startServer() {
   // 4. Invoices / Payments API
   app.get('/api/invoices', requireAuth, authorizeRole(['admin', 'financial', 'parent', 'student']), async (req: AuthRequest, res) => {
     try {
-      const role = req.user?.dbRole || 'student';
+      const role = req.user?.dbRole;
       let records = await db.select().from(invoices).orderBy(invoices.id);
 
       // Strict user boundary: Students/Parents can only see their own ALU-101 invoices
@@ -748,7 +768,7 @@ async function startServer() {
     if (!id) return res.status(400).json({ error: 'Falta parametrizar o ID da fatura.' });
 
     try {
-      const role = req.user?.dbRole || 'student';
+      const role = req.user?.dbRole;
       const targetInvoice = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
       if (targetInvoice.length === 0) {
         return res.status(404).json({ error: 'Fatura não encontrada.' });
@@ -1340,7 +1360,7 @@ async function startServer() {
   // 8. Documents Storage & Intelligent OCR API
   app.get('/api/documents', requireAuth, async (req: AuthRequest, res) => {
     try {
-      const role = req.user?.dbRole || 'student';
+      const role = req.user?.dbRole;
       let records = await db.select().from(uploadedDocuments).orderBy(uploadedDocuments.id);
 
       // Enforce strict data isolation for documents in backend
@@ -1997,7 +2017,7 @@ async function startServer() {
   // 12. Institutional Approvals System API Routes
   app.get('/api/approvals', requireAuth, async (req: AuthRequest, res) => {
     try {
-      const role = req.user?.dbRole || 'student';
+      const role = req.user?.dbRole;
       if (role === 'student' || role === 'parent') {
         return res.status(403).json({ error: 'Acesso Proibido: Alunos e Encarregados de Educação não têm permissão para aceder a aprovações institucionais.' });
       }
@@ -2092,7 +2112,7 @@ async function startServer() {
     }
 
     try {
-      const role = req.user?.dbRole || 'student';
+      const role = req.user?.dbRole;
       if (role === 'student' || role === 'parent') {
         return res.status(403).json({ error: 'Acesso Proibido: Alunos ou encarregados não possuem as competências para aceder ou transitar aprovações.' });
       }
@@ -2191,32 +2211,754 @@ async function startServer() {
   });
 
   // 13. Todo Tasks System API Routes
-  app.get('/api/tasks', requireAuth, async (req: AuthRequest, res) => {
+  // Helper to auto update SLA statuses using an optimized single DB update
+  async function autoUpdateSlaStatuses() {
     try {
-      const records = await db.select().from(todoTasks).orderBy(todoTasks.id);
+      await db.execute(sql`
+        UPDATE school_tasks
+        SET sla_status = CASE
+          WHEN COALESCE(
+            sla_deadline,
+            CASE 
+              WHEN limit_date IS NOT NULL THEN (limit_date::text || ' 23:59:59.999Z')::timestamptz
+              WHEN due_date IS NOT NULL THEN (due_date::text || ' 23:59:59.999Z')::timestamptz
+              ELSE NULL
+            END
+          ) IS NULL THEN 'On Track'
+          WHEN COALESCE(
+            sla_deadline,
+            CASE 
+              WHEN limit_date IS NOT NULL THEN (limit_date::text || ' 23:59:59.999Z')::timestamptz
+              WHEN due_date IS NOT NULL THEN (due_date::text || ' 23:59:59.999Z')::timestamptz
+              ELSE NULL
+            END
+          ) < NOW() THEN 'Breached'
+          WHEN COALESCE(
+            sla_deadline,
+            CASE 
+              WHEN limit_date IS NOT NULL THEN (limit_date::text || ' 23:59:59.999Z')::timestamptz
+              WHEN due_date IS NOT NULL THEN (due_date::text || ' 23:59:59.999Z')::timestamptz
+              ELSE NULL
+            END
+          ) <= NOW() + INTERVAL '24 hours' THEN 'Warning'
+          ELSE 'On Track'
+        END
+        WHERE is_deleted = false AND status <> 'Concluída';
+      `);
+    } catch (err) {
+      console.error('[SLA-AUTO-UPDATE] Error updating SLA statuses:', err);
+    }
+  }
+
+  // Start independent background worker for SLA updates
+  // Run once immediately (non-blocking) and then every 60 seconds
+  autoUpdateSlaStatuses().catch(err => console.error('SLA background initial run failed:', err));
+  setInterval(() => {
+    autoUpdateSlaStatuses().catch(err => console.error('SLA background interval run failed:', err));
+  }, 60000);
+
+  // --- SEGURANÇA, RBAC, RATE LIMITING E OBSERVABILIDADE DO MÓDULO SCHOOL_TASKS ---
+
+  // Backup secret key loaded from env or default
+  const BACKUP_SECRET = process.env.BACKUP_SECRET_KEY || 'school-tasks-nexus-backup-secret-key-2026';
+
+  function generateBackupSignature(tasks: any[]): string {
+    const dataStr = JSON.stringify(tasks);
+    return crypto.createHmac('sha256', BACKUP_SECRET).update(dataStr).digest('hex');
+  }
+
+  function verifyBackupSignature(tasks: any[], signature: string): boolean {
+    const computed = generateBackupSignature(tasks);
+    try {
+      return crypto.timingSafeEqual(Buffer.from(computed, 'hex'), Buffer.from(signature, 'hex'));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Permissões e Perfis (Roles)
+  const TASK_ROLES = ['admin', 'director', 'secretariat', 'financial', 'teacher', 'operator', 'system', 'ai_system'];
+
+  function isTaskRole(role: string): boolean {
+    return TASK_ROLES.includes(role);
+  }
+
+  function hasPermission(role: string, action: string): boolean {
+    if (role === 'admin') return true;
+
+    switch (action) {
+      case 'view_metrics':
+        return ['director', 'secretariat', 'financial', 'teacher', 'system', 'ai_system'].includes(role);
+      case 'view_archived':
+        return ['director', 'secretariat'].includes(role);
+      case 'create_task':
+        return ['director', 'secretariat', 'teacher', 'financial', 'system', 'ai_system'].includes(role);
+      case 'edit_task':
+        return ['director', 'secretariat', 'teacher', 'financial', 'system', 'ai_system'].includes(role);
+      case 'update_status':
+        return ['director', 'secretariat', 'teacher', 'financial', 'operator', 'system', 'ai_system'].includes(role);
+      case 'delete_task':
+        return ['director', 'secretariat'].includes(role);
+      case 'restore_task':
+        return ['director', 'secretariat'].includes(role);
+      default:
+        return false;
+    }
+  }
+
+  // Middleware de papel genérico
+  const authorizeTaskRole = () => {
+    return async (req: AuthRequest, res: any, next: any) => {
+      const role = req.user?.dbRole;
+      if (!isTaskRole(role)) {
+        try {
+          await db.insert(operationalLogs).values({
+            userId: req.user?.uid || 'anonymous',
+            userName: req.user?.dbName || 'Desconhecido',
+            userRole: role,
+            action: 'TASK_ACCESS_DENIED',
+            details: `[ACESSO RECUSADO] Perfil '${role}' não autorizado a acessar módulo de tarefas escolares no endpoint ${req.method} ${req.path}`
+          });
+        } catch (e) {
+          console.error('Erro ao registrar log TASK_ACCESS_DENIED:', e);
+        }
+        return res.status(403).json({
+          error: `Acesso Negado: O seu perfil de utilizador '${role}' não possui privilégios para aceder ao módulo de tarefas escolares.`
+        });
+      }
+      next();
+    };
+  };
+
+  // Middleware de autorização de ação específica
+  const authorizeTaskAction = (action: 'create_task' | 'edit_task' | 'update_status' | 'delete_task' | 'restore_task' | 'view_metrics' | 'view_archived') => {
+    return async (req: AuthRequest, res: any, next: any) => {
+      const role = req.user?.dbRole;
+      if (!isTaskRole(role)) {
+        try {
+          await db.insert(operationalLogs).values({
+            userId: req.user?.uid || 'anonymous',
+            userName: req.user?.dbName || 'Desconhecido',
+            userRole: role,
+            action: 'TASK_ACCESS_DENIED',
+            details: `[ACESSO RECUSADO] Perfil '${role}' não autorizado a aceder ao endpoint ${req.method} ${req.path}`
+          });
+        } catch (e) {
+          console.error('Erro ao registrar log:', e);
+        }
+        return res.status(403).json({
+          error: `Acesso Negado: O seu perfil de utilizador '${role}' não possui privilégios para aceder ao módulo de tarefas escolares.`
+        });
+      }
+
+      if (!hasPermission(role, action)) {
+        try {
+          await db.insert(operationalLogs).values({
+            userId: req.user?.uid || 'anonymous',
+            userName: req.user?.dbName || 'Desconhecido',
+            userRole: role,
+            action: 'TASK_PERMISSION_VIOLATION',
+            details: `[VIOLAÇÃO PERMISSÃO] Perfil '${role}' não tem permissão para a ação '${action}' no endpoint ${req.method} ${req.path}`
+          });
+        } catch (e) {
+          console.error('Erro ao registrar log TASK_PERMISSION_VIOLATION:', e);
+        }
+        return res.status(403).json({
+          error: `Acesso Proibido: O seu perfil de utilizador '${role}' não possui permissão para executar a ação '${action}'.`
+        });
+      }
+
+      next();
+    };
+  };
+
+  // Validador Rigoroso de Inputs
+  function validateTaskInput(body: any, isUpdate: boolean = false) {
+    const errors: string[] = [];
+
+    if (!isUpdate) {
+      if (!body.title || typeof body.title !== 'string' || body.title.trim().length === 0) {
+        errors.push('O campo "title" é obrigatório e deve ser uma string não vazia.');
+      }
+      if (!body.description || typeof body.description !== 'string' || body.description.trim().length === 0) {
+        errors.push('O campo "description" é obrigatório e deve ser uma string não vazia.');
+      }
+    }
+
+    if (body.title !== undefined) {
+      if (typeof body.title !== 'string') {
+        errors.push('O campo "title" deve ser uma string.');
+      } else if (body.title.length > 150) {
+        errors.push('O campo "title" é excessivamente longo (máximo 150 caracteres).');
+      }
+    }
+
+    if (body.description !== undefined) {
+      if (typeof body.description !== 'string') {
+        errors.push('O campo "description" deve ser uma string.');
+      } else if (body.description.length > 2000) {
+        errors.push('O campo "description" é excessivamente longo (máximo 2000 caracteres).');
+      }
+    }
+
+    if (body.observations !== undefined && body.observations !== null) {
+      if (typeof body.observations !== 'string') {
+        errors.push('O campo "observations" deve ser uma string.');
+      } else if (body.observations.length > 2000) {
+        errors.push('O campo "observations" é excessivamente longo (máximo 2000 caracteres).');
+      }
+    }
+
+    const validStatuses = ['Pendente', 'Em Curso', 'Concluída', 'Aguardando Aprovação', 'Cancelada', 'Atrasada'];
+    if (body.status !== undefined) {
+      if (!validStatuses.includes(body.status)) {
+        errors.push(`O valor do estado "${body.status}" é inválido. Valores aceites: ${validStatuses.join(', ')}.`);
+      }
+    }
+
+    const validPriorities = ['Baixa', 'Normal', 'Alta', 'Urgente'];
+    if (body.priority !== undefined) {
+      if (!validPriorities.includes(body.priority)) {
+        errors.push(`O valor da prioridade "${body.priority}" é inválido. Valores aceites: ${validPriorities.join(', ')}.`);
+      }
+    }
+
+    const validDepartments = ['Secretaria', 'Financeiro', 'Pedagógico', 'Direção', 'TI', 'Recursos Humanos', 'Biblioteca', 'Comunicação', 'Outro', 'Outros'];
+    if (body.department !== undefined) {
+      if (!validDepartments.includes(body.department)) {
+        errors.push(`O valor do departamento "${body.department}" é inválido. Valores aceites: ${validDepartments.join(', ')}.`);
+      }
+    }
+
+    if (body.dependencies !== undefined && body.dependencies !== null) {
+      if (!Array.isArray(body.dependencies)) {
+        errors.push('O campo "dependencies" deve ser um array de identificadores de tarefas (strings).');
+      } else {
+        for (const dep of body.dependencies) {
+          if (typeof dep !== 'string' || dep.length > 30) {
+            errors.push('Cada dependência no array deve ser uma string identificadora de tarefa válida.');
+            break;
+          }
+        }
+      }
+    }
+
+    if (body.attachments !== undefined && body.attachments !== null) {
+      if (!Array.isArray(body.attachments)) {
+        errors.push('O campo "attachments" deve ser um array de ficheiros.');
+      } else {
+        for (const attachment of body.attachments) {
+          if (typeof attachment !== 'object' || attachment === null) {
+            errors.push('Cada anexo deve ser um objecto válido.');
+            break;
+          }
+          if (typeof attachment.name !== 'string' || attachment.name.length > 150) {
+            errors.push('O nome do anexo deve ser uma string válida de até 150 caracteres.');
+            break;
+          }
+          if (typeof attachment.url !== 'string' || attachment.url.length > 1000) {
+            errors.push('A URL do anexo deve ser uma string válida de até 1000 caracteres.');
+            break;
+          }
+        }
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  // Memória para Rate Limiting
+  const rateLimitsStore = new Map<string, { count: number; resetTime: number }>();
+
+  const rateLimiter = (category: 'leitura' | 'escrita' | 'analytics' | 'health', limit: number, windowMs: number = 60000) => {
+    return async (req: AuthRequest, res: any, next: any) => {
+      const userId = req.user?.uid || req.ip || 'anonymous';
+      const key = `${userId}:${category}`;
+      const now = Date.now();
+
+      const record = rateLimitsStore.get(key);
+      if (!record || now > record.resetTime) {
+        rateLimitsStore.set(key, { count: 1, resetTime: now + windowMs });
+        return next();
+      }
+
+      record.count++;
+      if (record.count > limit) {
+        try {
+          await db.insert(operationalLogs).values({
+            userId: req.user?.uid || 'anonymous',
+            userName: req.user?.dbName || 'Desconhecido',
+            userRole: req.user?.dbRole || 'unassigned',
+            action: 'TASK_SECURITY_ALERT',
+            details: `[RATE_LIMIT_EXCEEDED] Limite de ${limit} requisições de '${category}' excedido pelo usuário.`
+          });
+        } catch (e) {
+          console.error('Erro ao registar log de segurança de rate limit:', e);
+        }
+
+        return res.status(429).json({
+          error: `Muitas requisições: Limite de taxa excedido para a categoria de '${category}'. Por favor, tente novamente após algum tempo.`
+        });
+      }
+
+      next();
+    };
+  };
+
+  // Register Enterprise Modularized School Task Routes (Repository, Service, Controller, Multi-Tenant isolated)
+  registerSchoolTaskRoutes(app);
+
+  // 8. New School Tasks Management API with severe validation and real-time synchronisation
+  app.get('/api/school-tasks/metrics', requireAuth, authorizeTaskAction('view_metrics'), rateLimiter('analytics', 20), async (req: AuthRequest, res) => {
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      // Highly optimized single-query counts
+      const globalStatsResult = await db.select({
+        total: sql<number>`count(*) filter (where not is_deleted)`,
+        pending: sql<number>`count(*) filter (where not is_deleted and status = 'Pendente')`,
+        inProgress: sql<number>`count(*) filter (where not is_deleted and status = 'Em Curso')`,
+        completed: sql<number>`count(*) filter (where not is_deleted and status = 'Concluída')`,
+        overdue: sql<number>`count(*) filter (where not is_deleted and status <> 'Concluída' and limit_date < ${todayStr})`,
+        archived: sql<number>`count(*) filter (where is_deleted)`
+      }).from(schoolTasks);
+
+      const stats = globalStatsResult[0] || { total: 0, pending: 0, inProgress: 0, completed: 0, overdue: 0, archived: 0 };
+
+      // Highly optimized grouped queries
+      const deptStatsResult = await db.select({
+        department: schoolTasks.department,
+        total: sql<number>`count(*) filter (where not is_deleted)`,
+        pending: sql<number>`count(*) filter (where not is_deleted and status = 'Pendente')`,
+        inProgress: sql<number>`count(*) filter (where not is_deleted and status = 'Em Curso')`,
+        completed: sql<number>`count(*) filter (where not is_deleted and status = 'Concluída')`,
+        overdue: sql<number>`count(*) filter (where not is_deleted and status <> 'Concluída' and limit_date < ${todayStr})`
+      })
+      .from(schoolTasks)
+      .groupBy(schoolTasks.department);
+
+      const byDepartment: Record<string, any> = {};
+      for (const row of deptStatsResult) {
+        const dept = row.department || 'Outro';
+        byDepartment[dept] = {
+          total: Number(row.total || 0),
+          pending: Number(row.pending || 0),
+          inProgress: Number(row.inProgress || 0),
+          completed: Number(row.completed || 0),
+          overdue: Number(row.overdue || 0)
+        };
+      }
+
+      res.json({
+        totalTasks: Number(stats.total || 0),
+        pendingTasks: Number(stats.pending || 0),
+        inProgressTasks: Number(stats.inProgress || 0),
+        completedTasks: Number(stats.completed || 0),
+        overdueTasks: Number(stats.overdue || 0),
+        archivedTasks: Number(stats.archived || 0),
+        byDepartment
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/school-tasks/analytics/productivity', requireAuth, authorizeTaskAction('view_metrics'), rateLimiter('analytics', 20), async (req: AuthRequest, res) => {
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      // Highly optimized database-side calculations
+      const avgTimeResult = await db.select({
+        avgHours: sql<number>`COALESCE(AVG(EXTRACT(EPOCH FROM (completed_at - created_at)) / 3600), 0)`
+      })
+      .from(schoolTasks)
+      .where(and(eq(schoolTasks.isDeleted, false), eq(schoolTasks.status, 'Concluída')));
+
+      const completedByUserResult = await db.select({
+        user: schoolTasks.completedBy,
+        count: sql<number>`count(*)`
+      })
+      .from(schoolTasks)
+      .where(and(eq(schoolTasks.isDeleted, false), eq(schoolTasks.status, 'Concluída')))
+      .groupBy(schoolTasks.completedBy);
+
+      const completedByUser: Record<string, number> = {};
+      for (const row of completedByUserResult) {
+        const user = row.user || 'Sistema / IA';
+        completedByUser[user] = (completedByUser[user] || 0) + Number(row.count);
+      }
+
+      const overdueResult = await db.select({
+        count: sql<number>`count(*)`
+      })
+      .from(schoolTasks)
+      .where(and(
+        eq(schoolTasks.isDeleted, false),
+        ne(schoolTasks.status, 'Concluída'),
+        sql`limit_date < ${todayStr}`
+      ));
+
+      const slaStatsResult = await db.select({
+        total: sql<number>`count(*)`,
+        onTrackOrWarning: sql<number>`count(*) filter (where sla_status <> 'Breached')`
+      })
+      .from(schoolTasks)
+      .where(eq(schoolTasks.isDeleted, false));
+
+      const totalSla = Number(slaStatsResult[0]?.total || 0);
+      const onTrackOrWarning = Number(slaStatsResult[0]?.onTrackOrWarning || 0);
+      const slaComplianceRate = totalSla > 0
+        ? parseFloat(((onTrackOrWarning / totalSla) * 100).toFixed(2))
+        : 100;
+
+      res.json({
+        averageCompletionTimeHours: parseFloat(Number(avgTimeResult[0]?.avgHours || 0).toFixed(2)),
+        completedByUser,
+        overdueTasks: Number(overdueResult[0]?.count || 0),
+        slaComplianceRate
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/school-tasks/analytics/departments', requireAuth, authorizeTaskAction('view_metrics'), rateLimiter('analytics', 20), async (req: AuthRequest, res) => {
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      // Highly optimized single grouped query for all departments
+      const deptAnalyticsResult = await db.select({
+        department: schoolTasks.department,
+        totalTasks: sql<number>`count(*)`,
+        completedTasks: sql<number>`count(*) filter (where status = 'Concluída')`,
+        slaOnTrackOrWarningCount: sql<number>`count(*) filter (where sla_status <> 'Breached')`,
+        avgHours: sql<number>`COALESCE(AVG(CASE WHEN status = 'Concluída' THEN EXTRACT(EPOCH FROM (completed_at - created_at)) / 3600 ELSE NULL END), 0)`
+      })
+      .from(schoolTasks)
+      .where(eq(schoolTasks.isDeleted, false))
+      .groupBy(schoolTasks.department);
+
+      const formattedDepartments: Record<string, {
+        completedTasks: number;
+        averageCompletionTimeHours: number;
+        slaComplianceRate: number;
+      }> = {};
+
+      for (const row of deptAnalyticsResult) {
+        const dept = row.department || 'Outro';
+        const total = Number(row.totalTasks || 0);
+        const completed = Number(row.completedTasks || 0);
+        const onTrackOrWarning = Number(row.slaOnTrackOrWarningCount || 0);
+        const avgHours = Number(row.avgHours || 0);
+
+        formattedDepartments[dept] = {
+          completedTasks: completed,
+          averageCompletionTimeHours: parseFloat(avgHours.toFixed(2)),
+          slaComplianceRate: total > 0 ? parseFloat(((onTrackOrWarning / total) * 100).toFixed(2)) : 100
+        };
+      }
+
+      res.json({
+        byDepartment: formattedDepartments
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/school-tasks/health', requireAuth, authorizeTaskAction('view_metrics'), rateLimiter('health', 10), async (req: AuthRequest, res) => {
+    try {
+      const startTime = Date.now();
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      // Highly optimized DB counts
+      const countsResult = await db.select({
+        total: sql<number>`count(*)`,
+        archived: sql<number>`count(*) filter (where is_deleted)`,
+        overdue: sql<number>`count(*) filter (where not is_deleted and status <> 'Concluída' and limit_date < ${todayStr})`
+      }).from(schoolTasks);
+
+      const counts = countsResult[0] || { total: 0, archived: 0, overdue: 0 };
+
+      // Optimized SQL validation query for invalid dependencies (no full-table load)
+      const invalidDepsResult = await db.execute(sql`
+        SELECT COUNT(DISTINCT t.id)::int as count
+        FROM school_tasks t
+        CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(t.dependencies, '[]'::jsonb)) as dep_id
+        LEFT JOIN school_tasks d ON d.id = dep_id AND d.is_deleted = false
+        WHERE t.is_deleted = false AND d.id IS NULL;
+      `);
+      const dependenciasInvalidasCount = Number((invalidDepsResult.rows[0] as any)?.count || 0);
+
+      const queryTimeMs = Date.now() - startTime;
+
+      res.json({
+        totalRegistros: Number(counts.total || 0),
+        tempoMedioQueryMs: queryTimeMs,
+        tarefasAtrasadas: Number(counts.overdue || 0),
+        tarefasComDependenciasInvalidas: dependenciasInvalidasCount,
+        tarefasArquivadas: Number(counts.archived || 0)
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+
+  app.get('/api/school-tasks', requireAuth, authorizeTaskRole(), rateLimiter('leitura', 100), async (req: AuthRequest, res) => {
+    try {
+      const { status, department, assignedTo, priority, dueDate, createdBy, page, limit } = req.query;
+
+      const conditions = [eq(schoolTasks.isDeleted, false)];
+
+      if (status) {
+        conditions.push(eq(sql`lower(${schoolTasks.status})`, String(status).toLowerCase()));
+      }
+      if (department) {
+        conditions.push(eq(sql`lower(${schoolTasks.department})`, String(department).toLowerCase()));
+      }
+      if (assignedTo) {
+        conditions.push(eq(sql`lower(${schoolTasks.assignedTo})`, String(assignedTo).toLowerCase()));
+      }
+      if (priority) {
+        conditions.push(eq(sql`lower(${schoolTasks.priority})`, String(priority).toLowerCase()));
+      }
+      if (dueDate) {
+        conditions.push(eq(schoolTasks.dueDate, String(dueDate)));
+      }
+      if (createdBy) {
+        conditions.push(eq(sql`lower(${schoolTasks.createdBy})`, String(createdBy).toLowerCase()));
+      }
+
+      let records;
+      if (page && limit) {
+        const pageNum = parseInt(page as string) || 1;
+        const limitNum = parseInt(limit as string) || 50;
+        const offsetNum = (pageNum - 1) * limitNum;
+
+        records = await db.select().from(schoolTasks)
+          .where(and(...conditions))
+          .orderBy(desc(schoolTasks.createdAt))
+          .limit(limitNum)
+          .offset(offsetNum);
+
+        const totalCountResult = await db.select({ count: sql<number>`count(*)` })
+          .from(schoolTasks)
+          .where(and(...conditions));
+        const total = Number(totalCountResult[0]?.count || 0);
+        const totalPages = Math.ceil(total / limitNum);
+
+        return res.json({
+          tasks: records,
+          total,
+          totalPages,
+          currentPage: pageNum
+        });
+      } else {
+        records = await db.select().from(schoolTasks)
+          .where(and(...conditions))
+          .orderBy(desc(schoolTasks.createdAt));
+        return res.json(records);
+      }
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/school-tasks/count', requireAuth, authorizeTaskRole(), rateLimiter('leitura', 100), async (req: AuthRequest, res) => {
+    try {
+      const { status, department, assignedTo, priority, dueDate, createdBy } = req.query;
+
+      const conditions = [eq(schoolTasks.isDeleted, false)];
+
+      if (status) {
+        conditions.push(eq(sql`lower(${schoolTasks.status})`, String(status).toLowerCase()));
+      }
+      if (department) {
+        conditions.push(eq(sql`lower(${schoolTasks.department})`, String(department).toLowerCase()));
+      }
+      if (assignedTo) {
+        conditions.push(eq(sql`lower(${schoolTasks.assignedTo})`, String(assignedTo).toLowerCase()));
+      }
+      if (priority) {
+        conditions.push(eq(sql`lower(${schoolTasks.priority})`, String(priority).toLowerCase()));
+      }
+      if (dueDate) {
+        conditions.push(eq(schoolTasks.dueDate, String(dueDate)));
+      }
+      if (createdBy) {
+        conditions.push(eq(sql`lower(${schoolTasks.createdBy})`, String(createdBy).toLowerCase()));
+      }
+
+      const totalResult = await db.select({ count: sql<number>`count(*)` })
+        .from(schoolTasks)
+        .where(eq(schoolTasks.isDeleted, false));
+      const total = Number(totalResult[0]?.count || 0);
+
+      const filteredResult = await db.select({ count: sql<number>`count(*)` })
+        .from(schoolTasks)
+        .where(and(...conditions));
+      const filtered = Number(filteredResult[0]?.count || 0);
+
+      res.json({
+        total,
+        filtered
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/school-tasks/deleted', requireAuth, authorizeTaskAction('view_archived'), rateLimiter('leitura', 100), async (req: AuthRequest, res) => {
+    try {
+      const records = await db.select().from(schoolTasks).where(eq(schoolTasks.isDeleted, true));
       res.json(records);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.post('/api/tasks', requireAuth, async (req: AuthRequest, res) => {
-    const { title, description, dueDate, priority, assignedTo } = req.body;
-    if (!title || !description) {
-      return res.status(400).json({ error: 'Campos "title" e "description" são obrigatórios.' });
-    }
+  app.get('/api/school-tasks/:id', requireAuth, authorizeTaskRole(), rateLimiter('leitura', 100), async (req: AuthRequest, res) => {
     try {
-      const newId = `TASK-${Date.now().toString().slice(-4)}`;
+      const records = await db.select().from(schoolTasks).where(and(eq(schoolTasks.id, req.params.id), eq(schoolTasks.isDeleted, false)));
+      if (records.length === 0) {
+        return res.status(404).json({ error: 'Tarefa não encontrada.' });
+      }
+      res.json(records[0]);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/school-tasks', requireAuth, authorizeTaskAction('create_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
+    const body = req.body;
+    const { id, title, description, status, dependencies } = body;
+
+    // Rigorous Input Validation
+    const validation = validateTaskInput(body, false);
+    if (!validation.isValid) {
+      try {
+        await db.insert(operationalLogs).values({
+          userId: req.user?.uid || 'anonymous',
+          userName: req.user?.dbName || 'Desconhecido',
+          userRole: req.user?.dbRole || 'unassigned',
+          action: 'TASK_SECURITY_ALERT',
+          details: `[INPUT_VALIDATION_FAILED] Erros: ${validation.errors.join(' | ')}`
+        });
+      } catch (logErr) {
+        console.error('Erro ao registar log TASK_SECURITY_ALERT:', logErr);
+      }
+      return res.status(400).json({ error: 'Payload de entrada inválido.', details: validation.errors });
+    }
+
+    const newId = id || `TSK-${Math.floor(2000 + Math.random() * 8000)}`;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    // Validate dependencies if status is active/completed
+    if (status && ['Em Curso', 'Concluída', 'Aguardando Aprovação'].includes(status) && dependencies && dependencies.length > 0) {
+      try {
+        const allTasks = await db.select().from(schoolTasks).where(eq(schoolTasks.isDeleted, false));
+        const taskMap = new Map<string, any>();
+        for (const t of allTasks) {
+          taskMap.set(t.id, t);
+        }
+
+        for (const depId of dependencies) {
+          const depTask = taskMap.get(depId);
+          if (!depTask) {
+            const blockedReason = `A tarefa dependente "${depId}" não existe.`;
+            await db.insert(operationalLogs).values({
+              userId: req.user?.uid || 'copilot-system',
+              userName: req.user?.dbName || 'Nexus Copilot IA',
+              userRole: req.user?.dbRole || 'system',
+              action: 'TASK_DEPENDENCY_CONFLICT',
+              details: JSON.stringify({
+                userId: req.user?.uid || 'copilot-system',
+                userName: req.user?.dbName || 'Nexus Copilot IA',
+                taskId: newId,
+                taskTitle: title,
+                timestamp: new Date().toISOString(),
+                reason: blockedReason
+              })
+            });
+            return res.status(400).json({ error: blockedReason });
+          }
+          if (depTask.status !== 'Concluída') {
+            const blockedReason = `A tarefa dependente "${depTask.title}" (${depId}) precisa de estar no estado "Concluída".`;
+            await db.insert(operationalLogs).values({
+              userId: req.user?.uid || 'copilot-system',
+              userName: req.user?.dbName || 'Nexus Copilot IA',
+              userRole: req.user?.dbRole || 'system',
+              action: 'TASK_DEPENDENCY_CONFLICT',
+              details: JSON.stringify({
+                userId: req.user?.uid || 'copilot-system',
+                userName: req.user?.dbName || 'Nexus Copilot IA',
+                taskId: newId,
+                taskTitle: title,
+                timestamp: new Date().toISOString(),
+                reason: blockedReason
+              })
+            });
+            return res.status(400).json({ error: blockedReason });
+          }
+        }
+      } catch (err: any) {
+        return res.status(500).json({ error: err.message });
+      }
+    }
+
+    try {
+      const limitDateVal = body.limitDate || body.dueDate || todayStr;
+      const slaDeadlineVal = body.slaDeadline ? new Date(body.slaDeadline) : new Date(`${limitDateVal}T23:59:59.999Z`);
+      const startedAtVal = (status && status !== 'Pendente') ? new Date() : null;
+      const firstResponseAtVal = (status && status !== 'Pendente') ? new Date() : null;
+      const completedAtVal = status === 'Concluída' ? new Date() : null;
+
+      let initialSlaStatus = 'On Track';
+      if (completedAtVal && slaDeadlineVal) {
+        initialSlaStatus = completedAtVal <= slaDeadlineVal ? 'On Track' : 'Breached';
+      } else if (!completedAtVal && slaDeadlineVal) {
+        const msLeft = slaDeadlineVal.getTime() - new Date().getTime();
+        if (msLeft < 0) {
+          initialSlaStatus = 'Breached';
+        } else if (msLeft <= 24 * 60 * 60 * 1000) {
+          initialSlaStatus = 'Warning';
+        }
+      }
+
       const newTask = {
         id: newId,
         title,
         description,
-        dueDate: dueDate || new Date().toISOString().split('T')[0],
-        priority: priority || 'média',
-        status: 'pendente',
-        assignedTo: assignedTo || 'all'
+        assignedTo: body.assignedTo || 'Não atribuído',
+        department: body.department || 'Secretaria',
+        priority: body.priority || 'Normal',
+        status: status || 'Pendente',
+        createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
+        dueDate: body.dueDate || todayStr,
+        limitDate: limitDateVal,
+        createdAutomatically: body.createdAutomatically ?? false,
+        referenceId: body.referenceId || null,
+        referenceType: body.referenceType || null,
+        observations: body.observations || null,
+        history: body.history || [],
+        attachments: body.attachments || [],
+        updatedAt: new Date(),
+        createdBy: body.createdBy || req.user?.dbName || 'Nexus System',
+        executedBy: body.executedBy || null,
+        completedBy: body.completedBy || null,
+        completedAt: completedAtVal,
+        dependencies: dependencies || [],
+        startedAt: startedAtVal,
+        firstResponseAt: firstResponseAtVal,
+        slaDeadline: slaDeadlineVal,
+        slaStatus: initialSlaStatus
       };
-      await db.insert(todoTasks).values(newTask);
+
+      await db.insert(schoolTasks).values(newTask);
 
       // Log action
       await db.insert(operationalLogs).values({
@@ -2224,13 +2966,13 @@ async function startServer() {
         userName: req.user?.dbName || 'Nexus Copilot IA',
         userRole: req.user?.dbRole || 'system',
         action: 'TASK_CREATED',
-        details: `Criada tarefa "${title}" com prioridade ${priority}`
+        details: `Criada tarefa escolar "${title}" (${newId}) no setor ${newTask.department}`
       });
 
-      broadcastToAll('ADD_TASK', newTask);
+      broadcastToAll('task_created', newTask);
       broadcastToAll('NOTIFY', {
         title: 'Nova Tarefa Operacional',
-        message: `Tarefa "${title}" foi registada pelo funcionário digital.`,
+        message: `Tarefa "${title}" foi registada com sucesso no sistema.`,
         alertType: 'info',
         category: 'task_created'
       });
@@ -2241,61 +2983,579 @@ async function startServer() {
     }
   });
 
-  app.put('/api/tasks/:id', requireAuth, async (req: AuthRequest, res) => {
+  app.put('/api/school-tasks/:id', requireAuth, rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
     const { id } = req.params;
-    const { status, priority, title, description, dueDate } = req.body;
+    const body = req.body;
+    const { status, priority, title, description, dueDate, limitDate, assignedTo, department, dependencies, history, attachments } = body;
+
+    const role = req.user?.dbRole;
+    if (!role || !isTaskRole(role)) {
+      try {
+        await db.insert(operationalLogs).values({
+          userId: req.user?.uid || 'anonymous',
+          userName: req.user?.dbName || 'Desconhecido',
+          userRole: role,
+          action: 'TASK_ACCESS_DENIED',
+          details: `[ACESSO RECUSADO] Perfil '${role}' não autorizado a aceder ao endpoint PUT /api/school-tasks/${id}`
+        });
+      } catch (e) {
+        console.error('Erro ao registrar log:', e);
+      }
+      return res.status(403).json({
+        error: `Acesso Negado: O seu perfil de utilizador '${role}' não possui privilégios para aceder ao módulo de tarefas escolares.`
+      });
+    }
+
+    const hasOtherFields = priority !== undefined ||
+                           title !== undefined ||
+                           description !== undefined ||
+                           dueDate !== undefined ||
+                           limitDate !== undefined ||
+                           assignedTo !== undefined ||
+                           department !== undefined ||
+                           dependencies !== undefined;
+
+    const requiredAction = hasOtherFields ? 'edit_task' : 'update_status';
+
+    if (!hasPermission(role, requiredAction)) {
+      try {
+        await db.insert(operationalLogs).values({
+          userId: req.user?.uid || 'anonymous',
+          userName: req.user?.dbName || 'Desconhecido',
+          userRole: role,
+          action: 'TASK_PERMISSION_VIOLATION',
+          details: `[VIOLAÇÃO PERMISSÃO] Perfil '${role}' não tem permissão para a ação '${requiredAction}' no endpoint PUT /api/school-tasks/${id}`
+        });
+      } catch (e) {
+        console.error('Erro ao registrar log TASK_PERMISSION_VIOLATION:', e);
+      }
+      return res.status(403).json({
+        error: `Acesso Proibido: O seu perfil de utilizador '${role}' não possui permissão para executar a ação '${requiredAction}'.`
+      });
+    }
+
+    // Rigorous Input Validation for updates
+    const validation = validateTaskInput(body, true);
+    if (!validation.isValid) {
+      try {
+        await db.insert(operationalLogs).values({
+          userId: req.user?.uid || 'anonymous',
+          userName: req.user?.dbName || 'Desconhecido',
+          userRole: role,
+          action: 'TASK_SECURITY_ALERT',
+          details: `[INPUT_VALIDATION_FAILED] Erros em PUT /api/school-tasks/${id}: ${validation.errors.join(' | ')}`
+        });
+      } catch (logErr) {
+        console.error('Erro ao registar log TASK_SECURITY_ALERT:', logErr);
+      }
+      return res.status(400).json({ error: 'Payload de atualização inválido.', details: validation.errors });
+    }
+
     try {
-      const existing = await db.select().from(todoTasks).where(eq(todoTasks.id, id));
-      if (existing.length === 0) {
+      const existingTasks = await db.select().from(schoolTasks).where(and(eq(schoolTasks.id, id), eq(schoolTasks.isDeleted, false)));
+      if (existingTasks.length === 0) {
         return res.status(404).json({ error: 'Tarefa não encontrada.' });
       }
+      const currentTask = existingTasks[0];
 
+      // Self-dependency validation
+      if (dependencies && Array.isArray(dependencies)) {
+        if (dependencies.includes(id)) {
+          return res.status(400).json({ error: 'Uma tarefa não pode depender de si própria.' });
+        }
+
+        // Circular dependency check using DFS
+        const allTasks = await db.select().from(schoolTasks).where(eq(schoolTasks.isDeleted, false));
+        const taskMap = new Map<string, any>();
+        for (const t of allTasks) {
+          taskMap.set(t.id, t);
+        }
+
+        const visited = new Set<string>();
+        function hasPath(currentId: string, targetId: string): boolean {
+          if (currentId === targetId) return true;
+          if (visited.has(currentId)) return false;
+          visited.add(currentId);
+
+          const task = taskMap.get(currentId);
+          if (!task) return false;
+
+          let taskDeps: string[] = [];
+          if (currentId === id) {
+            taskDeps = dependencies;
+          } else if (Array.isArray(task.dependencies)) {
+            taskDeps = task.dependencies;
+          } else if (typeof task.dependencies === 'string') {
+            try { taskDeps = JSON.parse(task.dependencies); } catch (e) {}
+          }
+
+          for (const depId of taskDeps) {
+            if (hasPath(depId, targetId)) {
+              return true;
+            }
+          }
+          return false;
+        }
+
+        for (const depId of dependencies) {
+          visited.clear();
+          if (hasPath(depId, id)) {
+            const blockedReason = `Impossível salvar: detetada dependência circular com a tarefa "${taskMap.get(depId)?.title || depId}".`;
+            
+            // Log TASK_CIRCULAR_DEPENDENCY
+            await db.insert(operationalLogs).values({
+              userId: req.user?.uid || 'copilot-system',
+              userName: req.user?.dbName || 'Nexus Copilot IA',
+              userRole: req.user?.dbRole || 'system',
+              action: 'TASK_CIRCULAR_DEPENDENCY',
+              details: JSON.stringify({
+                userId: req.user?.uid || 'copilot-system',
+                userName: req.user?.dbName || 'Nexus Copilot IA',
+                taskId: id,
+                taskTitle: title || currentTask.title,
+                timestamp: new Date().toISOString(),
+                reason: blockedReason
+              })
+            });
+
+            return res.status(400).json({ error: blockedReason });
+          }
+        }
+      }
+
+      // Dependency completion status validation
+      const targetStatus = status || currentTask.status;
+      if (['Em Curso', 'Concluída', 'Aguardando Aprovação'].includes(targetStatus)) {
+        const targetDeps = dependencies !== undefined ? dependencies : (Array.isArray(currentTask.dependencies) ? currentTask.dependencies : []);
+        if (targetDeps && targetDeps.length > 0) {
+          const allTasks = await db.select().from(schoolTasks).where(eq(schoolTasks.isDeleted, false));
+          const taskMap = new Map<string, any>();
+          for (const t of allTasks) {
+            taskMap.set(t.id, t);
+          }
+
+          for (const depId of targetDeps) {
+            const depTask = taskMap.get(depId);
+            if (!depTask) {
+              const blockedReason = `A tarefa dependente "${depId}" não existe.`;
+              await db.insert(operationalLogs).values({
+                userId: req.user?.uid || 'copilot-system',
+                userName: req.user?.dbName || 'Nexus Copilot IA',
+                userRole: req.user?.dbRole || 'system',
+                action: 'TASK_DEPENDENCY_CONFLICT',
+                details: JSON.stringify({
+                  userId: req.user?.uid || 'copilot-system',
+                  userName: req.user?.dbName || 'Nexus Copilot IA',
+                  taskId: id,
+                  taskTitle: title || currentTask.title,
+                  timestamp: new Date().toISOString(),
+                  reason: blockedReason
+                })
+              });
+              return res.status(400).json({ error: blockedReason });
+            }
+            if (depTask.status !== 'Concluída') {
+              const blockedReason = `A tarefa dependente "${depTask.title}" (${depId}) precisa de estar no estado "Concluída".`;
+              await db.insert(operationalLogs).values({
+                userId: req.user?.uid || 'copilot-system',
+                userName: req.user?.dbName || 'Nexus Copilot IA',
+                userRole: req.user?.dbRole || 'system',
+                action: 'TASK_DEPENDENCY_CONFLICT',
+                details: JSON.stringify({
+                  userId: req.user?.uid || 'copilot-system',
+                  userName: req.user?.dbName || 'Nexus Copilot IA',
+                  taskId: id,
+                  taskTitle: title || currentTask.title,
+                  timestamp: new Date().toISOString(),
+                  reason: blockedReason
+                })
+              });
+              return res.status(400).json({ error: blockedReason });
+            }
+          }
+        }
+      }
+
+      // Build update object
       const updateObj: any = {};
-      if (status !== undefined) updateObj.status = status;
+      if (status !== undefined) {
+        updateObj.status = status;
+        if (status === 'Em Curso' && currentTask.status === 'Pendente') {
+          updateObj.startedAt = currentTask.startedAt || new Date();
+          updateObj.firstResponseAt = currentTask.firstResponseAt || new Date();
+        }
+      }
       if (priority !== undefined) updateObj.priority = priority;
       if (title !== undefined) updateObj.title = title;
       if (description !== undefined) updateObj.description = description;
       if (dueDate !== undefined) updateObj.dueDate = dueDate;
+      if (limitDate !== undefined) updateObj.limitDate = limitDate;
+      if (assignedTo !== undefined) updateObj.assignedTo = assignedTo;
+      if (department !== undefined) updateObj.department = department;
+      if (dependencies !== undefined) updateObj.dependencies = dependencies;
+      if (history !== undefined) updateObj.history = history;
+      if (attachments !== undefined) updateObj.attachments = attachments;
 
-      await db.update(todoTasks).set(updateObj).where(eq(todoTasks.id, id));
+      updateObj.updatedAt = new Date();
+
+      if (status === 'Concluída' && currentTask.status !== 'Concluída') {
+        updateObj.completedAt = new Date();
+        updateObj.completedBy = req.user?.dbName || 'Nexus System';
+      }
+
+      // SLA Recalculation
+      const newLimitDate = limitDate !== undefined ? limitDate : currentTask.limitDate;
+      const newDueDate = dueDate !== undefined ? dueDate : currentTask.dueDate;
+      if (limitDate !== undefined || dueDate !== undefined) {
+        const targetLimit = newLimitDate || newDueDate;
+        if (targetLimit) {
+          updateObj.slaDeadline = new Date(`${targetLimit}T23:59:59.999Z`);
+        }
+      }
+
+      const finalSlaDeadline = updateObj.slaDeadline || currentTask.slaDeadline;
+      const finalCompletedAt = updateObj.completedAt || currentTask.completedAt;
+      const finalStatus = updateObj.status || currentTask.status;
+
+      if (finalSlaDeadline) {
+        let calculatedSlaStatus = 'On Track';
+        if (finalStatus === 'Concluída') {
+          if (finalCompletedAt) {
+            calculatedSlaStatus = new Date(finalCompletedAt) <= new Date(finalSlaDeadline) ? 'On Track' : 'Breached';
+          }
+        } else {
+          const msLeft = new Date(finalSlaDeadline).getTime() - new Date().getTime();
+          if (msLeft < 0) {
+            calculatedSlaStatus = 'Breached';
+          } else if (msLeft <= 24 * 60 * 60 * 1000) {
+            calculatedSlaStatus = 'Warning';
+          }
+        }
+        updateObj.slaStatus = calculatedSlaStatus;
+      }
+
+      await db.update(schoolTasks).set(updateObj).where(eq(schoolTasks.id, id));
+
+      const updatedFullTask = { ...currentTask, ...updateObj };
 
       await db.insert(operationalLogs).values({
         userId: req.user?.uid || 'copilot-system',
         userName: req.user?.dbName || 'Nexus Copilot IA',
         userRole: req.user?.dbRole || 'system',
         action: 'TASK_UPDATED',
-        details: `Atualizada tarefa "${existing[0].title}" (${id})`
+        details: `Atualizada tarefa escolar "${updatedFullTask.title}" (${id}) para estado "${updatedFullTask.status}"`
       });
 
-      broadcastToAll('UPDATE_TASK', { id, ...updateObj });
-      res.json({ success: true, id });
+      broadcastToAll('task_updated', updatedFullTask);
+      res.json(updatedFullTask);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.delete('/api/tasks/:id', requireAuth, async (req: AuthRequest, res) => {
+  app.delete('/api/school-tasks/:id', requireAuth, authorizeTaskAction('delete_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
     const { id } = req.params;
     try {
-      const existing = await db.select().from(todoTasks).where(eq(todoTasks.id, id));
+      const existing = await db.select().from(schoolTasks).where(and(eq(schoolTasks.id, id), eq(schoolTasks.isDeleted, false)));
       if (existing.length === 0) {
         return res.status(404).json({ error: 'Tarefa não encontrada.' });
       }
 
-      await db.delete(todoTasks).where(eq(todoTasks.id, id));
+      // Check if there are active dependents (tasks that list this task's id as a dependency)
+      const allTasks = await db.select().from(schoolTasks).where(eq(schoolTasks.isDeleted, false));
+      const dependents: { id: string; title: string }[] = [];
+      for (const t of allTasks) {
+        let deps: string[] = [];
+        if (Array.isArray(t.dependencies)) {
+          deps = t.dependencies as string[];
+        } else if (typeof t.dependencies === 'string') {
+          try { deps = JSON.parse(t.dependencies); } catch (e) {}
+        }
+        if (deps.includes(id)) {
+          dependents.push({ id: t.id, title: t.title });
+        }
+      }
+
+      if (dependents.length > 0) {
+        const blockedReason = `A tarefa possui dependentes ativos: ${dependents.map(d => `${d.title} (${d.id})`).join(', ')}`;
+        
+        // Log TASK_DELETE_BLOCKED
+        await db.insert(operationalLogs).values({
+          userId: req.user?.uid || 'copilot-system',
+          userName: req.user?.dbName || 'Nexus Copilot IA',
+          userRole: req.user?.dbRole || 'system',
+          action: 'TASK_DELETE_BLOCKED',
+          details: JSON.stringify({
+            userId: req.user?.uid || 'copilot-system',
+            userName: req.user?.dbName || 'Nexus Copilot IA',
+            taskId: id,
+            taskTitle: existing[0].title,
+            timestamp: new Date().toISOString(),
+            reason: blockedReason
+          })
+        });
+
+        return res.status(409).json({
+          error: 'A tarefa possui dependentes ativos.',
+          dependents
+        });
+      }
+
+      // Perform soft delete
+      await db.update(schoolTasks).set({
+        isDeleted: true,
+        deletedAt: new Date(),
+        deletedBy: req.user?.dbName || 'Nexus System'
+      }).where(eq(schoolTasks.id, id));
 
       await db.insert(operationalLogs).values({
         userId: req.user?.uid || 'copilot-system',
         userName: req.user?.dbName || 'Nexus Copilot IA',
         userRole: req.user?.dbRole || 'system',
         action: 'TASK_DELETED',
-        details: `Eliminada tarefa "${existing[0].title}"`
+        details: `Eliminada (soft delete) tarefa escolar "${existing[0].title}" (${id})`
       });
 
-      broadcastToAll('DELETE_TASK', { id });
+      broadcastToAll('task_deleted', { id });
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/school-tasks/:id/restore', requireAuth, authorizeTaskAction('restore_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
+    const { id } = req.params;
+    try {
+      const records = await db.select().from(schoolTasks).where(eq(schoolTasks.id, id));
+      if (records.length === 0) {
+        return res.status(404).json({ error: 'Tarefa não encontrada.' });
+      }
+      const task = records[0];
+      if (!task.isDeleted) {
+        return res.status(400).json({ error: 'Esta tarefa não está arquivada/eliminada.' });
+      }
+
+      await db.update(schoolTasks).set({
+        isDeleted: false,
+        deletedAt: null,
+        deletedBy: null,
+        updatedAt: new Date()
+      }).where(eq(schoolTasks.id, id));
+
+      await db.insert(operationalLogs).values({
+        userId: req.user?.uid || 'copilot-system',
+        userName: req.user?.dbName || 'Nexus Copilot IA',
+        userRole: req.user?.dbRole || 'system',
+        action: 'TASK_RESTORE',
+        details: `Recuperada/Desarquivada tarefa escolar "${task.title}" (${id})`
+      });
+
+      const updatedTask = { ...task, isDeleted: false, deletedAt: null, deletedBy: null, updatedAt: new Date() };
+      broadcastToAll('task_created', updatedTask);
+      res.json({ success: true, task: updatedTask });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get('/api/school-tasks/:id/dependency-impact', requireAuth, async (req: AuthRequest, res) => {
+    const { id } = req.params;
+    try {
+      const records = await db.select().from(schoolTasks).where(and(eq(schoolTasks.id, id), eq(schoolTasks.isDeleted, false)));
+      if (records.length === 0) {
+        return res.status(404).json({ error: 'Tarefa não encontrada.' });
+      }
+
+      const allTasks = await db.select().from(schoolTasks).where(eq(schoolTasks.isDeleted, false));
+      const directDeps: any[] = [];
+      
+      const dependentMap = new Map<string, any[]>();
+      for (const t of allTasks) {
+        let deps: string[] = [];
+        if (Array.isArray(t.dependencies)) {
+          deps = t.dependencies as string[];
+        } else if (typeof t.dependencies === 'string') {
+          try { deps = JSON.parse(t.dependencies); } catch (e) {}
+        }
+        for (const depId of deps) {
+          if (!dependentMap.has(depId)) {
+            dependentMap.set(depId, []);
+          }
+          dependentMap.get(depId)!.push(t);
+          if (depId === id) {
+            directDeps.push({ id: t.id, title: t.title });
+          }
+        }
+      }
+
+      const affectedSet = new Set<string>();
+      const affectedTasks: any[] = [];
+      const queue = [id];
+      
+      while (queue.length > 0) {
+        const currId = queue.shift()!;
+        const children = dependentMap.get(currId) || [];
+        for (const child of children) {
+          if (!affectedSet.has(child.id)) {
+            affectedSet.add(child.id);
+            affectedTasks.push({
+              id: child.id,
+              title: child.title,
+              status: child.status,
+              priority: child.priority,
+              assignedTo: child.assignedTo
+            });
+            queue.push(child.id);
+          }
+        }
+      }
+
+      res.json({
+        canDelete: directDeps.length === 0,
+        directDependents: directDeps.length,
+        totalAffectedTasks: affectedTasks.length,
+        tasks: affectedTasks
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- DISASTER RECOVERY ENDPOINTS (BACKUP & RESTORE SEGURO) ---
+
+  app.get('/api/school-tasks/export', requireAuth, rateLimiter('analytics', 20), async (req: AuthRequest, res) => {
+    const role = req.user?.dbRole;
+    if (role !== 'admin' && role !== 'director') {
+      try {
+        await db.insert(operationalLogs).values({
+          userId: req.user?.uid || 'anonymous',
+          userName: req.user?.dbName || 'Desconhecido',
+          userRole: role,
+          action: 'TASK_PERMISSION_VIOLATION',
+          details: `[ACESSO NEGADO RECOVERY] Perfil '${role}' tentou exportar backup de tarefas sem permissão.`
+        });
+      } catch (e) {
+        console.error('Erro ao registar log de segurança:', e);
+      }
+      return res.status(403).json({ error: 'Acesso Proibido: Apenas Super Admin e Direção podem exportar backups do sistema.' });
+    }
+
+    try {
+      const allTasks = await db.select().from(schoolTasks);
+      const checksum = generateBackupSignature(allTasks);
+
+      await db.insert(operationalLogs).values({
+        userId: req.user?.uid || 'copilot-system',
+        userName: req.user?.dbName || 'Nexus Copilot IA',
+        userRole: req.user?.dbRole || 'system',
+        action: 'DISASTER_RECOVERY_EXPORT',
+        details: `Efetuada exportação de backup lógico de ${allTasks.length} tarefas escolares.`
+      });
+
+      res.json({
+        tasks: allTasks,
+        checksum,
+        exportedAt: new Date().toISOString()
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/school-tasks/import-backup', requireAuth, rateLimiter('escrita', 10), async (req: AuthRequest, res) => {
+    const role = req.user?.dbRole;
+    if (role !== 'admin' && role !== 'director') {
+      try {
+        await db.insert(operationalLogs).values({
+          userId: req.user?.uid || 'anonymous',
+          userName: req.user?.dbName || 'Desconhecido',
+          userRole: role,
+          action: 'TASK_PERMISSION_VIOLATION',
+          details: `[ACESSO NEGADO RECOVERY] Perfil '${role}' tentou restaurar backup de tarefas sem permissão.`
+        });
+      } catch (e) {
+        console.error('Erro ao registar log de segurança:', e);
+      }
+      return res.status(403).json({ error: 'Acesso Proibido: Apenas Super Admin e Direção podem importar/restaurar backups no sistema.' });
+    }
+
+    const { tasks, checksum } = req.body;
+    if (!tasks || !Array.isArray(tasks) || !checksum) {
+      return res.status(400).json({ error: 'Formato de payload inválido. É obrigatório fornecer o array "tasks" e a assinatura "checksum".' });
+    }
+
+    // Cryptographic Signature Validation
+    if (!verifyBackupSignature(tasks, checksum)) {
+      try {
+        await db.insert(operationalLogs).values({
+          userId: req.user?.uid || 'anonymous',
+          userName: req.user?.dbName || 'Desconhecido',
+          userRole: role,
+          action: 'TASK_SECURITY_ALERT',
+          details: `[ALERT_RESTORE_FAILED] Tentativa de restauro de backup com assinatura digital inválida ou corrompida.`
+        });
+      } catch (e) {
+        console.error('Erro ao registar log de segurança:', e);
+      }
+      return res.status(400).json({ error: 'Restauração abortada: A assinatura digital de integridade do backup não corresponde. Os dados podem estar corrompidos ou foram adulterados.' });
+    }
+
+    // Verify each task meets input specifications
+    for (const task of tasks) {
+      const check = validateTaskInput(task, false);
+      if (!check.isValid) {
+        try {
+          await db.insert(operationalLogs).values({
+            userId: req.user?.uid || 'anonymous',
+            userName: req.user?.dbName || 'Desconhecido',
+            userRole: role,
+            action: 'TASK_SECURITY_ALERT',
+            details: `[ALERT_RESTORE_FAILED] Tarefa de backup inválida ou corrompida: ID=${task.id || 'N/A'} Erros=${check.errors.join(' | ')}`
+          });
+        } catch (e) {
+          console.error('Erro ao registar log de segurança:', e);
+        }
+        return res.status(400).json({ error: 'Restauração abortada: O arquivo de backup contém registros que violam as regras de validação atuais.', details: check.errors });
+      }
+    }
+
+    try {
+      // Execute restore in atomic transaction
+      await db.transaction(async (tx) => {
+        // Clear current active and deleted tasks to prevent duplicates/orphans
+        await tx.delete(schoolTasks);
+
+        if (tasks.length > 0) {
+          await tx.insert(schoolTasks).values(tasks.map((t: any) => ({
+            ...t,
+            createdAt: t.createdAt ? new Date(t.createdAt) : new Date(),
+            updatedAt: t.updatedAt ? new Date(t.updatedAt) : new Date(),
+            deletedAt: t.deletedAt ? new Date(t.deletedAt) : null,
+            slaDeadline: t.slaDeadline ? new Date(t.slaDeadline) : null,
+            completedAt: t.completedAt ? new Date(t.completedAt) : null,
+            startedAt: t.startedAt ? new Date(t.startedAt) : null,
+            firstResponseAt: t.firstResponseAt ? new Date(t.firstResponseAt) : null,
+          })));
+        }
+      });
+
+      await db.insert(operationalLogs).values({
+        userId: req.user?.uid || 'copilot-system',
+        userName: req.user?.dbName || 'Nexus Copilot IA',
+        userRole: req.user?.dbRole || 'system',
+        action: 'DISASTER_RECOVERY_RESTORE',
+        details: `Restauração lógica bem-sucedida de ${tasks.length} tarefas escolares via ficheiro de backup.`
+      });
+
+      broadcastToAll('task_created', { isBackupRestored: true });
+
+      res.json({
+        success: true,
+        message: 'Backup restaurado com sucesso em transação isolada.',
+        count: tasks.length
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: `Falha na transação de restauração: ${err.message}` });
     }
   });
 
@@ -2788,29 +4048,74 @@ Apresente as respostas de forma elegante utilizando tabelas em Markdown, badges,
               }
 
             } else if (name === 'createTodoTask') {
-              const newId = `TASK-${Date.now().toString().slice(-4)}`;
-              const dueDateVal = args.dueDate || new Date().toISOString().split('T')[0];
-              const newTask = {
+              const todayStr = new Date().toISOString().split('T')[0];
+              const dueDateVal = args.dueDate || todayStr;
+              const newId = `TSK-${Math.floor(2000 + Math.random() * 8000)}`;
+
+              let priorityVal = 'Normal';
+              if (args.priority) {
+                const p = args.priority.toLowerCase();
+                if (p === 'alta') priorityVal = 'Alta';
+                else if (p === 'baixa') priorityVal = 'Baixa';
+                else if (p === 'urgente') priorityVal = 'Urgente';
+                else if (p === 'crítica' || p === 'critica') priorityVal = 'Crítica';
+                else priorityVal = 'Normal';
+              }
+
+              let deptVal = 'Secretaria';
+              if (args.assignedTo) {
+                const a = args.assignedTo.toLowerCase();
+                if (a.includes('finan') || a.includes('contab')) deptVal = 'Financeiro';
+                else if (a.includes('pedag') || a.includes('prof') || a.includes('docen')) deptVal = 'Pedagógico';
+                else if (a.includes('dire') || a.includes('coord')) deptVal = 'Direção';
+                else if (a.includes('secret')) deptVal = 'Secretaria';
+              }
+
+              const newSchoolTask = {
                 id: newId,
                 title: args.title,
                 description: args.description,
+                assignedTo: args.assignedTo || 'Não atribuído',
+                department: deptVal,
+                priority: priorityVal,
+                status: 'Pendente',
+                createdAt: new Date(),
                 dueDate: dueDateVal,
-                priority: args.priority || 'média',
-                status: 'pendente',
-                assignedTo: args.assignedTo || 'all'
+                limitDate: dueDateVal,
+                createdAutomatically: true,
+                referenceId: null,
+                referenceType: null,
+                observations: 'Criado dinamicamente pelo assistente de Inteligência Artificial.',
+                history: [
+                  {
+                    id: `H-1-${newId}`,
+                    timestamp: new Date().toISOString(),
+                    action: 'Criação assistida por IA',
+                    user: 'Nexus Copilot IA',
+                    details: 'Tarefa operacional inserida via comando de linguagem natural.'
+                  }
+                ],
+                attachments: [],
+                dependencies: [],
+                updatedAt: new Date(),
+                createdBy: 'Nexus Copilot IA',
+                executedBy: null,
+                completedBy: null,
+                completedAt: null
               };
-              await db.insert(todoTasks).values(newTask);
+
+              await db.insert(schoolTasks).values(newSchoolTask);
 
               await db.insert(operationalLogs).values({
                 userId: req.user?.uid || 'copilot-system',
                 userName: 'Nexus Copilot IA',
                 userRole: 'system',
                 action: 'AGENT_TASK_CREATE',
-                details: `Tarefa de trabalho real criada pelo Copilot: "${args.title}" (Setor: ${args.assignedTo})`
+                details: `Tarefa de trabalho real criada pelo Copilot: "${args.title}" (Setor: ${args.assignedTo || 'Secretaria'})`
               });
 
-              broadcastToAll('ADD_TASK', newTask);
-              functionResponseData = { success: true, task: newTask };
+              broadcastToAll('task_created', newSchoolTask);
+              functionResponseData = { success: true, task: newSchoolTask };
 
             } else if (name === 'generateReport') {
               const reportTitle = `Relatorio_${args.reportType.toUpperCase()}_${Date.now().toString().slice(-4)}.pdf`;

@@ -1,15 +1,9 @@
-import { Student, Teacher, Invoice, Announcement, ChatMessage, AutomationFlow, ApprovalRequest } from './types';
+import { Student, Teacher, Invoice, Announcement, ChatMessage, AutomationFlow, ApprovalRequest, SchoolTask } from './types';
 import { auth } from './lib/firebase.ts';
-
-let bypassToken: string | null = null;
-
-export function setBypassToken(token: string | null) {
-  bypassToken = token;
-}
 
 // Dynamic header construction injecting our active Firebase user JWT
 export async function getHeaders() {
-  const token = auth.currentUser ? await auth.currentUser.getIdToken() : (bypassToken || '');
+  const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
   return {
     'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -23,10 +17,23 @@ export const supabaseAnonKey = "Firebase JWT Protected";
 
 // 1. Students Operations
 export async function getLiveStudents(): Promise<Student[]> {
-  const headers = await getHeaders();
-  const res = await fetch('/api/students', { headers });
-  if (!res.ok) throw new Error('Falha ao obter alunos do Cloud SQL PostgreSQL.');
-  return res.json();
+  try {
+    const headers = await getHeaders();
+    const res = await fetch('/api/students', { headers });
+    if (!res.ok) {
+      console.warn('Falha ao obter alunos do Cloud SQL PostgreSQL:', res.status);
+      return [];
+    }
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+    return [];
+  } catch (err) {
+    console.warn('Error fetching students:', err);
+    return [];
+  }
 }
 
 export async function upsertLiveStudent(student: Student): Promise<void> {
@@ -50,10 +57,23 @@ export async function deleteLiveStudent(id: string): Promise<void> {
 
 // 2. Teachers Operations
 export async function getLiveTeachers(): Promise<Teacher[]> {
-  const headers = await getHeaders();
-  const res = await fetch('/api/teachers', { headers });
-  if (!res.ok) throw new Error('Falha ao obter professores do Cloud SQL.');
-  return res.json();
+  try {
+    const headers = await getHeaders();
+    const res = await fetch('/api/teachers', { headers });
+    if (!res.ok) {
+      console.warn('Falha ao obter professores do Cloud SQL:', res.status);
+      return [];
+    }
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+    return [];
+  } catch (err) {
+    console.warn('Error fetching teachers:', err);
+    return [];
+  }
 }
 
 export async function upsertLiveTeacher(teacher: Teacher): Promise<void> {
@@ -91,10 +111,23 @@ export async function deleteLiveTeacher(id: string): Promise<void> {
 
 // 3. Invoices / Financial Operations
 export async function getLiveInvoices(): Promise<Invoice[]> {
-  const headers = await getHeaders();
-  const res = await fetch('/api/invoices', { headers });
-  if (!res.ok) throw new Error('Falha ao obter faturas do Postgres.');
-  return res.json();
+  try {
+    const headers = await getHeaders();
+    const res = await fetch('/api/invoices', { headers });
+    if (!res.ok) {
+      console.warn('Falha ao obter faturas do Postgres:', res.status);
+      return [];
+    }
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+    return [];
+  } catch (err) {
+    console.warn('Error fetching invoices:', err);
+    return [];
+  }
 }
 
 export async function upsertLiveInvoice(invoice: Invoice): Promise<void> {
@@ -151,10 +184,23 @@ export async function getLiveFinancialForecast(): Promise<any> {
 
 // 4. Announcements Operations
 export async function getLiveAnnouncements(): Promise<Announcement[]> {
-  const headers = await getHeaders();
-  const res = await fetch('/api/announcements', { headers });
-  if (!res.ok) throw new Error('Falha ao obter pauta de avisos.');
-  return res.json();
+  try {
+    const headers = await getHeaders();
+    const res = await fetch('/api/announcements', { headers });
+    if (!res.ok) {
+      console.warn('Falha ao obter pauta de avisos:', res.status);
+      return [];
+    }
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+    return [];
+  } catch (err) {
+    console.warn('Error fetching announcements:', err);
+    return [];
+  }
 }
 
 export async function upsertLiveAnnouncement(an: Announcement): Promise<void> {
@@ -173,10 +219,23 @@ export async function upsertLiveAnnouncement(an: Announcement): Promise<void> {
 
 // 5. Communications Chat Operations
 export async function getLiveMessages(): Promise<ChatMessage[]> {
-  const headers = await getHeaders();
-  const res = await fetch('/api/chat-messages', { headers });
-  if (!res.ok) throw new Error('Falha ao obter mensagens de chat.');
-  return res.json();
+  try {
+    const headers = await getHeaders();
+    const res = await fetch('/api/chat-messages', { headers });
+    if (!res.ok) {
+      console.warn('Falha ao obter mensagens de chat:', res.status);
+      return [];
+    }
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+    return [];
+  } catch (err) {
+    console.warn('Error fetching chat messages:', err);
+    return [];
+  }
 }
 
 export async function upsertLiveMessage(msg: ChatMessage): Promise<void> {
@@ -194,10 +253,23 @@ export async function upsertLiveMessage(msg: ChatMessage): Promise<void> {
 
 // 6. n8n Serverless Automations
 export async function getLiveAutomations(): Promise<AutomationFlow[]> {
-  const headers = await getHeaders();
-  const res = await fetch('/api/automations', { headers });
-  if (!res.ok) throw new Error('Falha ao consultar automações ativas.');
-  return res.json();
+  try {
+    const headers = await getHeaders();
+    const res = await fetch('/api/automations', { headers });
+    if (!res.ok) {
+      console.warn('Falha ao consultar automações ativas:', res.status);
+      return [];
+    }
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+    return [];
+  } catch (err) {
+    console.warn('Error fetching automations:', err);
+    return [];
+  }
 }
 
 export async function upsertLiveAutomation(flow: AutomationFlow): Promise<void> {
@@ -223,10 +295,23 @@ export async function triggerLiveAutomationRun(id: string): Promise<void> {
 
 // 7. Documents Storage & Intelligent Analyzers
 export async function getLiveDocuments(): Promise<any[]> {
-  const headers = await getHeaders();
-  const res = await fetch('/api/documents', { headers });
-  if (!res.ok) throw new Error('Falha ao obter documentos arquivados.');
-  return res.json();
+  try {
+    const headers = await getHeaders();
+    const res = await fetch('/api/documents', { headers });
+    if (!res.ok) {
+      console.warn('Falha ao obter documentos arquivados:', res.status);
+      return [];
+    }
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+    return [];
+  } catch (err) {
+    console.warn('Error fetching documents:', err);
+    return [];
+  }
 }
 
 export async function uploadLiveDocument(name: string, size?: string): Promise<any> {
@@ -251,18 +336,45 @@ export async function deleteLiveDocument(id: number): Promise<void> {
 
 // Operational History helper API
 export async function getLiveLogs(): Promise<any[]> {
-  const headers = await getHeaders();
-  const res = await fetch('/api/logs', { headers });
-  if (!res.ok) throw new Error('Falha ao obter logs operacionais do Postgres.');
-  return res.json();
+  try {
+    const headers = await getHeaders();
+    const res = await fetch('/api/logs', { headers });
+    if (!res.ok) {
+      console.warn('Falha ao obter logs operacionais do Postgres: status', res.status);
+      return [];
+    }
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+    console.warn('[LOGS] API returned non-JSON content. Falling back to empty array.');
+    return [];
+  } catch (err) {
+    console.warn('[LOGS] Error fetching live logs:', err);
+    return [];
+  }
 }
 
 // 8. Institutional Approvals Operations
 export async function getLiveApprovals(): Promise<ApprovalRequest[]> {
-  const headers = await getHeaders();
-  const res = await fetch('/api/approvals', { headers });
-  if (!res.ok) throw new Error('Falha ao obter pedidos de aprovação escolares.');
-  return res.json();
+  try {
+    const headers = await getHeaders();
+    const res = await fetch('/api/approvals', { headers });
+    if (!res.ok) {
+      console.warn('Falha ao obter pedidos de aprovação escolares:', res.status);
+      return [];
+    }
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    }
+    return [];
+  } catch (err) {
+    console.warn('Error fetching approvals:', err);
+    return [];
+  }
 }
 
 export async function createLiveApproval(title: string, description: string, flowType: string): Promise<ApprovalRequest> {
@@ -313,3 +425,78 @@ export async function seedSupabaseDatabase(data?: any): Promise<{ success: boole
     log: "Banco de Dados Cloud SQL sincronizado de forma instantânea na pauta local do servidor!"
   };
 }
+
+export async function getLiveTasks(): Promise<SchoolTask[]> {
+  const headers = await getHeaders();
+  const res = await fetch('/api/school-tasks', { headers });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || 'Falha ao buscar tarefas escolares.');
+  }
+  return res.json();
+}
+
+export async function upsertLiveTask(task: SchoolTask): Promise<SchoolTask> {
+  const headers = await getHeaders();
+  const res = await fetch('/api/school-tasks', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(task)
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || 'Falha ao gravar tarefa escolar.');
+  }
+  return res.json();
+}
+
+export async function deleteLiveTask(id: string): Promise<{ success: boolean }> {
+  const headers = await getHeaders();
+  const res = await fetch(`/api/school-tasks/${id}`, {
+    method: 'DELETE',
+    headers
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    if (res.status === 409 && errData.dependents && errData.dependents.length > 0) {
+      const depList = errData.dependents.map((d: any) => `"${d.title}" (${d.id})`).join('\n• ');
+      throw new Error(`Não é possível eliminar esta tarefa porque existem outras que dependem dela:\n• ${depList}`);
+    }
+    throw new Error(errData.error || 'Falha ao apagar tarefa escolar.');
+  }
+  return res.json();
+}
+
+export async function getDeletedLiveTasks(): Promise<SchoolTask[]> {
+  const headers = await getHeaders();
+  const res = await fetch('/api/school-tasks/deleted', { headers });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || 'Falha ao buscar tarefas escolares eliminadas.');
+  }
+  return res.json();
+}
+
+export async function restoreLiveTask(id: string): Promise<{ success: boolean; task: SchoolTask }> {
+  const headers = await getHeaders();
+  const res = await fetch(`/api/school-tasks/${id}/restore`, {
+    method: 'POST',
+    headers
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || 'Falha ao restaurar tarefa escolar.');
+  }
+  return res.json();
+}
+
+export async function getDependencyImpact(id: string): Promise<{ canDelete: boolean; directDependents: number; totalAffectedTasks: number; tasks: any[] }> {
+  const headers = await getHeaders();
+  const res = await fetch(`/api/school-tasks/${id}/dependency-impact`, { headers });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.error || 'Falha ao calcular impacto de dependência.');
+  }
+  return res.json();
+}
+

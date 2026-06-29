@@ -65,20 +65,27 @@ export default function Dashboard({
 
   const fetchTodoTasks = async () => {
     try {
-      const response = await fetch('/api/tasks', { headers: await getHeaders() });
+      const response = await fetch('/api/school-tasks', { headers: await getHeaders() });
       if (response.ok) {
-        const data = await response.json();
-        setTodoTasks(data);
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await response.json();
+          setTodoTasks(Array.isArray(data) ? data : []);
+        } else {
+          console.warn('[TASKS] API returned non-JSON content. Falling back to empty array.');
+        }
+      } else {
+        console.warn('[TASKS] API response not OK:', response.status);
       }
     } catch (err) {
-      console.error('Erro ao buscar tarefas:', err);
+      console.warn('Erro ao buscar tarefas:', err);
     }
   };
 
   const handleToggleTaskStatus = async (taskId: string, currentStatus: string) => {
     try {
-      const newStatus = currentStatus === 'completado' ? 'pendente' : 'completado';
-      const response = await fetch(`/api/tasks/${taskId}`, {
+      const newStatus = currentStatus === 'Concluída' ? 'Pendente' : 'Concluída';
+      const response = await fetch(`/api/school-tasks/${taskId}`, {
         method: 'PUT',
         headers: await getHeaders(),
         body: JSON.stringify({ status: newStatus })
@@ -95,7 +102,7 @@ export default function Dashboard({
 
   const handleDeleteTask = async (taskId: string) => {
     try {
-      const response = await fetch(`/api/tasks/${taskId}`, {
+      const response = await fetch(`/api/school-tasks/${taskId}`, {
         method: 'DELETE',
         headers: await getHeaders()
       });
@@ -103,9 +110,18 @@ export default function Dashboard({
         fetchTodoTasks();
         const customEvent = new CustomEvent('nexus-realtime-update');
         window.dispatchEvent(customEvent);
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        if (response.status === 409 && errData.dependents && errData.dependents.length > 0) {
+          const depList = errData.dependents.map((d: any) => `"${d.title}" (${d.id})`).join('\n• ');
+          alert(`Não é possível eliminar esta tarefa porque existem outras que dependem dela:\n• ${depList}`);
+        } else {
+          alert(`Erro ao eliminar tarefa: ${errData.error || 'Falha desconhecida'}`);
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao eliminar tarefa:', err);
+      alert(`Erro de rede ao eliminar tarefa: ${err.message}`);
     }
   };
 
@@ -705,49 +721,55 @@ export default function Dashboard({
                   Nenhuma tarefa operacional pendente no banco de dados. Delegue tarefas ao Copilot por chat ou botão rápido!
                 </p>
               ) : (
-                todoTasks.map((tk) => (
-                  <div key={tk.id} className="p-3 bg-zinc-950 border border-zinc-850 rounded-lg hover:border-zinc-800 transition flex items-start gap-2.5">
-                    <input 
-                      type="checkbox" 
-                      checked={tk.status === 'completado'}
-                      onChange={() => handleToggleTaskStatus(tk.id, tk.status)}
-                      className="mt-1 rounded border-zinc-800 bg-zinc-900 text-emerald-500 focus:ring-opacity-0 cursor-pointer w-3.5 h-3.5 shrink-0" 
-                    />
-                    <div className="flex-1 min-w-0">
-                      <h4 className={`text-xs font-semibold ${tk.status === 'completado' ? 'line-through text-zinc-500' : 'text-zinc-200'}`}>
-                        {tk.title}
-                      </h4>
-                      <p className="text-[10px] text-zinc-455 mt-1 font-sans break-words leading-relaxed">
-                        {tk.description}
-                      </p>
-                      
-                      <div className="flex items-center gap-2 mt-2 text-[8px] font-mono">
-                        <span className={`uppercase px-1.5 py-0.2 rounded font-bold ${
-                          tk.priority === 'alta' 
-                            ? 'bg-rose-500/15 text-rose-400 border border-rose-500/20' 
-                            : tk.priority === 'média'
-                            ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
-                            : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                        }`}>
-                          {tk.priority}
-                        </span>
-                        {tk.assignedTo && tk.assignedTo !== 'all' && (
-                          <span className="bg-zinc-800 text-zinc-400 px-1 py-0.2 rounded uppercase">
-                            Setor: {tk.assignedTo}
+                todoTasks.map((tk) => {
+                  const isCompleted = tk.status === 'Concluída';
+                  const priorityLower = tk.priority ? tk.priority.toLowerCase() : 'normal';
+                  const isHighOrCritical = priorityLower === 'alta' || priorityLower === 'urgente' || priorityLower === 'crítica' || priorityLower === 'critica';
+                  const isMediumOrNormal = priorityLower === 'normal' || priorityLower === 'média' || priorityLower === 'media';
+                  return (
+                    <div key={tk.id} className="p-3 bg-zinc-950 border border-zinc-850 rounded-lg hover:border-zinc-800 transition flex items-start gap-2.5">
+                      <input 
+                        type="checkbox" 
+                        checked={isCompleted}
+                        onChange={() => handleToggleTaskStatus(tk.id, tk.status)}
+                        className="mt-1 rounded border-zinc-800 bg-zinc-900 text-emerald-500 focus:ring-opacity-0 cursor-pointer w-3.5 h-3.5 shrink-0" 
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h4 className={`text-xs font-semibold ${isCompleted ? 'line-through text-zinc-500' : 'text-zinc-200'}`}>
+                          {tk.title}
+                        </h4>
+                        <p className="text-[10px] text-zinc-455 mt-1 font-sans break-words leading-relaxed">
+                          {tk.description}
+                        </p>
+                        
+                        <div className="flex items-center gap-2 mt-2 text-[8px] font-mono">
+                          <span className={`uppercase px-1.5 py-0.2 rounded font-bold ${
+                            isHighOrCritical 
+                              ? 'bg-rose-500/15 text-rose-400 border border-rose-500/20' 
+                              : isMediumOrNormal
+                              ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                              : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                          }`}>
+                            {tk.priority}
                           </span>
-                        )}
-                        <span className="text-zinc-500">{tk.dueDate}</span>
+                          {tk.assignedTo && tk.assignedTo !== 'all' && tk.assignedTo !== 'Não atribuído' && (
+                            <span className="bg-zinc-800 text-zinc-400 px-1 py-0.2 rounded uppercase">
+                              Setor: {tk.assignedTo}
+                            </span>
+                          )}
+                          <span className="text-zinc-500">{tk.dueDate}</span>
+                        </div>
                       </div>
+                      <button 
+                        onClick={() => handleDeleteTask(tk.id)}
+                        className="text-zinc-650 hover:text-rose-400 p-1 rounded transition shrink-0 self-center"
+                        title="Eliminar tarefa"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                    <button 
-                      onClick={() => handleDeleteTask(tk.id)}
-                      className="text-zinc-650 hover:text-rose-400 p-1 rounded transition shrink-0 self-center"
-                      title="Eliminar tarefa"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

@@ -15,8 +15,9 @@ interface AIAssistantProps {
 }
 
 export default function AIAssistant({ students, teachers, invoices, onRefreshData }: AIAssistantProps) {
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string; timestamp?: string }[]>([
+  const [messages, setMessages] = useState<{ id: string; role: 'user' | 'assistant'; content: string; timestamp?: string }[]>([
     {
+      id: 'welcome-message',
       role: 'assistant',
       content: 'Olá! Sou o **Nexus Copilot**, o seu funcionário digital inteligente integrado. \n\nTenho acesso para consulta em tempo real à **base de dados central**, aos **documentos escolares processados digitalmente** e aos **fluxos de processos automáticos**. \n\nDiferente de um assistente decorativo comum, eu consigo efetuar ações operacionais reais: pesquisar alunos com risco académico, auditar e conciliar pagamentos pendentes, catalogar documentos e até disparar processos de comunicação automática. \n\nO que gostaria de delegar à minha responsabilidade hoje?',
       timestamp: new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
@@ -42,7 +43,7 @@ export default function AIAssistant({ students, teachers, invoices, onRefreshDat
     }
 
     const currentTimestamp = new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
-    setMessages(prev => [...prev, { role: 'user', content: text, timestamp: currentTimestamp }]);
+    setMessages(prev => [...prev, { id: `user-msg-${Date.now()}`, role: 'user', content: text, timestamp: currentTimestamp }]);
     setIsLoading(true);
 
     try {
@@ -58,6 +59,7 @@ export default function AIAssistant({ students, teachers, invoices, onRefreshDat
 
       const data = await response.json();
       setMessages(prev => [...prev, { 
+        id: `assistant-msg-${Date.now()}`,
         role: 'assistant', 
         content: data.reply,
         timestamp: new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
@@ -73,6 +75,7 @@ export default function AIAssistant({ students, teachers, invoices, onRefreshDat
       setMessages(prev => [
         ...prev,
         {
+          id: `assistant-err-${Date.now()}`,
           role: 'assistant',
           content: 'Desculpe, ocorreu uma perturbação temporária ao contactar o meu motor central de inteligência. Contudo, como sou um agente híbrido integrado, apresento-lhe uma resposta direta do meu motor analítico local:\n\n* **Aviso**: Chave `GEMINI_API_KEY` deve estar preenchida nos Secrets para pleno funcionamento.\n* **Faturas em atraso**: Identificadas faturas pendentes na base de dados local para alunos do 8º Ano.\n* **Auditoria concluída**: Sistema de dados está ativo e operável.',
           timestamp: new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
@@ -314,6 +317,7 @@ export default function AIAssistant({ students, teachers, invoices, onRefreshDat
           <div className="pt-2">
             <button 
               onClick={() => setMessages([{
+                id: 'reset-welcome-message',
                 role: 'assistant',
                 content: 'Olá! Recompilei a minha memória de trabalho. A base de dados central está sincronizada e operante. Como funcionário digital inteligente da escola, que tarefas operacionais deseja que execute agora?',
                 timestamp: new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
@@ -332,9 +336,9 @@ export default function AIAssistant({ students, teachers, invoices, onRefreshDat
           {/* TAB 1: Console View (Typical AI Chat, but augmented) */}
           {activeTab === 'console' && (
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-              {messages.map((message, index) => (
+              {messages.map((message) => (
                 <div
-                  key={index}
+                  key={message.id}
                   className={`flex gap-3 max-w-[90%] md:max-w-[85%] ${
                     message.role === 'user' ? 'ml-auto flex-row-reverse' : ''
                   }`}

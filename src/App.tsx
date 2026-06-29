@@ -27,15 +27,6 @@ import {
 } from 'lucide-react';
 
 import { Student, Teacher, Invoice, Announcement, ChatMessage, AutomationFlow, UserRole, AuditLog, NotificationPreset, ApprovalRequest, ApprovalFlowType, DigitalSignatureRequest, DigitalSignatureDocType, SchoolTask } from './types';
-import { 
-  initialStudents, 
-  initialTeachers, 
-  initialInvoices, 
-  initialAnnouncements, 
-  initialMessages, 
-  initialAutomations,
-  initialTasks
-} from './mockData';
 import {
   supabaseConfigured,
   getLiveStudents,
@@ -53,10 +44,12 @@ import {
   upsertLiveMessage,
   upsertLiveAutomation,
   getLiveLogs,
-  setBypassToken,
   getLiveApprovals,
   createLiveApproval,
-  transitionLiveApproval
+  transitionLiveApproval,
+  getLiveTasks,
+  upsertLiveTask,
+  deleteLiveTask
 } from './supabaseClient';
 
 import { auth, googleAuthProvider } from './lib/firebase.ts';
@@ -74,13 +67,13 @@ import AIAssistant from './components/AIAssistant';
 import TeacherAI from './components/TeacherAI';
 import Gamification from './components/Gamification';
 import MatriculaPortal from './components/MatriculaPortal';
-import SchoolDocuments, { SchoolDoc, defaultSchoolDocuments } from './components/SchoolDocuments';
+import SchoolDocuments, { SchoolDoc } from './components/SchoolDocuments';
 import SchoolMigration from './components/SchoolMigration';
 import WorkflowsCentral from './components/WorkflowsCentral';
 import GlobalSearch from './components/GlobalSearch';
 import ParentPortal from './components/ParentPortal';
 import InstitutionalApprovals from './components/InstitutionalApprovals';
-import DigitalSignatureSystem, { defaultSignatures } from './components/DigitalSignatureSystem';
+import DigitalSignatureSystem from './components/DigitalSignatureSystem';
 import TasksCenter from './components/TasksCenter';
 import GoogleSheetsCenter from './components/GoogleSheetsCenter';
 
@@ -359,8 +352,6 @@ export default function App() {
   const [authRegisterName, setAuthRegisterName] = useState<string>('');
 
   const [loginStep, setLoginStep] = useState<number>(1);
-  const [selectedRole, setSelectedRole] = useState<UserRole>('admin');
-  const [secretKey, setSecretKey] = useState<string>('');
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('admin');
@@ -537,21 +528,12 @@ export default function App() {
 
   const [automationFlows, setAutomationFlows] = useState<AutomationFlow[]>([]);
 
-  const [schoolDocs, setSchoolDocs] = useState<SchoolDoc[]>(() => {
-    const saved = localStorage.getItem('nexus_school_docs');
-    return saved ? JSON.parse(saved) : defaultSchoolDocuments;
-  });
+  const [schoolDocs, setSchoolDocs] = useState<SchoolDoc[]>([]);
 
-  const [approvals, setApprovals] = useState<ApprovalRequest[]>(() => {
-    const saved = localStorage.getItem('nexus_approvals');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
   const [approvalsLoading, setApprovalsLoading] = useState(false);
 
-  const [signatures, setSignatures] = useState<DigitalSignatureRequest[]>(() => {
-    const saved = localStorage.getItem('nexus_signatures');
-    return saved ? JSON.parse(saved) : defaultSignatures([], defaultSchoolDocuments, []);
-  });
+  const [signatures, setSignatures] = useState<DigitalSignatureRequest[]>([]);
 
   const [tasks, setTasks] = useState<SchoolTask[]>([]);
 
@@ -559,10 +541,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('nexus_approvals', JSON.stringify(approvals));
   }, [approvals]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_tasks', JSON.stringify(tasks));
-  }, [tasks]);
 
   useEffect(() => {
     localStorage.setItem('nexus_students', JSON.stringify(students));
@@ -600,10 +578,12 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (usr) => {
       if (usr) {
+        console.log('[AUTH-CLIENT] onAuthStateChanged active user detected:', usr.email);
         setFirebaseUser(usr);
         // Load the PostgreSQL profile role on access
         try {
           const token = await usr.getIdToken();
+          console.log('[AUTH-CLIENT] onAuthStateChanged fetching PostgreSQL profile...');
           const pRes = await fetch('/api/profile', {
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -611,11 +591,19 @@ export default function App() {
             const profile = await pRes.json();
             console.log('[AUTH-PG] Active PG user role profile loaded:', profile);
             setCurrentUserRole(profile.role);
+          } else {
+            console.error('[AUTH-PG] Profile fetch failed with status:', pRes.status);
+            // If the profile fetch fails (e.g. user deleted from PostgreSQL), we must sign out to remain synchronized!
+            await signOut(auth);
+            setFirebaseUser(null);
           }
         } catch (e) {
           console.error('[AUTH-PG] Error loading profile from Postgres:', e);
+          await signOut(auth);
+          setFirebaseUser(null);
         }
       } else {
+        console.log('[AUTH-CLIENT] onAuthStateChanged detected signed out state.');
         setFirebaseUser(null);
       }
       setAuthLoading(false);
@@ -766,6 +754,24 @@ export default function App() {
             setApprovals(prev => prev.map(a => a.id === apr.id ? apr : a));
           }
 
+          if (data.type === 'task_created') {
+            const task = data.payload;
+            setTasks(prev => {
+              if (prev.some(t => t.id === task.id)) return prev;
+              return [task, ...prev];
+            });
+          }
+
+          if (data.type === 'task_updated') {
+            const task = data.payload;
+            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, ...task } : t));
+          }
+
+          if (data.type === 'task_deleted') {
+            const { id } = data.payload;
+            setTasks(prev => prev.filter(t => t.id !== id));
+          }
+
           // Trigger a global custom event for Dashboard.tsx or other child components to update immediately
           window.dispatchEvent(new CustomEvent('nexus-realtime-update', { detail: data }));
           
@@ -781,7 +787,7 @@ export default function App() {
       };
       
       ws.onerror = (err) => {
-        console.error('[REALTIME] Connection error:', err);
+        console.warn('[REALTIME] Connection error (retrying):', err);
       };
     }
     
@@ -798,14 +804,15 @@ export default function App() {
   const loadLiveDb = async () => {
     if (!supabaseConfigured) return;
     try {
-      const [liveSt, liveTc, liveIv, liveAn, liveMs, liveAu, liveAp] = await Promise.all([
+      const [liveSt, liveTc, liveIv, liveAn, liveMs, liveAu, liveAp, liveTasks] = await Promise.all([
         getLiveStudents(),
         getLiveTeachers(),
         getLiveInvoices(),
         getLiveAnnouncements(),
         getLiveMessages(),
         getLiveAutomations(),
-        getLiveApprovals()
+        getLiveApprovals(),
+        getLiveTasks()
       ]);
       
       if (liveSt) setStudents(liveSt);
@@ -815,6 +822,7 @@ export default function App() {
       if (liveMs) setMessages(liveMs);
       if (liveAu) setAutomationFlows(liveAu);
       if (liveAp) setApprovals(liveAp);
+      if (liveTasks) setTasks(liveTasks);
       console.log("🟢 Live PostgreSQL Data loaded successfully.");
     } catch (err) {
       console.warn("⚠️ Local storage caching fallback: ", err);
@@ -827,25 +835,6 @@ export default function App() {
     loadLiveDb();
   }, [firebaseUser]);
 
-  const triggerSandboxBypass = (role: UserRole) => {
-    console.log(`[AUTH-BYPASS] Activating high-fidelity Sandbox bypass mode for role: ${role}`);
-    const mockEmail = loginEmail || `${role}@nexus.edu`;
-    setBypassToken(`bypass-token-${role}`);
-    const mockUser = {
-      uid: `bypass_uid_${role}`,
-      email: mockEmail,
-      displayName: `${role.charAt(0).toUpperCase() + role.slice(1)} Simulado`,
-      getIdToken: async () => `bypass-token-${role}`
-    };
-    setFirebaseUser(mockUser);
-    setCurrentUserRole(role);
-  };
-
-  const handleQuickSimulationLogin = async (role: UserRole) => {
-    // Retained as fallback wrapper for external reference
-    triggerSandboxBypass(role);
-  };
-
   const handleModularLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
@@ -853,108 +842,109 @@ export default function App() {
     const email = loginEmail.trim().toLowerCase();
     const password = loginPassword.trim();
 
+    console.log('[DEBUG-AUTH-FLOW] 1. Clique no botão Login.');
+
     if (!email || !password) {
       setLoginError('O email e a palavra-passe são obrigatórios.');
       return;
     }
 
-    // High-fidelity backward-compatible mapping for demo accounts to ensure they login perfectly
-    let deterministicPassword = password;
-    let mappedRole: UserRole = 'student';
-
-    if (email === 'admin@nexus.edu') {
-      deterministicPassword = 'nexus_pwd_admin_secret';
-      mappedRole = 'admin';
-    } else if (email === 'direcao@nexus.edu') {
-      deterministicPassword = 'nexus_pwd_director_secret';
-      mappedRole = 'director';
-    } else if (email === 'secretaria@nexus.edu') {
-      deterministicPassword = 'nexus_pwd_secretariat_secret';
-      mappedRole = 'secretariat';
-    } else if (email === 'financeiro@nexus.edu') {
-      deterministicPassword = 'nexus_pwd_financial_secret';
-      mappedRole = 'financial';
-    } else if (email === 'professor@nexus.edu') {
-      deterministicPassword = 'nexus_pwd_teacher_secret';
-      mappedRole = 'teacher';
-    } else if (email === 'encarregado@nexus.edu') {
-      deterministicPassword = 'nexus_pwd_parent_secret';
-      mappedRole = 'parent';
-    } else if (email === 'aluno@nexus.edu') {
-      deterministicPassword = 'nexus_pwd_student_secret';
-      mappedRole = 'student';
-    } else {
-      // Dynamic fallback role mapping for new email entries
-      if (email.includes('admin')) mappedRole = 'admin';
-      else if (email.includes('director') || email.includes('direcao')) mappedRole = 'director';
-      else if (email.includes('secret')) mappedRole = 'secretariat';
-      else if (email.includes('finance')) mappedRole = 'financial';
-      else if (email.includes('teach') || email.includes('prof')) mappedRole = 'teacher';
-      else if (email.includes('parent') || email.includes('encarregado')) mappedRole = 'parent';
-    }
-
     try {
-      console.log(`[AUTH-REAL] Unifying email login for: ${email}`);
       let usrCredential;
-      try {
-        usrCredential = await signInWithEmailAndPassword(auth, email, deterministicPassword);
-      } catch (signInErr: any) {
-        if (
-          signInErr.code === 'auth/user-not-found' || 
-          signInErr.code === 'auth/invalid-credential' || 
-          signInErr.code === 'auth/wrong-password' ||
-          signInErr.code === 'auth/invalid-email'
-        ) {
-          // Auto create account with standard role password if first registration attempts occur
-          usrCredential = await createUserWithEmailAndPassword(auth, email, deterministicPassword);
-        } else {
+
+      if (isRegistering) {
+        // Real Sign Up / Registration
+        console.log(`[AUTH-REAL] Creating real account for email: ${email}`);
+        if (password.length < 6) {
+          setLoginError('A palavra-passe deve ter pelo menos 6 caracteres.');
+          return;
+        }
+        console.log('[DEBUG-AUTH-FLOW] 2. Antes de chamar createUserWithEmailAndPassword:', {
+          email: email,
+          passwordLength: password.length
+        });
+        try {
+          usrCredential = await createUserWithEmailAndPassword(auth, email, password);
+          console.log('[DEBUG-AUTH-FLOW] 3. Depois da chamada: SUCCESS');
+        } catch (regErr: any) {
+          console.log('[DEBUG-AUTH-FLOW] 3. Depois da chamada falhou:', {
+            code: regErr.code,
+            message: regErr.message,
+            stack: regErr.stack
+          });
+          throw regErr;
+        }
+      } else {
+        // Real Sign In
+        console.log(`[AUTH-REAL] Logging in real account for email: ${email}`);
+        console.log('[DEBUG-AUTH-FLOW] 2. Antes de chamar signInWithEmailAndPassword:', {
+          email: email,
+          passwordLength: password.length
+        });
+
+        try {
+          usrCredential = await signInWithEmailAndPassword(auth, email, password);
+          console.log('[DEBUG-AUTH-FLOW] 3. Depois da chamada: SUCCESS');
+        } catch (signInErr: any) {
+          console.log('[DEBUG-AUTH-FLOW] 3. Depois da chamada falhou:', {
+            code: signInErr.code,
+            message: signInErr.message,
+            stack: signInErr.stack
+          });
           throw signInErr;
         }
       }
 
       if (usrCredential && usrCredential.user) {
+        console.log('[DEBUG-AUTH-FLOW] 4. Login Firebase funcionou!');
+        console.log('[DEBUG-AUTH-FLOW] UID:', usrCredential.user.uid);
+        console.log('[DEBUG-AUTH-FLOW] EMAIL:', usrCredential.user.email);
         const token = await usrCredential.user.getIdToken();
+        console.log('[DEBUG-AUTH-FLOW] TOKEN GERADO:', token);
         
-        // Ensure Postgres user row is fully created and has proper role
-        const response = await fetch('/api/profile/role', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ role: mappedRole })
-        });
-        
-        // Fetch actual profile to check for suspension
+        console.log('[DEBUG-AUTH-FLOW] 5. Antes de chamar /api/profile. Authorization Header:', `Bearer ${token}`);
         const pRes = await fetch('/api/profile', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
         if (pRes.ok) {
           const profile = await pRes.json();
+          console.log('[AUTH-CLIENT] Existing profile found in PostgreSQL:', profile);
           if (profile.status === 'suspended') {
             await signOut(auth);
             setLoginError('A sua conta está temporariamente suspensa pelo administrador pedagógico.');
             return;
           }
           setCurrentUserRole(profile.role);
+          setFirebaseUser(usrCredential.user);
         } else {
-          setCurrentUserRole(mappedRole);
+          console.error('[AUTH-CLIENT] Failed to synchronize and verify PostgreSQL profile.');
+          await signOut(auth);
+          setLoginError('Falha crítica de sincronização: Não foi possível obter ou persistir o perfil do utilizador no PostgreSQL.');
         }
-        
-        setFirebaseUser(usrCredential.user);
       }
     } catch (err: any) {
-      if (err.code === 'auth/operation-not-allowed') {
-        triggerSandboxBypass(mappedRole);
+      console.error('[DEBUG-AUTH-FLOW] 10. Exceção completa capturada no frontend:', err);
+      console.error('[DEBUG-AUTH-FLOW] Stack Trace completo do erro:', err.stack);
+      let errorMsg = 'Falha durante a autenticação. Verifique os dados introduzidos.';
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+        errorMsg = 'Credenciais incorretas ou utilizador não encontrado.';
+      } else if (err.code === 'auth/email-already-in-use') {
+        errorMsg = 'Este endereço de email já se encontra registado.';
+      } else if (err.code === 'auth/weak-password') {
+        errorMsg = 'A palavra-passe escolhida é demasiado fraca (mínimo de 6 caracteres).';
+      } else if (err.code === 'auth/invalid-email') {
+        errorMsg = 'O endereço de email introduzido é inválido.';
+      } else if (err.code === 'auth/operation-not-allowed') {
+        errorMsg = 'O provedor de autenticação "E-mail/palavra-passe" não está ativado no seu novo projeto Firebase ("nexus-edu-platform"). Por favor, aceda ao Console Firebase > Authentication > separador "Método de login" (Sign-in method), clique em "Adicionar novo provedor", escolha "E-mail/palavra-passe" e ative-o para poder efetuar o registo e login de utilizadores.';
       } else {
-        setLoginError(`Falha durante a autenticação: ${err.message || err}`);
+        errorMsg = `Erro na autenticação: ${err.message || String(err)}`;
       }
+      setLoginError(errorMsg);
     }
   };
 
   const handleCustomLogin = async (e: React.FormEvent) => {
-    // Maintained for compatibility
     handleModularLogin(e);
   };
 
@@ -963,24 +953,19 @@ export default function App() {
     try {
       await signInWithPopup(auth, googleAuthProvider);
     } catch (err: any) {
-      // If popup/operations not allowed/blocked in sandbox, fallback graciously
-      triggerSandboxBypass('admin');
+      setLoginError('Não foi possível efetuar o login com o Google. Por favor use o formulário de email/palavra-passe.');
     }
   };
 
   const handleSignOut = async () => {
     try {
-      setBypassToken(null);
       await signOut(auth);
       setFirebaseUser(null);
       setLoginStep(1);
-      setSecretKey('');
     } catch (err) {
       console.error("Error signing out:", err);
-      setBypassToken(null);
       setFirebaseUser(null);
       setLoginStep(1);
-      setSecretKey('');
     }
   };
 
@@ -1159,6 +1144,15 @@ export default function App() {
     };
 
     setTasks(prev => [t1, t2, t3, t4, t5, ...prev]);
+    if (supabaseConfigured) {
+      Promise.all([
+        upsertLiveTask(t1),
+        upsertLiveTask(t2),
+        upsertLiveTask(t3),
+        upsertLiveTask(t4),
+        upsertLiveTask(t5)
+      ]).catch(err => console.error("Error creating student matricula tasks:", err));
+    }
   };
 
   const handleUpdateStudent = (id: string, updatedFields: Partial<Student>) => {
@@ -1200,6 +1194,9 @@ export default function App() {
           ]
         };
         setTasks(prevTasks => [gradesTask, ...prevTasks]);
+        if (supabaseConfigured) {
+          upsertLiveTask(gradesTask).catch(err => console.error("Error creating grades task:", err));
+        }
       }
 
       return next;
@@ -1296,6 +1293,9 @@ export default function App() {
               ]
             };
             setTasks(prev => [lateTask, ...prev]);
+            if (supabaseConfigured) {
+              upsertLiveTask(lateTask).catch(err => console.error("Error creating late payment task:", err));
+            }
           }
 
           return updatedIv;
@@ -1369,6 +1369,9 @@ export default function App() {
       ]
     };
     setTasks(prev => [commTask, ...prev]);
+    if (supabaseConfigured) {
+      upsertLiveTask(commTask).catch(err => console.error("Error creating communication task:", err));
+    }
   };
 
   const handleAddMessage = (newMsg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
@@ -1557,6 +1560,13 @@ export default function App() {
     };
 
     setTasks(prev => [valTask, classTask, appTask, ...prev]);
+    if (supabaseConfigured) {
+      Promise.all([
+        upsertLiveTask(valTask),
+        upsertLiveTask(classTask),
+        upsertLiveTask(appTask)
+      ]).catch(err => console.error("Error creating document tasks:", err));
+    }
   };
 
   const handleUpdateSchoolDocs = (doc: SchoolDoc) => {
@@ -1577,24 +1587,6 @@ export default function App() {
 
   const handleDeleteSignature = (id: string) => {
     setSignatures(prev => prev.filter(s => s.id !== id));
-  };
-
-  const handleResetToZero = () => {
-    setStudents([]);
-    setTeachers([]);
-    setInvoices([]);
-    setAnnouncements([]);
-    setMessages([]);
-    setSchoolDocs([]);
-  };
-
-  const handleRestoreDemo = () => {
-    setStudents(initialStudents);
-    setTeachers(initialTeachers);
-    setInvoices(initialInvoices);
-    setAnnouncements(initialAnnouncements);
-    setMessages(initialMessages);
-    setSchoolDocs(defaultSchoolDocuments);
   };
 
   // Filter sidebar items according to executive guidelines: "Cada utilizador deve ver apenas o necessário"
@@ -1710,7 +1702,7 @@ export default function App() {
           </button>
         </div>
 
-        <div className={`w-full max-w-sm ${theme === 'light' ? 'bg-white border-zinc-200 shadow-xl text-zinc-900' : 'bg-zinc-900 border-white/5 text-zinc-100'} border rounded-3xl p-8 relative z-10 space-y-6 transition-all duration-200`}>
+        <div className={`w-full max-w-md ${theme === 'light' ? 'bg-white border-zinc-200 shadow-xl text-zinc-900' : 'bg-zinc-900 border-white/5 text-zinc-100'} border rounded-3xl p-8 relative z-10 space-y-6 transition-all duration-200`}>
           <div className="text-center space-y-3">
             <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${theme === 'light' ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-500/10 text-indigo-400'}`}>
               <GraduationCap className="w-8 h-8" />
@@ -1723,9 +1715,43 @@ export default function App() {
             </div>
           </div>
 
+          {/* REAL AUTHENTICATION SWITCHER */}
+          <div className="flex bg-zinc-100 dark:bg-zinc-950 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegistering(false);
+                setLoginError('');
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
+                !isRegistering
+                  ? (theme === 'light' ? 'bg-white shadow-sm text-indigo-600' : 'bg-zinc-900 text-indigo-400')
+                  : 'text-zinc-500 hover:text-zinc-400'
+              }`}
+            >
+              Iniciar Sessão
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegistering(true);
+                setLoginError('');
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
+                isRegistering
+                  ? (theme === 'light' ? 'bg-white shadow-sm text-indigo-600' : 'bg-zinc-900 text-indigo-400')
+                  : 'text-zinc-500 hover:text-zinc-400'
+              }`}
+            >
+              Criar Conta Real
+            </button>
+          </div>
+
           {loginError && (
-            <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-sm text-rose-500 font-semibold text-center leading-relaxed">
-              {loginError}
+            <div className="space-y-3">
+              <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-sm text-rose-500 font-semibold text-center leading-relaxed">
+                {loginError}
+              </div>
             </div>
           )}
 
@@ -1764,14 +1790,14 @@ export default function App() {
               type="submit"
               className="w-full h-11 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-xl text-[16px] tracking-wide transition-all cursor-pointer shadow-lg shadow-indigo-600/10 text-center flex items-center justify-center font-semibold"
             >
-              Entrar na Plataforma
+              {isRegistering ? 'Criar Nova Conta Real' : 'Entrar na Plataforma'}
             </button>
 
-            <div className="text-center pt-2">
+            <div className="text-center pt-1">
               <button
                 type="button"
                 onClick={() => setShowRecoveryInfo(true)}
-                className={`text-[14px] font-medium hover:underline cursor-pointer ${theme === 'light' ? 'text-indigo-600' : 'text-indigo-400'}`}
+                className={`text-[13px] font-medium hover:underline cursor-pointer ${theme === 'light' ? 'text-indigo-600' : 'text-indigo-400'}`}
               >
                 Recuperar acesso
               </button>
@@ -2344,8 +2370,6 @@ export default function App() {
                       onImportLiveDatabase={handleImportLiveDatabase}
                       rolePermissions={rolePermissions}
                       onUpdatePermissions={handleUpdatePermissions}
-                      onResetToZero={handleResetToZero}
-                      onRestoreDemo={handleRestoreDemo}
                       auditLogs={auditLogs}
                       onClearAuditLogs={handleClearAuditLogs}
                       firebaseUser={firebaseUser}
