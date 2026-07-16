@@ -48,10 +48,20 @@ export const requireAuth = async (
       return res.status(401).json({ error: 'Unauthorized: Failed to resolve database user profile' });
     }
 
-    // Safety verification for suspended user accounts (except profile page itself to allow graceful logout)
+    // Safety verification for suspended and pending user accounts (except profile page itself and access request endpoints)
     if (dbUser.status === 'suspended' && req.path !== '/api/profile') {
       console.warn(`[AUTH-MIDDLEWARE] Access blocked: Account is suspended for user=${dbUser.email}`);
       return res.status(403).json({ error: 'Conta Suspensa: O acesso aos recursos foi temporariamente bloqueado pela direção.' });
+    }
+
+    if (dbUser.status === 'unverified_email' && req.path !== '/api/profile') {
+      console.warn(`[AUTH-MIDDLEWARE] Access blocked: Email is unverified for user=${dbUser.email}`);
+      return res.status(403).json({ error: 'E-mail Não Confirmado: Por favor, confirme o seu endereço de email usando o código enviado para aceder ao sistema.' });
+    }
+
+    if (dbUser.status === 'pending' && req.path !== '/api/profile' && req.path !== '/api/profile/request-access') {
+      console.warn(`[AUTH-MIDDLEWARE] Access blocked: Account is pending for user=${dbUser.email}`);
+      return res.status(403).json({ error: 'Acesso Pendente: A sua conta está sob validação do administrador. Por favor, aguarde.' });
     }
 
     // Attach both firebase payload and database user profile
@@ -66,8 +76,8 @@ export const requireAuth = async (
     console.log(`[AUTH-MIDDLEWARE] Authorization successful for user=${req.user.email} with role=${req.user.dbRole}`);
     next();
   } catch (error: any) {
-    console.error('[DEBUG-AUTH-FLOW] 10. Mostrar qualquer exceção completa - middleware requireAuth:', error);
-    console.error('[DEBUG-AUTH-FLOW] Stack Trace completo do middleware requireAuth:', error.stack);
+    console.warn('[DEBUG-AUTH-FLOW] 10. Exceção de autenticação tratada no middleware requireAuth:', error.message || error);
+    console.log('[DEBUG-AUTH-FLOW] Stack Trace completo do middleware requireAuth:', error.stack);
     return res.status(401).json({ error: `Unauthorized: ${error.message || String(error)}` });
   }
 };

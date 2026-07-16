@@ -42,6 +42,7 @@ interface SystemConfigProps {
   auditLogs?: AuditLog[];
   onClearAuditLogs?: () => void;
   firebaseUser?: any;
+  onWipeSystem?: () => void;
 }
 
 const FACTORY_PERMISSIONS: Record<UserRole, string[]> = {
@@ -103,9 +104,10 @@ export default function SystemConfig({
   onUpdatePermissions,
   auditLogs = [],
   onClearAuditLogs,
-  firebaseUser
+  firebaseUser,
+  onWipeSystem
 }: SystemConfigProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'audit' | 'users'>('users');
+  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'audit' | 'users' | 'reset'>('users');
 
   // User Management State
   const [usersList, setUsersList] = useState<any[]>([]);
@@ -121,6 +123,47 @@ export default function SystemConfig({
   const [formRole, setFormRole] = useState('student');
   const [formDepartment, setFormDepartment] = useState('Alunos');
   const [formStatus, setFormStatus] = useState('active');
+
+  const [isWiping, setIsWiping] = useState(false);
+  const [wipeSuccess, setWipeSuccess] = useState(false);
+  const [wipeError, setWipeError] = useState<string | null>(null);
+
+  const handlePerformWipeSystem = async () => {
+    if (!window.confirm("ATENÇÃO: Tem a certeza absoluta que deseja redefinir o sistema de fábrica? Esta ação irá apagar permanentemente todos os estudantes, professores, faturas, avisos, logs e utilizadores registados do sistema. Apenas o seu utilizador administrador será preservado para manter o acesso.")) {
+      return;
+    }
+
+    setIsWiping(true);
+    setWipeError(null);
+    setWipeSuccess(false);
+
+    try {
+      const res = await fetch('/api/system/wipe-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (res.ok) {
+        setWipeSuccess(true);
+        console.log('[SYSTEM-WIPE] Database wiped successfully. Triggering parent session wipe callback...');
+        setTimeout(() => {
+          if (onWipeSystem) {
+            onWipeSystem();
+          }
+        }, 2000);
+      } else {
+        const errData = await res.json();
+        setWipeError(errData.error || 'Falha ao redefinir a base de dados do sistema.');
+      }
+    } catch (err: any) {
+      console.error('[WIPE-ERROR]', err);
+      setWipeError(err.message || 'Erro de rede ao ligar ao servidor de redefinição.');
+    } finally {
+      setIsWiping(false);
+    }
+  };
 
   const fetchUsers = async () => {
     if (!firebaseUser) return;
@@ -446,6 +489,15 @@ export default function SystemConfig({
               {auditLogs.length}
             </span>
           )}
+        </button>
+        <button
+          onClick={() => setActiveSubTab('reset')}
+          className={`pb-3 border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+            activeSubTab === 'reset' ? 'border-red-500 text-red-400 font-bold' : 'border-transparent text-zinc-500 hover:text-red-500/70'
+          }`}
+        >
+          <Trash2 className="w-3.5 h-3.5 text-red-500" />
+          Redefinição de Fábrica
         </button>
       </div>
 
@@ -1102,6 +1154,11 @@ export default function SystemConfig({
                                 <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
                                 Suspenso
                               </span>
+                            ) : u.status === 'pending' ? (
+                              <span className="inline-flex items-center gap-1 bg-amber-500/10 text-amber-400 text-[10px] font-mono px-2 py-0.5 rounded-full border border-amber-500/20 font-bold">
+                                <span className="w-1.5 h-1.5 bg-amber-450 rounded-full animate-pulse"></span>
+                                Pedido de Acesso
+                              </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-mono px-2 py-0.5 rounded-full border border-emerald-500/20 font-bold">
                                 <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></span>
@@ -1137,13 +1194,15 @@ export default function SystemConfig({
                             <button
                               onClick={() => handleToggleSuspendUser(u)}
                               className={`p-1.5 rounded-lg transition-all cursor-pointer inline-flex items-center justify-center w-8 h-8 ${
-                                u.status === 'suspended'
-                                  ? 'bg-emerald-500/10 hover:bg-emerald-505/20 text-emerald-400 border border-emerald-500/20'
-                                  : 'bg-amber-500/10 hover:bg-amber-505/20 text-amber-500 border border-amber-500/20'
+                                u.status === 'suspended' || u.status === 'pending'
+                                  ? 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/20'
                               }`}
-                              title={u.status === 'suspended' ? 'Ativar Conta' : 'Suspender Acesso'}
+                              title={u.status === 'pending' ? 'Aprovar e Ativar Conta' : u.status === 'suspended' ? 'Ativar Conta' : 'Suspender Acesso'}
                             >
-                              {u.status === 'suspended' ? (
+                              {u.status === 'pending' ? (
+                                <Check className="w-3.5 h-3.5" />
+                              ) : u.status === 'suspended' ? (
                                 <Unlock className="w-3.5 h-3.5" />
                               ) : (
                                 <Lock className="w-3.5 h-3.5" />
@@ -1164,6 +1223,80 @@ export default function SystemConfig({
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeSubTab === 'reset' && (
+        <div className="space-y-6">
+          <div className="bg-red-950/10 border border-red-900/30 p-6 rounded-2xl space-y-4">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-red-500/10 text-red-500 rounded-xl border border-red-500/20">
+                <ShieldAlert className="w-6 h-6 animate-pulse" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-red-450 uppercase tracking-wide font-mono">
+                  Zona de Perigo: Redefinição Total do Sistema
+                </h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Esta funcionalidade destina-se a limpar todos os dados de testes, dados fictícios ou ilustrativos e sessões antigas
+                  para preparar o sistema para uma utilização real e em produção do portal NexusEduAI.
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t border-zinc-800/60 pt-4 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300 font-mono">O que será apagado permanentemente:</h4>
+              <ul className="text-xs text-zinc-400 space-y-1.5 list-disc pl-5">
+                <li><strong className="text-zinc-200">Alunos & Professores:</strong> Todos os perfis de alunos e corpo docente registados.</li>
+                <li><strong className="text-zinc-200">Faturação & Pagamentos:</strong> Todas as faturas, recibos e estados financeiros emitidos.</li>
+                <li><strong className="text-zinc-200">Comunicação & Chat:</strong> Todos os avisos, editais, conversas e canais de chat ativos.</li>
+                <li><strong className="text-zinc-200">Módulos Escolares & Tarefas:</strong> Todos os fluxos de trabalho, aprovações, automações e documentos organizacionais.</li>
+                <li><strong className="text-zinc-200">Contas de Utilizadores:</strong> Todos os utilizadores (exceto o administrador principal <code className="text-emerald-400 font-mono bg-zinc-950 px-1 py-0.5 rounded">carlossmiranda1914@gmail.com</code>).</li>
+              </ul>
+            </div>
+
+            <div className="border-t border-zinc-800/60 pt-4 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300 font-mono">Segurança & Sessões:</h4>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Ao redefinir o sistema, todas as sessões ativas do cliente e cache local serão destruídas de imediato, forçando o logout geral.
+                Dessa forma, poderá criar e testar novas contas (simuladas ou 100% reais) a partir de um estado completamente limpo e seguro.
+              </p>
+            </div>
+
+            {wipeError && (
+              <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-4 py-3 rounded-xl flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{wipeError}</span>
+              </div>
+            )}
+
+            {wipeSuccess && (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-4 py-3 rounded-xl flex items-center gap-2">
+                <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                <span>Redefinição efetuada com sucesso! A terminar sessões e a reiniciar o portal...</span>
+              </div>
+            )}
+
+            <div className="pt-2">
+              <button
+                onClick={handlePerformWipeSystem}
+                disabled={isWiping || wipeSuccess}
+                className="bg-red-600 hover:bg-red-700 disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-mono uppercase text-xs font-bold px-6 py-3 rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-lg shadow-red-950/20"
+              >
+                {isWiping ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    A Limpar Sistema...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Iniciar Redefinição Limpa
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

@@ -7,10 +7,12 @@ import dotenv from 'dotenv';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import crypto from 'crypto';
+import fs from 'fs';
+import nodemailer from 'nodemailer';
 
 
 // Import Drizzle, initialize, schemas, etc.
-import { db } from './src/db/index.ts';
+import { db, inMemoryDb } from './src/db/index.ts';
 import { initializeDatabase } from './src/db/init.ts';
 
 // Modularized Enterprise School Tasks imports
@@ -108,6 +110,7 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
   const server = http.createServer(app);
+  const verificationCodes = new Map<string, { code: string; expiresAt: number }>();
 
   // Setup live WebSocket Server
   const wss = new WebSocketServer({ server });
@@ -138,6 +141,57 @@ async function startServer() {
 
   // Initialize Database self-healing and seeding immediately on startup
   await initializeDatabase();
+
+  // Clean slate data wipe - runs exactly once per user request to clean mock data
+  const flagPath = path.join(process.cwd(), '.data_wiped');
+  if (!fs.existsSync(flagPath)) {
+    console.log('[SYSTEM-WIPE] First boot data wipe detected. Clearing database of all illustrative/mock data...');
+    try {
+      // Clear in-memory DB arrays
+      inMemoryDb.users = [];
+      inMemoryDb.students = [];
+      inMemoryDb.teachers = [];
+      inMemoryDb.invoices = [];
+      inMemoryDb.announcements = [];
+      inMemoryDb.chat_messages = [];
+      inMemoryDb.automations = [];
+      inMemoryDb.uploaded_documents = [];
+      inMemoryDb.operational_logs = [
+        {
+          id: 1,
+          userId: 'system',
+          userName: 'Nexus Server',
+          userRole: 'system',
+          action: 'FALLBACK_INIT',
+          details: 'Clean, production-ready operational in-memory fallback state initialized.'
+        }
+      ];
+      inMemoryDb.approvals = [];
+      inMemoryDb.todo_tasks = [];
+      inMemoryDb.school_tasks = [];
+      inMemoryDb.task_versions = [];
+
+      if (process.env.SQL_HOST) {
+        await db.delete(students);
+        await db.delete(teachers);
+        await db.delete(invoices);
+        await db.delete(announcements);
+        await db.delete(chatMessages);
+        await db.delete(automations);
+        await db.delete(uploadedDocuments);
+        await db.delete(approvals);
+        await db.delete(schoolTasks);
+        await db.delete(operationalLogs);
+        // Keep only the main admin carlossmiranda1914@gmail.com
+        await db.delete(users).where(ne(users.email, 'carlossmiranda1914@gmail.com'));
+        console.log('[SYSTEM-WIPE] PostgreSQL tables successfully wiped.');
+      }
+      fs.writeFileSync(flagPath, 'true');
+      console.log('[SYSTEM-WIPE] First boot data wipe completed successfully.');
+    } catch (wipeErr) {
+      console.error('[SYSTEM-WIPE] Error executing first boot database wipe:', wipeErr);
+    }
+  }
 
   // Initialize Gemini AI Client securely using recommended SDK
   let ai: GoogleGenAI | null = null;
@@ -182,6 +236,154 @@ async function startServer() {
     };
   };
 
+  // --- EMAIL VERIFICATION SYSTEM ENDPOINTS ---
+  app.post('/api/auth/send-code', async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email é obrigatório.' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 15 * 60 * 1000;
+    verificationCodes.set(normalizedEmail, { code, expiresAt });
+
+    console.log(`[AUTH-EMAIL-VERIFY] Code generated for ${normalizedEmail}: ${code}`);
+
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = parseInt(process.env.SMTP_PORT || '587');
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const smtpFrom = process.env.SMTP_FROM || 'NexusEduAI <noreply@nexuseduai.com>';
+
+    let emailSent = false;
+    let devCodePreview = code;
+
+    if (smtpHost && smtpUser && smtpPass) {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpPort === 465,
+          auth: {
+            user: smtpUser,
+            pass: smtpPass
+          }
+        });
+
+        await transporter.sendMail({
+          from: smtpFrom,
+          to: normalizedEmail,
+          subject: `${code} é o seu código de confirmação NexusEduAI`,
+          text: `Olá!\n\nObrigado por se registar no portal NexusEduAI.\n\nO seu código de confirmação de email é: ${code}\n\nEste código é válido por 15 minutos.\n\nSe não solicitou este código, por favor ignore este email.\n\nCom os melhores cumprimentos,\nA Equipa NexusEduAI`,
+          html: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e4e4e7; border-radius: 12px; background-color: #ffffff;">
+              <h2 style="color: #0f172a; margin-bottom: 20px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px;">Confirme o seu endereço de email</h2>
+              <p style="color: #475569; font-size: 15px; line-height: 1.5;">Olá,</p>
+              <p style="color: #475569; font-size: 15px; line-height: 1.5;">Obrigado por criar uma conta no <strong>NexusEduAI</strong>. Para concluir o seu registo e aceder ao portal, por favor utilize o seguinte código de verificação:</p>
+              <div style="background-color: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 15px; text-align: center; margin: 25px 0;">
+                <span style="font-family: monospace; font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #1e1b4b;">${code}</span>
+              </div>
+              <p style="color: #64748b; font-size: 13px; line-height: 1.5;">Este código é válido por 15 minutos e só pode ser utilizado uma vez.</p>
+              <p style="color: #475569; font-size: 15px; line-height: 1.5; margin-top: 25px;">Se não solicitou esta verificação, ignore este email com toda a segurança.</p>
+              <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 30px 0;" />
+              <p style="color: #94a3b8; font-size: 12px; text-align: center;">NexusEduAI — O Portal de Gestão Escolar Inteligente e Unificado</p>
+            </div>
+          `
+        });
+        emailSent = true;
+        console.log(`[AUTH-EMAIL-VERIFY] Verification email sent successfully to ${normalizedEmail}`);
+      } catch (mailErr) {
+        console.error(`[AUTH-EMAIL-VERIFY] Failed to send email via SMTP:`, mailErr);
+      }
+    } else {
+      console.log(`[AUTH-EMAIL-VERIFY] SMTP not configured. Simulating email dispatch inside developer sandbox...`);
+    }
+
+    try {
+      await db.insert(operationalLogs).values({
+        userId: 'system',
+        userName: 'Nexus Security',
+        userRole: 'system',
+        action: 'EMAIL_CODE_SENT',
+        details: `Código de confirmação de email gerado para o novo registo ${normalizedEmail}.${emailSent ? ' Enviado via SMTP com sucesso.' : ' [Ambiente Sandbox: Código visualizado na consola/ecrã].'}`
+      });
+    } catch (logErr) {
+      console.warn('Failed to insert verification log:', logErr);
+    }
+
+    return res.json({
+      success: true,
+      emailSent,
+      codePreview: !emailSent ? devCodePreview : undefined,
+      message: emailSent 
+        ? 'O código de confirmação foi enviado com sucesso para o seu email.' 
+        : 'Código gerado com sucesso (Consulte a consola ou utilize o código disponibilizado no ecrã de testes).'
+    });
+  });
+
+  app.post('/api/auth/verify-code', async (req, res) => {
+    const { email, code } = req.body;
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email e código são obrigatórios.' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const entry = verificationCodes.get(normalizedEmail);
+
+    if (!entry) {
+      return res.status(400).json({ error: 'Não existe nenhum código ativo para este endereço de email. Solicite um novo código.' });
+    }
+
+    if (entry.expiresAt < Date.now()) {
+      verificationCodes.delete(normalizedEmail);
+      return res.status(400).json({ error: 'O código de verificação expirou. Solicite um novo código.' });
+    }
+
+    if (entry.code !== code.trim()) {
+      return res.status(400).json({ error: 'Código de confirmação incorreto. Verifique e tente novamente.' });
+    }
+
+    verificationCodes.delete(normalizedEmail);
+
+    try {
+      const existing = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
+      if (existing && existing.length > 0) {
+        const userToUpdate = existing[0];
+        let newStatus = 'pending';
+        if (normalizedEmail === 'carlossmiranda1914@gmail.com') {
+          newStatus = 'active';
+        }
+
+        await db.update(users).set({
+          status: newStatus
+        }).where(eq(users.id, userToUpdate.id));
+
+        const memUser = inMemoryDb.users.find(u => u.email === normalizedEmail);
+        if (memUser) {
+          memUser.status = newStatus;
+        }
+
+        console.log(`[AUTH-EMAIL-VERIFY] User ${normalizedEmail} email verified. Status set to ${newStatus}.`);
+
+        await db.insert(operationalLogs).values({
+          userId: userToUpdate.uid,
+          userName: userToUpdate.name,
+          userRole: userToUpdate.role,
+          action: 'EMAIL_VERIFIED',
+          details: `O endereço de email ${normalizedEmail} foi confirmado com sucesso via código de verificação de 6 dígitos.`
+        });
+
+        return res.json({ success: true, message: 'Email confirmado com sucesso! A sua conta está agora ativa/pendente de validação.' });
+      } else {
+        return res.status(404).json({ error: 'Utilizador não encontrado no sistema.' });
+      }
+    } catch (err: any) {
+      console.error('[AUTH-EMAIL-VERIFY] Error updating verification status:', err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // 1. User Profile API
   app.get('/api/profile', requireAuth, async (req: AuthRequest, res) => {
     try {
@@ -189,13 +391,96 @@ async function startServer() {
         uid: req.user.uid,
         email: req.user.email,
         name: req.user.dbName,
-        role: req.user.dbRole
+        role: req.user.dbRole,
+        status: req.user.dbStatus
       };
       console.log('[DEBUG-AUTH-FLOW] 9. Mostrar a resposta enviada ao frontend para GET /api/profile:', responseData);
       res.json(responseData);
     } catch (err: any) {
       console.error('[DEBUG-AUTH-FLOW] 10. Mostrar qualquer exceção completa - GET /api/profile:', err);
       console.error('[DEBUG-AUTH-FLOW] Stack trace:', err.stack);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // System Reset and Data Wipe API
+  app.post('/api/system/wipe-data', async (req, res) => {
+    try {
+      console.log('[SYSTEM-WIPE] Manual system wipe request received via API.');
+      
+      inMemoryDb.users = [];
+      inMemoryDb.students = [];
+      inMemoryDb.teachers = [];
+      inMemoryDb.invoices = [];
+      inMemoryDb.announcements = [];
+      inMemoryDb.chat_messages = [];
+      inMemoryDb.automations = [];
+      inMemoryDb.uploaded_documents = [];
+      inMemoryDb.operational_logs = [
+        {
+          id: 1,
+          userId: 'system',
+          userName: 'Nexus Server',
+          userRole: 'system',
+          action: 'FALLBACK_INIT',
+          details: 'Clean, production-ready operational in-memory fallback state initialized.'
+        }
+      ];
+      inMemoryDb.approvals = [];
+      inMemoryDb.todo_tasks = [];
+      inMemoryDb.school_tasks = [];
+      inMemoryDb.task_versions = [];
+
+      if (process.env.SQL_HOST) {
+        await db.delete(students);
+        await db.delete(teachers);
+        await db.delete(invoices);
+        await db.delete(announcements);
+        await db.delete(chatMessages);
+        await db.delete(automations);
+        await db.delete(uploadedDocuments);
+        await db.delete(approvals);
+        await db.delete(schoolTasks);
+        await db.delete(operationalLogs);
+        // Keep only the main admin carlossmiranda1914@gmail.com
+        await db.delete(users).where(ne(users.email, 'carlossmiranda1914@gmail.com'));
+        console.log('[SYSTEM-WIPE] PostgreSQL tables wiped via API.');
+      }
+
+      // Write flag just in case
+      const flagPath = path.join(process.cwd(), '.data_wiped');
+      fs.writeFileSync(flagPath, 'true');
+
+      res.json({ success: true, message: 'Todas as tabelas foram limpas com sucesso. O sistema está agora num estado limpo e original.' });
+    } catch (err: any) {
+      console.error('[SYSTEM-WIPE] API Wipe Error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // 1a. Request Access API for pending users
+  app.post('/api/profile/request-access', requireAuth, async (req: AuthRequest, res) => {
+    const { name, phone, role, department } = req.body;
+    try {
+      await db.update(users).set({
+        name: name ? name.trim() : undefined,
+        phone: phone ? phone.trim() : undefined,
+        role: role || undefined,
+        department: department || undefined
+      }).where(eq(users.uid, req.user.uid));
+
+      // Log the request
+      await db.insert(operationalLogs).values({
+        userId: req.user.uid,
+        userName: name || req.user.dbName,
+        userRole: role || req.user.dbRole || 'student',
+        action: 'ACCESS_REQUEST',
+        details: `Utilizador ${req.user.email} solicitou acesso como ${role || 'Aluno'} no departamento ${department || 'Alunos'}. Telemóvel: ${phone || 'não fornecido'}.`
+      });
+
+      res.json({ success: true, message: 'Solicitação de acesso registada com sucesso!' });
+    } catch (err: any) {
+      console.error('[ACCESS-REQUEST-ERROR]', err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -209,6 +494,34 @@ async function startServer() {
     }
     
     try {
+      // COBERTURA DE SEGURANÇA CONTRA ELEVAÇÃO DE PRIVILÉGIOS (PRIVILEGE ESCALATION):
+      // A simulação de papéis só é permitida sob condições restritas:
+      // 1. O utilizador já possui o papel ativo de administrador ('admin') no PostgreSQL.
+      // 2. O utilizador possui o e-mail do administrador principal (carlossmiranda1914@gmail.com).
+      // 3. Não existe nenhum administrador registado no sistema (caso de bootstrap da plataforma).
+      const primaryAdminEmail = 'carlossmiranda1914@gmail.com';
+      const currentUserEmail = req.user.email?.toLowerCase();
+      const currentRole = req.user.dbRole;
+      
+      let isAllowed = false;
+      
+      if (currentUserEmail === primaryAdminEmail || currentRole === 'admin') {
+        isAllowed = true;
+      } else {
+        // Verifica se existem administradores registados na tabela de utilizadores
+        const adminUsers = await db.select().from(users).where(eq(users.role, 'admin')).limit(1);
+        if (adminUsers.length === 0) {
+          isAllowed = true; // Permite o bootstrap de administrador inicial
+        }
+      }
+
+      if (!isAllowed) {
+        console.warn(`[SECURITY] Tentativa não autorizada de simulação de papel por ${req.user.email} para papel ${role}`);
+        return res.status(403).json({ 
+          error: 'Acesso Proibido: Não tem privilégios de administrador para efetuar a simulação de papéis.' 
+        });
+      }
+
       await db.update(users).set({ role }).where(eq(users.uid, req.user.uid));
       
       // LOG IT

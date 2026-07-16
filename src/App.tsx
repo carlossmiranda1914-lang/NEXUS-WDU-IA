@@ -23,7 +23,10 @@ import {
   Database,
   PenTool,
   FileSpreadsheet,
-  ListTodo
+  ListTodo,
+  Check,
+  RefreshCw,
+  Mail
 } from 'lucide-react';
 
 import { Student, Teacher, Invoice, Announcement, ChatMessage, AutomationFlow, UserRole, AuditLog, NotificationPreset, ApprovalRequest, ApprovalFlowType, DigitalSignatureRequest, DigitalSignatureDocType, SchoolTask } from './types';
@@ -53,7 +56,7 @@ import {
 } from './supabaseClient';
 
 import { auth, googleAuthProvider } from './lib/firebase.ts';
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 
 // Subcomponents
 import Dashboard from './components/Dashboard';
@@ -350,6 +353,28 @@ export default function App() {
   const [loginError, setLoginError] = useState<string>('');
   const [isRegistering, setIsRegistering] = useState<boolean>(false);
   const [authRegisterName, setAuthRegisterName] = useState<string>('');
+  const [currentUserStatus, setCurrentUserStatus] = useState<string>('active');
+  const [recoveryEmail, setRecoveryEmail] = useState<string>('');
+  const [recoveryError, setRecoveryError] = useState<string>('');
+  const [recoverySuccess, setRecoverySuccess] = useState<string>('');
+  const [sendingRecovery, setSendingRecovery] = useState<boolean>(false);
+
+  // Access request form states for pending users
+  const [requestedPhone, setRequestedPhone] = useState<string>('');
+  const [requestedRole, setRequestedRole] = useState<string>('student');
+  const [requestedDepartment, setRequestedDepartment] = useState<string>('Alunos');
+  const [requestAccessSuccess, setRequestAccessSuccess] = useState<boolean>(false);
+  const [requestAccessError, setRequestAccessError] = useState<string>('');
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState<boolean>(false);
+
+  // Email verification states
+  const [verificationCode, setVerificationCode] = useState<string>('');
+  const [verificationError, setVerificationError] = useState<string>('');
+  const [verificationSuccess, setVerificationSuccess] = useState<string>('');
+  const [isVerifying, setIsVerifying] = useState<boolean>(false);
+  const [isSendingCode, setIsSendingCode] = useState<boolean>(false);
+  const [sendCodeSuccess, setSendCodeSuccess] = useState<string>('');
+  const [debugCodeReceived, setDebugCodeReceived] = useState<string>('');
 
   const [loginStep, setLoginStep] = useState<number>(1);
 
@@ -474,9 +499,30 @@ export default function App() {
     }
   }, [activeTab, currentUserRole, rolePermissions]);
 
-  const handleSimulationRoleChange = (newRole: UserRole) => {
+  const handleSimulationRoleChange = async (newRole: UserRole) => {
     setCurrentUserRole(newRole);
     logAuditEvent(newRole, activeTab, 'ALLOWED', 'LOGIN', `O utilizador iniciou sessão ou trocou com sucesso para o perfil de ${newRole.toUpperCase()}.`);
+    
+    if (firebaseUser) {
+      try {
+        const token = await firebaseUser.getIdToken();
+        const res = await fetch('/api/profile/role', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ role: newRole })
+        });
+        if (res.ok) {
+          console.log(`[AUTH] Profile role updated successfully in PostgreSQL to: ${newRole}`);
+        } else {
+          console.warn('[AUTH] Warning: Failed to update simulated role in PostgreSQL.');
+        }
+      } catch (err) {
+        console.warn('[AUTH] Warning: Error synchronizing simulated role with backend:', err);
+      }
+    }
   };
 
   // Core School State Engine (React hydrated from local mock db)
@@ -574,6 +620,35 @@ export default function App() {
     localStorage.setItem('nexus_signatures', JSON.stringify(signatures));
   }, [signatures]);
 
+  // Redefinição limpa de primeiro carregamento para destruir qualquer sessão simulada/teste anterior
+  useEffect(() => {
+    const isWiped = localStorage.getItem('nexus_system_reset_v4');
+    if (!isWiped) {
+      console.log('[SYSTEM-WIPE] Clean boot detected: clearing and signing out any active sessions...');
+      signOut(auth).then(() => {
+        localStorage.clear();
+        localStorage.setItem('nexus_system_reset_v4', 'true');
+        window.location.reload();
+      }).catch((e) => {
+        console.error(e);
+        localStorage.clear();
+        localStorage.setItem('nexus_system_reset_v4', 'true');
+      });
+    }
+  }, []);
+
+  const handleWipeSystemSessions = async () => {
+    console.log('[SYSTEM-WIPE] Manual wipe triggered. Clearing sessions & local cache...');
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error(err);
+    }
+    localStorage.clear();
+    localStorage.setItem('nexus_system_reset_v4', 'true');
+    window.location.reload();
+  };
+
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (usr) => {
@@ -590,7 +665,15 @@ export default function App() {
           if (pRes.ok) {
             const profile = await pRes.json();
             console.log('[AUTH-PG] Active PG user role profile loaded:', profile);
-            setCurrentUserRole(profile.role);
+            if (profile.status === 'suspended') {
+              console.warn('[AUTH-PG] Account is suspended, signing out.');
+              await signOut(auth);
+              setFirebaseUser(null);
+              setLoginError('A sua conta está temporariamente suspensa pelo administrador pedagógico.');
+            } else {
+              setCurrentUserRole(profile.role);
+              setCurrentUserStatus(profile.status || 'active');
+            }
           } else {
             console.error('[AUTH-PG] Profile fetch failed with status:', pRes.status);
             // If the profile fetch fails (e.g. user deleted from PostgreSQL), we must sign out to remain synchronized!
@@ -859,12 +942,20 @@ export default function App() {
           setLoginError('A palavra-passe deve ter pelo menos 6 caracteres.');
           return;
         }
+        if (!authRegisterName.trim()) {
+          setLoginError('O Nome Completo é obrigatório para registo.');
+          return;
+        }
         console.log('[DEBUG-AUTH-FLOW] 2. Antes de chamar createUserWithEmailAndPassword:', {
           email: email,
           passwordLength: password.length
         });
         try {
           usrCredential = await createUserWithEmailAndPassword(auth, email, password);
+          if (usrCredential.user) {
+            await updateProfile(usrCredential.user, { displayName: authRegisterName.trim() });
+            console.log('[AUTH-REAL] Display name updated successfully in Firebase Auth');
+          }
           console.log('[DEBUG-AUTH-FLOW] 3. Depois da chamada: SUCCESS');
         } catch (regErr: any) {
           console.log('[DEBUG-AUTH-FLOW] 3. Depois da chamada falhou:', {
@@ -916,6 +1007,7 @@ export default function App() {
             return;
           }
           setCurrentUserRole(profile.role);
+          setCurrentUserStatus(profile.status || 'active');
           setFirebaseUser(usrCredential.user);
         } else {
           console.error('[AUTH-CLIENT] Failed to synchronize and verify PostgreSQL profile.');
@@ -924,8 +1016,8 @@ export default function App() {
         }
       }
     } catch (err: any) {
-      console.error('[DEBUG-AUTH-FLOW] 10. Exceção completa capturada no frontend:', err);
-      console.error('[DEBUG-AUTH-FLOW] Stack Trace completo do erro:', err.stack);
+      console.warn('[DEBUG-AUTH-FLOW] 10. Exceção de autenticação tratada no frontend:', err);
+      console.log('[DEBUG-AUTH-FLOW] Stack Trace do erro de autenticação:', err.stack);
       let errorMsg = 'Falha durante a autenticação. Verifique os dados introduzidos.';
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
         errorMsg = 'Credenciais incorretas ou utilizador não encontrado.';
@@ -943,6 +1035,85 @@ export default function App() {
       setLoginError(errorMsg);
     }
   };
+
+  const handleSendVerificationCode = async (forceResend = false) => {
+    if (!firebaseUser || !firebaseUser.email) return;
+    setIsSendingCode(true);
+    setSendCodeSuccess('');
+    setVerificationError('');
+    try {
+      const res = await fetch('/api/auth/send-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email: firebaseUser.email })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSendCodeSuccess(data.message || 'Código de confirmação enviado!');
+        if (data.codePreview) {
+          setDebugCodeReceived(data.codePreview);
+        } else {
+          setDebugCodeReceived('');
+        }
+      } else {
+        setVerificationError(data.error || 'Falha ao enviar o código de confirmação.');
+      }
+    } catch (err: any) {
+      console.error('[SEND-CODE-ERROR]', err);
+      setVerificationError('Erro ao estabelecer ligação para envio de código.');
+    } finally {
+      setIsSendingCode(false);
+    }
+  };
+
+  const handleVerifyVerificationCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!firebaseUser || !firebaseUser.email || !verificationCode) return;
+    setIsVerifying(true);
+    setVerificationError('');
+    setVerificationSuccess('');
+    try {
+      const res = await fetch('/api/auth/verify-code', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email: firebaseUser.email, code: verificationCode })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setVerificationSuccess(data.message || 'Email verificado com sucesso!');
+        setVerificationCode('');
+        
+        // Refresh profile on backend to update the status in our React state
+        const token = await firebaseUser.getIdToken();
+        const pRes = await fetch('/api/profile', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (pRes.ok) {
+          const profile = await pRes.json();
+          setCurrentUserStatus(profile.status);
+        } else {
+          window.location.reload();
+        }
+      } else {
+        setVerificationError(data.error || 'Código incorreto ou expirado. Tente novamente.');
+      }
+    } catch (err: any) {
+      console.error('[VERIFY-CODE-ERROR]', err);
+      setVerificationError('Erro ao validar o código. Verifique a ligação de rede.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  useEffect(() => {
+    if (firebaseUser && currentUserStatus === 'unverified_email') {
+      handleSendVerificationCode();
+    }
+  }, [firebaseUser, currentUserStatus]);
 
   const handleCustomLogin = async (e: React.FormEvent) => {
     handleModularLogin(e);
@@ -1667,6 +1838,338 @@ export default function App() {
     );
   }
 
+  if (firebaseUser && currentUserStatus === 'unverified_email') {
+    return (
+      <div className={`min-h-screen ${theme === 'light' ? 'bg-slate-50 text-zinc-900' : 'bg-zinc-950 text-zinc-100'} flex flex-col items-center justify-center font-sans p-6 relative overflow-hidden transition-colors duration-200`}>
+        {/* Abstract blur background lights */}
+        <div className={`absolute top-1/4 left-1/4 -translate-y-1/2 -translate-x-1/2 w-96 h-96 ${theme === 'light' ? 'bg-indigo-400/5' : 'bg-indigo-500/10'} rounded-full blur-[120px] pointer-events-none`}></div>
+        <div className={`absolute bottom-1/4 right-1/4 translate-y-1/2 translate-x-1/2 w-96 h-96 ${theme === 'light' ? 'bg-emerald-400/5' : 'bg-emerald-500/10'} rounded-full blur-[120px] pointer-events-none`}></div>
+
+        {/* Theme Switcher Floating */}
+        <div className="absolute top-6 right-6 z-50 flex items-center gap-4">
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-center shadow-md ${
+              theme === 'light' 
+                ? 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100' 
+                : 'bg-zinc-900 border-white/10 text-white hover:bg-zinc-800'
+            }`}
+          >
+            {theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}
+          </button>
+          <button
+            onClick={handleSignOut}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-350 rounded-xl text-xs font-semibold cursor-pointer"
+          >
+            Sair / Cancelar
+          </button>
+        </div>
+
+        <div className={`w-full max-w-lg ${theme === 'light' ? 'bg-white border-zinc-200 shadow-xl text-zinc-900' : 'bg-zinc-900 border-white/5 text-zinc-100'} border rounded-3xl p-8 relative z-10 space-y-6 transition-all duration-200`}>
+          <div className="text-center space-y-3">
+            <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${theme === 'light' ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-500/10 text-indigo-400'}`}>
+              <Mail className="w-8 h-8" />
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-[24px] font-bold tracking-tight font-display text-zinc-900 dark:text-zinc-100">Confirme o seu E-mail</h1>
+              <p className={`text-[13px] ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} max-w-sm mx-auto leading-relaxed`}>
+                Enviámos um código de confirmação de 6 dígitos para o endereço de email <strong>{firebaseUser.email}</strong>. Introduza-o abaixo para entrar no sistema.
+              </p>
+            </div>
+          </div>
+
+          {verificationError && (
+            <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-xs text-rose-500 font-semibold text-center leading-relaxed">
+              {verificationError}
+            </div>
+          )}
+
+          {sendCodeSuccess && (
+            <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl text-xs text-indigo-500 dark:text-indigo-400 font-semibold text-center leading-relaxed">
+              {sendCodeSuccess}
+            </div>
+          )}
+
+          {verificationSuccess && (
+            <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-xs text-emerald-500 font-semibold text-center leading-relaxed">
+              {verificationSuccess}
+            </div>
+          )}
+
+          <form onSubmit={handleVerifyVerificationCode} className="space-y-4">
+            <div className="space-y-2">
+              <label className={`text-[12px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-zinc-600' : 'text-zinc-400'} block text-center`}>
+                Código de Verificação (6 Dígitos)
+              </label>
+              <input
+                type="text"
+                maxLength={6}
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="123456"
+                className={`w-full text-center tracking-[12px] font-mono text-2xl h-14 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-2xl outline-none transition-all`}
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isVerifying || verificationCode.length !== 6}
+              className="w-full h-12 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 text-white rounded-2xl text-sm font-semibold tracking-wide transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              {isVerifying ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  A validar código...
+                </>
+              ) : (
+                'Confirmar Código e Entrar'
+              )}
+            </button>
+          </form>
+
+          {/* SIMULATION HELP BOX */}
+          {debugCodeReceived && (
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-2 text-center">
+              <span className="text-xs font-bold text-amber-500 uppercase tracking-wide block">Ambiente de Demonstração / Testes</span>
+              <p className="text-xs text-zinc-400 leading-normal">
+                Como as credenciais de SMTP não estão ativas neste contentor, apresentamos o código de email gerado para facilitar os testes:
+              </p>
+              <div className="inline-block bg-zinc-950 border border-white/10 rounded-xl px-4 py-1.5 font-mono text-lg font-bold text-amber-400 tracking-wider">
+                {debugCodeReceived}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-center gap-3 text-xs pt-2">
+            <span className={theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'}>Não recebeu o código?</span>
+            <button
+              type="button"
+              disabled={isSendingCode}
+              onClick={() => handleSendVerificationCode(true)}
+              className="text-indigo-500 hover:text-indigo-400 font-semibold cursor-pointer flex items-center gap-1 hover:underline disabled:opacity-50"
+            >
+              {isSendingCode ? 'A reenviar...' : 'Reenviar Código'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (firebaseUser && currentUserStatus === 'pending') {
+    return (
+      <div className={`min-h-screen ${theme === 'light' ? 'bg-slate-50 text-zinc-900' : 'bg-zinc-950 text-zinc-100'} flex flex-col items-center justify-center font-sans p-6 relative overflow-hidden transition-colors duration-200`}>
+        {/* Abstract blur background lights */}
+        <div className={`absolute top-1/4 left-1/4 -translate-y-1/2 -translate-x-1/2 w-96 h-96 ${theme === 'light' ? 'bg-indigo-400/5' : 'bg-indigo-500/10'} rounded-full blur-[120px] pointer-events-none`}></div>
+        <div className={`absolute bottom-1/4 right-1/4 translate-y-1/2 translate-x-1/2 w-96 h-96 ${theme === 'light' ? 'bg-emerald-400/5' : 'bg-emerald-500/10'} rounded-full blur-[120px] pointer-events-none`}></div>
+
+        {/* Theme Switcher Floating */}
+        <div className="absolute top-6 right-6 z-50 flex items-center gap-4">
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-center shadow-md ${
+              theme === 'light' 
+                ? 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100' 
+                : 'bg-zinc-900 border-white/10 text-white hover:bg-zinc-800'
+            }`}
+          >
+            {theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}
+          </button>
+          <button
+            onClick={handleSignOut}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded-xl text-xs font-semibold"
+          >
+            Sair
+          </button>
+        </div>
+
+        <div className={`w-full max-w-lg ${theme === 'light' ? 'bg-white border-zinc-200 shadow-xl text-zinc-900' : 'bg-zinc-900 border-white/5 text-zinc-100'} border rounded-3xl p-8 relative z-10 space-y-6 transition-all duration-200`}>
+          <div className="text-center space-y-3">
+            <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${theme === 'light' ? 'bg-amber-50 text-amber-600' : 'bg-amber-500/10 text-amber-400'}`}>
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-[24px] font-bold tracking-tight font-display text-zinc-900 dark:text-zinc-100">Acesso Pendente de Aprovação</h1>
+              <p className={`text-[13px] ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} max-w-sm mx-auto leading-relaxed`}>
+                Olá, <strong>{firebaseUser.displayName || firebaseUser.email}</strong>. A sua conta real foi registada com sucesso, mas necessita de aprovação da Direção Escolar para aceder aos recursos da plataforma.
+              </p>
+            </div>
+          </div>
+
+          {requestAccessSuccess ? (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl space-y-3"
+            >
+              <h4 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                <Check className="w-4 h-4" /> Solicitação de Acesso Enviada!
+              </h4>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                O seu pedido para o cargo de <strong>{requestedRole === 'teacher' ? 'Professor' : requestedRole === 'parent' ? 'Encarregado de Educação' : requestedRole === 'financial' ? 'Financeiro' : requestedRole === 'secretariat' ? 'Secretaria' : requestedRole === 'director' ? 'Diretor' : 'Aluno'}</strong> foi registado com sucesso no departamento de <strong>{requestedDepartment}</strong>.
+              </p>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Por favor, aguarde que o administrador (carlossmiranda1914@gmail.com) ative a sua conta. Pode recarregar esta página para verificar o estado da sua conta.
+              </p>
+              <div className="flex justify-between items-center pt-2">
+                <button
+                  onClick={async () => {
+                    // Refresh status
+                    try {
+                      const token = await firebaseUser.getIdToken();
+                      const pRes = await fetch('/api/profile', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                      });
+                      if (pRes.ok) {
+                        const profile = await pRes.json();
+                        setCurrentUserStatus(profile.status || 'active');
+                        setCurrentUserRole(profile.role);
+                      }
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  }}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Verificar Estado
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  className="text-xs text-zinc-500 hover:text-zinc-350 underline"
+                >
+                  Utilizar outra conta
+                </button>
+              </div>
+            </motion.div>
+          ) : (
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setIsSubmittingRequest(true);
+              setRequestAccessError('');
+              try {
+                const token = await firebaseUser.getIdToken();
+                const res = await fetch('/api/profile/request-access', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({
+                    name: firebaseUser.displayName || authRegisterName || firebaseUser.email.split('@')[0],
+                    phone: requestedPhone,
+                    role: requestedRole,
+                    department: requestedDepartment
+                  })
+                });
+
+                if (res.ok) {
+                  setRequestAccessSuccess(true);
+                } else {
+                  const data = await res.json();
+                  setRequestAccessError(data.error || 'Falha ao submeter a solicitação de acesso.');
+                }
+              } catch (err: any) {
+                setRequestAccessError(err.message || 'Erro de rede ao submeter o pedido.');
+              } finally {
+                setIsSubmittingRequest(false);
+              }
+            }} className="space-y-4">
+              <div className="bg-zinc-950/40 p-4 border border-zinc-800/60 rounded-2xl space-y-2">
+                <p className="text-xs font-semibold text-indigo-400">Dados do Registo:</p>
+                <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
+                  <div>Email: <span className="font-mono text-zinc-300">{firebaseUser.email}</span></div>
+                  <div>Nome: <span className="font-mono text-zinc-300">{firebaseUser.displayName || 'Não definido'}</span></div>
+                </div>
+              </div>
+
+              {requestAccessError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs rounded-xl font-medium">
+                  {requestAccessError}
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-zinc-300 block">Número de Telemóvel / Contacto</label>
+                <input
+                  type="text"
+                  value={requestedPhone}
+                  onChange={(e) => setRequestedPhone(e.target.value)}
+                  placeholder="Ex: +351 912 345 678"
+                  className={`w-full h-10 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-xl px-3 text-xs outline-none transition-all`}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-zinc-300 block">Cargo Solicitado</label>
+                  <select
+                    value={requestedRole}
+                    onChange={(e) => {
+                      setRequestedRole(e.target.value);
+                      // Auto-select department
+                      const mapping: Record<string, string> = {
+                        student: 'Alunos',
+                        parent: 'Acompanhamento',
+                        teacher: 'Professorado',
+                        financial: 'Financeiro',
+                        secretariat: 'Secretaria',
+                        director: 'Direção'
+                      };
+                      if (mapping[e.target.value]) {
+                        setRequestedDepartment(mapping[e.target.value]);
+                      }
+                    }}
+                    className={`w-full h-10 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900' : 'bg-zinc-950 border-white/5 text-zinc-100'} border rounded-xl px-3 text-xs outline-none cursor-pointer`}
+                  >
+                    <option value="student">Aluno</option>
+                    <option value="parent">Responsável (Encarregado)</option>
+                    <option value="teacher">Professor</option>
+                    <option value="financial">Colaborador Financeiro</option>
+                    <option value="secretariat">Colaborador de Secretaria</option>
+                    <option value="director">Diretor / Gestor</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-zinc-300 block">Departamento</label>
+                  <select
+                    value={requestedDepartment}
+                    onChange={(e) => setRequestedDepartment(e.target.value)}
+                    className={`w-full h-10 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900' : 'bg-zinc-950 border-white/5 text-zinc-100'} border rounded-xl px-3 text-xs outline-none cursor-pointer`}
+                  >
+                    <option value="Alunos">Alunos</option>
+                    <option value="Acompanhamento">Acompanhamento</option>
+                    <option value="Professorado">Professorado</option>
+                    <option value="Financeiro">Financeiro</option>
+                    <option value="Secretaria">Secretaria</option>
+                    <option value="Direção">Direção</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmittingRequest}
+                className="w-full h-11 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:bg-zinc-700 text-white rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer shadow-lg shadow-indigo-600/10 text-center flex items-center justify-center gap-2"
+              >
+                {isSubmittingRequest ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Enviando Pedido de Acesso...
+                  </>
+                ) : (
+                  'Submeter Pedido de Acesso Real'
+                )}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (!firebaseUser) {
     return (
       <div className={`min-h-screen ${theme === 'light' ? 'bg-slate-50 text-zinc-900' : 'bg-zinc-950 text-zinc-100'} flex flex-col items-center justify-center font-sans p-6 relative overflow-hidden transition-colors duration-200`}>
@@ -1756,6 +2259,22 @@ export default function App() {
           )}
 
           <form onSubmit={handleModularLogin} className="space-y-5">
+            {isRegistering && (
+              <div className="space-y-2 animate-fade-in">
+                <label className={`text-[14px] font-semibold tracking-wide ${theme === 'light' ? 'text-zinc-700' : 'text-zinc-300'} block`}>
+                  Nome Completo
+                </label>
+                <input
+                  type="text"
+                  value={authRegisterName}
+                  onChange={(e) => setAuthRegisterName(e.target.value)}
+                  placeholder="Insira o seu nome real completo"
+                  className={`w-full h-11 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-xl px-4 text-base outline-none transition-all`}
+                  required={isRegistering}
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <label className={`text-[14px] font-semibold tracking-wide ${theme === 'light' ? 'text-zinc-700' : 'text-zinc-300'} block`}>
                 Endereço de Email
@@ -1817,24 +2336,110 @@ export default function App() {
               >
                 <div className="flex items-center gap-3">
                   <div className={`p-2 rounded-xl ${theme === 'light' ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-500/10 text-indigo-400'}`}>
-                    <GraduationCap className="w-6 h-6" />
+                    <Mail className="w-6 h-6" />
                   </div>
                   <h3 className="text-[20px] font-bold font-display">Recuperação de Acesso</h3>
                 </div>
-                <p className="text-[14px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-                  Para recuperar ou redefinir a sua palavra-passe, por favor entre em contacto direto com a <strong>Direção Escolar</strong> ou os <strong>Serviços de Secretaria</strong> do seu agrupamento escolar.
-                </p>
-                <p className="text-[14px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-                  Por motivos de conformidade com a proteção de dados (RGPD), as alterações de credenciais devem ser validadas presencialmente ou através dos canais oficiais instituídos.
-                </p>
-                <div className="pt-2 flex justify-end">
-                  <button
-                    onClick={() => setShowRecoveryInfo(false)}
-                    className="h-10 px-6 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm cursor-pointer transition-all"
-                  >
-                    Entendido
-                  </button>
-                </div>
+
+                {recoverySuccess ? (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs leading-relaxed">
+                      {recoverySuccess}
+                    </div>
+                    <p className="text-[12px] text-zinc-400">
+                      Após redefinir a palavra-passe no link enviado, tente iniciar sessão novamente com as novas credenciais.
+                    </p>
+                    <div className="flex justify-end pt-2">
+                      <button
+                        onClick={() => {
+                          setShowRecoveryInfo(false);
+                          setRecoverySuccess('');
+                          setRecoveryEmail('');
+                        }}
+                        className="h-10 px-6 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm cursor-pointer transition-all"
+                      >
+                        Voltar ao Login
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setRecoveryError('');
+                    setRecoverySuccess('');
+                    setSendingRecovery(true);
+                    try {
+                      const emailToRecover = (recoveryEmail || loginEmail).trim().toLowerCase();
+                      if (!emailToRecover) {
+                        setRecoveryError('Por favor, introduza o seu endereço de email.');
+                        return;
+                      }
+                      await sendPasswordResetEmail(auth, emailToRecover);
+                      setRecoverySuccess(`E-mail de recuperação enviado com sucesso para: ${emailToRecover}`);
+                    } catch (err: any) {
+                      console.error('[RECOVERY-ERROR]', err);
+                      let errorMsg = 'Erro ao enviar o email de recuperação. Verifique se o endereço está correto.';
+                      if (err.code === 'auth/user-not-found') {
+                        errorMsg = 'Nenhum utilizador registado com este endereço de email.';
+                      } else if (err.code === 'auth/invalid-email') {
+                        errorMsg = 'O endereço de email introduzido é inválido.';
+                      }
+                      setRecoveryError(errorMsg);
+                    } finally {
+                      setSendingRecovery(false);
+                    }
+                  }} className="space-y-4">
+                    <p className="text-[13px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+                      Introduza o seu email registado abaixo para receber um link oficial de redefinição de palavra-passe do Firebase Auth.
+                    </p>
+
+                    {recoveryError && (
+                      <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs rounded-xl font-medium">
+                        {recoveryError}
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-zinc-300 block">Endereço de Email</label>
+                      <input
+                        type="email"
+                        value={recoveryEmail || loginEmail}
+                        onChange={(e) => setRecoveryEmail(e.target.value)}
+                        placeholder="Ex: exemplo@nexus.edu"
+                        className={`w-full h-10 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900' : 'bg-zinc-950 border-white/5 text-zinc-100'} border rounded-xl px-3 text-xs outline-none`}
+                        required
+                      />
+                    </div>
+
+                    <div className="pt-2 flex justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowRecoveryInfo(false);
+                          setRecoveryError('');
+                          setRecoverySuccess('');
+                        }}
+                        className={`h-10 px-4 ${theme === 'light' ? 'bg-slate-100 hover:bg-slate-200 text-zinc-750' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'} font-semibold rounded-xl text-xs cursor-pointer transition-all`}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={sendingRecovery}
+                        className="h-10 px-6 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-700 text-white font-semibold rounded-xl text-xs cursor-pointer transition-all flex items-center justify-center gap-2"
+                      >
+                        {sendingRecovery ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            Enviando...
+                          </>
+                        ) : (
+                          'Enviar Link de Recuperação Real'
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </motion.div>
             </div>
           )}
@@ -2373,6 +2978,7 @@ export default function App() {
                       auditLogs={auditLogs}
                       onClearAuditLogs={handleClearAuditLogs}
                       firebaseUser={firebaseUser}
+                      onWipeSystem={handleWipeSystemSessions}
                     />
                   )}
                 </>
