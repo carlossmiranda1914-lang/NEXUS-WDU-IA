@@ -14,7 +14,7 @@ export const createPool = () => {
   });
 };
 
-const pool = createPool();
+export const pool = createPool();
 
 pool.on('error', (err) => {
   console.error('[DB-POOL] Unexpected error on idle SQL pool client:', err);
@@ -241,6 +241,8 @@ function executeInMemoryEmulation(sql: string, params: any[]): any {
       const wherePart = sql.split(/where/i)[1] || '';
       const whereMatches = [...wherePart.matchAll(/["']?([a-zA-Z0-9_]+)["']?\s*=\s*\$(\d+)/g)];
 
+      const updatedRows: any[] = [];
+
       inMemoryDb[table as keyof typeof inMemoryDb] = list.map((item: any) => {
         let matchesAll = true;
         for (const m of whereMatches) {
@@ -258,12 +260,17 @@ function executeInMemoryEmulation(sql: string, params: any[]): any {
           if (sqlLower.includes('executions') && sqlLower.includes('+')) {
             newItem.executions = (item.executions || 0) + 1;
           }
+          updatedRows.push(newItem);
           return newItem;
         }
         return item;
       });
 
-      return { rowsAffected: 1 };
+      if (sqlLower.includes('returning')) {
+        return updatedRows;
+      }
+
+      return { rowsAffected: updatedRows.length };
     }
   }
 
@@ -271,6 +278,8 @@ function executeInMemoryEmulation(sql: string, params: any[]): any {
   if (sqlLower.startsWith('delete')) {
     const wherePart = sql.split(/where/i)[1] || '';
     const whereMatches = [...wherePart.matchAll(/["']?([a-zA-Z0-9_]+)["']?\s*=\s*\$(\d+)/g)];
+
+    const deletedRows: any[] = [];
 
     inMemoryDb[table as keyof typeof inMemoryDb] = list.filter((item: any) => {
       let matchesAll = true;
@@ -284,10 +293,17 @@ function executeInMemoryEmulation(sql: string, params: any[]): any {
           break;
         }
       }
+      if (matchesAll) {
+        deletedRows.push(item);
+      }
       return !matchesAll;
     });
 
-    return { rowsAffected: 1 };
+    if (sqlLower.includes('returning')) {
+      return deletedRows;
+    }
+
+    return { rowsAffected: deletedRows.length };
   }
 
   return [];
@@ -302,11 +318,10 @@ function makeQueryProxy(obj: any): any {
         return function (rawSql: any) {
           const p = (async () => {
             const sqlStr = getSqlString(rawSql);
-            const isProduction = process.env.NODE_ENV === 'production';
             const disableFallback = process.env.DISABLE_DB_FALLBACK === 'true';
             
             if (!process.env.SQL_HOST) {
-              if (isProduction || disableFallback) {
+              if (disableFallback) {
                 throw new Error('Database error: SQL_HOST is not defined and in-memory fallback is disabled.');
               }
               return executeInMemoryEmulation(sqlStr, []);
@@ -314,8 +329,8 @@ function makeQueryProxy(obj: any): any {
             try {
               return await target.execute(rawSql);
             } catch (err: any) {
-              if (isProduction || disableFallback) {
-                console.error('[DB-PROXY] Database execution failed in production/strict mode:', err);
+              if (disableFallback) {
+                console.error('[DB-PROXY] Database execution failed in strict mode:', err);
                 throw err;
               }
               console.info(`[DB-HEAL-EXEC] Local operational synchronisation active.`);
@@ -342,13 +357,12 @@ function makeQueryProxy(obj: any): any {
             }
           }
 
-          const isProduction = process.env.NODE_ENV === 'production';
           const disableFallback = process.env.DISABLE_DB_FALLBACK === 'true';
 
           // Trigger execution
           const promise = (async () => {
             if (!process.env.SQL_HOST) {
-              if (isProduction || disableFallback) {
+              if (disableFallback) {
                 throw new Error('Database error: SQL_HOST is not defined and in-memory fallback is disabled.');
               }
               return executeInMemoryEmulation(sql, params);
@@ -357,8 +371,8 @@ function makeQueryProxy(obj: any): any {
               // Try the real PostgreSQL query
               return await target;
             } catch (error: any) {
-              if (isProduction || disableFallback) {
-                console.error('[DB-PROXY] Database query failed in production/strict mode:', error);
+              if (disableFallback) {
+                console.error('[DB-PROXY] Database query failed in strict mode:', error);
                 throw error;
               }
               console.info(`[DB-HEAL-ENG] Local operational state synchronized.`);

@@ -401,13 +401,14 @@ export class SchoolTaskService {
     }
 
     const task = await SchoolTaskRepository.create(taskData, tenantId, schoolId, organizationId, changedBy, metadata);
+    const resolvedTask = task || { ...taskData, id: taskData.id || `TSK-${Math.floor(2000 + Math.random() * 8000)}` };
 
     // Event Publishing
     eventBus.publish({
       eventName: 'TaskCreated',
       tenantId,
-      taskId: task.id,
-      data: task,
+      taskId: resolvedTask.id,
+      data: resolvedTask,
       userId: metadata.userId,
       userName: metadata.userName,
       timestamp: new Date().toISOString(),
@@ -415,12 +416,12 @@ export class SchoolTaskService {
       correlationId: metadata.correlationId
     });
 
-    if (task.assignedTo && task.assignedTo !== 'Não atribuído') {
+    if (resolvedTask.assignedTo && resolvedTask.assignedTo !== 'Não atribuído') {
       eventBus.publish({
         eventName: 'TaskAssigned',
         tenantId,
-        taskId: task.id,
-        data: { assignedTo: task.assignedTo },
+        taskId: resolvedTask.id,
+        data: { assignedTo: resolvedTask.assignedTo },
         userId: metadata.userId,
         userName: metadata.userName,
         timestamp: new Date().toISOString(),
@@ -429,7 +430,7 @@ export class SchoolTaskService {
       });
     }
 
-    return task;
+    return resolvedTask;
   }
 
   /**

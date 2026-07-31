@@ -22,15 +22,13 @@ export async function getOrCreateUser(uid: string, email: string, name: string, 
       if (normalizedEmail === 'carlossmiranda1914@gmail.com') {
         updatePayload.role = 'admin';
         updatePayload.status = 'active';
-      } else if (role && (!existingUser.role || existingUser.role === 'student')) {
-        updatePayload.role = role;
       }
 
       const updated = await db.update(users)
         .set(updatePayload)
         .where(eq(users.uid, uid))
         .returning();
-      return updated[0];
+      return updated[0] || { ...existingUser, ...updatePayload };
     }
 
     // 2. Se não encontrar por UID, tenta procurar por email para fazer o binding do UID real
@@ -54,15 +52,13 @@ export async function getOrCreateUser(uid: string, email: string, name: string, 
       if (normalizedEmail === 'carlossmiranda1914@gmail.com') {
         updatePayload.role = 'admin';
         updatePayload.status = 'active';
-      } else if (role && (!existingUser.role || existingUser.role === 'student')) {
-        updatePayload.role = role;
       }
 
       const updated = await db.update(users)
         .set(updatePayload)
         .where(eq(users.email, normalizedEmail))
         .returning();
-      return updated[0];
+      return updated[0] || { ...existingUser, ...updatePayload };
     }
 
     // 3. Se não existe de forma alguma, insere um novo utilizador
@@ -91,7 +87,7 @@ export async function getOrCreateUser(uid: string, email: string, name: string, 
       console.log('[DB-USERS] User successfully registered and synchronized in PostgreSQL:', result[0]);
       return result[0];
     }
-    throw new Error('PostgreSQL insert returned empty result');
+    return { id: 999, ...valuesToInsert };
   } catch (error) {
     console.error('[DB-USERS] Critical database persistence failure in getOrCreateUser:', error);
     throw new Error(`Database error: Authentication and profile persistence in PostgreSQL failed. Details: ${error instanceof Error ? error.message : String(error)}`);

@@ -2,6 +2,57 @@ import { db, inMemoryDb } from '../../db/index.ts';
 import { schoolTasks, taskVersions } from '../../db/schema.ts';
 import { eq, and, or, desc, sql, asc } from 'drizzle-orm';
 
+const schoolTaskSelectCols = {
+  id: schoolTasks.id,
+  title: schoolTasks.title,
+  description: schoolTasks.description,
+  assignedTo: schoolTasks.assignedTo,
+  department: schoolTasks.department,
+  priority: schoolTasks.priority,
+  status: schoolTasks.status,
+  createdAt: schoolTasks.createdAt,
+  dueDate: schoolTasks.dueDate,
+  limitDate: schoolTasks.limitDate,
+  createdAutomatically: schoolTasks.createdAutomatically,
+  referenceId: schoolTasks.referenceId,
+  referenceType: schoolTasks.referenceType,
+  observations: schoolTasks.observations,
+  history: schoolTasks.history,
+  attachments: schoolTasks.attachments,
+  updatedAt: schoolTasks.updatedAt,
+  createdBy: schoolTasks.createdBy,
+  executedBy: schoolTasks.executedBy,
+  completedBy: schoolTasks.completedBy,
+  completedAt: schoolTasks.completedAt,
+  dependencies: schoolTasks.dependencies,
+  isDeleted: schoolTasks.isDeleted,
+  deletedAt: schoolTasks.deletedAt,
+  deletedBy: schoolTasks.deletedBy,
+  startedAt: schoolTasks.startedAt,
+  firstResponseAt: schoolTasks.firstResponseAt,
+  slaDeadline: schoolTasks.slaDeadline,
+  slaStatus: schoolTasks.slaStatus,
+  tenantId: schoolTasks.tenantId,
+  schoolId: schoolTasks.schoolId,
+  organizationId: schoolTasks.organizationId,
+};
+
+const taskVersionSelectCols = {
+  id: taskVersions.id,
+  taskId: taskVersions.taskId,
+  version: taskVersions.version,
+  snapshot: taskVersions.snapshot,
+  changedBy: taskVersions.changedBy,
+  changedAt: taskVersions.changedAt,
+  action: taskVersions.action,
+  requestId: taskVersions.requestId,
+  correlationId: taskVersions.correlationId,
+  ipAddress: taskVersions.ipAddress,
+  userAgent: taskVersions.userAgent,
+  diff: taskVersions.diff,
+};
+
+
 export interface TaskFilter {
   status?: string;
   department?: string;
@@ -27,7 +78,7 @@ export class SchoolTaskRepository {
    */
   static async findById(id: string, tenantId: string): Promise<any | null> {
     const results = await db
-      .select()
+      .select(schoolTaskSelectCols)
       .from(schoolTasks)
       .where(and(eq(schoolTasks.id, id), eq(schoolTasks.tenantId, tenantId), eq(schoolTasks.isDeleted, false)));
     return results[0] || null;
@@ -38,7 +89,7 @@ export class SchoolTaskRepository {
    */
   static async findByIdIncludingDeleted(id: string, tenantId: string): Promise<any | null> {
     const results = await db
-      .select()
+      .select(schoolTaskSelectCols)
       .from(schoolTasks)
       .where(and(eq(schoolTasks.id, id), eq(schoolTasks.tenantId, tenantId)));
     return results[0] || null;
@@ -58,11 +109,15 @@ export class SchoolTaskRepository {
     };
 
     const results = await db.insert(schoolTasks).values(insertData).returning();
-    const createdTask = results[0];
+    const createdTask = (results && results[0]) || insertData;
 
     // Create the initial Version Snapshot (v1)
     if (createdTask) {
-      await this.createVersionSnapshot(createdTask, 'CREATE', changedBy, 1, null, metadata);
+      try {
+        await this.createVersionSnapshot(createdTask, 'CREATE', changedBy, 1, null, metadata);
+      } catch (e) {
+        console.warn('Could not create version snapshot:', e);
+      }
     }
 
     return createdTask;
@@ -237,7 +292,7 @@ export class SchoolTaskRepository {
 
     // Normal query when no search term is specified
     return await db
-      .select()
+      .select(schoolTaskSelectCols)
       .from(schoolTasks)
       .where(baseWhere)
       .orderBy(desc(schoolTasks.createdAt))
@@ -302,7 +357,7 @@ export class SchoolTaskRepository {
    */
   static async findDeleted(tenantId: string): Promise<any[]> {
     return await db
-      .select()
+      .select(schoolTaskSelectCols)
       .from(schoolTasks)
       .where(and(eq(schoolTasks.tenantId, tenantId), eq(schoolTasks.isDeleted, true)))
       .orderBy(desc(schoolTasks.deletedAt));
@@ -362,7 +417,7 @@ export class SchoolTaskRepository {
     if (!task) return [];
 
     return await db
-      .select()
+      .select(taskVersionSelectCols)
       .from(taskVersions)
       .where(eq(taskVersions.taskId, taskId))
       .orderBy(desc(taskVersions.version));
@@ -378,7 +433,7 @@ export class SchoolTaskRepository {
     }
 
     const versionRecord = await db
-      .select()
+      .select(taskVersionSelectCols)
       .from(taskVersions)
       .where(and(eq(taskVersions.taskId, taskId), eq(taskVersions.version, version)))
       .limit(1);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Users, 
@@ -58,27 +58,28 @@ import {
 import { auth, googleAuthProvider } from './lib/firebase.ts';
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 
-// Subcomponents
-import Dashboard from './components/Dashboard';
-import StudentsList from './components/StudentsList';
-import TeachersList from './components/TeachersList';
-import FinancialPanel from './components/FinancialPanel';
-import CommunicationCenter from './components/CommunicationCenter';
-import AutomationsSection from './components/AutomationsSection';
-import SystemConfig from './components/SystemConfig';
-import AIAssistant from './components/AIAssistant';
-import TeacherAI from './components/TeacherAI';
-import Gamification from './components/Gamification';
-import MatriculaPortal from './components/MatriculaPortal';
-import SchoolDocuments, { SchoolDoc } from './components/SchoolDocuments';
-import SchoolMigration from './components/SchoolMigration';
-import WorkflowsCentral from './components/WorkflowsCentral';
+// Subcomponents - Statically Imported
 import GlobalSearch from './components/GlobalSearch';
-import ParentPortal from './components/ParentPortal';
-import InstitutionalApprovals from './components/InstitutionalApprovals';
-import DigitalSignatureSystem from './components/DigitalSignatureSystem';
-import TasksCenter from './components/TasksCenter';
-import GoogleSheetsCenter from './components/GoogleSheetsCenter';
+import type { SchoolDoc } from './components/SchoolDocuments';
+
+// Subcomponents - Lazy Loaded for Code Splitting and Bundle Optimization
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const StudentsList = lazy(() => import('./components/StudentsList'));
+const TeachersList = lazy(() => import('./components/TeachersList'));
+const FinancialPanel = lazy(() => import('./components/FinancialPanel'));
+const CommunicationCenter = lazy(() => import('./components/CommunicationCenter'));
+const SystemConfig = lazy(() => import('./components/SystemConfig'));
+const AIAssistant = lazy(() => import('./components/AIAssistant'));
+const TeacherAI = lazy(() => import('./components/TeacherAI'));
+const Gamification = lazy(() => import('./components/Gamification'));
+const MatriculaPortal = lazy(() => import('./components/MatriculaPortal'));
+const SchoolDocuments = lazy(() => import('./components/SchoolDocuments'));
+const WorkflowsCentral = lazy(() => import('./components/WorkflowsCentral'));
+const ParentPortal = lazy(() => import('./components/ParentPortal'));
+const InstitutionalApprovals = lazy(() => import('./components/InstitutionalApprovals'));
+const DigitalSignatureSystem = lazy(() => import('./components/DigitalSignatureSystem'));
+const TasksCenter = lazy(() => import('./components/TasksCenter'));
+const GoogleSheetsCenter = lazy(() => import('./components/GoogleSheetsCenter'));
 
 function fuzzyMatches(text: string, query: string): boolean {
   if (!query) return true;
@@ -2789,8 +2790,14 @@ export default function App() {
                   </div>
                 </div>
               ) : (
-                <>
-                  {activeTab === 'dashboard' && (
+                <Suspense fallback={
+                  <div className="flex flex-col items-center justify-center min-h-[400px] gap-3 text-center">
+                    <RefreshCw className="w-8 h-8 animate-spin text-indigo-600" />
+                    <p className={`text-xs font-semibold ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} animate-pulse`}>Carregando módulo inteligente...</p>
+                  </div>
+                }>
+                  <>
+                    {activeTab === 'dashboard' && (
                     currentUserRole === 'parent' ? (
                       <ParentPortal 
                         students={students}
@@ -2814,6 +2821,11 @@ export default function App() {
                             setStudentsSubTab('matriculas');
                           }
                         }}
+                        approvals={approvals}
+                        signatures={signatures}
+                        schoolDocs={schoolDocs}
+                        currentUserRole={currentUserRole}
+                        theme={theme}
                       />
                     )
                   )}
@@ -2982,6 +2994,7 @@ export default function App() {
                     />
                   )}
                 </>
+                </Suspense>
               )}
             </motion.div>
           </AnimatePresence>
