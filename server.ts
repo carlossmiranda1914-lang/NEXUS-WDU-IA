@@ -723,7 +723,7 @@ async function startServer() {
   app.post('/api/profile/role', requireAuth, async (req: AuthRequest, res) => {
     const { role } = req.body;
     if (!role) {
-      console.warn('[DEBUG-AUTH-FLOW] POST /api/profile/role bad request: missing role parameter');
+      console.warn('[AUTH] POST /api/profile/role: parâmetro role em falta.');
       return res.status(400).json({ error: 'Falta parametrizar o papel.' });
     }
     

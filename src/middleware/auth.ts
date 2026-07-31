@@ -36,7 +36,7 @@ export const requireAuth = async (
     }
     const name = decodedToken.name || email.split('@')[0] || 'Utilizador Nexus';
     
-    console.log(`[AUTH-MIDDLEWARE] Syncing user profile with PostgreSQL: uid=${decodedToken.uid}`);
+    console.log('[AUTH-MIDDLEWARE] A sincronizar perfil de utilizador com a base de dados.');
     
     const dbUser = await getOrCreateUser(decodedToken.uid, email, name);
     console.log('[AUTH] Token verificado para path:', req.path);
