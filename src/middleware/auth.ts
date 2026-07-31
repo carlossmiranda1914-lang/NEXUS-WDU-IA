@@ -12,7 +12,6 @@ export const requireAuth = async (
   next: NextFunction
 ) => {
   const authHeader = req.headers.authorization;
-  console.log('[DEBUG-AUTH-FLOW] 6. No backend mostrar: Authorization recebido:', authHeader);
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.warn('[AUTH-MIDDLEWARE] Blocked request: Missing or malformed Authorization header:', req.path);
@@ -24,7 +23,6 @@ export const requireAuth = async (
   
   try {
     const decodedToken = await adminAuth.verifyIdToken(token);
-    console.log('[DEBUG-AUTH-FLOW] 7. Mostrar o resultado de verifyIdToken() (Firebase Admin): SUCCESS', decodedToken);
 
     if (!decodedToken || !decodedToken.uid) {
       console.error('[AUTH-MIDDLEWARE] Critical: Token could not be verified or has no UID.');
@@ -38,10 +36,10 @@ export const requireAuth = async (
     }
     const name = decodedToken.name || email.split('@')[0] || 'Utilizador Nexus';
     
-    console.log(`[AUTH-MIDDLEWARE] Syncing user profile with PostgreSQL: uid=${decodedToken.uid}, email=${email}`);
+    console.log(`[AUTH-MIDDLEWARE] Syncing user profile with PostgreSQL: uid=${decodedToken.uid}`);
     
     const dbUser = await getOrCreateUser(decodedToken.uid, email, name);
-    console.log('[DEBUG-AUTH-FLOW] 8. Mostrar o utilizador encontrado no PostgreSQL:', dbUser);
+    console.log('[AUTH] Token verificado para path:', req.path);
     
     if (!dbUser) {
       console.error('[AUTH-MIDDLEWARE] Failed to persist/fetch user profile in PostgreSQL.');
@@ -73,11 +71,10 @@ export const requireAuth = async (
       dbStatus: dbUser.status
     };
     
-    console.log(`[AUTH-MIDDLEWARE] Authorization successful for user=${req.user.email} with role=${req.user.dbRole}`);
+    console.log(`[AUTH-MIDDLEWARE] Authorization successful for role=${req.user.dbRole}`);
     next();
   } catch (error: any) {
-    console.warn('[DEBUG-AUTH-FLOW] 10. Exceção de autenticação tratada no middleware requireAuth:', error.message || error);
-    console.log('[DEBUG-AUTH-FLOW] Stack Trace completo do middleware requireAuth:', error.stack);
+    console.warn('[AUTH-MIDDLEWARE] Authentication error:', error.message || error);
     return res.status(401).json({ error: `Unauthorized: ${error.message || String(error)}` });
   }
 };

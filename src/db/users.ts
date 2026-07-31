@@ -3,7 +3,6 @@ import { users } from './schema.ts';
 import { eq } from 'drizzle-orm';
 
 export async function getOrCreateUser(uid: string, email: string, name: string, role?: string) {
-  console.log(`[DB-USERS] Entering getOrCreateUser: uid=${uid}, email=${email}, name=${name}, role=${role}`);
   try {
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -84,7 +83,7 @@ export async function getOrCreateUser(uid: string, email: string, name: string, 
 
     const result = await db.insert(users).values(valuesToInsert).returning();
     if (result && result.length > 0) {
-      console.log('[DB-USERS] User successfully registered and synchronized in PostgreSQL:', result[0]);
+      console.log('[DB-USERS] User successfully registered and synchronized in PostgreSQL.');
       return result[0];
     }
     return { id: 999, ...valuesToInsert };
@@ -95,10 +94,8 @@ export async function getOrCreateUser(uid: string, email: string, name: string, 
 }
 
 export async function getUserProfile(uid: string) {
-  console.log(`[DB-USERS] Entering getUserProfile: uid=${uid}`);
   try {
     const result = await db.select().from(users).where(eq(users.uid, uid)).limit(1);
-    console.log('[DB-USERS] getUserProfile query result:', result[0] || 'not found');
     return result[0] || null;
   } catch (error) {
     console.error('[DB-USERS] Failed to fetch user profile:', error);

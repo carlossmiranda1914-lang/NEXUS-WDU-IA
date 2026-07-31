@@ -1,4 +1,6 @@
 import express from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
@@ -121,8 +123,41 @@ async function generateContentWithRetry(
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  app.use(helmet());
+  app.use(cors({
+    origin: process.env.NODE_ENV === 'production' 
+      ? [process.env.APP_URL || ''] 
+      : true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+  }));
+
   const server = http.createServer(app);
   const verificationCodes = new Map<string, { code: string; expiresAt: number }>();
+  const authRateLimit = new Map<string, { count: number; resetTime: number }>();
+
+  function rateLimitAuth(maxAttempts: number, windowMs: number) {
+    return (req: any, res: any, next: any) => {
+      const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+      const now = Date.now();
+      const key = `${ip}:${req.path}`;
+      
+      const entry = authRateLimit.get(key);
+      if (entry && now < entry.resetTime) {
+        if (entry.count >= maxAttempts) {
+          return res.status(429).json({ 
+            error: 'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.' 
+          });
+        }
+        entry.count++;
+      } else {
+        authRateLimit.set(key, { count: 1, resetTime: now + windowMs });
+      }
+      next();
+    };
+  }
 
   // Setup live WebSocket Server
   const wss = new WebSocketServer({ server });
@@ -197,56 +232,7 @@ async function startServer() {
   // Initialize Database self-healing and seeding immediately on startup
   await initializeDatabase();
 
-  // Clean slate data wipe - runs exactly once per user request to clean mock data
-  const flagPath = path.join(process.cwd(), '.data_wiped');
-  if (!fs.existsSync(flagPath)) {
-    console.log('[SYSTEM-WIPE] First boot data wipe detected. Clearing database of all illustrative/mock data...');
-    try {
-      // Clear in-memory DB arrays
-      inMemoryDb.users = [];
-      inMemoryDb.students = [];
-      inMemoryDb.teachers = [];
-      inMemoryDb.invoices = [];
-      inMemoryDb.announcements = [];
-      inMemoryDb.chat_messages = [];
-      inMemoryDb.automations = [];
-      inMemoryDb.uploaded_documents = [];
-      inMemoryDb.operational_logs = [
-        {
-          id: 1,
-          userId: 'system',
-          userName: 'Nexus Server',
-          userRole: 'system',
-          action: 'FALLBACK_INIT',
-          details: 'Clean, production-ready operational in-memory fallback state initialized.'
-        }
-      ];
-      inMemoryDb.approvals = [];
-      inMemoryDb.todo_tasks = [];
-      inMemoryDb.school_tasks = [];
-      inMemoryDb.task_versions = [];
-
-      if (process.env.SQL_HOST) {
-        await db.delete(students);
-        await db.delete(teachers);
-        await db.delete(invoices);
-        await db.delete(announcements);
-        await db.delete(chatMessages);
-        await db.delete(automations);
-        await db.delete(uploadedDocuments);
-        await db.delete(approvals);
-        await db.delete(schoolTasks);
-        await db.delete(operationalLogs);
-        // Keep only the main admin carlossmiranda1914@gmail.com
-        await db.delete(users).where(ne(users.email, 'carlossmiranda1914@gmail.com'));
-        console.log('[SYSTEM-WIPE] PostgreSQL tables successfully wiped.');
-      }
-      fs.writeFileSync(flagPath, 'true');
-      console.log('[SYSTEM-WIPE] First boot data wipe completed successfully.');
-    } catch (wipeErr) {
-      console.error('[SYSTEM-WIPE] Error executing first boot database wipe:', wipeErr);
-    }
-  }
+  console.log('[SERVER] Servidor iniciado. Base de dados pronta para uso operacional.');
 
   // Initialize Gemini AI Client securely using recommended SDK
   let ai: GoogleGenAI | null = null;
@@ -292,7 +278,7 @@ async function startServer() {
   };
 
   // --- EMAIL VERIFICATION SYSTEM ENDPOINTS ---
-  app.post('/api/auth/send-code', async (req, res) => {
+  app.post('/api/auth/send-code', rateLimitAuth(5, 60_000), async (req, res) => {
     const { email } = req.body;
     if (!email) {
       return res.status(400).json({ error: 'Email é obrigatório.' });
@@ -302,8 +288,6 @@ async function startServer() {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = Date.now() + 15 * 60 * 1000;
     verificationCodes.set(normalizedEmail, { code, expiresAt });
-
-    console.log(`[AUTH-EMAIL-VERIFY] Code generated for ${normalizedEmail}: ${code}`);
 
     const smtpHost = process.env.SMTP_HOST;
     const smtpPort = parseInt(process.env.SMTP_PORT || '587');
@@ -377,7 +361,7 @@ async function startServer() {
     });
   });
 
-  app.post('/api/auth/verify-code', async (req, res) => {
+  app.post('/api/auth/verify-code', rateLimitAuth(10, 60_000), async (req, res) => {
     const { email, code } = req.body;
     if (!email || !code) {
       return res.status(400).json({ error: 'Email e código são obrigatórios.' });
@@ -449,11 +433,9 @@ async function startServer() {
         role: req.user.dbRole,
         status: req.user.dbStatus
       };
-      console.log('[DEBUG-AUTH-FLOW] 9. Mostrar a resposta enviada ao frontend para GET /api/profile:', responseData);
       res.json(responseData);
     } catch (err: any) {
-      console.error('[DEBUG-AUTH-FLOW] 10. Mostrar qualquer exceção completa - GET /api/profile:', err);
-      console.error('[DEBUG-AUTH-FLOW] Stack trace:', err.stack);
+      console.error('[PROFILE-API] Error fetching profile:', err?.message || err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -640,7 +622,27 @@ async function startServer() {
   });
 
   // System Reset and Data Wipe API
-  app.post('/api/system/wipe-data', async (req, res) => {
+  app.post('/api/system/wipe-data', requireAuth, authorizeRole(['admin']), async (req: AuthRequest, res) => {
+    const { confirmationToken } = req.body;
+    const WIPE_TOKEN = process.env.SYSTEM_WIPE_TOKEN;
+
+    if (!WIPE_TOKEN) {
+      return res.status(503).json({ 
+        error: 'Operação desativada: Token de segurança para limpeza de dados não configurado no ambiente.' 
+      });
+    }
+
+    if (confirmationToken !== WIPE_TOKEN) {
+      await db.insert(operationalLogs).values({
+        userId: req.user.uid,
+        userName: req.user.dbName,
+        userRole: req.user.dbRole,
+        action: 'WIPE_BLOCKED_INVALID_TOKEN',
+        details: `Tentativa de limpeza de dados com token inválido por ${req.user.email}.`
+      });
+      return res.status(403).json({ error: 'Token de confirmação inválido. Operação bloqueada.' });
+    }
+
     try {
       console.log('[SYSTEM-WIPE] Manual system wipe request received via API.');
       
@@ -682,10 +684,6 @@ async function startServer() {
         await db.delete(users).where(ne(users.email, 'carlossmiranda1914@gmail.com'));
         console.log('[SYSTEM-WIPE] PostgreSQL tables wiped via API.');
       }
-
-      // Write flag just in case
-      const flagPath = path.join(process.cwd(), '.data_wiped');
-      fs.writeFileSync(flagPath, 'true');
 
       res.json({ success: true, message: 'Todas as tabelas foram limpas com sucesso. O sistema está agora num estado limpo e original.' });
     } catch (err: any) {
@@ -770,11 +768,9 @@ async function startServer() {
       });
 
       const responseData = { success: true, role };
-      console.log('[DEBUG-AUTH-FLOW] 9. Mostrar a resposta enviada ao frontend para POST /api/profile/role:', responseData);
       res.json(responseData);
     } catch (err: any) {
-      console.error('[DEBUG-AUTH-FLOW] 10. Mostrar qualquer exceção completa - POST /api/profile/role:', err);
-      console.error('[DEBUG-AUTH-FLOW] Stack trace:', err.stack);
+      console.error('[PROFILE-ROLE] Error updating role:', err?.message || err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -5860,6 +5856,16 @@ Gerado em tempo real com base no balanço ativo das tabelas financeiras integrad
 2. **Diversificação de Receitas de Capex**: Expandir ofertas de faturamento acessório de curto prazo (atividades desportivas complementares e licenciamento de fardamento individual) para reduzir a dependência exclusiva de inscrições fundamentais.
 3. **Provisionamento para Crédito de Liquidação Duvidosa**: Estabelecer nas contas do terceiro trimestre uma verba pró-rata de 3.5% para compensar possíveis insolvências pontuais de encarregados, blindando o caixa letivo contra rombos estruturais.`;
   }
+
+  // Centralized Error Handler
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error('[CENTRAL-ERROR-HANDLER]', err);
+    res.status(err.status || 500).json({
+      error: process.env.NODE_ENV === 'production' 
+        ? 'Erro interno do servidor.' 
+        : err.message || 'Erro desconhecido.'
+    });
+  });
 
   // Vite Middleware Setup
   if (process.env.NODE_ENV !== 'production') {
