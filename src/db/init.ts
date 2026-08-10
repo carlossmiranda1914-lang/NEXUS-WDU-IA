@@ -1,4 +1,4 @@
-import { db } from './index.ts';
+import { db, isInMemoryFallbackAllowed, isPersistentDatabaseConfigured } from './index.ts';
 import { sql } from 'drizzle-orm';
 import {
   users,
@@ -15,9 +15,12 @@ import {
 
 export async function initializeDatabase() {
   console.log('[DB-INIT] Starting database initialization...');
-  if (!process.env.SQL_HOST) {
-    console.log('[DB-INIT] Cloud SQL configuration not detected. Operating with in-memory persistence fallback.');
-    return;
+  if (!isPersistentDatabaseConfigured) {
+    if (isInMemoryFallbackAllowed) {
+      console.log('[DB-INIT] Explicit local in-memory fallback enabled.');
+      return;
+    }
+    throw new Error('[DB-INIT] DATABASE_URL or SQL_HOST is required when in-memory fallback is not explicitly enabled.');
   }
   
   try {

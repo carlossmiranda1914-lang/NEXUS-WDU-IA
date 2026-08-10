@@ -1,5 +1,81 @@
-import { pgTable, serial, text, integer, timestamp, boolean, doublePrecision, jsonb, date } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, integer, timestamp, boolean, doublePrecision, jsonb, date, uuid, uniqueIndex } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+
+// vNext identity model. These tables intentionally coexist with the legacy
+// `users` table during the progressive migration.
+export const institutions = pgTable('institutions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull(),
+  status: text('status').notNull().default('pending'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('institutions_slug_unique').on(table.slug),
+]);
+
+export const people = pgTable('people', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  phone: text('phone'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const identities = pgTable('identities', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  personId: uuid('person_id').notNull().references(() => people.id, { onDelete: 'restrict' }),
+  provider: text('provider').notNull(),
+  providerSubject: text('provider_subject').notNull(),
+  email: text('email'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('identities_provider_subject_unique').on(table.provider, table.providerSubject),
+]);
+
+export const memberships = pgTable('memberships', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  personId: uuid('person_id').notNull().references(() => people.id, { onDelete: 'restrict' }),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  role: text('role').notNull(),
+  status: text('status').notNull().default('pending'),
+  approvedBy: uuid('approved_by').references(() => people.id, { onDelete: 'restrict' }),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  suspendedAt: timestamp('suspended_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('memberships_person_institution_role_unique').on(table.personId, table.institutionId, table.role),
+]);
+
+// vNext school roles. A student and a guardian are people with institutional
+// relationships; neither relationship is inferred from an email or a fixed ID.
+export const studentProfiles = pgTable('student_profiles', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  personId: uuid('person_id').notNull().references(() => people.id, { onDelete: 'restrict' }),
+  studentNumber: text('student_number'),
+  status: text('status').notNull().default('active'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('student_profiles_institution_person_unique').on(table.institutionId, table.personId),
+]);
+
+export const guardianRelationships = pgTable('guardian_relationships', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  guardianPersonId: uuid('guardian_person_id').notNull().references(() => people.id, { onDelete: 'restrict' }),
+  studentPersonId: uuid('student_person_id').notNull().references(() => people.id, { onDelete: 'restrict' }),
+  relationship: text('relationship').notNull(),
+  status: text('status').notNull().default('active'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('guardian_relationships_institution_guardian_student_unique').on(table.institutionId, table.guardianPersonId, table.studentPersonId),
+]);
 
 // 1. Users Profile Table (linked directly to Firebase Authentication UID)
 export const users = pgTable('users', {

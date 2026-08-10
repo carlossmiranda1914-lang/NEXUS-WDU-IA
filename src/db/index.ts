@@ -1,10 +1,22 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import * as schema from './schema.ts';
+import { resolveDatabaseRuntimePolicy } from './database-runtime-policy.ts';
 
 const { Pool } = pg;
 
+const databaseRuntimePolicy = resolveDatabaseRuntimePolicy();
+export const { isPersistentDatabaseConfigured, isInMemoryFallbackAllowed } = databaseRuntimePolicy;
+
 export const createPool = () => {
+  const databaseUrl = process.env.DATABASE_URL?.trim();
+  if (databaseUrl) {
+    return new Pool({
+      connectionString: databaseUrl,
+      connectionTimeoutMillis: 5000,
+    });
+  }
+
   return new Pool({
     host: process.env.SQL_HOST,
     user: process.env.SQL_USER || process.env.SQL_ADMIN_USER,
@@ -309,8 +321,8 @@ function executeInMemoryEmulation(sql: string, params: any[]): any {
   return [];
 }
 
-// Elegant proxy wrapper logic to transparently intercept any Drizzle operation,
-// catch any PostgreSQL connection timeouts/exceptions, and route to our in-memory engine.
+// In-memory emulation is a local-development opt-in only. A configured database
+// must never silently degrade to non-durable state.
 function makeQueryProxy(obj: any): any {
   return new Proxy(obj, {
     get(target, prop, receiver) {
@@ -318,23 +330,17 @@ function makeQueryProxy(obj: any): any {
         return function (rawSql: any) {
           const p = (async () => {
             const sqlStr = getSqlString(rawSql);
-            const disableFallback = process.env.DISABLE_DB_FALLBACK === 'true';
-            
-            if (!process.env.SQL_HOST) {
-              if (disableFallback) {
-                throw new Error('Database error: SQL_HOST is not defined and in-memory fallback is disabled.');
+            if (!isPersistentDatabaseConfigured) {
+              if (!isInMemoryFallbackAllowed) {
+                throw new Error('Database error: DATABASE_URL or SQL_HOST is required outside explicit local fallback mode.');
               }
               return executeInMemoryEmulation(sqlStr, []);
             }
             try {
               return await target.execute(rawSql);
             } catch (err: any) {
-              if (disableFallback) {
-                console.error('[DB-PROXY] Database execution failed in strict mode:', err);
-                throw err;
-              }
-              console.info(`[DB-HEAL-EXEC] Local operational synchronisation active.`);
-              return executeInMemoryEmulation(sqlStr, []);
+              console.error('[DB-PROXY] Persistent database execution failed:', err);
+              throw err;
             }
           })();
           return p;
@@ -357,13 +363,11 @@ function makeQueryProxy(obj: any): any {
             }
           }
 
-          const disableFallback = process.env.DISABLE_DB_FALLBACK === 'true';
-
           // Trigger execution
           const promise = (async () => {
-            if (!process.env.SQL_HOST) {
-              if (disableFallback) {
-                throw new Error('Database error: SQL_HOST is not defined and in-memory fallback is disabled.');
+            if (!isPersistentDatabaseConfigured) {
+              if (!isInMemoryFallbackAllowed) {
+                throw new Error('Database error: DATABASE_URL or SQL_HOST is required outside explicit local fallback mode.');
               }
               return executeInMemoryEmulation(sql, params);
             }
@@ -371,17 +375,8 @@ function makeQueryProxy(obj: any): any {
               // Try the real PostgreSQL query
               return await target;
             } catch (error: any) {
-              if (disableFallback) {
-                console.error('[DB-PROXY] Database query failed in strict mode:', error);
-                throw error;
-              }
-              console.info(`[DB-HEAL-ENG] Local operational state synchronized.`);
-              try {
-                return executeInMemoryEmulation(sql, params);
-              } catch (emuError: any) {
-                console.info('[DB-HEAL-CRITICAL] Local emulation query resolved.');
-                return [];
-              }
+              console.error('[DB-PROXY] Persistent database query failed:', error);
+              throw error;
             }
           })();
 
