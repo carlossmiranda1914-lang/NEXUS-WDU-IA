@@ -1,7 +1,7 @@
 import { SchoolTaskRepository, TaskFilter } from './school-task.repository.ts';
 import { SchoolTaskCache } from './cache-manager.ts';
 import { eventBus, TaskEventName } from './event-bus.ts';
-import { db, inMemoryDb } from '../../db/index.ts';
+import { db, inMemoryDb, isPersistentDatabaseConfigured } from '../../db/index.ts';
 import { schoolTasks } from '../../db/schema.ts';
 import { and, eq, sql, ne } from 'drizzle-orm';
 
@@ -39,7 +39,7 @@ export class SchoolTaskService {
     const todayStr = new Date().toISOString().split('T')[0];
 
     let result: any;
-    if (!process.env.SQL_HOST) {
+    if (!isPersistentDatabaseConfigured) {
       // High-fidelity fallback emulation
       const tasks = inMemoryDb.school_tasks.filter(t => t.tenantId === tenantId);
       const active = tasks.filter(t => !t.isDeleted);
@@ -137,7 +137,7 @@ export class SchoolTaskService {
     const todayStr = new Date().toISOString().split('T')[0];
     let result: any;
 
-    if (!process.env.SQL_HOST) {
+    if (!isPersistentDatabaseConfigured) {
       // In-memory fallback
       const tasks = inMemoryDb.school_tasks.filter(t => t.tenantId === tenantId && !t.isDeleted);
       const completed = tasks.filter(t => t.status === 'Concluída');
@@ -234,7 +234,7 @@ export class SchoolTaskService {
     if (cached) return cached;
 
     let result: any;
-    if (!process.env.SQL_HOST) {
+    if (!isPersistentDatabaseConfigured) {
       // In-memory fallback
       const tasks = inMemoryDb.school_tasks.filter(t => t.tenantId === tenantId && !t.isDeleted);
       const byDept: Record<string, any> = {};
@@ -313,7 +313,7 @@ export class SchoolTaskService {
     const startTime = Date.now();
     let result: any;
 
-    if (!process.env.SQL_HOST) {
+    if (!isPersistentDatabaseConfigured) {
       // In-memory fallback
       const tasks = inMemoryDb.school_tasks.filter(t => t.tenantId === tenantId);
       const active = tasks.filter(t => !t.isDeleted);
@@ -609,7 +609,7 @@ export class SchoolTaskService {
    */
   static async getDependencyImpact(id: string, tenantId: string): Promise<any> {
     // Build direct and indirect impact tree
-    const allTasks = !process.env.SQL_HOST 
+    const allTasks = !isPersistentDatabaseConfigured
       ? inMemoryDb.school_tasks.filter(t => t.tenantId === tenantId && !t.isDeleted)
       : await db.select().from(schoolTasks).where(and(eq(schoolTasks.tenantId, tenantId), eq(schoolTasks.isDeleted, false)));
 

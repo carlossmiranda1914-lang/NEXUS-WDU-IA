@@ -15,7 +15,7 @@ import os from 'os';
 
 
 // Import Drizzle, initialize, schemas, etc.
-import { db, inMemoryDb, pool } from './src/db/index.ts';
+import { db, inMemoryDb, isPersistentDatabaseConfigured, pool } from './src/db/index.ts';
 import { initializeDatabase } from './src/db/init.ts';
 
 // Modularized Enterprise School Tasks imports
@@ -27,16 +27,11 @@ import { eventBus } from './src/modules/school-tasks/event-bus.ts';
 let wssInstance: WebSocketServer | null = null;
 
 function broadcastToAll(type: string, payload: any) {
-  if (!wssInstance) return;
-  const dataStr = JSON.stringify({ type, payload });
-  wssInstance.clients.forEach((client: WebSocket) => {
-    if (client.readyState === 1) { // WebSocket.OPEN
-      try {
-        client.send(dataStr);
-      } catch (err) {
-        console.error('[REALTIME-WS] Error broadcasting:', err);
-      }
-    }
+  // Legacy endpoints do not yet carry verified institutional context. Until
+  // each is migrated, dropping their WebSocket event is safer than exposing it
+  // to every connected school. School-task events use the scoped manager.
+  console.warn(`[REALTIME-WS] Event '${type}' not sent: institutional context is required.`, {
+    hasPayload: payload !== undefined,
   });
 }
 
@@ -54,8 +49,22 @@ import {
   schoolTasks
 } from './src/db/schema.ts';
 import { requireAuth, AuthRequest } from './src/middleware/auth.ts';
+import { multiTenantMiddleware } from './src/middleware/multi-tenant.ts';
 import { adminAuth } from './src/lib/firebase-admin.ts';
+import { resolveInstitutionalContext } from './src/auth/institutional-context.ts';
+import { resolveAuthorizedStudents } from './src/auth/authorized-students.ts';
 import { eq, desc, sql, and, ne, inArray } from 'drizzle-orm';
+
+async function resolveAuthorizedLegacyStudentIds(req: AuthRequest): Promise<string[]> {
+  if (!req.institutionalContext || !['student', 'parent'].includes(req.institutionalContext.role)) {
+    return [];
+  }
+
+  const authorizedStudents = await resolveAuthorizedStudents(pool, req.institutionalContext);
+  return authorizedStudents
+    .map((student) => student.legacyStudentId)
+    .filter((studentId): studentId is string => Boolean(studentId));
+}
 
 // Load environment variables
 dotenv.config();
@@ -130,7 +139,7 @@ async function startServer() {
       ? [process.env.APP_URL || ''] 
       : true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Institution-Id'],
     credentials: true,
   }));
 
@@ -163,9 +172,21 @@ async function startServer() {
   const wss = new WebSocketServer({ server });
   wssInstance = wss;
 
-  wss.on('connection', (ws, req) => {
-    // Delegate to multi-tenant real-time manager
-    SchoolTaskWebSocketManager.handleConnection(ws, req);
+  wss.on('connection', async (ws, req) => {
+    try {
+      const requestUrl = new URL(req.url || '/', 'http://localhost');
+      const token = requestUrl.searchParams.get('access_token');
+      if (!token) {
+        return ws.close(1008, 'Authentication required');
+      }
+      const decodedToken = await adminAuth.verifyIdToken(token);
+      const requestedInstitutionId = requestUrl.searchParams.get('institution_id') || undefined;
+      const resolution = await resolveInstitutionalContext(pool, decodedToken.uid, requestedInstitutionId);
+      if (resolution.kind !== 'resolved') {
+        return ws.close(1008, 'Institutional authorization required');
+      }
+
+      SchoolTaskWebSocketManager.handleConnection(ws, resolution.context);
 
     // Legacy backwards-compatibility listener for general broadcasts
     ws.on('message', (msg) => {
@@ -178,6 +199,9 @@ async function startServer() {
         // Safe check
       }
     });
+    } catch (error) {
+      ws.close(1008, 'Authentication failed');
+    }
   });
 
   // Background Live organization simulations (DEACTIVATED per user request to disable fictitious notifications and only emit real ones)
@@ -255,7 +279,7 @@ async function startServer() {
   const authorizeRole = (allowedRoles: string[]) => {
     return async (req: AuthRequest, res: any, next: any) => {
       const role = req.user?.dbRole;
-      if (allowedRoles.includes(role)) {
+      if (req.institutionalContext && allowedRoles.includes(role)) {
         return next();
       }
 
@@ -431,12 +455,32 @@ async function startServer() {
         email: req.user.email,
         name: req.user.dbName,
         role: req.user.dbRole,
-        status: req.user.dbStatus
+        status: req.user.dbStatus,
+        institution: req.institutionalContext ? {
+          id: req.institutionalContext.institutionId,
+          name: req.institutionalContext.institutionName,
+          slug: req.institutionalContext.institutionSlug,
+        } : null,
       };
       res.json(responseData);
     } catch (err: any) {
       console.error('[PROFILE-API] Error fetching profile:', err?.message || err);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // vNext authorized student context. This deliberately has no fallback to a
+  // fixed student ID or a guardian name.
+  app.get('/api/authorized-students', requireAuth, async (req: AuthRequest, res) => {
+    if (!req.institutionalContext || !['student', 'parent'].includes(req.institutionalContext.role)) {
+      return res.status(403).json({ error: 'Este recurso é exclusivo de aluno ou encarregado.' });
+    }
+    try {
+      const students = await resolveAuthorizedStudents(pool, req.institutionalContext);
+      return res.json({ students });
+    } catch (error: any) {
+      console.error('[AUTHORIZED-STUDENTS] Failed to resolve relationships:', error.message || error);
+      return res.status(500).json({ error: 'Não foi possível resolver os educandos autorizados.' });
     }
   });
 
@@ -447,7 +491,7 @@ async function startServer() {
       let postgresStatus = 'OFFLINE';
       let pgLatency = 0;
       try {
-        if (process.env.SQL_HOST) {
+        if (isPersistentDatabaseConfigured) {
           const startPg = Date.now();
           await pool.query('SELECT 1');
           pgLatency = Date.now() - startPg;
@@ -669,7 +713,7 @@ async function startServer() {
       inMemoryDb.school_tasks = [];
       inMemoryDb.task_versions = [];
 
-      if (process.env.SQL_HOST) {
+      if (isPersistentDatabaseConfigured) {
         await db.delete(students);
         await db.delete(teachers);
         await db.delete(invoices);
@@ -699,7 +743,6 @@ async function startServer() {
       await db.update(users).set({
         name: name ? name.trim() : undefined,
         phone: phone ? phone.trim() : undefined,
-        role: role || undefined,
         department: department || undefined
       }).where(eq(users.uid, req.user.uid));
 
@@ -727,6 +770,10 @@ async function startServer() {
       return res.status(400).json({ error: 'Falta parametrizar o papel.' });
     }
     
+    // Institutional roles are assigned through memberships, never by a
+    // self-service simulation endpoint.
+    return res.status(410).json({ error: 'A alteração de papel é gerida pela associação institucional.' });
+
     try {
       // COBERTURA DE SEGURANÇA CONTRA ELEVAÇÃO DE PRIVILÉGIOS (PRIVILEGE ESCALATION):
       // A simulação de papéis só é permitida sob condições restritas:
@@ -914,10 +961,13 @@ async function startServer() {
       };
 
       if (role === 'student' || role === 'parent') {
-        records = await db.select(fullCols)
-          .from(students)
-          .where(eq(students.id, 'ALU-101'))
-          .orderBy(students.id);
+        const authorizedStudentIds = await resolveAuthorizedLegacyStudentIds(req);
+        records = authorizedStudentIds.length > 0
+          ? await db.select(fullCols)
+            .from(students)
+            .where(inArray(students.id, authorizedStudentIds))
+            .orderBy(students.id)
+          : [];
       } else if (role === 'teacher') {
         const teacherProfile = await db.select({ classes: teachers.classes })
           .from(teachers)
@@ -926,7 +976,7 @@ async function startServer() {
 
         const assignedClasses = (teacherProfile.length > 0 && Array.isArray(teacherProfile[0].classes))
           ? (teacherProfile[0].classes as string[])
-          : ['9º Ano A', '10º Ano A'];
+          : [];
 
         if (assignedClasses.length > 0) {
           records = await db.select(fullCols)
@@ -1397,10 +1447,13 @@ async function startServer() {
       };
 
       if (role === 'student' || role === 'parent') {
-        records = await db.select(invoiceCols)
-          .from(invoices)
-          .where(eq(invoices.studentId, 'ALU-101'))
-          .orderBy(invoices.id);
+        const authorizedStudentIds = await resolveAuthorizedLegacyStudentIds(req);
+        records = authorizedStudentIds.length > 0
+          ? await db.select(invoiceCols)
+            .from(invoices)
+            .where(inArray(invoices.studentId, authorizedStudentIds))
+            .orderBy(invoices.id)
+          : [];
       } else {
         records = await db.select(invoiceCols)
           .from(invoices)
@@ -1435,9 +1488,13 @@ async function startServer() {
         return res.status(404).json({ error: 'Fatura não encontrada.' });
       }
 
-      // Context check: Parents/students cannot pay other people's invoices
-      if ((role === 'student' || role === 'parent') && targetInvoice[0].studentId !== 'ALU-101') {
-        return res.status(403).json({ error: 'Acesso Proibido: Não tem autorização para liquidar faturas fora do seu âmbito de educando.' });
+      // Parents/students can pay only invoices mapped through their active
+      // persisted relationship. An unmapped profile has no legacy access.
+      if (role === 'student' || role === 'parent') {
+        const authorizedStudentIds = await resolveAuthorizedLegacyStudentIds(req);
+        if (!authorizedStudentIds.includes(targetInvoice[0].studentId)) {
+          return res.status(403).json({ error: 'Acesso proibido para esta fatura.' });
+        }
       }
 
       // Update invoice as paid
@@ -2089,13 +2146,9 @@ async function startServer() {
 
       // Enforce strict data isolation for documents in backend
       if (role === 'student' || role === 'parent') {
-        const studentIdPart = 'alu-101';
-        records = records.filter(d => 
-          d.name.toLowerCase().includes(studentIdPart) || 
-          d.name.toLowerCase().includes('maria') ||
-          d.name.toLowerCase().includes('silva') ||
-          (d.extractedDetails && JSON.stringify(d.extractedDetails).toLowerCase().includes(studentIdPart))
-        );
+        // Legacy documents are not yet mapped to a person and institution.
+        // Empty is safer than exposing an unverified document.
+        records = [];
       } else if (role === 'teacher') {
         // Teachers see only pedagogical documents of students from their designated classes
         const teacherProfile = await db.select().from(teachers).where(eq(teachers.email, req.user.email)).limit(1);
@@ -2120,10 +2173,8 @@ async function startServer() {
             ) || nameLower.includes('pauta') || nameLower.includes('horário') || nameLower.includes('aula');
           });
         } else {
-          records = records.filter(d => 
-            !d.category?.toLowerCase().includes('finança') && 
-            !d.category?.toLowerCase().includes('pagamento')
-          );
+          // No verified teacher profile means no document visibility.
+          records = [];
         }
       } else if (role === 'financial') {
         // Financial cannot visualize student grade reports or behavioral records
@@ -2486,7 +2537,7 @@ async function startServer() {
   });
 
   // --- MULTI-SOURCE SCHOOL DATA MIGRATION & AI ONBOARDING API ---
-  app.post('/api/migration/analyze', requireAuth, async (req: AuthRequest, res) => {
+  app.post('/api/migration/analyze', requireAuth, authorizeRole(['admin']), async (req: AuthRequest, res) => {
     const { text, fileType } = req.body;
     if (!text) {
       return res.status(400).json({ error: 'Nenhum dado ou texto fornecido para análise.' });
@@ -2643,7 +2694,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/migration/execute', requireAuth, async (req: AuthRequest, res) => {
+  app.post('/api/migration/execute', requireAuth, authorizeRole(['admin']), async (req: AuthRequest, res) => {
     const { rows, schoolName } = req.body;
     if (!rows || !Array.isArray(rows)) {
       return res.status(400).json({ error: 'Nenhum aluno válido fornecido para inserção.' });
@@ -3233,6 +3284,7 @@ async function startServer() {
   };
 
   // Register Enterprise Modularized School Task Routes (Repository, Service, Controller, Multi-Tenant isolated)
+  app.use('/api/school-tasks', requireAuth, multiTenantMiddleware);
   registerSchoolTaskRoutes(app);
 
   // 8. New School Tasks Management API with severe validation and real-time synchronisation

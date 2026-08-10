@@ -1,4 +1,5 @@
 import { WebSocket } from 'ws';
+import { InstitutionalContext } from '../../auth/institutional-context.ts';
 
 export interface TenantWebSocket extends WebSocket {
   tenantId?: string;
@@ -10,24 +11,10 @@ export class SchoolTaskWebSocketManager {
   /**
    * Register a new WebSocket connection and set up its message handlers
    */
-  static handleConnection(ws: TenantWebSocket, req: any): void {
+  static handleConnection(ws: TenantWebSocket, context: InstitutionalContext): void {
     this.clients.add(ws);
-    console.log('[WebSocketManager] New client connected.');
-
-    // 1. Try to extract tenantId from connection URL query params
-    try {
-      const urlString = req.url || '';
-      if (urlString.includes('tenantId=')) {
-        const urlParams = new URLSearchParams(urlString.split('?')[1]);
-        const tId = urlParams.get('tenantId');
-        if (tId) {
-          ws.tenantId = tId;
-          console.log(`[WebSocketManager] Client bound to tenant '${tId}' via handshake query.`);
-        }
-      }
-    } catch (err) {
-      console.error('[WebSocketManager] Handshake parsing error:', err);
-    }
+    ws.tenantId = context.institutionId;
+    console.log('[WebSocketManager] Authenticated client connected.');
 
     // Send confirmation heartbeat
     ws.send(JSON.stringify({
@@ -46,13 +33,13 @@ export class SchoolTaskWebSocketManager {
         
         if (parsed.type === 'SUBSCRIBE') {
           const { tenantId } = parsed;
-          if (tenantId && typeof tenantId === 'string') {
-            ws.tenantId = tenantId;
-            console.log(`[WebSocketManager] Client joined subscription room for tenant '${tenantId}'`);
+          if (!tenantId || tenantId === ws.tenantId) {
             ws.send(JSON.stringify({
               type: 'SUBSCRIBED',
-              payload: { tenantId }
+              payload: { tenantId: ws.tenantId }
             }));
+          } else {
+            ws.send(JSON.stringify({ type: 'ERROR', payload: { error: 'Instituição não autorizada.' } }));
           }
         } else if (parsed.type === 'PING') {
           ws.send(JSON.stringify({ type: 'PONG' }));
@@ -98,10 +85,17 @@ export class SchoolTaskWebSocketManager {
   }
 
   /**
-   * Universal broadcast as fallback (respects tenant context)
+   * Publish only when the caller supplies a verified institution identifier.
+   * There is deliberately no default room: a missing context must never turn
+   * into a cross-institution broadcast.
    */
-  static broadcast(type: string, payload: any, fallbackTenantId: string = 'default-tenant'): void {
-    const tenantId = payload.tenantId || payload.data?.tenantId || fallbackTenantId;
-    this.broadcastToTenant(tenantId, type, payload);
+  static broadcast(institutionId: string | undefined, type: string, payload: unknown): boolean {
+    if (!institutionId) {
+      console.warn(`[WebSocketManager] Event '${type}' rejected: institutional context is required.`);
+      return false;
+    }
+
+    this.broadcastToTenant(institutionId, type, payload);
+    return true;
   }
 }

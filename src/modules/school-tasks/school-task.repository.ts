@@ -1,4 +1,4 @@
-import { db, inMemoryDb } from '../../db/index.ts';
+import { db, inMemoryDb, isPersistentDatabaseConfigured } from '../../db/index.ts';
 import { schoolTasks, taskVersions } from '../../db/schema.ts';
 import { eq, and, or, desc, sql, asc } from 'drizzle-orm';
 
@@ -242,7 +242,7 @@ export class SchoolTaskRepository {
     if (search && search.trim().length > 0) {
       const cleanTerm = search.trim();
 
-      if (!process.env.SQL_HOST) {
+      if (!isPersistentDatabaseConfigured) {
         // High-fidelity local memory full-text search emulator
         const tasks = inMemoryDb.school_tasks.filter((t: any) => {
           if (t.tenantId !== tenantId || t.isDeleted) return false;
@@ -317,7 +317,7 @@ export class SchoolTaskRepository {
     const baseWhere = this.withTenant(tenantId, conditions);
 
     if (search && search.trim().length > 0) {
-      if (!process.env.SQL_HOST) {
+      if (!isPersistentDatabaseConfigured) {
         const cleanTerm = search.trim().toLowerCase();
         return inMemoryDb.school_tasks.filter((t: any) => {
           if (t.tenantId !== tenantId || t.isDeleted) return false;

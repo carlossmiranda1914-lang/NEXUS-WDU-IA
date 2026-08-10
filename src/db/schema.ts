@@ -57,6 +57,9 @@ export const studentProfiles = pgTable('student_profiles', {
   institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
   personId: uuid('person_id').notNull().references(() => people.id, { onDelete: 'restrict' }),
   studentNumber: text('student_number'),
+  // Transitional link to the legacy SIS record. It is intentionally nullable:
+  // no profile receives access to legacy data until an administrator maps it.
+  legacyStudentId: text('legacy_student_id'),
   status: text('status').notNull().default('active'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

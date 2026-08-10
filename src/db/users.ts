@@ -18,11 +18,6 @@ export async function getOrCreateUser(uid: string, email: string, name: string, 
         lastAccess: new Date(),
       };
       
-      if (normalizedEmail === 'carlossmiranda1914@gmail.com') {
-        updatePayload.role = 'admin';
-        updatePayload.status = 'active';
-      }
-
       const updated = await db.update(users)
         .set(updatePayload)
         .where(eq(users.uid, uid))
@@ -48,11 +43,6 @@ export async function getOrCreateUser(uid: string, email: string, name: string, 
         lastAccess: new Date(),
       };
       
-      if (normalizedEmail === 'carlossmiranda1914@gmail.com') {
-        updatePayload.role = 'admin';
-        updatePayload.status = 'active';
-      }
-
       const updated = await db.update(users)
         .set(updatePayload)
         .where(eq(users.email, normalizedEmail))
@@ -69,16 +59,11 @@ export async function getOrCreateUser(uid: string, email: string, name: string, 
       lastAccess: new Date(),
     };
     
-    if (normalizedEmail === 'carlossmiranda1914@gmail.com') {
-      valuesToInsert.role = 'admin';
-      valuesToInsert.status = 'active';
+    valuesToInsert.status = 'unverified_email';
+    if (role) {
+      valuesToInsert.role = role;
     } else {
-      valuesToInsert.status = 'unverified_email';
-      if (role) {
-        valuesToInsert.role = role;
-      } else {
-        valuesToInsert.role = 'student';
-      }
+      valuesToInsert.role = 'student';
     }
 
     const result = await db.insert(users).values(valuesToInsert).returning();

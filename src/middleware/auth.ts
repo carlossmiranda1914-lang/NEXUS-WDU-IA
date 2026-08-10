@@ -1,80 +1,54 @@
 import { Request, Response, NextFunction } from 'express';
 import { adminAuth } from '../lib/firebase-admin.ts';
-import { getOrCreateUser } from '../db/users.ts';
+import { pool } from '../db/index.ts';
+import { InstitutionalContext, resolveInstitutionalContext } from '../auth/institutional-context.ts';
 
 export interface AuthRequest extends Request {
-  user?: any; // DecodedIdToken with db user info attached
+  user?: any;
+  institutionalContext?: InstitutionalContext;
 }
 
-export const requireAuth = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
+export const requireAuth = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (req.user && req.institutionalContext) return next();
   const authHeader = req.headers.authorization;
-
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.warn('[AUTH-MIDDLEWARE] Blocked request: Missing or malformed Authorization header:', req.path);
     return res.status(401).json({ error: 'Unauthorized: Missing token' });
   }
 
-  const token = authHeader.split('Bearer ')[1];
-  console.log(`[AUTH-MIDDLEWARE] Processing auth token for path: ${req.method} ${req.path}`);
-  
   try {
-    const decodedToken = await adminAuth.verifyIdToken(token);
-
-    if (!decodedToken || !decodedToken.uid) {
-      console.error('[AUTH-MIDDLEWARE] Critical: Token could not be verified or has no UID.');
+    const decodedToken = await adminAuth.verifyIdToken(authHeader.split('Bearer ')[1]);
+    if (!decodedToken?.uid) {
       return res.status(401).json({ error: 'Unauthorized: Invalid token payload' });
     }
 
-    const email = decodedToken.email;
-    if (!email) {
-      console.error('[AUTH-MIDDLEWARE] Critical: Token does not contain an email address.');
-      return res.status(401).json({ error: 'Unauthorized: Token must contain email' });
+    const requestedInstitutionId = typeof req.headers['x-institution-id'] === 'string'
+      ? req.headers['x-institution-id']
+      : undefined;
+    const resolution = await resolveInstitutionalContext(pool, decodedToken.uid, requestedInstitutionId);
+
+    if (resolution.kind === 'missing_membership') {
+      return res.status(403).json({ error: 'Acesso pendente: esta conta não possui uma associação institucional ativa.' });
     }
-    const name = decodedToken.name || email.split('@')[0] || 'Utilizador Nexus';
-    
-    console.log('[AUTH-MIDDLEWARE] A sincronizar perfil de utilizador com a base de dados.');
-    
-    const dbUser = await getOrCreateUser(decodedToken.uid, email, name);
-    console.log('[AUTH] Token verificado para path:', req.path);
-    
-    if (!dbUser) {
-      console.error('[AUTH-MIDDLEWARE] Failed to persist/fetch user profile in PostgreSQL.');
-      return res.status(401).json({ error: 'Unauthorized: Failed to resolve database user profile' });
+    if (resolution.kind === 'institution_selection_required') {
+      return res.status(409).json({ error: 'Seleção de instituição necessária.', institutions: resolution.institutions });
+    }
+    if (resolution.kind === 'institution_not_authorized') {
+      return res.status(403).json({ error: 'Acesso recusado para a instituição solicitada.' });
     }
 
-    // Safety verification for suspended and pending user accounts (except profile page itself and access request endpoints)
-    if (dbUser.status === 'suspended' && req.path !== '/api/profile') {
-      console.warn(`[AUTH-MIDDLEWARE] Access blocked: Account is suspended for user=${dbUser.email}`);
-      return res.status(403).json({ error: 'Conta Suspensa: O acesso aos recursos foi temporariamente bloqueado pela direção.' });
-    }
-
-    if (dbUser.status === 'unverified_email' && req.path !== '/api/profile') {
-      console.warn(`[AUTH-MIDDLEWARE] Access blocked: Email is unverified for user=${dbUser.email}`);
-      return res.status(403).json({ error: 'E-mail Não Confirmado: Por favor, confirme o seu endereço de email usando o código enviado para aceder ao sistema.' });
-    }
-
-    if (dbUser.status === 'pending' && req.path !== '/api/profile' && req.path !== '/api/profile/request-access') {
-      console.warn(`[AUTH-MIDDLEWARE] Access blocked: Account is pending for user=${dbUser.email}`);
-      return res.status(403).json({ error: 'Acesso Pendente: A sua conta está sob validação do administrador. Por favor, aguarde.' });
-    }
-
-    // Attach both firebase payload and database user profile
+    const context = resolution.context;
+    req.institutionalContext = context;
     req.user = {
       ...decodedToken,
-      dbId: dbUser.id,
-      dbRole: dbUser.role,
-      dbName: dbUser.name,
-      dbStatus: dbUser.status
+      dbId: context.personId,
+      // Temporary compatibility mapping while the legacy endpoints are migrated.
+      dbRole: context.role === 'institution_admin' ? 'admin' : context.role,
+      dbName: context.personName,
+      dbStatus: 'active',
     };
-    
-    console.log(`[AUTH-MIDDLEWARE] Authorization successful for role=${req.user.dbRole}`);
     next();
   } catch (error: any) {
     console.warn('[AUTH-MIDDLEWARE] Authentication error:', error.message || error);
-    return res.status(401).json({ error: `Unauthorized: ${error.message || String(error)}` });
+    return res.status(401).json({ error: 'Unauthorized: token could not be verified' });
   }
 };
