@@ -1,6 +1,6 @@
 # Missão 08 — Preparar Matrícula Integrada e Student 360
 
-**Estado:** PREPARAÇÃO — ainda não iniciar implementação funcional ou visual.
+**Estado:** EM IMPLEMENTAÇÃO — a camada de dados, API institucional e validação em base de testes foram iniciadas. A interface substituta continua dependente da validação do fluxo real.
 
 ## Decisão de prioridade
 
@@ -10,7 +10,14 @@ O Plano Mestre v4.2 define a Fase 2 como o primeiro fluxo vertical do Nexus: mat
 
 Uma secretaria consegue iniciar uma matrícula, identificar ou criar a pessoa correta, relacionar aluno e encarregado, acompanhar documentos e ver o estado do processo. Cada passo deve ter responsável, estado, evidência e histórico.
 
-## Esta missão prepara, mas não implementa ainda
+## Entrega inicial implementada
+
+1. Migração vNext para ano letivo, ofertas, matrículas, checklist documental e linha temporal.
+2. API institucional autenticada para listar, criar e transitar matrículas.
+3. Regras de transição por papel, testadas isoladamente.
+4. Aplicação e verificação da migração na base de testes, sem alteração da base oficial.
+
+## Trabalho ainda pendente para encerrar a missão
 
 1. O modelo de dados mínimo: pessoa, aluno, encarregado, candidatura/matrícula, ano letivo, oferta/turma e checklist documental.
 2. A máquina de estados: rascunho, em análise, a aguardar documentos, validada, bloqueada, ativa e cancelada.

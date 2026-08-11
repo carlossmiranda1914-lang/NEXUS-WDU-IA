@@ -3,9 +3,17 @@ import pg from 'pg';
 
 dotenv.config();
 
-const databaseUrl = process.env.DATABASE_URL?.trim();
+const verifyTestDatabase = process.env.VERIFY_TEST_DATABASE === 'NEXUS_TEST_DATABASE';
+const databaseUrl = verifyTestDatabase
+  ? process.env.TEST_DATABASE_URL?.trim()
+  : process.env.DATABASE_URL?.trim();
 if (!databaseUrl) {
-  throw new Error('DATABASE_URL is required for the read-only schema verification.');
+  throw new Error(verifyTestDatabase
+    ? 'TEST_DATABASE_URL is required for the test schema verification.'
+    : 'DATABASE_URL is required for the read-only schema verification.');
+}
+if (verifyTestDatabase && databaseUrl === process.env.DATABASE_URL?.trim()) {
+  throw new Error('Test schema verification must not use DATABASE_URL.');
 }
 
 const { Pool } = pg;
@@ -20,6 +28,11 @@ const requiredTables = [
   'guardian_relationships',
   'institution_resource_ownership',
   'operational_logs',
+  'academic_years',
+  'enrollment_offers',
+  'enrollment_applications',
+  'enrollment_documents',
+  'enrollment_events',
 ];
 
 const requiredColumns: Record<string, string[]> = {
@@ -31,6 +44,11 @@ const requiredColumns: Record<string, string[]> = {
   guardian_relationships: ['institution_id', 'guardian_person_id', 'student_person_id'],
   institution_resource_ownership: ['institution_id', 'resource_type', 'resource_id'],
   operational_logs: ['institution_id', 'request_id', 'correlation_id', 'outcome', 'metadata'],
+  academic_years: ['institution_id', 'name', 'starts_on', 'ends_on', 'status'],
+  enrollment_offers: ['institution_id', 'academic_year_id', 'name', 'code', 'status'],
+  enrollment_applications: ['institution_id', 'student_person_id', 'academic_year_id', 'offer_id', 'status'],
+  enrollment_documents: ['institution_id', 'enrollment_application_id', 'document_type', 'status'],
+  enrollment_events: ['institution_id', 'enrollment_application_id', 'actor_person_id', 'event_type'],
 };
 
 async function verifySchema(): Promise<void> {

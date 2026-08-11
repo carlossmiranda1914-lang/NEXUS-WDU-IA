@@ -1,5 +1,6 @@
 import { pgTable, serial, text, integer, timestamp, boolean, doublePrecision, jsonb, date, uuid, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 // vNext identity model. These tables intentionally coexist with the legacy
 // `users` table during the progressive migration.
@@ -216,6 +217,72 @@ export const operationalLogs = pgTable('operational_logs', {
   metadata: jsonb('metadata').notNull().default({}),
   createdAt: timestamp('created_at').defaultNow(),
 });
+
+// The enrollment domain is separate from the legacy `students` table.  Every
+// record has an institution boundary and the student is always a `person`.
+export const academicYears = pgTable('academic_years', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  startsOn: date('starts_on').notNull(),
+  endsOn: date('ends_on').notNull(),
+  status: text('status').notNull().default('draft'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex('academic_years_institution_name_unique').on(table.institutionId, table.name)]);
+
+export const enrollmentOffers = pgTable('enrollment_offers', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  academicYearId: uuid('academic_year_id').notNull().references(() => academicYears.id, { onDelete: 'restrict' }),
+  name: text('name').notNull(),
+  code: text('code').notNull(),
+  status: text('status').notNull().default('active'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex('enrollment_offers_institution_code_unique').on(table.institutionId, table.code)]);
+
+export const enrollmentApplications = pgTable('enrollment_applications', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  studentPersonId: uuid('student_person_id').notNull().references(() => people.id, { onDelete: 'restrict' }),
+  guardianPersonId: uuid('guardian_person_id').references(() => people.id, { onDelete: 'restrict' }),
+  academicYearId: uuid('academic_year_id').notNull().references(() => academicYears.id, { onDelete: 'restrict' }),
+  offerId: uuid('offer_id').notNull().references(() => enrollmentOffers.id, { onDelete: 'restrict' }),
+  status: text('status').notNull().default('draft'),
+  createdBy: uuid('created_by').notNull().references(() => people.id, { onDelete: 'restrict' }),
+  updatedBy: uuid('updated_by').notNull().references(() => people.id, { onDelete: 'restrict' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('enrollment_applications_active_unique').on(table.institutionId, table.studentPersonId, table.academicYearId).where(sql`status <> 'cancelled'`),
+  index('enrollment_applications_institution_status_idx').on(table.institutionId, table.status),
+]);
+
+export const enrollmentDocuments = pgTable('enrollment_documents', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  enrollmentApplicationId: uuid('enrollment_application_id').notNull().references(() => enrollmentApplications.id, { onDelete: 'cascade' }),
+  documentType: text('document_type').notNull(),
+  status: text('status').notNull().default('pending'),
+  evidenceReference: text('evidence_reference'),
+  verifiedBy: uuid('verified_by').references(() => people.id, { onDelete: 'restrict' }),
+  verifiedAt: timestamp('verified_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex('enrollment_documents_application_type_unique').on(table.enrollmentApplicationId, table.documentType)]);
+
+export const enrollmentEvents = pgTable('enrollment_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  enrollmentApplicationId: uuid('enrollment_application_id').notNull().references(() => enrollmentApplications.id, { onDelete: 'cascade' }),
+  actorPersonId: uuid('actor_person_id').notNull().references(() => people.id, { onDelete: 'restrict' }),
+  eventType: text('event_type').notNull(),
+  fromStatus: text('from_status'),
+  toStatus: text('to_status'),
+  metadata: jsonb('metadata').notNull().default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [index('enrollment_events_application_created_idx').on(table.enrollmentApplicationId, table.createdAt)]);
 
 // DEFINE SYSTEM RELATIONSHIPS
 export const studentRelations = relations(students, ({ many }) => ({

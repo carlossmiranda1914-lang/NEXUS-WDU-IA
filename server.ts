@@ -20,6 +20,7 @@ import { initializeDatabase } from './src/db/init.ts';
 
 // Modularized Enterprise School Tasks imports
 import { registerSchoolTaskRoutes } from './src/modules/school-tasks/school-task.controller.ts';
+import { registerEnrollmentRoutes } from './src/modules/enrollments/enrollment.controller.ts';
 import { SchoolTaskWebSocketManager } from './src/modules/school-tasks/websocket-manager.ts';
 import { eventBus } from './src/modules/school-tasks/event-bus.ts';
 import { registerSchoolTaskRealtimeBridge } from './src/modules/school-tasks/realtime-bridge.ts';
@@ -3483,6 +3484,7 @@ async function startServer() {
   // Register Enterprise Modularized School Task Routes (Repository, Service, Controller, Multi-Tenant isolated)
   app.use('/api/school-tasks', requireAuth, multiTenantMiddleware);
   registerSchoolTaskRoutes(app);
+  registerEnrollmentRoutes(app);
 
   // 8. New School Tasks Management API with severe validation and real-time synchronisation
   app.get('/api/school-tasks/metrics', requireAuth, authorizeTaskAction('view_metrics'), rateLimiter('analytics', 20), async (req: AuthRequest, res) => {
