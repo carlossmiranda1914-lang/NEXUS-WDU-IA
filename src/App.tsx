@@ -731,9 +731,26 @@ export default function App() {
     let ws: WebSocket | null = null;
     let reconnectTimeout: any = null;
     
-    function connect() {
-      console.log('[REALTIME] Initializing WebSocket Connection to Live Org:', wsUrl);
-      ws = new WebSocket(wsUrl);
+    async function connect() {
+      try {
+        const token = await firebaseUser.getIdToken();
+        if (!token) {
+          setIsLiveConnected(false);
+          return;
+        }
+
+        // The server verifies this token and derives the institution from the
+        // active membership. The browser never chooses a room by itself.
+        const secureWsUrl = new URL(wsUrl);
+        secureWsUrl.searchParams.set('access_token', token);
+        console.log('[REALTIME] Initializing authenticated institutional connection.');
+        ws = new WebSocket(secureWsUrl.toString());
+      } catch (error) {
+        console.warn('[REALTIME] Could not obtain an authenticated connection token:', error);
+        setIsLiveConnected(false);
+        reconnectTimeout = setTimeout(connect, 4000);
+        return;
+      }
       
       ws.onopen = () => {
         console.log('[REALTIME] WebSocket connected. Live organization updates ready.');

@@ -22,6 +22,7 @@ import { initializeDatabase } from './src/db/init.ts';
 import { registerSchoolTaskRoutes } from './src/modules/school-tasks/school-task.controller.ts';
 import { SchoolTaskWebSocketManager } from './src/modules/school-tasks/websocket-manager.ts';
 import { eventBus } from './src/modules/school-tasks/event-bus.ts';
+import { registerSchoolTaskRealtimeBridge } from './src/modules/school-tasks/realtime-bridge.ts';
 
 
 let wssInstance: WebSocketServer | null = null;
@@ -183,6 +184,7 @@ async function startServer() {
   // Setup live WebSocket Server
   const wss = new WebSocketServer({ server });
   wssInstance = wss;
+  registerSchoolTaskRealtimeBridge();
 
   wss.on('connection', async (ws, req) => {
     try {

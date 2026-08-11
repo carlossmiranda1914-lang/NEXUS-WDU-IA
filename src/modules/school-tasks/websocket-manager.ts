@@ -63,7 +63,7 @@ export class SchoolTaskWebSocketManager {
   /**
    * Broadcast real-time events strictly within the tenant room boundary
    */
-  static broadcastToTenant(tenantId: string, type: string, payload: any): void {
+  static broadcastToTenant(tenantId: string, type: string, payload: unknown): void {
     console.log(`[WebSocketManager] Broadcasting strictly to room 'tenant-${tenantId}' for event type: ${type}`);
     let sentCount = 0;
     
@@ -90,7 +90,7 @@ export class SchoolTaskWebSocketManager {
    * into a cross-institution broadcast.
    */
   static broadcast(institutionId: string | undefined, type: string, payload: unknown): boolean {
-    if (!institutionId) {
+    if (!institutionId || !institutionId.trim()) {
       console.warn(`[WebSocketManager] Event '${type}' rejected: institutional context is required.`);
       return false;
     }
