@@ -25,3 +25,4 @@ Foi iniciada a implementação da Matrícula Integrada e Student 360 sem reutili
 - Compilação TypeScript.
 - Testes unitários das regras de autorização e transição.
 - Migração e verificação na base de testes antes de qualquer aplicação na base oficial.
+- Migração `0006_vnext_enrollment_student360.sql` aplicada na base oficial em 2026-08-11, com verificação posterior em modo de leitura: 13 tabelas vNext confirmadas.
