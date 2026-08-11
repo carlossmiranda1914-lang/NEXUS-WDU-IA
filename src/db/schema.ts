@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp, boolean, doublePrecision, jsonb, date, uuid, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, integer, timestamp, boolean, doublePrecision, jsonb, date, uuid, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
 // vNext identity model. These tables intentionally coexist with the legacy
@@ -78,6 +78,19 @@ export const guardianRelationships = pgTable('guardian_relationships', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   uniqueIndex('guardian_relationships_institution_guardian_student_unique').on(table.institutionId, table.guardianPersonId, table.studentPersonId),
+]);
+
+// Ownership bridge for records that still live in legacy domain tables. A
+// resource can belong to exactly one institution; no mapping means no access.
+export const institutionResourceOwnership = pgTable('institution_resource_ownership', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  resourceType: text('resource_type').notNull(),
+  resourceId: text('resource_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('institution_resource_ownership_resource_unique').on(table.resourceType, table.resourceId),
+  index('institution_resource_ownership_scope_idx').on(table.institutionId, table.resourceType),
 ]);
 
 // 1. Users Profile Table (linked directly to Firebase Authentication UID)
