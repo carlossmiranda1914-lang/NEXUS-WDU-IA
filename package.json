@@ -10,6 +10,7 @@
     "test:integrity": "tsx test-integrity.ts",
     "test:auth": "tsx test-auth-stabilization.ts",
     "test:schema": "tsx scripts/verify-vnext-schema.ts",
+    "test:database:setup": "tsx scripts/setup-test-database.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

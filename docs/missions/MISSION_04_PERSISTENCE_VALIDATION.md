@@ -19,6 +19,10 @@ mistake.
 - A test URL equal to `DATABASE_URL` is refused.
 - Without a dedicated test database, mutation tests report an explicit safe
   skip instead of attempting localhost or production.
+- The dedicated `NEXUS.EDU.AI-TEST` database was initialized with all four
+  vNext migrations and the legacy tables required by the existing test suites.
+- Real mutation tests passed on the test database: 7/7 school-task integrity
+  tests and 5/5 authentication persistence tests.
 
 ## Validation commands
 
@@ -30,8 +34,7 @@ mistake.
   context, ownership, and WebSocket isolation
 - `npm run build`
 
-## Remaining operational setup
+## Operational rule
 
-A dedicated non-production PostgreSQL database is still required before the
-mutation suites can execute real inserts and deletes. This is an infrastructure
-setup task, not a production-data action.
+Keep `NEXUS.EDU.AI-TEST` for the duration of development. It contains only
+synthetic test records and is the only approved target for mutation suites.
