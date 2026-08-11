@@ -152,7 +152,12 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(helmet());
+  // Vite injects a small inline module to enable React Refresh in local
+  // development. The production CSP remains enabled; only the development
+  // server disables this policy so the local app can render.
+  app.use(helmet({
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+  }));
   app.use(cors({
     origin: process.env.NODE_ENV === 'production' 
       ? [process.env.APP_URL || ''] 
