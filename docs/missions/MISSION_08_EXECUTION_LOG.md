@@ -9,6 +9,8 @@ Foi iniciada a implementação da Matrícula Integrada e Student 360 sem reutili
 - Migração vNext para anos letivos, ofertas, matrículas, checklist documental e linha temporal.
 - Isolamento obrigatório por `institution_id` em cada entidade nova.
 - API autenticada para listar, criar e transitar matrículas.
+- Área de Secretaria no frontend ligada à API institucional, com estados de carregamento, vazio, erro e sucesso.
+- O portal demonstrativo deixou de ser carregado no separador de matrículas; permanece no repositório apenas como legado não utilizado.
 - Estados explícitos: `draft`, `under_review`, `awaiting_documents`, `validated`, `blocked`, `active` e `cancelled`.
 - Regras de papel: secretaria prepara e analisa; direção ou administrador institucional ativam; professor, aluno e encarregado não gerem matrículas.
 - Auditoria de linha temporal por matrícula.

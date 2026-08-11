@@ -72,7 +72,7 @@ const SystemConfig = lazy(() => import('./components/SystemConfig'));
 const AIAssistant = lazy(() => import('./components/AIAssistant'));
 const TeacherAI = lazy(() => import('./components/TeacherAI'));
 const Gamification = lazy(() => import('./components/Gamification'));
-const MatriculaPortal = lazy(() => import('./components/MatriculaPortal'));
+const EnrollmentWorkspace = lazy(() => import('./components/EnrollmentWorkspace'));
 const SchoolDocuments = lazy(() => import('./components/SchoolDocuments'));
 const WorkflowsCentral = lazy(() => import('./components/WorkflowsCentral'));
 const ParentPortal = lazy(() => import('./components/ParentPortal'));
@@ -2861,11 +2861,7 @@ export default function App() {
                       )}
                       
                       {studentsSubTab === 'matriculas' && (
-                        <MatriculaPortal 
-                          students={visibleStudents}
-                          onAddStudent={handleAddStudent}
-                          onUpdateStudent={handleUpdateStudent}
-                        />
+                        <EnrollmentWorkspace />
                       )}
                       
                       {studentsSubTab === 'gamification' && (
