@@ -1,3 +1,7 @@
+// Must execute before the database module is imported. ESM imports are loaded
+// before the server body, so calling dotenv.config() later is too late for the
+// database runtime policy.
+import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
