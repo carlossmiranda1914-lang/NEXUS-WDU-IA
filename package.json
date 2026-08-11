@@ -9,6 +9,7 @@
     "start": "node dist/server.cjs",
     "test:integrity": "tsx test-integrity.ts",
     "test:auth": "tsx test-auth-stabilization.ts",
+    "test:schema": "tsx scripts/verify-vnext-schema.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
