@@ -1,3 +1,7 @@
+// Must execute before the database module is imported. ESM imports are loaded
+// before the server body, so calling dotenv.config() later is too late for the
+// database runtime policy.
+import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -20,8 +24,11 @@ import { initializeDatabase } from './src/db/init.ts';
 
 // Modularized Enterprise School Tasks imports
 import { registerSchoolTaskRoutes } from './src/modules/school-tasks/school-task.controller.ts';
+import { registerEnrollmentRoutes } from './src/modules/enrollments/enrollment.controller.ts';
 import { SchoolTaskWebSocketManager } from './src/modules/school-tasks/websocket-manager.ts';
 import { eventBus } from './src/modules/school-tasks/event-bus.ts';
+import { registerSchoolTaskRealtimeBridge } from './src/modules/school-tasks/realtime-bridge.ts';
+import { describeRequestForAudit, outcomeForStatus, shouldAuditRequest } from './src/observability/request-audit.ts';
 
 
 let wssInstance: WebSocketServer | null = null;
@@ -46,13 +53,15 @@ import {
   uploadedDocuments,
   operationalLogs,
   approvals,
-  schoolTasks
+  schoolTasks,
+  institutionResourceOwnership
 } from './src/db/schema.ts';
 import { requireAuth, AuthRequest } from './src/middleware/auth.ts';
 import { multiTenantMiddleware } from './src/middleware/multi-tenant.ts';
 import { adminAuth } from './src/lib/firebase-admin.ts';
 import { resolveInstitutionalContext } from './src/auth/institutional-context.ts';
 import { resolveAuthorizedStudents } from './src/auth/authorized-students.ts';
+import { isInstitutionOwned, resolveInstitutionOwnedResourceIds } from './src/auth/institution-resource-ownership.ts';
 import { eq, desc, sql, and, ne, inArray } from 'drizzle-orm';
 
 async function resolveAuthorizedLegacyStudentIds(req: AuthRequest): Promise<string[]> {
@@ -64,6 +73,16 @@ async function resolveAuthorizedLegacyStudentIds(req: AuthRequest): Promise<stri
   return authorizedStudents
     .map((student) => student.legacyStudentId)
     .filter((studentId): studentId is string => Boolean(studentId));
+}
+
+async function scopeLegacyRecordsToInstitution<T extends { id: string | number }>(
+  req: AuthRequest,
+  resourceType: string,
+  records: T[],
+): Promise<T[]> {
+  if (!req.institutionalContext) return [];
+  const ownedIds = await resolveInstitutionOwnedResourceIds(pool, req.institutionalContext, resourceType);
+  return records.filter((record) => isInstitutionOwned(String(record.id), ownedIds));
 }
 
 // Load environment variables
@@ -133,7 +152,12 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(helmet());
+  // Vite injects a small inline module to enable React Refresh in local
+  // development. The production CSP remains enabled; only the development
+  // server disables this policy so the local app can render.
+  app.use(helmet({
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+  }));
   app.use(cors({
     origin: process.env.NODE_ENV === 'production' 
       ? [process.env.APP_URL || ''] 
@@ -171,6 +195,7 @@ async function startServer() {
   // Setup live WebSocket Server
   const wss = new WebSocketServer({ server });
   wssInstance = wss;
+  registerSchoolTaskRealtimeBridge();
 
   wss.on('connection', async (ws, req) => {
     try {
@@ -223,6 +248,15 @@ async function startServer() {
   // Express middleware to track live institutional platform metrics
   app.use((req, res, next) => {
     const start = Date.now();
+    const requestId = `req-${crypto.randomUUID()}`;
+    const suppliedCorrelationId = req.header('x-correlation-id');
+    const correlationId = suppliedCorrelationId && /^[a-zA-Z0-9._-]{8,128}$/.test(suppliedCorrelationId)
+      ? suppliedCorrelationId
+      : `corr-${crypto.randomUUID()}`;
+    res.setHeader('X-Request-ID', requestId);
+    res.setHeader('X-Correlation-ID', correlationId);
+    req.headers['x-request-id'] = requestId;
+    req.headers['x-correlation-id'] = correlationId;
     platformStats.totalRequests++;
     platformStats.lastRequestTime = new Date().toISOString();
 
@@ -247,6 +281,23 @@ async function startServer() {
       // If a successful database write command is executed via the API, synchronize lastSyncTime
       if (res.statusCode < 400 && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method || '')) {
         platformStats.lastSyncTime = new Date().toISOString();
+      }
+
+      const authReq = req as AuthRequest;
+      if (authReq.institutionalContext && shouldAuditRequest({ method: req.method, statusCode: res.statusCode, durationMs: duration })) {
+        const routePattern = req.route?.path ? `${req.baseUrl || ''}${req.route.path}` : undefined;
+        void db.insert(operationalLogs).values({
+          institutionId: authReq.institutionalContext.institutionId,
+          userId: authReq.user?.uid || authReq.institutionalContext.personId,
+          userName: authReq.institutionalContext.personName,
+          userRole: authReq.institutionalContext.role,
+          action: `HTTP_${req.method.toUpperCase()}`,
+          details: describeRequestForAudit({ method: req.method, statusCode: res.statusCode, durationMs: duration, routePattern }),
+          requestId,
+          correlationId,
+          outcome: outcomeForStatus(res.statusCode),
+          metadata: { statusCode: res.statusCode, durationMs: duration },
+        }).catch((error) => console.error('[AUDIT] Failed to persist request audit record:', error));
       }
     });
 
@@ -837,7 +888,7 @@ async function startServer() {
         lastAccess: users.lastAccess,
         createdAt: users.createdAt
       }).from(users).orderBy(users.id);
-      res.json(allUsers);
+      res.json(await scopeLegacyRecordsToInstitution(req, 'user', allUsers));
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -866,6 +917,11 @@ async function startServer() {
         valuesToInsert.role = role;
       }
       const newUser = await db.insert(users).values(valuesToInsert).returning();
+      await db.insert(institutionResourceOwnership).values({
+        institutionId: req.institutionalContext!.institutionId,
+        resourceType: 'user',
+        resourceId: String(newUser[0].id),
+      });
 
       // LOG IT
       await db.insert(operationalLogs).values({
@@ -886,6 +942,15 @@ async function startServer() {
     try {
       const idNum = parseInt(req.params.id);
       const { email, name, role, phone, department, status } = req.body;
+
+      const ownedUserIds = await resolveInstitutionOwnedResourceIds(
+        pool,
+        req.institutionalContext!,
+        'user'
+      );
+      if (!isInstitutionOwned(String(idNum), ownedUserIds)) {
+        return res.status(404).json({ error: 'Utilizador não encontrado.' });
+      }
 
       await db.update(users).set({
         email: email ? email.trim().toLowerCase() : undefined,
@@ -916,6 +981,14 @@ async function startServer() {
   app.delete('/api/users/:id', requireAuth, authorizeRole(['admin']), async (req: AuthRequest, res) => {
     try {
       const idNum = parseInt(req.params.id);
+      const ownedUserIds = await resolveInstitutionOwnedResourceIds(
+        pool,
+        req.institutionalContext!,
+        'user'
+      );
+      if (!isInstitutionOwned(String(idNum), ownedUserIds)) {
+        return res.status(404).json({ error: 'Utilizador não encontrado.' });
+      }
       await db.delete(users).where(eq(users.id, idNum));
 
       // LOG IT
@@ -1004,7 +1077,7 @@ async function startServer() {
           .orderBy(students.id);
       }
 
-      res.json(records);
+      res.json(await scopeLegacyRecordsToInstitution(req, 'student', records));
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1018,6 +1091,15 @@ async function startServer() {
         // Check if student exists in database
         const existing = await db.select().from(students).where(eq(students.id, id)).limit(1);
         if (existing.length > 0) {
+          const ownedStudentIds = await resolveInstitutionOwnedResourceIds(
+            pool,
+            req.institutionalContext!,
+            'student'
+          );
+          if (!isInstitutionOwned(id, ownedStudentIds)) {
+            return res.status(404).json({ error: 'Estudante não encontrado.' });
+          }
+
           // --- 1. UPDATE EXISTING STUDENT ---
           await db.update(students).set({
             name: name || existing[0].name,
@@ -1148,6 +1230,11 @@ async function startServer() {
       };
 
       await db.insert(students).values(newStudentObj);
+      await db.insert(institutionResourceOwnership).values({
+        institutionId: req.institutionalContext!.institutionId,
+        resourceType: 'student',
+        resourceId: targetId,
+      });
 
       // Generate the Immediate Enrollment Invoice Fee
       const primaryInvId = `FAT-${9900 + nextIdNum}`;
@@ -1159,6 +1246,11 @@ async function startServer() {
         dueDate: nowStr, // Due today!
         status: 'pending',
         category: 'tuition'
+      });
+      await db.insert(institutionResourceOwnership).values({
+        institutionId: req.institutionalContext!.institutionId,
+        resourceType: 'invoice',
+        resourceId: primaryInvId,
       });
 
       // Generate Future Invoices (mensalidades futuras + calendário de cobrança)
@@ -1178,6 +1270,11 @@ async function startServer() {
           dueDate: dueStr,
           status: 'pending',
           category: 'tuition'
+        });
+        await db.insert(institutionResourceOwnership).values({
+          institutionId: req.institutionalContext!.institutionId,
+          resourceType: 'invoice',
+          resourceId: invId,
         });
       }
 
@@ -1222,6 +1319,14 @@ async function startServer() {
   app.delete('/api/students/:id', requireAuth, authorizeRole(['admin', 'secretariat', 'director']), async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+      const ownedStudentIds = await resolveInstitutionOwnedResourceIds(
+        pool,
+        req.institutionalContext!,
+        'student'
+      );
+      if (!isInstitutionOwned(id, ownedStudentIds)) {
+        return res.status(404).json({ error: 'Estudante não encontrado para eliminação.' });
+      }
       const existing = await db.select().from(students).where(eq(students.id, id)).limit(1);
       if (existing.length === 0) {
         return res.status(404).json({ error: 'Estudante não encontrado para eliminação.' });
@@ -1282,7 +1387,7 @@ async function startServer() {
           .orderBy(teachers.id);
       }
 
-      res.json(records);
+      res.json(await scopeLegacyRecordsToInstitution(req, 'teacher', records));
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1323,6 +1428,11 @@ async function startServer() {
       };
 
       await db.insert(teachers).values(newTeacher);
+      await db.insert(institutionResourceOwnership).values({
+        institutionId: req.institutionalContext!.institutionId,
+        resourceType: 'teacher',
+        resourceId: generatedId,
+      });
 
       await db.insert(operationalLogs).values({
         userId: req.user.uid,
@@ -1350,6 +1460,15 @@ async function startServer() {
     try {
       const { id } = req.params;
       const { name, email, phone, subjects, classes, status, schedule, productivityScore } = req.body;
+
+      const ownedTeacherIds = await resolveInstitutionOwnedResourceIds(
+        pool,
+        req.institutionalContext!,
+        'teacher'
+      );
+      if (!isInstitutionOwned(id, ownedTeacherIds)) {
+        return res.status(404).json({ error: 'Professor não encontrado para atualização.' });
+      }
 
       const existing = await db.select({
         id: teachers.id,
@@ -1398,6 +1517,14 @@ async function startServer() {
   app.delete('/api/teachers/:id', requireAuth, authorizeRole(['admin', 'director', 'secretariat']), async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+      const ownedTeacherIds = await resolveInstitutionOwnedResourceIds(
+        pool,
+        req.institutionalContext!,
+        'teacher'
+      );
+      if (!isInstitutionOwned(id, ownedTeacherIds)) {
+        return res.status(404).json({ error: 'Professor não encontrado para eliminação.' });
+      }
       const existing = await db.select({ id: teachers.id, name: teachers.name })
         .from(teachers)
         .where(eq(teachers.id, id))
@@ -1460,7 +1587,7 @@ async function startServer() {
           .orderBy(invoices.id);
       }
 
-      res.json(records);
+      res.json(await scopeLegacyRecordsToInstitution(req, 'invoice', records));
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1485,6 +1612,15 @@ async function startServer() {
         .limit(1);
 
       if (targetInvoice.length === 0) {
+        return res.status(404).json({ error: 'Fatura não encontrada.' });
+      }
+
+      const ownedInvoiceIds = await resolveInstitutionOwnedResourceIds(
+        pool,
+        req.institutionalContext!,
+        'invoice'
+      );
+      if (!isInstitutionOwned(id, ownedInvoiceIds)) {
         return res.status(404).json({ error: 'Fatura não encontrada.' });
       }
 
@@ -1555,6 +1691,15 @@ async function startServer() {
         return res.status(400).json({ error: 'Os campos studentId, amount e dueDate são obrigatórios.' });
       }
 
+      const ownedStudentIds = await resolveInstitutionOwnedResourceIds(
+        pool,
+        req.institutionalContext!,
+        'student'
+      );
+      if (!isInstitutionOwned(studentId, ownedStudentIds)) {
+        return res.status(404).json({ error: 'Estudante não encontrado.' });
+      }
+
       // Generate unique FAT ID efficiently with count(*)
       const countResult = await db.select({ count: sql`count(*)` }).from(invoices);
       const totalCount = Number((countResult[0] as any)?.count || 0);
@@ -1572,6 +1717,11 @@ async function startServer() {
       };
 
       await db.insert(invoices).values(newInv);
+      await db.insert(institutionResourceOwnership).values({
+        institutionId: req.institutionalContext!.institutionId,
+        resourceType: 'invoice',
+        resourceId: fatalId,
+      });
 
       // Increase student's outstanding fees
       const sRecord = await db.select({
@@ -1626,6 +1776,15 @@ async function startServer() {
         .where(eq(invoices.id, id))
         .limit(1);
       if (targetInvoice.length === 0) {
+        return res.status(404).json({ error: 'Fatura não encontrada.' });
+      }
+
+      const ownedInvoiceIds = await resolveInstitutionOwnedResourceIds(
+        pool,
+        req.institutionalContext!,
+        'invoice'
+      );
+      if (!isInstitutionOwned(id, ownedInvoiceIds)) {
         return res.status(404).json({ error: 'Fatura não encontrada.' });
       }
 
@@ -1684,7 +1843,7 @@ async function startServer() {
         return res.status(400).json({ error: 'Formato inválido. Requer lista de transações bancárias.' });
       }
 
-      const allInvoices = await db.select({
+      let allInvoices = await db.select({
         id: invoices.id,
         status: invoices.status,
         studentId: invoices.studentId,
@@ -1693,12 +1852,15 @@ async function startServer() {
       })
         .from(invoices);
 
-      const allStudents = await db.select({
+      let allStudents = await db.select({
         id: students.id,
         name: students.name,
         outstandingFees: students.outstandingFees,
       })
         .from(students);
+
+      allInvoices = await scopeLegacyRecordsToInstitution(req, 'invoice', allInvoices);
+      allStudents = await scopeLegacyRecordsToInstitution(req, 'student', allStudents);
 
       const reconciledList = [];
       const errorsList = [];
@@ -1801,7 +1963,7 @@ async function startServer() {
   // D. Financial AI Predictive Forecasting Analyst
   app.get('/api/financial/forecast', requireAuth, authorizeRole(['admin', 'director', 'financial']), async (req: AuthRequest, res) => {
     try {
-      const allInvoices = await db.select({
+      let allInvoices = await db.select({
         id: invoices.id,
         status: invoices.status,
         amount: invoices.amount,
@@ -1809,10 +1971,13 @@ async function startServer() {
       })
         .from(invoices);
 
-      const allStudents = await db.select({
+      let allStudents = await db.select({
         id: students.id,
       })
         .from(students);
+
+      allInvoices = await scopeLegacyRecordsToInstitution(req, 'invoice', allInvoices);
+      allStudents = await scopeLegacyRecordsToInstitution(req, 'student', allStudents);
 
       const activeInvoices = allInvoices.filter(i => i.status !== 'cancelled');
       const paidInvoices = activeInvoices.filter(i => i.status === 'paid');
@@ -1925,7 +2090,7 @@ async function startServer() {
       })
         .from(announcements)
         .orderBy(announcements.id);
-      res.json(records);
+      res.json(await scopeLegacyRecordsToInstitution(req, 'announcement', records));
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1952,6 +2117,11 @@ async function startServer() {
       };
 
       await db.insert(announcements).values(newAnn);
+      await db.insert(institutionResourceOwnership).values({
+        institutionId: req.institutionalContext!.institutionId,
+        resourceType: 'announcement',
+        resourceId: nextId,
+      });
 
       // Audit Log
       await db.insert(operationalLogs).values({
@@ -1986,7 +2156,7 @@ async function startServer() {
         query = query.where(eq(chatMessages.channel, channel as string)) as any;
       }
       const records = await query.orderBy(chatMessages.id);
-      res.json(records);
+      res.json(await scopeLegacyRecordsToInstitution(req, 'message', records));
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -2007,6 +2177,13 @@ async function startServer() {
       });
 
       const records = await db.select().from(chatMessages).orderBy(desc(chatMessages.id)).limit(1);
+      if (records[0]) {
+        await db.insert(institutionResourceOwnership).values({
+          institutionId: req.institutionalContext!.institutionId,
+          resourceType: 'message',
+          resourceId: String(records[0].id),
+        });
+      }
       
       // Broadcast chat message
       if (records && records.length > 0) {
@@ -2143,6 +2320,7 @@ async function startServer() {
     try {
       const role = req.user?.dbRole;
       let records = await db.select().from(uploadedDocuments).orderBy(uploadedDocuments.id);
+      records = await scopeLegacyRecordsToInstitution(req, 'document', records);
 
       // Enforce strict data isolation for documents in backend
       if (role === 'student' || role === 'parent') {
@@ -2219,6 +2397,11 @@ async function startServer() {
       }).returning();
 
       const docId = inserted[0].id;
+      await db.insert(institutionResourceOwnership).values({
+        institutionId: req.institutionalContext!.institutionId,
+        resourceType: 'document',
+        resourceId: String(docId),
+      });
 
       // 2. Real OCR Analysis using Gemini AI (if available) with local fallback OCR engine!
       let category = 'Unassigned';
@@ -2508,6 +2691,15 @@ async function startServer() {
     if (!id || isNaN(id)) return res.status(400).json({ error: 'Falta parametrizar ID numérico.' });
 
     try {
+      const ownedDocumentIds = await resolveInstitutionOwnedResourceIds(
+        pool,
+        req.institutionalContext!,
+        'document'
+      );
+      if (!isInstitutionOwned(String(id), ownedDocumentIds)) {
+        return res.status(404).json({ error: 'Documento não encontrado.' });
+      }
+
       const targetDoc = await db.select().from(uploadedDocuments).where(eq(uploadedDocuments.id, id)).limit(1);
       if (targetDoc.length === 0) return res.status(404).json({ error: 'Documento não encontrado.' });
 
@@ -2798,6 +2990,7 @@ async function startServer() {
       }
 
       let records = await db.select().from(approvals);
+      records = await scopeLegacyRecordsToInstitution(req, 'approval', records);
 
       // Enforce strict workflow isolation
       if (role === 'secretariat') {
@@ -2853,6 +3046,11 @@ async function startServer() {
       };
 
       await db.insert(approvals).values(newApproval);
+      await db.insert(institutionResourceOwnership).values({
+        institutionId: req.institutionalContext!.institutionId,
+        resourceType: 'approval',
+        resourceId: newApproval.id,
+      });
 
       // Log action to system tracer
       await db.insert(operationalLogs).values({
@@ -2890,6 +3088,15 @@ async function startServer() {
       const role = req.user?.dbRole;
       if (role === 'student' || role === 'parent') {
         return res.status(403).json({ error: 'Acesso Proibido: Alunos ou encarregados não possuem as competências para aceder ou transitar aprovações.' });
+      }
+
+      const ownedApprovalIds = await resolveInstitutionOwnedResourceIds(
+        pool,
+        req.institutionalContext!,
+        'approval'
+      );
+      if (!isInstitutionOwned(String(id), ownedApprovalIds)) {
+        return res.status(404).json({ error: 'Pedido de aprovação não encontrado.' });
       }
 
       const existing = await db.select().from(approvals).where(eq(approvals.id, id));
@@ -3286,6 +3493,7 @@ async function startServer() {
   // Register Enterprise Modularized School Task Routes (Repository, Service, Controller, Multi-Tenant isolated)
   app.use('/api/school-tasks', requireAuth, multiTenantMiddleware);
   registerSchoolTaskRoutes(app);
+  registerEnrollmentRoutes(app);
 
   // 8. New School Tasks Management API with severe validation and real-time synchronisation
   app.get('/api/school-tasks/metrics', requireAuth, authorizeTaskAction('view_metrics'), rateLimiter('analytics', 20), async (req: AuthRequest, res) => {
@@ -4336,8 +4544,10 @@ async function startServer() {
   });
 
   // 9. Operational Audit Logs API (Admin dashboard helper) - FULLY TRANSLATED FOR BUSINESS PERSPECTIVES WITH LEVEL RATINGS
-  app.get('/api/logs', requireAuth, async (req: AuthRequest, res) => {
+  app.get('/api/logs', requireAuth, authorizeRole(['admin', 'director']), async (req: AuthRequest, res) => {
     try {
+      const institutionId = req.institutionalContext?.institutionId;
+      if (!institutionId) return res.status(403).json({ error: 'Contexto institucional obrigatÃ³rio.' });
       const records = await db.select({
         id: operationalLogs.id,
         userId: operationalLogs.userId,
@@ -4345,9 +4555,13 @@ async function startServer() {
         userRole: operationalLogs.userRole,
         action: operationalLogs.action,
         details: operationalLogs.details,
+        requestId: operationalLogs.requestId,
+        correlationId: operationalLogs.correlationId,
+        outcome: operationalLogs.outcome,
         timestamp: operationalLogs.createdAt,
       })
         .from(operationalLogs)
+        .where(eq(operationalLogs.institutionId, institutionId))
         .orderBy(desc(operationalLogs.id))
         .limit(50);
 
@@ -5123,6 +5337,11 @@ Apresente as respostas de forma elegante utilizando tabelas em Markdown, badges,
                   }
                 };
                 const [insertedDoc] = await db.insert(uploadedDocuments).values(newDocObj).returning();
+                await db.insert(institutionResourceOwnership).values({
+                  institutionId: req.institutionalContext!.institutionId,
+                  resourceType: 'document',
+                  resourceId: String(insertedDoc.id),
+                });
                 
                 await db.insert(operationalLogs).values({
                   userId: req.user?.uid || 'copilot-system',
@@ -5160,6 +5379,11 @@ Apresente as respostas de forma elegante utilizando tabelas em Markdown, badges,
                   }
                 };
                 const [insertedDoc] = await db.insert(uploadedDocuments).values(newDocObj).returning();
+                await db.insert(institutionResourceOwnership).values({
+                  institutionId: req.institutionalContext!.institutionId,
+                  resourceType: 'document',
+                  resourceId: String(insertedDoc.id),
+                });
 
                 await db.insert(operationalLogs).values({
                   userId: req.user?.uid || 'copilot-system',
@@ -5269,6 +5493,11 @@ Apresente as respostas de forma elegante utilizando tabelas em Markdown, badges,
                 }
               };
               const [insertedDoc] = await db.insert(uploadedDocuments).values(newDocObj).returning();
+              await db.insert(institutionResourceOwnership).values({
+                institutionId: req.institutionalContext!.institutionId,
+                resourceType: 'document',
+                resourceId: String(insertedDoc.id),
+              });
 
               await db.insert(operationalLogs).values({
                 userId: req.user?.uid || 'copilot-system',
@@ -5283,6 +5512,7 @@ Apresente as respostas de forma elegante utilizando tabelas em Markdown, badges,
 
             } else if (name === 'locateDocuments') {
               let docs = await db.select().from(uploadedDocuments);
+              docs = await scopeLegacyRecordsToInstitution(req, 'document', docs);
               if (args.category) {
                 docs = docs.filter(d => d.category.toLowerCase().includes(args.category.toLowerCase()));
               }

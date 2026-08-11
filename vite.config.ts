@@ -3,9 +3,12 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
 
-export default defineConfig(() => {
+export default defineConfig(({ command }) => {
   return {
-    plugins: [react(), tailwindcss()],
+    // React Refresh is incompatible with this server's Vite middleware in
+    // development. The build keeps the React plugin; development uses Vite's
+    // normal module reload without injecting the incompatible refresh preamble.
+    plugins: [...(command === 'build' ? [react()] : []), tailwindcss()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

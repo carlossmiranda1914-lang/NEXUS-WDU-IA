@@ -1,23 +1,20 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import pg from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { eq, and } from 'drizzle-orm';
 import * as schema from './src/db/schema.ts';
+import { createTestDatabasePool, reportSkippedDatabaseTest } from './src/db/test-database.ts';
 
-const { Pool } = pg;
-const pool = new Pool({
-  host: process.env.SQL_HOST,
-  user: process.env.SQL_USER || process.env.SQL_ADMIN_USER,
-  password: process.env.SQL_PASSWORD || process.env.SQL_ADMIN_PASSWORD,
-  database: process.env.SQL_DB_NAME,
-});
-
-const db = drizzle(pool, { schema });
+const pool = createTestDatabasePool();
+const db = pool ? drizzle(pool, { schema }) : null;
 const { schoolTasks, operationalLogs } = schema;
 
 async function runTests() {
+  if (!pool || !db) {
+    reportSkippedDatabaseTest('INTEGRITY-TEST');
+    return;
+  }
   console.log('==================================================');
   console.log('      INICIANDO TESTES DE INTEGRIDADE SCHOOL_TASKS');
   console.log('==================================================\n');

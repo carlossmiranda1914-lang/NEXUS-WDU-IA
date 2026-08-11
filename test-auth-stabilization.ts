@@ -4,24 +4,23 @@ dotenv.config();
 // Disable Drizzle-level in-memory fallback for these tests to verify real database constraints
 process.env.DISABLE_DB_FALLBACK = 'true';
 
-import pg from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { eq } from 'drizzle-orm';
 import * as schema from './src/db/schema.ts';
-import { getOrCreateUser, getUserProfile } from './src/db/users.ts';
+import { createTestDatabasePool, reportSkippedDatabaseTest } from './src/db/test-database.ts';
 
-const { Pool } = pg;
-const pool = new Pool({
-  host: process.env.SQL_HOST,
-  user: process.env.SQL_USER || process.env.SQL_ADMIN_USER,
-  password: process.env.SQL_PASSWORD || process.env.SQL_ADMIN_PASSWORD,
-  database: process.env.SQL_DB_NAME,
-});
-
-const db = drizzle(pool, { schema });
+const pool = createTestDatabasePool();
+const db = pool ? drizzle(pool, { schema }) : null;
 const { users } = schema;
 
 async function runAuthTests() {
+  if (!pool || !db) {
+    reportSkippedDatabaseTest('AUTH-TEST');
+    return;
+  }
+  const originalDatabaseUrl = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+  const { getOrCreateUser, getUserProfile } = await import('./src/db/users.ts');
   console.log('==================================================');
   console.log('    INICIANDO TESTES DE ESTABILIZAÇÃO DE AUTENTICAÇÃO');
   console.log('==================================================\n');
@@ -155,6 +154,8 @@ async function runAuthTests() {
     console.error('Erro fatal durante execução dos testes de autenticação:', err);
   } finally {
     pool.end();
+    if (originalDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = originalDatabaseUrl;
   }
 }
 
