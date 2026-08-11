@@ -19,6 +19,7 @@ const requiredTables = [
   'student_profiles',
   'guardian_relationships',
   'institution_resource_ownership',
+  'operational_logs',
 ];
 
 const requiredColumns: Record<string, string[]> = {
@@ -29,6 +30,7 @@ const requiredColumns: Record<string, string[]> = {
   student_profiles: ['institution_id', 'person_id', 'legacy_student_id'],
   guardian_relationships: ['institution_id', 'guardian_person_id', 'student_person_id'],
   institution_resource_ownership: ['institution_id', 'resource_type', 'resource_id'],
+  operational_logs: ['institution_id', 'request_id', 'correlation_id', 'outcome', 'metadata'],
 };
 
 async function verifySchema(): Promise<void> {

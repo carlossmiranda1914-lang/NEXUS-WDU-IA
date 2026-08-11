@@ -204,11 +204,16 @@ export const uploadedDocuments = pgTable('uploaded_documents', {
 // 9. Operational Activity Logs Table (System Traceability)
 export const operationalLogs = pgTable('operational_logs', {
   id: serial('id').primaryKey(),
+  institutionId: uuid('institution_id').references(() => institutions.id, { onDelete: 'restrict' }),
   userId: text('user_id'), // Firebase UID or 'system'
   userName: text('user_name').notNull().default('System'),
   userRole: text('user_role').notNull().default('system'),
   action: text('action').notNull(), // e.g., 'LOGIN', 'WORKFLOW_TRIGGER', 'PAYMENT_RECEIPT', 'OCR_ANALYSIS'
   details: text('details').notNull(),
+  requestId: text('request_id'),
+  correlationId: text('correlation_id'),
+  outcome: text('outcome').notNull().default('success'),
+  metadata: jsonb('metadata').notNull().default({}),
   createdAt: timestamp('created_at').defaultNow(),
 });
 

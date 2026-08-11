@@ -11,6 +11,7 @@
     "test:auth": "tsx test-auth-stabilization.ts",
     "test:schema": "tsx scripts/verify-vnext-schema.ts",
     "test:database:setup": "tsx scripts/setup-test-database.ts",
+    "migrate:audit": "tsx scripts/apply-audit-observability-migration.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

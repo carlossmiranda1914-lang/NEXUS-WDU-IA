@@ -23,6 +23,7 @@ import { registerSchoolTaskRoutes } from './src/modules/school-tasks/school-task
 import { SchoolTaskWebSocketManager } from './src/modules/school-tasks/websocket-manager.ts';
 import { eventBus } from './src/modules/school-tasks/event-bus.ts';
 import { registerSchoolTaskRealtimeBridge } from './src/modules/school-tasks/realtime-bridge.ts';
+import { describeRequestForAudit, outcomeForStatus, shouldAuditRequest } from './src/observability/request-audit.ts';
 
 
 let wssInstance: WebSocketServer | null = null;
@@ -237,6 +238,15 @@ async function startServer() {
   // Express middleware to track live institutional platform metrics
   app.use((req, res, next) => {
     const start = Date.now();
+    const requestId = `req-${crypto.randomUUID()}`;
+    const suppliedCorrelationId = req.header('x-correlation-id');
+    const correlationId = suppliedCorrelationId && /^[a-zA-Z0-9._-]{8,128}$/.test(suppliedCorrelationId)
+      ? suppliedCorrelationId
+      : `corr-${crypto.randomUUID()}`;
+    res.setHeader('X-Request-ID', requestId);
+    res.setHeader('X-Correlation-ID', correlationId);
+    req.headers['x-request-id'] = requestId;
+    req.headers['x-correlation-id'] = correlationId;
     platformStats.totalRequests++;
     platformStats.lastRequestTime = new Date().toISOString();
 
@@ -261,6 +271,23 @@ async function startServer() {
       // If a successful database write command is executed via the API, synchronize lastSyncTime
       if (res.statusCode < 400 && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method || '')) {
         platformStats.lastSyncTime = new Date().toISOString();
+      }
+
+      const authReq = req as AuthRequest;
+      if (authReq.institutionalContext && shouldAuditRequest({ method: req.method, statusCode: res.statusCode, durationMs: duration })) {
+        const routePattern = req.route?.path ? `${req.baseUrl || ''}${req.route.path}` : undefined;
+        void db.insert(operationalLogs).values({
+          institutionId: authReq.institutionalContext.institutionId,
+          userId: authReq.user?.uid || authReq.institutionalContext.personId,
+          userName: authReq.institutionalContext.personName,
+          userRole: authReq.institutionalContext.role,
+          action: `HTTP_${req.method.toUpperCase()}`,
+          details: describeRequestForAudit({ method: req.method, statusCode: res.statusCode, durationMs: duration, routePattern }),
+          requestId,
+          correlationId,
+          outcome: outcomeForStatus(res.statusCode),
+          metadata: { statusCode: res.statusCode, durationMs: duration },
+        }).catch((error) => console.error('[AUDIT] Failed to persist request audit record:', error));
       }
     });
 
@@ -4506,8 +4533,10 @@ async function startServer() {
   });
 
   // 9. Operational Audit Logs API (Admin dashboard helper) - FULLY TRANSLATED FOR BUSINESS PERSPECTIVES WITH LEVEL RATINGS
-  app.get('/api/logs', requireAuth, async (req: AuthRequest, res) => {
+  app.get('/api/logs', requireAuth, authorizeRole(['admin', 'director']), async (req: AuthRequest, res) => {
     try {
+      const institutionId = req.institutionalContext?.institutionId;
+      if (!institutionId) return res.status(403).json({ error: 'Contexto institucional obrigatÃ³rio.' });
       const records = await db.select({
         id: operationalLogs.id,
         userId: operationalLogs.userId,
@@ -4515,9 +4544,13 @@ async function startServer() {
         userRole: operationalLogs.userRole,
         action: operationalLogs.action,
         details: operationalLogs.details,
+        requestId: operationalLogs.requestId,
+        correlationId: operationalLogs.correlationId,
+        outcome: operationalLogs.outcome,
         timestamp: operationalLogs.createdAt,
       })
         .from(operationalLogs)
+        .where(eq(operationalLogs.institutionId, institutionId))
         .orderBy(desc(operationalLogs.id))
         .limit(50);
 
