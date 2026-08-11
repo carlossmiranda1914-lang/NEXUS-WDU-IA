@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { AlertCircle, CheckCircle2, ClipboardList, LoaderCircle, Plus, RefreshCw, UserRoundPlus } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ClipboardList, LoaderCircle, Plus, RefreshCw, Settings2, UserRoundPlus } from 'lucide-react';
 import { auth } from '../lib/firebase.ts';
 
 type EnrollmentStatus = 'draft' | 'under_review' | 'awaiting_documents' | 'validated' | 'blocked' | 'active' | 'cancelled';
@@ -38,6 +38,12 @@ export default function EnrollmentWorkspace() {
   const [studentName, setStudentName] = useState('');
   const [guardianName, setGuardianName] = useState('');
   const [offerId, setOfferId] = useState('');
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [academicYearName, setAcademicYearName] = useState('2026/2027');
+  const [startsOn, setStartsOn] = useState('2026-09-01');
+  const [endsOn, setEndsOn] = useState('2027-07-31');
+  const [offerName, setOfferName] = useState('Ensino regular');
+  const [offerCode, setOfferCode] = useState('REG-2026');
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -61,6 +67,15 @@ export default function EnrollmentWorkspace() {
     finally { setSubmitting(false); }
   }
 
+  async function saveSetup(event: FormEvent) {
+    event.preventDefault(); setSubmitting(true); setError(null); setNotice(null);
+    try {
+      await request('/api/enrollments/setup', { method: 'POST', body: JSON.stringify({ academicYearName, startsOn, endsOn, offerName, offerCode }) });
+      setSetupOpen(false); setNotice('Ano letivo e oferta guardados. Já pode criar a primeira matrícula real.'); await load();
+    } catch (setupError) { setError(setupError instanceof Error ? setupError.message : 'Não foi possível guardar a configuração.'); }
+    finally { setSubmitting(false); }
+  }
+
   return (
     <section className="space-y-6" aria-label="Matrículas institucionais">
       <header className="flex flex-col gap-3 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
@@ -78,7 +93,7 @@ export default function EnrollmentWorkspace() {
       {notice && <div role="status" className="flex gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-100"><CheckCircle2 className="h-5 w-5 shrink-0" />{notice}</div>}
 
       {loading ? <div className="flex min-h-56 items-center justify-center gap-3 rounded-2xl border border-white/10 bg-zinc-900 text-sm text-zinc-300"><LoaderCircle className="h-5 w-5 animate-spin" /> A carregar dados institucionais…</div> : offers.length === 0 ? (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6"><h2 className="font-semibold text-amber-100">Configuração necessária</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-amber-100/80">Ainda não existe um ano letivo ativo com uma oferta de matrícula nesta instituição. Por segurança, não é possível criar uma matrícula sem essa configuração oficial.</p></div>
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6"><h2 className="font-semibold text-amber-100">Configuração necessária</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-amber-100/80">Ainda não existe um ano letivo ativo com uma oferta de matrícula nesta instituição. Por segurança, não é possível criar uma matrícula sem essa configuração oficial.</p><button type="button" onClick={() => setSetupOpen(true)} className="mt-5 inline-flex items-center gap-2 rounded-lg bg-amber-300 px-4 py-2.5 text-sm font-bold text-zinc-950 hover:bg-amber-200"><Settings2 className="h-4 w-4" /> Configurar matrícula</button></div>
       ) : (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
           <form onSubmit={createDraft} className="rounded-2xl border border-white/10 bg-zinc-900 p-5 shadow-sm">
@@ -94,6 +109,8 @@ export default function EnrollmentWorkspace() {
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-900"><div className="flex items-center gap-2 border-b border-white/10 px-5 py-4"><ClipboardList className="h-5 w-5 text-emerald-400" /><h2 className="font-semibold text-white">Processos da instituição</h2></div>{enrollments.length === 0 ? <div className="p-8 text-center text-sm text-zinc-400">Ainda não existem matrículas nesta instituição. Crie o primeiro rascunho quando tiver os dados necessários.</div> : <ul className="divide-y divide-white/10">{enrollments.map((enrollment) => <li key={enrollment.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium text-white">{enrollment.student_name}</p><p className="mt-1 text-xs text-zinc-400">{enrollment.offer_name} · {enrollment.academic_year_name}{enrollment.guardian_name ? ` · Encarregado: ${enrollment.guardian_name}` : ''}</p></div><span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyle[enrollment.status]}`}>{statusLabels[enrollment.status]}</span></li>)}</ul>}</div>
         </div>
       )}
+
+      {setupOpen && <div className="rounded-2xl border border-emerald-500/30 bg-zinc-900 p-5"><div className="mb-4"><h2 className="font-semibold text-white">Configuração oficial de matrícula</h2><p className="mt-1 text-sm text-zinc-400">Crie o primeiro ano letivo e a primeira oferta desta instituição. Esta ação não cria dados demonstrativos.</p></div><form onSubmit={saveSetup} className="grid gap-4 md:grid-cols-2"><label className="text-xs font-medium text-zinc-300">Ano letivo<input required value={academicYearName} onChange={(event) => setAcademicYearName(event.target.value)} className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white" /></label><label className="text-xs font-medium text-zinc-300">Oferta / curso / turma<input required value={offerName} onChange={(event) => setOfferName(event.target.value)} className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white" /></label><label className="text-xs font-medium text-zinc-300">Início<input required type="date" value={startsOn} onChange={(event) => setStartsOn(event.target.value)} className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white" /></label><label className="text-xs font-medium text-zinc-300">Fim<input required type="date" value={endsOn} onChange={(event) => setEndsOn(event.target.value)} className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white" /></label><label className="text-xs font-medium text-zinc-300 md:col-span-2">Código interno da oferta<input required value={offerCode} onChange={(event) => setOfferCode(event.target.value.toUpperCase())} className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2.5 text-sm text-white" /></label><div className="flex gap-3 md:col-span-2"><button disabled={submitting} className="rounded-lg bg-emerald-400 px-4 py-2.5 text-sm font-bold text-zinc-950 disabled:opacity-50">{submitting ? 'A guardar…' : 'Guardar configuração'}</button><button type="button" onClick={() => setSetupOpen(false)} className="rounded-lg border border-zinc-700 px-4 py-2.5 text-sm font-semibold text-zinc-200">Cancelar</button></div></form></div>}
     </section>
   );
 }

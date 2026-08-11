@@ -1,7 +1,11 @@
-import { canManageEnrollment, canTransitionEnrollment, isEnrollmentStatus } from '../src/modules/enrollments/enrollment-policy.ts';
+import { canConfigureEnrollment, canManageEnrollment, canTransitionEnrollment, isEnrollmentStatus } from '../src/modules/enrollments/enrollment-policy.ts';
 
 const failures: string[] = [];
 function expect(condition: unknown, message: string) { if (!condition) failures.push(message); }
+
+expect(canConfigureEnrollment('institution_admin'), 'Institution admin must configure enrollment.');
+expect(canConfigureEnrollment('director'), 'Director must configure enrollment.');
+expect(!canConfigureEnrollment('secretariat'), 'Secretariat must not configure enrollment.');
 
 expect(canManageEnrollment('secretariat'), 'Secretaria deve poder gerir matrículas.');
 expect(!canManageEnrollment('student'), 'Aluno não pode gerir matrículas.');

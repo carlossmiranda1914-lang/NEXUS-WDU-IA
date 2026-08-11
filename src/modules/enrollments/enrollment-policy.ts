@@ -17,6 +17,11 @@ export function canManageEnrollment(role: InstitutionalRole): boolean {
   return role === 'institution_admin' || role === 'director' || role === 'secretariat';
 }
 
+/** Only the institution leadership may change the official enrollment offer. */
+export function canConfigureEnrollment(role: InstitutionalRole): boolean {
+  return role === 'institution_admin' || role === 'director';
+}
+
 export function canTransitionEnrollment(role: InstitutionalRole, from: EnrollmentStatus, to: EnrollmentStatus): boolean {
   if (!canManageEnrollment(role) || !transitions[from].includes(to)) return false;
   if (to === 'active') return role === 'institution_admin' || role === 'director';
