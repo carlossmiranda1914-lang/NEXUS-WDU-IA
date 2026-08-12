@@ -1,0 +1,97 @@
+import dotenv from 'dotenv';
+import { readdir, readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
+import { createTestDatabasePool } from '../src/db/test-database.ts';
+
+dotenv.config();
+
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+const migrationsDirectory = path.resolve(currentDirectory, '../src/db/migrations');
+
+function quoteIdentifier(value: string): string {
+  return `"${value.replaceAll('"', '""')}"`;
+}
+
+async function verifyMigrationsIsolated(): Promise<void> {
+  const pool = createTestDatabasePool();
+  if (!pool) throw new Error('TEST_DATABASE_URL is required to verify migrations.');
+
+  const schemaName = `nexus_verify_${Date.now()}_${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+  const schemaIdentifier = quoteIdentifier(schemaName);
+  const client = await pool.connect();
+
+  try {
+    await client.query(`CREATE SCHEMA ${schemaIdentifier}`);
+    await client.query(`SET search_path TO ${schemaIdentifier}, public`);
+
+    const migrationFiles = (await readdir(migrationsDirectory))
+      .filter((name) => /^\d{4}_.+\.sql$/.test(name))
+      .sort();
+
+    for (const filename of migrationFiles) {
+      const sql = await readFile(path.join(migrationsDirectory, filename), 'utf8');
+      await client.query('BEGIN');
+      try {
+        await client.query(sql);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw new Error(`Migration ${filename} failed in isolated schema: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    const birthDate = await client.query<{ data_type: string; is_nullable: string }>(
+      `SELECT data_type, is_nullable
+         FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = 'people' AND column_name = 'birth_date'`,
+      [schemaName],
+    );
+    if (birthDate.rowCount !== 1 || birthDate.rows[0].data_type !== 'date' || birthDate.rows[0].is_nullable !== 'YES') {
+      throw new Error('Expected people.birth_date to be DATE NULL after migrations.');
+    }
+
+    const commandTable = await client.query<{ constraint_name: string }>(
+      `SELECT tc.constraint_name
+         FROM information_schema.table_constraints tc
+        WHERE tc.table_schema = $1
+          AND tc.table_name = 'enrollment_intake_commands'
+          AND tc.constraint_type = 'UNIQUE'
+          AND tc.constraint_name = 'enrollment_intake_commands_institution_operation_key_unique'`,
+      [schemaName],
+    );
+    if (commandTable.rowCount !== 1) {
+      throw new Error('Expected enrollment_intake_commands institutional idempotency unique constraint.');
+    }
+
+    const fingerprintColumn = await client.query<{ is_nullable: string }>(
+      `SELECT is_nullable
+         FROM information_schema.columns
+        WHERE table_schema = $1
+          AND table_name = 'enrollment_intake_commands'
+          AND column_name = 'request_fingerprint'`,
+      [schemaName],
+    );
+    if (fingerprintColumn.rowCount !== 1 || fingerprintColumn.rows[0].is_nullable !== 'NO') {
+      throw new Error('Expected enrollment_intake_commands.request_fingerprint to be NOT NULL.');
+    }
+
+    console.log(`[MIGRATION-VERIFY] PASS: ${migrationFiles.length} migrations applied in isolated schema.`);
+    console.log('[MIGRATION-VERIFY] PASS: people.birth_date is DATE NULL.');
+    console.log('[MIGRATION-VERIFY] PASS: enrollment_intake_commands idempotency constraints are present.');
+  } finally {
+    try {
+      await client.query('RESET search_path');
+      await client.query(`DROP SCHEMA IF EXISTS ${schemaIdentifier} CASCADE`);
+    } finally {
+      client.release();
+      await pool.end();
+    }
+  }
+}
+
+verifyMigrationsIsolated().catch((error) => {
+  console.error('[MIGRATION-VERIFY]', error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+});
