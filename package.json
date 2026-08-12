@@ -15,6 +15,7 @@
     "test:enrollment-policy": "tsx tests/enrollment-policy.test.ts",
     "test:person-resolution": "tsx tests/person-resolution.test.ts",
     "test:person-resolution-access": "tsx tests/person-resolution-access.test.ts",
+    "test:enrollment-intake": "tsx tests/enrollment-intake.test.ts",
     "test:database:setup": "tsx scripts/setup-test-database.ts",
     "test:identity": "tsx scripts/seed-test-institutional-identity.ts",
     "migrate:audit": "tsx scripts/apply-audit-observability-migration.ts",
