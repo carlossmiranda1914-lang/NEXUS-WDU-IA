@@ -179,36 +179,38 @@ export const chatMessages = pgTable('chat_messages', {
 
 // 7. System Automations / n8n Trigger Simulations
 export const automations = pgTable('automations', {
-  id: text('id').primaryKey(),
+  id: text('id').primaryKey(), // e.g., 'FLUX-01'
   title: text('title').notNull(),
   description: text('description').notNull(),
   trigger: text('trigger').notNull(),
   action: text('action').notNull(),
   active: boolean('active').notNull().default(true),
-  type: text('type').notNull(),
+  type: text('type').notNull(), // 'sms' | 'email' | 'system' | 'whatsapp'
   executions: integer('executions').notNull().default(0),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+// 8. Uploaded/Processed Documents Table
 export const uploadedDocuments = pgTable('uploaded_documents', {
   id: serial('id').primaryKey(),
   name: text('name').notNull(),
-  type: text('type').notNull(),
-  url: text('url'),
+  type: text('type').notNull(), // e.g. 'pdf', 'png', etc.
+  url: text('url'), // Local download/virtual storage link
   size: text('size').notNull().default('0 KB'),
-  category: text('category').notNull().default('Unassigned'),
-  extractedDetails: jsonb('extracted_details').notNull().default({}),
-  status: text('status').notNull().default('Processing'),
+  category: text('category').notNull().default('Unassigned'), // extracted/detected category e.g. 'Contrato de Matrícula'
+  extractedDetails: jsonb('extracted_details').notNull().default({}), // OCR extracted JSON data
+  status: text('status').notNull().default('Processing'), // 'Processing' | 'Analyzed' | 'Failed'
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+// 9. Operational Activity Logs Table (System Traceability)
 export const operationalLogs = pgTable('operational_logs', {
   id: serial('id').primaryKey(),
   institutionId: uuid('institution_id').references(() => institutions.id, { onDelete: 'restrict' }),
-  userId: text('user_id'),
+  userId: text('user_id'), // Firebase UID or 'system'
   userName: text('user_name').notNull().default('System'),
   userRole: text('user_role').notNull().default('system'),
-  action: text('action').notNull(),
+  action: text('action').notNull(), // e.g., 'LOGIN', 'WORKFLOW_TRIGGER', 'PAYMENT_RECEIPT', 'OCR_ANALYSIS'
   details: text('details').notNull(),
   requestId: text('request_id'),
   correlationId: text('correlation_id'),
@@ -217,6 +219,8 @@ export const operationalLogs = pgTable('operational_logs', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+// The enrollment domain is separate from the legacy `students` table.  Every
+// record has an institution boundary and the student is always a `person`.
 export const academicYears = pgTable('academic_years', {
   id: uuid('id').defaultRandom().primaryKey(),
   institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
@@ -281,6 +285,7 @@ export const enrollmentEvents = pgTable('enrollment_events', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [index('enrollment_events_application_created_idx').on(table.enrollmentApplicationId, table.createdAt)]);
 
+// DEFINE SYSTEM RELATIONSHIPS
 export const studentRelations = relations(students, ({ many }) => ({
   invoices: many(invoices),
 }));
@@ -292,31 +297,34 @@ export const invoicesRelations = relations(invoices, ({ one }) => ({
   }),
 }));
 
+// 10. Institutional Approvals Table
 export const approvals = pgTable('approvals', {
-  id: text('id').primaryKey(),
+  id: text('id').primaryKey(), // e.g., 'APR-001'
   title: text('title').notNull(),
   description: text('description').notNull(),
-  flowType: text('flow_type').notNull(),
-  status: text('status').notNull().default('pending'),
+  flowType: text('flow_type').notNull(), // 'secretariat_to_director' | 'teacher_to_director' | 'financial_to_director'
+  status: text('status').notNull().default('pending'), // 'pending' | 'analyzing' | 'approved' | 'rejected' | 'revision_requested'
   requesterRole: text('requester_role').notNull(),
   requesterName: text('requester_name').notNull(),
-  createdAtDate: text('created_at_date').notNull(),
-  createdAtTime: text('created_at_time').notNull(),
+  createdAtDate: text('created_at_date').notNull(), // 'YYYY-MM-DD'
+  createdAtTime: text('created_at_time').notNull(), // 'HH:MM:SS'
   updatedAt: timestamp('updated_at').defaultNow(),
-  history: jsonb('history').notNull().default([]),
+  history: jsonb('history').notNull().default([]), // array of { id, timestamp, action, userRole, userName, comment }
 });
 
+// 11. Custom/Staff Tasks Table
 export const todoTasks = pgTable('todo_tasks', {
-  id: text('id').primaryKey(),
+  id: text('id').primaryKey(), // e.g. 'TASK-1002'
   title: text('title').notNull(),
   description: text('description').notNull(),
-  dueDate: text('due_date').notNull(),
-  priority: text('priority').notNull().default('média'),
-  status: text('status').notNull().default('pendente'),
-  assignedTo: text('assigned_to').notNull().default('all'),
+  dueDate: text('due_date').notNull(), // 'YYYY-MM-DD'
+  priority: text('priority').notNull().default('média'), // 'alta' | 'média' | 'baixa'
+  status: text('status').notNull().default('pendente'), // 'pendente' | 'concluído'
+  assignedTo: text('assigned_to').notNull().default('all'), // 'all' or specific role/name
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+// 12. New School Tasks Table (PostgreSQL)
 export const schoolTasks = pgTable('school_tasks', {
   id: text('id').primaryKey(),
   title: text('title').notNull(),
@@ -332,14 +340,14 @@ export const schoolTasks = pgTable('school_tasks', {
   referenceId: text('reference_id'),
   referenceType: text('reference_type'),
   observations: text('observations'),
-  history: jsonb('history').default([]),
-  attachments: jsonb('attachments').default([]),
+  history: jsonb('history').default([]), // TaskHistoryEvent[]
+  attachments: jsonb('attachments').default([]), // TaskAttachment[]
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   createdBy: text('created_by'),
   executedBy: text('executed_by'),
   completedBy: text('completed_by'),
   completedAt: timestamp('completed_at', { withTimezone: true }),
-  dependencies: jsonb('dependencies').default([]),
+  dependencies: jsonb('dependencies').default([]), // string[] (precedent task IDs)
   isDeleted: boolean('is_deleted').default(false).notNull(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   deletedBy: text('deleted_by'),
@@ -347,22 +355,27 @@ export const schoolTasks = pgTable('school_tasks', {
   firstResponseAt: timestamp('first_response_at', { withTimezone: true }),
   slaDeadline: timestamp('sla_deadline', { withTimezone: true }),
   slaStatus: text('sla_status').default('On Track'),
+  // Phase 11 - Enterprise Multi-Tenancy
   tenantId: text('tenant_id').notNull().default('default-tenant'),
   schoolId: text('school_id').notNull().default('default-school'),
   organizationId: text('organization_id').notNull().default('default-org'),
 });
 
+// 13. Task Versions and Snapshots (Phase 11 - Advanced Audit & Snapshots for Rollbacks)
 export const taskVersions = pgTable('task_versions', {
   id: serial('id').primaryKey(),
   taskId: text('task_id').notNull(),
   version: integer('version').notNull(),
-  snapshot: jsonb('snapshot').notNull(),
+  snapshot: jsonb('snapshot').notNull(), // Full JSON dump of the schoolTasks row at this specific version
   changedBy: text('changed_by').notNull(),
   changedAt: timestamp('changed_at', { withTimezone: true }).defaultNow().notNull(),
-  action: text('action').notNull(),
+  action: text('action').notNull(), // 'CREATE' | 'UPDATE' | 'RESTORE' | 'DELETE' | 'ARCHIVE'
   requestId: text('request_id'),
   correlationId: text('correlation_id'),
   ipAddress: text('ip_address'),
   userAgent: text('user_agent'),
-  diff: jsonb('diff'),
+  diff: jsonb('diff'), // JSON record detailing specific field updates
 });
+
+
+
