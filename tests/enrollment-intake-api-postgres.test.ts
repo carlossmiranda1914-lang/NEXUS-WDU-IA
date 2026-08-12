@@ -13,6 +13,7 @@ import {
   startEnrollmentIntake,
   type EnrollmentApiPool,
 } from '../src/modules/enrollments/enrollment-intake-api.ts';
+import { EnrollmentIntakeError, executeEnrollmentIntake } from '../src/modules/enrollments/enrollment-intake.ts';
 
 const { Pool } = pg;
 const connectionString = process.env.TEST_DATABASE_URL?.trim();
@@ -115,6 +116,22 @@ try {
     [ids.offerA, ids.institutionA, ids.yearA],
   );
 
+  // Regression proof: direct T4 reuse of an external Person without an approved
+  // decision must fail closed before any global Person-existence lookup.
+  let directExternalReuseError: unknown;
+  try {
+    await executeEnrollmentIntake(pool, {
+      institutionId: ids.institutionA,
+      actorPersonId: ids.secretariatA,
+      offerId: ids.offerA,
+      idempotencyKey: 't6-direct-external-reuse-0001',
+      person: { kind: 'reuse_person', personId: ids.externalStudent },
+    });
+  } catch (error) { directExternalReuseError = error; }
+  if (!(directExternalReuseError instanceof EnrollmentIntakeError) || directExternalReuseError.code !== 'PERSON_NOT_FOUND') {
+    throw new Error('Direct cross-institution reuse must preserve T4 PERSON_NOT_FOUND fail-closed behavior.');
+  }
+
   // D-06 C2: only a human name is available. The resolver runs, but direct
   // creation remains blocked until a controlled, independently approved decision.
   const nameOnlyStudent = { name: 'Nova Pessoa Real', birthDate: null, phone: null };
@@ -205,6 +222,7 @@ try {
   );
   if (Number(counts.rows[0].enrollment_count) !== 3) throw new Error('Expected exactly three enrollments in T6 integration proof.');
 
+  console.log('[T6-POSTGRES] PASS: direct cross-institution reuse without decision failed closed with PERSON_NOT_FOUND.');
   console.log('[T6-POSTGRES] PASS: D-06 name-only intake was blocked from automatic creation and completed only after independent approval.');
   console.log('[T6-POSTGRES] PASS: approved intake persisted across pool restart and replayed idempotently.');
   console.log('[T6-POSTGRES] PASS: local Person reused without duplicate.');
