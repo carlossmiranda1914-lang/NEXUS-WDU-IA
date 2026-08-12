@@ -21,6 +21,7 @@
     "test:enrollment-intake-api:postgres": "tsx tests/enrollment-intake-api-postgres.test.ts",
     "test:t6": "npm run test:person-resolution && npm run test:person-resolution-access && npm run test:enrollment-intake && npm run test:identity-resolution-decision && npm run test:enrollment-intake-api && npm run test:enrollment-intake-api:postgres && npm run test:migrations:isolated && npm run lint && npm run build",
     "apply:enrollment-vnext-layer1": "tsx scripts/apply-enrollment-vnext-layer1-shell.ts",
+    "fix:enrollment-vnext-layer1": "tsx scripts/fix-enrollment-vnext-layer1-typescript.ts",
     "test:enrollment-operations-model": "tsx tests/enrollment-operations-model.test.ts",
     "test:enrollment-operations-ui": "tsx tests/enrollment-operations-ui-contract.test.ts",
     "test:enrollment-vnext-layer1": "npm run test:enrollment-operations-model && npm run test:enrollment-operations-ui && npm run test:t6",
