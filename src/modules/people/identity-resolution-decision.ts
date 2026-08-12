@@ -391,12 +391,12 @@ export async function decideIdentityDecision(
     const updated = await client.query<any>(
       `UPDATE identity_resolution_decisions
           SET status = $1,
-              decided_by_person_id = $2,
-              approved_by_person_id = CASE WHEN $1 = 'approved' THEN $2 ELSE NULL END,
+              decided_by_person_id = $2::uuid,
+              approved_by_person_id = CASE WHEN $1 = 'approved' THEN $2::uuid ELSE NULL END,
               decided_at = CASE WHEN $1 IN ('approved', 'rejected') THEN now() ELSE NULL END,
               updated_at = now(),
               version = version + 1
-        WHERE id = $3 AND institution_id = $4
+        WHERE id = $3::uuid AND institution_id = $4::uuid
         RETURNING *`,
       [nextStatus, input.actorPersonId, input.decisionId, input.institutionId],
     );
