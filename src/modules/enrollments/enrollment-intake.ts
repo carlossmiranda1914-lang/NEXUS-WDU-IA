@@ -265,6 +265,12 @@ export async function executeEnrollmentIntake(
         studentPersonId = localPerson.rows[0].person_id;
         studentProfileId = localPerson.rows[0].student_profile_id;
       } else {
+        // Preserve T4's fail-closed behavior for direct/untrusted reuse attempts:
+        // without an explicit approved decision we do not probe global Person existence.
+        if (!command.person.authorization) {
+          throw new EnrollmentIntakeError('PERSON_NOT_FOUND', 'The selected Person is not available in this institution.');
+        }
+
         await requireApprovedIdentityDecision(
           client,
           command.institutionId,
