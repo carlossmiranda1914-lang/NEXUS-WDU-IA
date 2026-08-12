@@ -2,7 +2,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const path = resolve(process.cwd(), 'src/App.tsx');
-let source = await readFile(path, 'utf8');
+const rawSource = await readFile(path, 'utf8');
+const originalEol = rawSource.includes('\r\n') ? '\r\n' : '\n';
+let source = rawSource.replace(/\r\n/g, '\n');
 
 function replaceOnce(label: string, pattern: string | RegExp, replacement: string) {
   const before = source;
@@ -67,5 +69,6 @@ if (!source.includes("{activeTab === 'students' && (\n                    <Enrol
   throw new Error('[ENROLLMENT-VNEXT] operational workspace mount missing after patch.');
 }
 
-await writeFile(path, source, 'utf8');
+const output = originalEol === '\r\n' ? source.replace(/\n/g, '\r\n') : source;
+await writeFile(path, output, 'utf8');
 console.log('[ENROLLMENT-VNEXT] PASS: App.tsx patched only through asserted Layer 1 integration points.');
