@@ -77,9 +77,48 @@ async function verifyMigrationsIsolated(): Promise<void> {
       throw new Error('Expected enrollment_intake_commands.request_fingerprint to be NOT NULL.');
     }
 
+    const identityDecisionCaseUnique = await client.query<{ constraint_name: string }>(
+      `SELECT tc.constraint_name
+         FROM information_schema.table_constraints tc
+        WHERE tc.table_schema = $1
+          AND tc.table_name = 'identity_resolution_decisions'
+          AND tc.constraint_type = 'UNIQUE'
+          AND tc.constraint_name = 'identity_resolution_decisions_case_unique'`,
+      [schemaName],
+    );
+    if (identityDecisionCaseUnique.rowCount !== 1) {
+      throw new Error('Expected identity resolution case uniqueness per institution.');
+    }
+
+    const identityDecisionSegregation = await client.query<{ constraint_name: string }>(
+      `SELECT tc.constraint_name
+         FROM information_schema.table_constraints tc
+        WHERE tc.table_schema = $1
+          AND tc.table_name = 'identity_resolution_decisions'
+          AND tc.constraint_type = 'CHECK'
+          AND tc.constraint_name = 'identity_resolution_decisions_segregation'`,
+      [schemaName],
+    );
+    if (identityDecisionSegregation.rowCount !== 1) {
+      throw new Error('Expected identity resolution segregation-of-duties constraint.');
+    }
+
+    const decidedByColumn = await client.query<{ is_nullable: string }>(
+      `SELECT is_nullable
+         FROM information_schema.columns
+        WHERE table_schema = $1
+          AND table_name = 'identity_resolution_decisions'
+          AND column_name = 'decided_by_person_id'`,
+      [schemaName],
+    );
+    if (decidedByColumn.rowCount !== 1 || decidedByColumn.rows[0].is_nullable !== 'YES') {
+      throw new Error('Expected nullable decided_by_person_id audit column.');
+    }
+
     console.log(`[MIGRATION-VERIFY] PASS: ${migrationFiles.length} migrations applied in isolated schema.`);
     console.log('[MIGRATION-VERIFY] PASS: people.birth_date is DATE NULL.');
     console.log('[MIGRATION-VERIFY] PASS: enrollment_intake_commands idempotency constraints are present.');
+    console.log('[MIGRATION-VERIFY] PASS: identity_resolution_decisions authority/audit constraints are present.');
   } finally {
     try {
       await client.query('RESET search_path');
