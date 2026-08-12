@@ -19,6 +19,7 @@ CREATE TABLE identity_resolution_decisions (
   match_reasons JSONB NOT NULL DEFAULT '[]'::jsonb,
   evidence_types JSONB NOT NULL DEFAULT '[]'::jsonb,
   requested_by_person_id UUID NOT NULL REFERENCES people(id) ON DELETE RESTRICT,
+  decided_by_person_id UUID REFERENCES people(id) ON DELETE RESTRICT,
   approved_by_person_id UUID REFERENCES people(id) ON DELETE RESTRICT,
   policy_version TEXT NOT NULL DEFAULT 'D05-v1',
   request_id TEXT,
