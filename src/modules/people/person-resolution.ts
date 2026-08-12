@@ -64,6 +64,8 @@ export function normalizePhone(value?: string | null): string | null {
 
 export function normalizeIdentifier(value?: string | null): string | null {
   if (!value) return null;
+  // Whitespace and case are presentation differences. Punctuation is not:
+  // ALU-001 and ALU001 can represent distinct institutional identifiers.
   const normalized = value.trim().replace(/\s+/g, '').toUpperCase();
   return normalized || null;
 }
