@@ -8,16 +8,23 @@ export interface TransactionPool {
   connect(): Promise<TransactionQueryClient & { release(): void }>;
 }
 
+export interface EnrollmentIdentityAuthorization {
+  decisionId: string;
+  caseKey: string;
+}
+
 export type EnrollmentIntakePersonDecision =
   | {
       kind: 'new_person';
       name: string;
       birthDate?: string | null;
       phone?: string | null;
+      authorization?: EnrollmentIdentityAuthorization;
     }
   | {
       kind: 'reuse_person';
       personId: string;
+      authorization?: EnrollmentIdentityAuthorization;
     };
 
 export interface EnrollmentIntakeCommand {
@@ -42,7 +49,9 @@ export class EnrollmentIntakeError extends Error {
       | 'IDEMPOTENCY_KEY_REUSED'
       | 'OFFER_NOT_AVAILABLE'
       | 'PERSON_NOT_FOUND'
-      | 'ENROLLMENT_ALREADY_EXISTS',
+      | 'ENROLLMENT_ALREADY_EXISTS'
+      | 'IDENTITY_DECISION_REQUIRED'
+      | 'IDENTITY_DECISION_INVALID',
     message: string,
   ) {
     super(message);
@@ -70,8 +79,13 @@ export function fingerprintEnrollmentIntake(command: EnrollmentIntakeCommand): s
         name: command.person.name.trim(),
         birthDate: normalizeOptionalText(command.person.birthDate),
         phone: normalizeOptionalText(command.person.phone),
+        authorization: command.person.authorization ?? null,
       }
-    : { kind: command.person.kind, personId: command.person.personId };
+    : {
+        kind: command.person.kind,
+        personId: command.person.personId,
+        authorization: command.person.authorization ?? null,
+      };
 
   return crypto.createHash('sha256').update(JSON.stringify({
     institutionId: command.institutionId,
@@ -121,6 +135,40 @@ async function selectCompletedReplay(
     };
   }
   return null;
+}
+
+async function requireApprovedIdentityDecision(
+  client: TransactionQueryClient,
+  institutionId: string,
+  authorization: EnrollmentIdentityAuthorization | undefined,
+  expectedAction: 'CREATE_PERSON' | 'REUSE_PERSON',
+  expectedCandidatePersonId?: string,
+): Promise<void> {
+  if (!authorization) {
+    throw new EnrollmentIntakeError('IDENTITY_DECISION_REQUIRED', 'An approved identity decision is required for this intake.');
+  }
+
+  const approved = await client.query<{
+    proposed_action: string;
+    proposed_candidate_person_id: string | null;
+  }>(
+    `SELECT proposed_action, proposed_candidate_person_id
+       FROM identity_resolution_decisions
+      WHERE id = $1
+        AND institution_id = $2
+        AND case_key = $3
+        AND status = 'approved'
+      FOR UPDATE`,
+    [authorization.decisionId, institutionId, authorization.caseKey],
+  );
+
+  if (!approved.rowCount || approved.rows[0].proposed_action !== expectedAction) {
+    throw new EnrollmentIntakeError('IDENTITY_DECISION_INVALID', 'The identity decision is not approved for this action and institution.');
+  }
+
+  if (expectedAction === 'REUSE_PERSON' && approved.rows[0].proposed_candidate_person_id !== expectedCandidatePersonId) {
+    throw new EnrollmentIntakeError('IDENTITY_DECISION_INVALID', 'The approved identity decision does not authorize this Person.');
+  }
 }
 
 export async function executeEnrollmentIntake(
@@ -186,6 +234,15 @@ export async function executeEnrollmentIntake(
     let studentProfileId: string | undefined;
 
     if (command.person.kind === 'new_person') {
+      if (command.person.authorization) {
+        await requireApprovedIdentityDecision(
+          client,
+          command.institutionId,
+          command.person.authorization,
+          'CREATE_PERSON',
+        );
+      }
+
       const createdPerson = await client.query<{ id: string }>(
         `INSERT INTO people (name, birth_date, phone)
          VALUES ($1, $2::date, $3)
@@ -194,8 +251,6 @@ export async function executeEnrollmentIntake(
       );
       studentPersonId = createdPerson.rows[0].id;
     } else {
-      // T4 deliberately permits only reuse already anchored to this institution.
-      // Cross-institution Person reuse requires the later authority/API proof.
       const localPerson = await client.query<{ person_id: string; student_profile_id: string }>(
         `SELECT p.id AS person_id, sp.id AS student_profile_id
            FROM people p
@@ -205,11 +260,27 @@ export async function executeEnrollmentIntake(
           WHERE p.id = $1`,
         [command.person.personId, command.institutionId],
       );
-      if (!localPerson.rowCount) {
-        throw new EnrollmentIntakeError('PERSON_NOT_FOUND', 'The selected Person is not available in this institution.');
+
+      if (localPerson.rowCount) {
+        studentPersonId = localPerson.rows[0].person_id;
+        studentProfileId = localPerson.rows[0].student_profile_id;
+      } else {
+        await requireApprovedIdentityDecision(
+          client,
+          command.institutionId,
+          command.person.authorization,
+          'REUSE_PERSON',
+          command.person.personId,
+        );
+        const existingPerson = await client.query<{ id: string }>(
+          `SELECT id FROM people WHERE id = $1`,
+          [command.person.personId],
+        );
+        if (!existingPerson.rowCount) {
+          throw new EnrollmentIntakeError('PERSON_NOT_FOUND', 'The approved Person no longer exists.');
+        }
+        studentPersonId = existingPerson.rows[0].id;
       }
-      studentPersonId = localPerson.rows[0].person_id;
-      studentProfileId = localPerson.rows[0].student_profile_id;
     }
 
     if (!studentProfileId) {
@@ -243,7 +314,16 @@ export async function executeEnrollmentIntake(
         `INSERT INTO enrollment_events (
            institution_id, enrollment_application_id, actor_person_id, event_type, to_status, metadata
          ) VALUES ($1, $2, $3, 'created', 'draft', $4::jsonb)`,
-        [command.institutionId, enrollment.rows[0].id, command.actorPersonId, JSON.stringify({ source: 'student_person_resolution', idempotent: true })],
+        [
+          command.institutionId,
+          enrollment.rows[0].id,
+          command.actorPersonId,
+          JSON.stringify({
+            source: 'student_person_resolution',
+            idempotent: true,
+            identityDecisionId: command.person.authorization?.decisionId ?? null,
+          }),
+        ],
       );
 
       await client.query(
