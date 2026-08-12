@@ -73,14 +73,12 @@ export function fingerprintEnrollmentIntake(command: EnrollmentIntakeCommand): s
       }
     : { kind: command.person.kind, personId: command.person.personId };
 
-  const canonical = JSON.stringify({
+  return crypto.createHash('sha256').update(JSON.stringify({
     institutionId: command.institutionId,
     actorPersonId: command.actorPersonId,
     offerId: command.offerId,
     person,
-  });
-
-  return crypto.createHash('sha256').update(canonical).digest('hex');
+  })).digest('hex');
 }
 
 async function selectCompletedReplay(
@@ -96,16 +94,12 @@ async function selectCompletedReplay(
     student_person_id: string | null;
     student_profile_id: string | null;
   }>(
-    `SELECT c.request_fingerprint,
-            c.status,
-            c.enrollment_application_id,
-            e.student_person_id,
-            sp.id AS student_profile_id
+    `SELECT c.request_fingerprint, c.status, c.enrollment_application_id,
+            e.student_person_id, sp.id AS student_profile_id
        FROM enrollment_intake_commands c
        LEFT JOIN enrollment_applications e ON e.id = c.enrollment_application_id
        LEFT JOIN student_profiles sp
-         ON sp.institution_id = c.institution_id
-        AND sp.person_id = e.student_person_id
+         ON sp.institution_id = c.institution_id AND sp.person_id = e.student_person_id
       WHERE c.institution_id = $1
         AND c.operation = 'enrollment_intake'
         AND c.idempotency_key = $2
@@ -114,12 +108,10 @@ async function selectCompletedReplay(
   );
 
   if (!existing.rowCount) return null;
-
   const row = existing.rows[0];
   if (row.request_fingerprint !== requestFingerprint) {
     throw new EnrollmentIntakeError('IDEMPOTENCY_KEY_REUSED', 'The idempotency key was already used with different input.');
   }
-
   if (row.status === 'completed' && row.enrollment_application_id && row.student_person_id && row.student_profile_id) {
     return {
       enrollmentApplicationId: row.enrollment_application_id,
@@ -128,7 +120,6 @@ async function selectCompletedReplay(
       replayed: true,
     };
   }
-
   return null;
 }
 
@@ -142,20 +133,12 @@ export async function executeEnrollmentIntake(
 
   try {
     await client.query('BEGIN');
-
-    // Serializes concurrent retries for the same institutional command without
-    // relying on process memory. The lock lives only for this transaction.
     await client.query(
       `SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
       [command.institutionId, `enrollment_intake:${idempotencyKey}`],
     );
 
-    const replay = await selectCompletedReplay(
-      client,
-      command.institutionId,
-      idempotencyKey,
-      requestFingerprint,
-    );
+    const replay = await selectCompletedReplay(client, command.institutionId, idempotencyKey, requestFingerprint);
     if (replay) {
       await client.query('COMMIT');
       return replay;
@@ -169,14 +152,10 @@ export async function executeEnrollmentIntake(
           AND idempotency_key = $2`,
       [command.institutionId, idempotencyKey],
     );
-
     if (existingCommand.rowCount) {
       if (existingCommand.rows[0].request_fingerprint !== requestFingerprint) {
         throw new EnrollmentIntakeError('IDEMPOTENCY_KEY_REUSED', 'The idempotency key was already used with different input.');
       }
-      // A pending row can only be observed after a previous transaction was
-      // committed. T4 never commits pending commands, so this indicates an
-      // invalid legacy/interrupted state and must not continue silently.
       throw new EnrollmentIntakeError('IDEMPOTENCY_KEY_REUSED', 'The idempotency command is not in a reusable completed state.');
     }
 
@@ -184,8 +163,7 @@ export async function executeEnrollmentIntake(
       `SELECT o.academic_year_id
          FROM enrollment_offers o
          INNER JOIN academic_years y
-           ON y.id = o.academic_year_id
-          AND y.institution_id = o.institution_id
+           ON y.id = o.academic_year_id AND y.institution_id = o.institution_id
         WHERE o.id = $1
           AND o.institution_id = $2
           AND o.status = 'active'
@@ -205,46 +183,51 @@ export async function executeEnrollmentIntake(
     );
 
     let studentPersonId: string;
+    let studentProfileId: string | undefined;
+
     if (command.person.kind === 'new_person') {
       const createdPerson = await client.query<{ id: string }>(
         `INSERT INTO people (name, birth_date, phone)
          VALUES ($1, $2::date, $3)
          RETURNING id`,
-        [
-          command.person.name.trim(),
-          normalizeOptionalText(command.person.birthDate),
-          normalizeOptionalText(command.person.phone),
-        ],
+        [command.person.name.trim(), normalizeOptionalText(command.person.birthDate), normalizeOptionalText(command.person.phone)],
       );
       studentPersonId = createdPerson.rows[0].id;
     } else {
-      const existingPerson = await client.query<{ id: string }>(
-        `SELECT id FROM people WHERE id = $1`,
-        [command.person.personId],
+      // T4 deliberately permits only reuse already anchored to this institution.
+      // Cross-institution Person reuse requires the later authority/API proof.
+      const localPerson = await client.query<{ person_id: string; student_profile_id: string }>(
+        `SELECT p.id AS person_id, sp.id AS student_profile_id
+           FROM people p
+           INNER JOIN student_profiles sp
+             ON sp.person_id = p.id
+            AND sp.institution_id = $2
+          WHERE p.id = $1`,
+        [command.person.personId, command.institutionId],
       );
-      if (!existingPerson.rowCount) {
-        throw new EnrollmentIntakeError('PERSON_NOT_FOUND', 'The selected Person does not exist.');
+      if (!localPerson.rowCount) {
+        throw new EnrollmentIntakeError('PERSON_NOT_FOUND', 'The selected Person is not available in this institution.');
       }
-      studentPersonId = existingPerson.rows[0].id;
+      studentPersonId = localPerson.rows[0].person_id;
+      studentProfileId = localPerson.rows[0].student_profile_id;
     }
 
-    const insertedProfile = await client.query<{ id: string }>(
-      `INSERT INTO student_profiles (institution_id, person_id, status)
-       VALUES ($1, $2, 'inactive')
-       ON CONFLICT (institution_id, person_id) DO NOTHING
-       RETURNING id`,
-      [command.institutionId, studentPersonId],
-    );
-
-    let studentProfileId = insertedProfile.rows[0]?.id;
     if (!studentProfileId) {
-      const existingProfile = await client.query<{ id: string }>(
-        `SELECT id
-           FROM student_profiles
-          WHERE institution_id = $1 AND person_id = $2`,
+      const insertedProfile = await client.query<{ id: string }>(
+        `INSERT INTO student_profiles (institution_id, person_id, status)
+         VALUES ($1, $2, 'inactive')
+         ON CONFLICT (institution_id, person_id) DO NOTHING
+         RETURNING id`,
         [command.institutionId, studentPersonId],
       );
-      studentProfileId = existingProfile.rows[0]?.id;
+      studentProfileId = insertedProfile.rows[0]?.id;
+      if (!studentProfileId) {
+        const existingProfile = await client.query<{ id: string }>(
+          `SELECT id FROM student_profiles WHERE institution_id = $1 AND person_id = $2`,
+          [command.institutionId, studentPersonId],
+        );
+        studentProfileId = existingProfile.rows[0]?.id;
+      }
     }
 
     try {
@@ -253,25 +236,14 @@ export async function executeEnrollmentIntake(
            institution_id, student_person_id, academic_year_id, offer_id, created_by, updated_by
          ) VALUES ($1, $2, $3, $4, $5, $5)
          RETURNING id`,
-        [
-          command.institutionId,
-          studentPersonId,
-          offer.rows[0].academic_year_id,
-          command.offerId,
-          command.actorPersonId,
-        ],
+        [command.institutionId, studentPersonId, offer.rows[0].academic_year_id, command.offerId, command.actorPersonId],
       );
 
       await client.query(
         `INSERT INTO enrollment_events (
            institution_id, enrollment_application_id, actor_person_id, event_type, to_status, metadata
          ) VALUES ($1, $2, $3, 'created', 'draft', $4::jsonb)`,
-        [
-          command.institutionId,
-          enrollment.rows[0].id,
-          command.actorPersonId,
-          JSON.stringify({ source: 'student_person_resolution', idempotent: true }),
-        ],
+        [command.institutionId, enrollment.rows[0].id, command.actorPersonId, JSON.stringify({ source: 'student_person_resolution', idempotent: true })],
       );
 
       await client.query(
@@ -285,7 +257,7 @@ export async function executeEnrollmentIntake(
       return {
         enrollmentApplicationId: enrollment.rows[0].id,
         studentPersonId,
-        studentProfileId,
+        studentProfileId: studentProfileId!,
         replayed: false,
       };
     } catch (error: any) {
