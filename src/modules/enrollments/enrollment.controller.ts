@@ -1,6 +1,17 @@
 import { Application, Response } from 'express';
 import { pool } from '../../db/index.ts';
 import { requireAuth, AuthRequest } from '../../middleware/auth.ts';
+import { IdentityDecisionError } from '../people/identity-resolution-decision.ts';
+import {
+  assertNoClientAuthority,
+  decideEnrollmentIdentityDecision,
+  EnrollmentIntakeApiError,
+  parseEnrollmentStudentInput,
+  proposeEnrollmentIdentityDecision,
+  resolveStudentForEnrollment,
+  startEnrollmentIntake,
+} from './enrollment-intake-api.ts';
+import { EnrollmentIntakeError } from './enrollment-intake.ts';
 import { canConfigureEnrollment, canManageEnrollment, canTransitionEnrollment, EnrollmentStatus, isEnrollmentStatus } from './enrollment-policy.ts';
 
 function reject(res: Response, status: number, error: string) { return res.status(status).json({ error }); }
@@ -24,6 +35,33 @@ function enrollmentConfigurator(req: AuthRequest, res: Response) {
 
 function validDate(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
+}
+
+function rejectDomainError(res: Response, error: unknown) {
+  if (error instanceof EnrollmentIntakeApiError) {
+    if (error.code === 'IDENTITY_REVIEW_REQUIRED' || error.code === 'IDENTITY_DECISION_INVALID' || error.code === 'IDENTITY_DECISION_STALE') {
+      return reject(res, 409, error.message);
+    }
+    return reject(res, 400, error.message);
+  }
+  if (error instanceof EnrollmentIntakeError) {
+    if (error.code === 'ENROLLMENT_ALREADY_EXISTS' || error.code === 'IDEMPOTENCY_KEY_REUSED'
+      || error.code === 'IDENTITY_DECISION_REQUIRED' || error.code === 'IDENTITY_DECISION_INVALID'
+      || error.code === 'PERSON_NOT_FOUND') {
+      return reject(res, 409, error.message);
+    }
+    return reject(res, 400, error.message);
+  }
+  if (error instanceof IdentityDecisionError) {
+    if (error.code === 'UNAUTHORIZED_DECISION' || error.code === 'SEGREGATION_REQUIRED' || error.code === 'INSTITUTION_ADMIN_REQUIRED') {
+      return reject(res, 403, error.message);
+    }
+    if (error.code === 'DECISION_NOT_FOUND') return reject(res, 404, error.message);
+    if (error.code === 'DECISION_CASE_CONFLICT' || error.code === 'DECISION_ALREADY_FINAL') return reject(res, 409, error.message);
+    return reject(res, 400, error.message);
+  }
+  console.error('[ENROLLMENTS] unhandled domain error', error);
+  return reject(res, 500, 'Não foi possível concluir a operação de matrícula.');
 }
 
 export function registerEnrollmentRoutes(app: Application) {
@@ -104,77 +142,112 @@ export function registerEnrollmentRoutes(app: Application) {
     } catch (error) { console.error('[ENROLLMENTS] list', error); return reject(res, 500, 'Não foi possível carregar as matrículas.'); }
   });
 
+  app.post('/api/enrollments/person-resolution', requireAuth, async (req: AuthRequest, res: Response) => {
+    const context = enrollmentActor(req, res); if (!context) return;
+    try {
+      assertNoClientAuthority(req.body);
+      const student = parseEnrollmentStudentInput(req.body?.student);
+      const resolution = await resolveStudentForEnrollment(pool, context, student);
+      return res.json({ resolution });
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
+  app.post('/api/enrollments/identity-decisions', requireAuth, async (req: AuthRequest, res: Response) => {
+    const context = enrollmentActor(req, res); if (!context) return;
+    try {
+      assertNoClientAuthority(req.body);
+      const student = parseEnrollmentStudentInput(req.body?.student);
+      const proposedAction = req.body?.proposedAction;
+      if (proposedAction !== 'REUSE_PERSON' && proposedAction !== 'CREATE_PERSON') {
+        return reject(res, 400, 'Ação de decisão de identidade inválida.');
+      }
+      const decision = await proposeEnrollmentIdentityDecision(pool, context, {
+        offerId: req.body?.offerId,
+        student,
+        proposedAction,
+        candidatePersonId: req.body?.candidatePersonId ?? null,
+        evidenceTypes: Array.isArray(req.body?.evidenceTypes) ? req.body.evidenceTypes : [],
+        requestId: typeof req.headers['x-request-id'] === 'string' ? req.headers['x-request-id'] : null,
+        correlationId: typeof req.headers['x-correlation-id'] === 'string' ? req.headers['x-correlation-id'] : null,
+      });
+      return res.status(201).json({
+        decision: {
+          id: decision.id,
+          status: decision.status,
+          riskLevel: decision.riskLevel,
+          proposedAction: decision.proposedAction,
+          reasonCode: decision.reasonCode,
+          version: decision.version,
+          replayed: decision.replayed ?? false,
+        },
+      });
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
+  app.post('/api/enrollments/identity-decisions/:id/outcome', requireAuth, async (req: AuthRequest, res: Response) => {
+    const context = enrollmentActor(req, res); if (!context) return;
+    try {
+      assertNoClientAuthority(req.body ?? {});
+      const outcome = req.body?.outcome;
+      if (outcome !== 'approve' && outcome !== 'reject' && outcome !== 'request_more_information') {
+        return reject(res, 400, 'Resultado de decisão inválido.');
+      }
+      const decision = await decideEnrollmentIdentityDecision(pool, context, req.params.id, outcome);
+      return res.json({
+        decision: {
+          id: decision.id,
+          status: decision.status,
+          riskLevel: decision.riskLevel,
+          proposedAction: decision.proposedAction,
+          reasonCode: decision.reasonCode,
+          version: decision.version,
+        },
+      });
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
+  app.post('/api/enrollments/intake', requireAuth, async (req: AuthRequest, res: Response) => {
+    const context = enrollmentActor(req, res); if (!context) return;
+    try {
+      assertNoClientAuthority(req.body);
+      const student = parseEnrollmentStudentInput(req.body?.student);
+      const idempotencyKeyHeader = req.header('Idempotency-Key');
+      if (!idempotencyKeyHeader) return reject(res, 400, 'Idempotency-Key é obrigatório para iniciar a matrícula.');
+      const result = await startEnrollmentIntake(pool, context, {
+        offerId: req.body?.offerId,
+        student,
+        idempotencyKey: idempotencyKeyHeader,
+        decisionId: req.body?.decisionId ?? null,
+      });
+      return res.status(result.replayed ? 200 : 201).json({
+        enrollment: {
+          id: result.enrollmentApplicationId,
+          studentPersonId: result.studentPersonId,
+          studentProfileId: result.studentProfileId,
+          replayed: result.replayed,
+        },
+      });
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
+  // Legacy write paths are intentionally closed. They previously created Person
+  // directly or trusted a browser-supplied global Person UUID, bypassing 08B.1.
   app.post('/api/enrollments/drafts', requireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
-    const { studentName, guardianName, offerId } = req.body ?? {};
-    if (typeof studentName !== 'string' || studentName.trim().length < 3 || studentName.trim().length > 160) return reject(res, 400, 'Indique o nome completo do aluno.');
-    if (guardianName !== undefined && (typeof guardianName !== 'string' || guardianName.trim().length < 3 || guardianName.trim().length > 160)) return reject(res, 400, 'O nome do encarregado é inválido.');
-    if (!validUuid(offerId)) return reject(res, 400, 'Selecione uma oferta de matrícula válida.');
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const offer = await client.query<{ academic_year_id: string }>(
-        `SELECT o.academic_year_id FROM enrollment_offers o INNER JOIN academic_years y ON y.id = o.academic_year_id
-         WHERE o.id = $1 AND o.institution_id = $2 AND o.status = 'active' AND y.status = 'active'`, [offerId, context.institutionId],
-      );
-      if (!offer.rowCount) { await client.query('ROLLBACK'); return reject(res, 400, 'A oferta não pertence à instituição ou não está ativa.'); }
-      const student = await client.query<{ id: string }>(`INSERT INTO people (name) VALUES ($1) RETURNING id`, [studentName.trim()]);
-      await client.query(`INSERT INTO student_profiles (institution_id, person_id, status) VALUES ($1, $2, 'inactive')`, [context.institutionId, student.rows[0].id]);
-      let guardianPersonId: string | null = null;
-      if (guardianName?.trim()) {
-        const guardian = await client.query<{ id: string }>(`INSERT INTO people (name) VALUES ($1) RETURNING id`, [guardianName.trim()]);
-        guardianPersonId = guardian.rows[0].id;
-        await client.query(
-          `INSERT INTO guardian_relationships (institution_id, guardian_person_id, student_person_id, relationship)
-           VALUES ($1, $2, $3, 'guardian')`, [context.institutionId, guardianPersonId, student.rows[0].id],
-        );
-      }
-      const enrollment = await client.query(
-        `INSERT INTO enrollment_applications (institution_id, student_person_id, guardian_person_id, academic_year_id, offer_id, created_by, updated_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $6) RETURNING id, status, created_at`,
-        [context.institutionId, student.rows[0].id, guardianPersonId, offer.rows[0].academic_year_id, offerId, context.personId],
-      );
-      await client.query(`INSERT INTO enrollment_events (institution_id, enrollment_application_id, actor_person_id, event_type, to_status) VALUES ($1, $2, $3, 'created', 'draft')`, [context.institutionId, enrollment.rows[0].id, context.personId]);
-      await client.query('COMMIT');
-      res.status(201).json({ enrollment: { ...enrollment.rows[0], student_name: studentName.trim(), guardian_name: guardianName?.trim() || null } });
-    } catch (error: any) {
-      await client.query('ROLLBACK');
-      if (error?.code === '23505') return reject(res, 409, 'Já existe uma matrícula não cancelada para este aluno neste ano letivo.');
-      console.error('[ENROLLMENTS] draft', error); return reject(res, 500, 'Não foi possível criar o rascunho de matrícula.');
-    } finally { client.release(); }
+    return reject(res, 410, 'Fluxo antigo de rascunho desativado. Utilize o intake de matrícula com resolução de identidade.');
   });
 
   app.post('/api/enrollments', requireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
-    const { studentPersonId, guardianPersonId, academicYearId, offerId } = req.body ?? {};
-    if (![studentPersonId, academicYearId, offerId].every(validUuid) || (guardianPersonId !== undefined && guardianPersonId !== null && !validUuid(guardianPersonId))) {
-      return reject(res, 400, 'Os identificadores da matrícula têm de ser UUIDs válidos.');
-    }
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const offer = await client.query(
-        `SELECT 1 FROM enrollment_offers WHERE id = $1 AND institution_id = $2 AND academic_year_id = $3 AND status = 'active'`,
-        [offerId, context.institutionId, academicYearId],
-      );
-      if (!offer.rowCount) { await client.query('ROLLBACK'); return reject(res, 400, 'A oferta não pertence à instituição ou não está ativa.'); }
-      const created = await client.query(
-        `INSERT INTO enrollment_applications (institution_id, student_person_id, guardian_person_id, academic_year_id, offer_id, created_by, updated_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $6) RETURNING id, status, created_at`,
-        [context.institutionId, studentPersonId, guardianPersonId ?? null, academicYearId, offerId, context.personId],
-      );
-      await client.query(
-        `INSERT INTO enrollment_events (institution_id, enrollment_application_id, actor_person_id, event_type, to_status)
-         VALUES ($1, $2, $3, 'created', 'draft')`,
-        [context.institutionId, created.rows[0].id, context.personId],
-      );
-      await client.query('COMMIT');
-      res.status(201).json({ enrollment: created.rows[0] });
-    } catch (error: any) {
-      await client.query('ROLLBACK');
-      if (error?.code === '23505') return reject(res, 409, 'Já existe uma matrícula não cancelada para este aluno neste ano letivo.');
-      throw error;
-    } finally { client.release(); }
+    return reject(res, 410, 'Fluxo antigo de matrícula desativado. Utilize /api/enrollments/intake.');
   });
 
   app.post('/api/enrollments/:id/transitions', requireAuth, async (req: AuthRequest, res: Response) => {
