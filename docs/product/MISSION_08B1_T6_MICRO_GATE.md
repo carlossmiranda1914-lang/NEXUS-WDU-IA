@@ -43,13 +43,13 @@ Estas correções não alteram privilégios nem expandem o domínio funcional; r
 O mesmo teste cobre Escola A/B, restricted match, fail-closed T4 e reutilização cross-institution somente após proposta T5 + aprovação independente.
 
 ## Gates
-- regressões T2/T3/T4/T5;
-- `test:enrollment-intake-api`;
-- `test:enrollment-intake-api:postgres`;
-- `test:migrations:isolated`;
-- lint;
-- build;
-- diff controlado: 10 ficheiros. Os dois ficheiros adicionais ao escopo T6 original são `identity-resolution-decision.ts` (correção PostgreSQL real T5) e `tests/enrollment-intake.test.ts` (regressão T4 fail-closed explícita).
+Executar preferencialmente um único comando:
+
+`npm run test:t6`
+
+Esse comando executa regressões T2/T3/T4/T5, contrato T6, PostgreSQL real T6, migrations isoladas, lint e build.
+
+Diff controlado: 10 ficheiros. Os dois ficheiros adicionais ao escopo T6 original são `identity-resolution-decision.ts` (correção PostgreSQL real T5) e `tests/enrollment-intake.test.ts` (regressão T4 fail-closed explícita).
 
 ## Fora do escopo
 - UI T7;
