@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../src/components/EnrollmentWorkspace.tsx', import.meta.url), 'utf8');
+const model = await readFile(new URL('../src/modules/enrollments/enrollment-ui-model.ts', import.meta.url), 'utf8');
 const failures: string[] = [];
 let assertions = 0;
 function expect(condition: unknown, message: string) { assertions += 1; if (!condition) failures.push(message); }
@@ -15,7 +16,8 @@ expect(!source.includes('institutionId:'), 'T7 UI must not send institutionId as
 expect(!source.includes('studentPersonId:'), 'T7 UI must not send studentPersonId as client authority.');
 expect(source.includes('Identificar aluno'), 'T7 UI must expose the Identificar step in non-technical language.');
 expect(source.includes('Iniciar matrícula'), 'T7 UI must expose the final Iniciar action.');
-expect(source.includes('possível registo que não pode ser apresentado aqui') || source.includes('possible'), 'Restricted-match UI must avoid exposing protected candidate details.');
+expect(model.includes('possível registo que não pode ser apresentado aqui'), 'Restricted-match copy must explicitly hide protected candidate details.');
+expect(!model.toLowerCase().includes('instituição de origem:'), 'Restricted-match model must not render an origin field.');
 
 if (failures.length) throw new Error(failures.join('\n'));
 console.log(`Enrollment UI contract tests passed (${assertions} assertions).`);
