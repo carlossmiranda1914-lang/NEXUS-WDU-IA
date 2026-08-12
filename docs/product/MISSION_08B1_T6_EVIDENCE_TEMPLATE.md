@@ -4,6 +4,7 @@ Preencher somente com execução real dos gates.
 
 - E01 branch/HEAD:
 - E02 diff contra `main`:
+- E03 `npm run test:t6`:
 - E03 regressões T2/T3/T4/T5:
 - E03 `test:enrollment-intake-api`:
 - E03 `test:enrollment-intake-api:postgres`:
@@ -25,6 +26,7 @@ Preencher somente com execução real dos gates.
 Estas correções exigem reexecução integral; resultados anteriores não contam como evidência final da T6.
 
 ## Critérios mínimos de PASS
+- `npm run test:t6` termina com exit code 0;
 - nenhum endpoint T6 aceita `institutionId`, `role`, `approved`, `academicYearId` ou `studentPersonId` do browser como autoridade;
 - `POST /api/enrollments/drafts` e POST legado `/api/enrollments` não escrevem mais;
 - `NO_MATCH` normal cria uma única Person/Profile/Enrollment;
