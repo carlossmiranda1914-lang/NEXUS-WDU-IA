@@ -126,6 +126,7 @@ export interface IdentityDecisionRecord {
   reasonCode: IdentityDecisionReasonCode;
   status: IdentityDecisionStatus;
   requestedByPersonId: string;
+  decidedByPersonId: string | null;
   approvedByPersonId: string | null;
   version: number;
   replayed?: boolean;
@@ -172,7 +173,37 @@ function sanitizeCandidateIds(values: readonly string[] | undefined): string[] {
   return unique;
 }
 
-function fingerprintProposal(input: ProposeIdentityDecisionInput, policy: Policy): string {
+function validateProposalSemantics(input: ProposeIdentityDecisionInput, candidatePersonIds: readonly string[]) {
+  if (input.proposedAction === 'CREATE_PERSON' && input.reasonCode !== 'NEW_PERSON_APPROVED_DESPITE_CONFLICT') {
+    throw new IdentityDecisionError('INVALID_DECISION_INPUT', 'Conflict creation requires the dedicated D-05 reason code.');
+  }
+  if (input.reasonCode === 'NEW_PERSON_APPROVED_DESPITE_CONFLICT' && input.proposedAction !== 'CREATE_PERSON') {
+    throw new IdentityDecisionError('INVALID_DECISION_INPUT', 'The conflict exception must propose CREATE_PERSON.');
+  }
+  if (['MATCH_CONFIRMED_WITH_NEW_EVIDENCE', 'MULTIPLE_CANDIDATES_RESOLVED', 'IDENTIFIER_CONFLICT'].includes(input.reasonCode)
+      && input.proposedAction !== 'REUSE_PERSON') {
+    throw new IdentityDecisionError('INVALID_DECISION_INPUT', 'Resolved identity matches must propose REUSE_PERSON.');
+  }
+  if (['CONFLICT_REQUIRES_REVIEW', 'INSUFFICIENT_EVIDENCE'].includes(input.reasonCode)
+      && input.proposedAction !== 'REVIEW_REQUIRED') {
+    throw new IdentityDecisionError('INVALID_DECISION_INPUT', 'Unresolved conflicts must remain REVIEW_REQUIRED.');
+  }
+  if (input.proposedAction === 'REUSE_PERSON') {
+    if (!input.proposedCandidatePersonId || !candidatePersonIds.includes(input.proposedCandidatePersonId)) {
+      throw new IdentityDecisionError('INVALID_DECISION_INPUT', 'REUSE_PERSON requires one approved candidate from the internal candidate set.');
+    }
+  } else if (input.proposedCandidatePersonId) {
+    throw new IdentityDecisionError('INVALID_DECISION_INPUT', 'Only REUSE_PERSON may select a candidate Person.');
+  }
+}
+
+function fingerprintProposal(
+  input: ProposeIdentityDecisionInput,
+  policy: Policy,
+  candidatePersonIds: readonly string[],
+  matchReasons: readonly string[],
+  evidenceTypes: readonly string[],
+): string {
   const payload = JSON.stringify({
     institutionId: input.institutionId,
     caseKey: sanitizeCaseKey(input.caseKey),
@@ -180,9 +211,9 @@ function fingerprintProposal(input: ProposeIdentityDecisionInput, policy: Policy
     reasonCode: input.reasonCode,
     riskLevel: policy.riskLevel,
     proposedCandidatePersonId: input.proposedCandidatePersonId ?? null,
-    candidatePersonIds: [...sanitizeCandidateIds(input.candidatePersonIds)].sort(),
-    matchReasons: [...sanitizeList(input.matchReasons, MATCH_REASON_ALLOWLIST)].sort(),
-    evidenceTypes: [...sanitizeList(input.evidenceTypes, EVIDENCE_TYPE_ALLOWLIST)].sort(),
+    candidatePersonIds: [...candidatePersonIds].sort(),
+    matchReasons: [...matchReasons].sort(),
+    evidenceTypes: [...evidenceTypes].sort(),
   });
   return crypto.createHash('sha256').update(payload).digest('hex');
 }
@@ -218,6 +249,7 @@ function mapRow(row: any, replayed = false): IdentityDecisionRecord {
     reasonCode: row.reason_code,
     status: row.status,
     requestedByPersonId: row.requested_by_person_id,
+    decidedByPersonId: row.decided_by_person_id ?? null,
     approvedByPersonId: row.approved_by_person_id ?? null,
     version: row.version,
     replayed,
@@ -230,26 +262,13 @@ export async function proposeIdentityDecision(
 ): Promise<IdentityDecisionRecord> {
   const policy = POLICY[input.reasonCode];
   if (!policy) throw new IdentityDecisionError('INVALID_DECISION_INPUT', 'Unsupported reason code.');
-  if (input.proposedAction === 'CREATE_PERSON' && input.reasonCode !== 'NEW_PERSON_APPROVED_DESPITE_CONFLICT') {
-    throw new IdentityDecisionError('INVALID_DECISION_INPUT', 'Conflict creation requires the dedicated D-05 reason code.');
-  }
-  if (input.reasonCode === 'NEW_PERSON_APPROVED_DESPITE_CONFLICT' && input.proposedAction !== 'CREATE_PERSON') {
-    throw new IdentityDecisionError('INVALID_DECISION_INPUT', 'The conflict exception must propose CREATE_PERSON.');
-  }
-  if (['MATCH_CONFIRMED_WITH_NEW_EVIDENCE', 'MULTIPLE_CANDIDATES_RESOLVED'].includes(input.reasonCode)
-      && input.proposedAction !== 'REUSE_PERSON') {
-    throw new IdentityDecisionError('INVALID_DECISION_INPUT', 'Resolved match decisions must propose REUSE_PERSON.');
-  }
-  if (['CONFLICT_REQUIRES_REVIEW', 'INSUFFICIENT_EVIDENCE', 'IDENTIFIER_CONFLICT'].includes(input.reasonCode)
-      && input.proposedAction !== 'REVIEW_REQUIRED') {
-    throw new IdentityDecisionError('INVALID_DECISION_INPUT', 'This reason code must remain REVIEW_REQUIRED until authorized resolution exists.');
-  }
 
   const caseKey = sanitizeCaseKey(input.caseKey);
   const candidatePersonIds = sanitizeCandidateIds(input.candidatePersonIds);
   const matchReasons = sanitizeList(input.matchReasons, MATCH_REASON_ALLOWLIST);
   const evidenceTypes = sanitizeList(input.evidenceTypes, EVIDENCE_TYPE_ALLOWLIST);
-  const requestFingerprint = fingerprintProposal(input, policy);
+  validateProposalSemantics(input, candidatePersonIds);
+  const requestFingerprint = fingerprintProposal(input, policy, candidatePersonIds, matchReasons, evidenceTypes);
   const client = await pool.connect();
 
   try {
@@ -344,6 +363,9 @@ export async function decideIdentityDecision(
     }
 
     if (input.outcome === 'approve') {
+      if (policy.requiredApprovalRole === null) {
+        throw new IdentityDecisionError('INVALID_DECISION_INPUT', 'This policy outcome does not support approval.');
+      }
       if (policy.requiredApprovalRole === 'leadership' && role !== 'director' && role !== 'institution_admin') {
         throw new IdentityDecisionError('UNAUTHORIZED_DECISION', 'Leadership approval is required.');
       }
@@ -369,7 +391,8 @@ export async function decideIdentityDecision(
     const updated = await client.query<any>(
       `UPDATE identity_resolution_decisions
           SET status = $1,
-              approved_by_person_id = $2,
+              decided_by_person_id = $2,
+              approved_by_person_id = CASE WHEN $1 = 'approved' THEN $2 ELSE NULL END,
               decided_at = CASE WHEN $1 IN ('approved', 'rejected') THEN now() ELSE NULL END,
               updated_at = now(),
               version = version + 1
