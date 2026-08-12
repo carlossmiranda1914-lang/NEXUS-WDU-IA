@@ -27,6 +27,18 @@ replaceOnce(
 );
 
 replaceOnce(
+  'obsolete gamification layout configuration',
+  `  gamification: {\n    type: 'Painel de Méritos e Destaques',\n    containerClass: "w-full max-w-[1600px] mx-auto space-y-6",\n    description: "Registo de comportamento positivo, prémios de dedicação e pódio de alunos."\n  },\n`,
+  '',
+);
+
+replaceOnce(
+  'obsolete matriculas layout configuration',
+  `  matriculas: {\n    type: 'Formatador Sequencial de Registos',\n    containerClass: "w-full max-w-[1500px] mx-auto space-y-6",\n    description: "Portal de Matrícula para conferência de dados e validação de documentos de acesso."\n  },\n`,
+  '',
+);
+
+replaceOnce(
   'legacy students subtab state',
   "  const [studentsSubTab, setStudentsSubTab] = useState<'list' | 'matriculas' | 'gamification'>('list');\n",
   '',
@@ -58,6 +70,8 @@ const forbidden = [
   '<Gamification',
   'Portal de Matrícula',
   'Mérito & Engajamento / Pódio',
+  "type: 'Painel de Méritos e Destaques'",
+  "type: 'Formatador Sequencial de Registos'",
 ];
 for (const token of forbidden) {
   if (source.includes(token)) throw new Error(`[ENROLLMENT-VNEXT] forbidden legacy token remained after patch: ${token}`);
