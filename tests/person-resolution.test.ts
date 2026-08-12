@@ -30,7 +30,8 @@ function candidate(overrides: Partial<PersonResolutionCandidate> = {}): PersonRe
 
 expect(normalizePersonName('  João   Manuel ANTÓNIO ') === 'joao manuel antonio', 'Name normalization must remove accents, case and repeated spaces.');
 expect(normalizePhone('+244 923 000 111') === '244923000111', 'Phone normalization must keep digits only.');
-expect(normalizeIdentifier(' alu 001 ') === 'ALU001', 'Identifier normalization must ignore spaces and case.');
+expect(normalizeIdentifier(' alu-001 ') === 'ALU-001', 'Identifier normalization must ignore surrounding spaces and case while preserving punctuation.');
+expect(normalizeIdentifier('ALU001') !== normalizeIdentifier('ALU-001'), 'Identifier normalization must not collapse punctuation that can distinguish institutional identifiers.');
 
 const noMatch = resolvePersonCandidates(
   { name: 'Pessoa Nova', birthDate: '2015-01-01' },
@@ -40,7 +41,7 @@ expect(noMatch.status === 'NO_MATCH', 'Unrelated data must return NO_MATCH.');
 expect(noMatch.candidateCount === 0, 'NO_MATCH must not expose candidate count from unrelated rows.');
 
 const localStrong = resolvePersonCandidates(
-  { name: 'João Manuel António', birthDate: '2014-03-12', studentNumber: 'alu 001' },
+  { name: 'João Manuel António', birthDate: '2014-03-12', studentNumber: 'alu-001' },
   [candidate()],
 );
 expect(localStrong.status === 'LOCAL_MATCH', 'Strong institutional identifier must resolve a local Person.');
