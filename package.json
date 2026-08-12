@@ -14,6 +14,7 @@
     "test:schema:test": "set VERIFY_TEST_DATABASE=NEXUS_TEST_DATABASE&& tsx scripts/verify-vnext-schema.ts",
     "test:enrollment-policy": "tsx tests/enrollment-policy.test.ts",
     "test:person-resolution": "tsx tests/person-resolution.test.ts",
+    "test:person-resolution-access": "tsx tests/person-resolution-access.test.ts",
     "test:database:setup": "tsx scripts/setup-test-database.ts",
     "test:identity": "tsx scripts/seed-test-institutional-identity.ts",
     "migrate:audit": "tsx scripts/apply-audit-observability-migration.ts",
