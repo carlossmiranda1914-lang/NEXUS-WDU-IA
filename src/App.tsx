@@ -64,13 +64,15 @@ import type { SchoolDoc } from './components/SchoolDocuments';
 
 // Subcomponents - Lazy Loaded for Code Splitting and Bundle Optimization
 const Dashboard = lazy(() => import('./components/Dashboard'));
+const StudentsList = lazy(() => import('./components/StudentsList'));
 const TeachersList = lazy(() => import('./components/TeachersList'));
 const FinancialPanel = lazy(() => import('./components/FinancialPanel'));
 const CommunicationCenter = lazy(() => import('./components/CommunicationCenter'));
 const SystemConfig = lazy(() => import('./components/SystemConfig'));
 const AIAssistant = lazy(() => import('./components/AIAssistant'));
 const TeacherAI = lazy(() => import('./components/TeacherAI'));
-const EnrollmentOperationsWorkspace = lazy(() => import('./components/EnrollmentOperationsWorkspace'));
+const Gamification = lazy(() => import('./components/Gamification'));
+const EnrollmentWorkspace = lazy(() => import('./components/EnrollmentWorkspace'));
 const SchoolDocuments = lazy(() => import('./components/SchoolDocuments'));
 const WorkflowsCentral = lazy(() => import('./components/WorkflowsCentral'));
 const ParentPortal = lazy(() => import('./components/ParentPortal'));
@@ -147,9 +149,9 @@ export const TABS_LAYOUT_CONFIG: Record<string, {
     description: "Gestão financeira de propinas, faturação e controlo administrativo de pagamentos."
   },
   students: {
-    type: 'Workspace Operacional de Alunos & Matrículas',
-    containerClass: "space-y-6 w-full max-w-[1600px] mx-auto",
-    description: "Entradas, matrículas em curso, exceções e alunos ativos num fluxo institucional único."
+    type: 'Layout de Lista Geral',
+    containerClass: "space-y-6 w-full max-w-7xl mx-auto",
+    description: "Espaço para acompanhamento de matrículas, frequência estudantil e progresso comportamental."
   },
   teachers: {
     type: 'Layout de Lista Geral',
@@ -274,7 +276,7 @@ const defaultNotificationPresets: NotificationPreset[] = [
     name: 'Reconciliação Bancária Concluída',
     description: 'Resultado da conciliação em lote das receitas declaradas por extratos bancários.',
     enabled: true,
-    allowedRoles: ['admin', 'financial', 'director'],
+    allowedRoles: ['admin', 'financial'],
     customTitle: 'Reconciliação Concluída'
   },
   {
@@ -384,6 +386,7 @@ export default function App() {
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
 
   // Reorganized navigation: sub-tab states for modular layout
+  const [studentsSubTab, setStudentsSubTab] = useState<'list' | 'matriculas' | 'gamification'>('list');
   const [teachersSubTab, setTeachersSubTab] = useState<'list' | 'ai'>('list');
   const [documentsSubTab, setDocumentsSubTab] = useState<'list' | 'automations'>('list');
   const [configSubTab, setConfigSubTab] = useState<'settings' | 'migration'>('settings');
@@ -674,6 +677,7 @@ export default function App() {
             }
           } else {
             console.error('[AUTH-PG] Profile fetch failed with status:', pRes.status);
+            // If the profile fetch fails (e.g. user deleted from PostgreSQL), we must sign out to remain synchronized!
             await signOut(auth);
             setFirebaseUser(null);
           }
@@ -735,6 +739,8 @@ export default function App() {
           return;
         }
 
+        // The server verifies this token and derives the institution from the
+        // active membership. The browser never chooses a room by itself.
         const secureWsUrl = new URL(wsUrl);
         secureWsUrl.searchParams.set('access_token', token);
         console.log('[REALTIME] Initializing authenticated institutional connection.');
@@ -761,19 +767,24 @@ export default function App() {
           
           if (data.type === 'NOTIFY') {
             const { title, message, alertType, category } = data.payload;
+            
+            // Apply customizable role & toggled notification filter policies
             let displayTitle = title;
             if (category) {
               const matchedPreset = presetsRef.current?.find(p => p.category === category);
               if (matchedPreset) {
+                // Check of active states
                 if (!matchedPreset.enabled) {
                   console.log(`[NOTIFY] Ignored muted alert category: ${category}`);
                   return;
                 }
+                // Check of roles
                 const permitted = matchedPreset.allowedRoles || [];
                 if (!permitted.includes(roleRef.current)) {
                   console.log(`[NOTIFY] Bypassed category ${category} because user role ${roleRef.current} is not authorized in preset:`, permitted);
                   return;
                 }
+                // Check of custom title override
                 if (matchedPreset.customTitle) {
                   displayTitle = matchedPreset.customTitle;
                 }
@@ -781,6 +792,8 @@ export default function App() {
             }
 
             const notId = `notif-${Math.random().toString(36).substr(2, 9)}`;
+            
+            // Push toast
             setRealtimeNotifications(prev => [
               {
                 id: notId,
@@ -791,6 +804,8 @@ export default function App() {
               },
               ...prev
             ]);
+            
+            // Auto timeout toast after 6 seconds
             setTimeout(() => {
               setRealtimeNotifications(prev => prev.filter(n => n.id !== notId));
             }, 6000);
@@ -858,7 +873,9 @@ export default function App() {
             setTasks(prev => prev.filter(t => t.id !== id));
           }
 
+          // Trigger a global custom event for Dashboard.tsx or other child components to update immediately
           window.dispatchEvent(new CustomEvent('nexus-realtime-update', { detail: data }));
+          
         } catch (err) {
           console.error('[REALTIME] WS Parsing Error: ', err);
         }
@@ -913,6 +930,7 @@ export default function App() {
     }
   };
 
+  // Load live data from Supabase if configured, falling back quietly to localStorage if empty/offline
   useEffect(() => {
     if (!firebaseUser) return;
     loadLiveDb();
@@ -936,6 +954,7 @@ export default function App() {
       let usrCredential;
 
       if (isRegistering) {
+        // Real Sign Up / Registration
         console.log(`[AUTH-REAL] Creating real account for email: ${email}`);
         if (password.length < 6) {
           setLoginError('A palavra-passe deve ter pelo menos 6 caracteres.');
@@ -965,6 +984,7 @@ export default function App() {
           throw regErr;
         }
       } else {
+        // Real Sign In
         console.log(`[AUTH-REAL] Logging in real account for email: ${email}`);
         console.log('[DEBUG-AUTH-FLOW] 2. Antes de chamar signInWithEmailAndPassword:', {
           email: email,
@@ -1084,6 +1104,8 @@ export default function App() {
       if (res.ok && data.success) {
         setVerificationSuccess(data.message || 'Email verificado com sucesso!');
         setVerificationCode('');
+        
+        // Refresh profile on backend to update the status in our React state
         const token = await firebaseUser.getIdToken();
         const pRes = await fetch('/api/profile', {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -1152,6 +1174,7 @@ export default function App() {
     if (liveData.automationFlows && liveData.automationFlows.length > 0) setAutomationFlows(liveData.automationFlows);
   };
 
+  // State Mutators
   const handleAddStudent = (newStudentData: Omit<Student, 'id'>) => {
     const id = `ALU-${Math.floor(106 + Math.random() * 900)}`;
     const student: Student = { ...newStudentData, id };
@@ -1169,6 +1192,7 @@ export default function App() {
     const t4Id = `TSK-FIN-${student.id}`;
     const t5Id = `TSK-CRE-${student.id}`;
 
+    // 1. Receber documentos
     const t1: SchoolTask = {
       id: t1Id,
       title: `Receber documentos de matrícula - ${student.name}`,
@@ -1185,9 +1209,18 @@ export default function App() {
       referenceId: student.id,
       referenceType: 'matricula',
       dependencies: [],
-      history: [{ id: `H-1-${t1Id}`, timestamp, action: 'Tarefa de recepção criada automaticamente', user: 'Sistema (Fluxo Matrícula)', details: 'Primeira etapa operacional do fluxo de matrícula.' }]
+      history: [
+        {
+          id: `H-1-${t1Id}`,
+          timestamp,
+          action: 'Tarefa de recepção criada automaticamente',
+          user: 'Sistema (Fluxo Matrícula)',
+          details: 'Primeira etapa operacional do fluxo de matrícula.'
+        }
+      ]
     };
 
+    // 2. Validar documentos (Depende de T1)
     const t2: SchoolTask = {
       id: t2Id,
       title: `Validar documentos académicos - ${student.name}`,
@@ -1204,9 +1237,18 @@ export default function App() {
       referenceId: student.id,
       referenceType: 'matricula',
       dependencies: [t1Id],
-      history: [{ id: `H-1-${t2Id}`, timestamp, action: 'Tarefa de validação criada automaticamente', user: 'Sistema (Fluxo Matrícula)', details: `Dependente da recepção documental (${t1Id}).` }]
+      history: [
+        {
+          id: `H-1-${t2Id}`,
+          timestamp,
+          action: 'Tarefa de validação criada automaticamente',
+          user: 'Sistema (Fluxo Matrícula)',
+          details: `Dependente da recepção documental (${t1Id}).`
+        }
+      ]
     };
 
+    // 3. Aprovar matrícula administrativamente (Depende de T2)
     const t3: SchoolTask = {
       id: t3Id,
       title: `Aprovar matrícula administrativamente - ${student.name}`,
@@ -1223,9 +1265,18 @@ export default function App() {
       referenceId: student.id,
       referenceType: 'matricula',
       dependencies: [t2Id],
-      history: [{ id: `H-1-${t3Id}`, timestamp, action: 'Tarefa de aprovação administrativa criada', user: 'Sistema (Fluxo Matrícula)', details: `Aguardando a validação completa de documentos (${t2Id}).` }]
+      history: [
+        {
+          id: `H-1-${t3Id}`,
+          timestamp,
+          action: 'Tarefa de aprovação administrativa criada',
+          user: 'Sistema (Fluxo Matrícula)',
+          details: `Aguardando a validação completa de documentos (${t2Id}).`
+        }
+      ]
     };
 
+    // 4. Criar plano financeiro (Depende de T3)
     const t4: SchoolTask = {
       id: t4Id,
       title: `Criar plano financeiro e propinas - ${student.name}`,
@@ -1242,9 +1293,18 @@ export default function App() {
       referenceId: student.id,
       referenceType: 'matricula',
       dependencies: [t3Id],
-      history: [{ id: `H-1-${t4Id}`, timestamp, action: 'Tarefa de plano financeiro criada', user: 'Sistema (Fluxo Matrícula)', details: `Dependente da homologação formal da matrícula (${t3Id}).` }]
+      history: [
+        {
+          id: `H-1-${t4Id}`,
+          timestamp,
+          action: 'Tarefa de plano financeiro criada',
+          user: 'Sistema (Fluxo Matrícula)',
+          details: `Dependente da homologação formal da matrícula (${t3Id}).`
+        }
+      ]
     };
 
+    // 5. Emitir credenciais de acesso (Depende de T4)
     const t5: SchoolTask = {
       id: t5Id,
       title: `Emitir credenciais de acesso - ${student.name}`,
@@ -1261,13 +1321,26 @@ export default function App() {
       referenceId: student.id,
       referenceType: 'matricula',
       dependencies: [t4Id],
-      history: [{ id: `H-1-${t5Id}`, timestamp, action: 'Tarefa de emissão de acessos criada', user: 'Sistema (Fluxo Matrícula)', details: `Ativação letiva dependente da configuração financeira do aluno (${t4Id}).` }]
+      history: [
+        {
+          id: `H-1-${t5Id}`,
+          timestamp,
+          action: 'Tarefa de emissão de acessos criada',
+          user: 'Sistema (Fluxo Matrícula)',
+          details: `Ativação letiva dependente da configuração financeira do aluno (${t4Id}).`
+        }
+      ]
     };
 
     setTasks(prev => [t1, t2, t3, t4, t5, ...prev]);
     if (supabaseConfigured) {
-      Promise.all([upsertLiveTask(t1), upsertLiveTask(t2), upsertLiveTask(t3), upsertLiveTask(t4), upsertLiveTask(t5)])
-        .catch(err => console.error("Error creating student matricula tasks:", err));
+      Promise.all([
+        upsertLiveTask(t1),
+        upsertLiveTask(t2),
+        upsertLiveTask(t3),
+        upsertLiveTask(t4),
+        upsertLiveTask(t5)
+      ]).catch(err => console.error("Error creating student matricula tasks:", err));
     }
   };
 
@@ -1278,6 +1351,8 @@ export default function App() {
       if (updatedSt && supabaseConfigured) {
         upsertLiveStudent(updatedSt).catch(err => console.error("Error updating student:", err));
       }
+
+      // Automatically trigger approval task for Directorate if grades are modified
       if (updatedFields.grades && updatedSt) {
         const studentName = updatedSt.name;
         const today = new Date().toISOString().split('T')[0];
@@ -1297,11 +1372,22 @@ export default function App() {
           createdBy: 'Sistema (Fluxo Avaliações)',
           referenceId: id,
           referenceType: 'matricula',
-          history: [{ id: `H-1-TSK-AVAL-${id}`, timestamp, action: 'Pauta de notas registada', user: 'Sistema (Fluxo Avaliações)', details: 'Lançamento de notas de disciplinas requer homologação de pauta pela direção.' }]
+          history: [
+            {
+              id: `H-1-TSK-AVAL-${id}`,
+              timestamp,
+              action: 'Pauta de notas registada',
+              user: 'Sistema (Fluxo Avaliações)',
+              details: 'Lançamento de notas de disciplinas requer homologação de pauta pela direção.'
+            }
+          ]
         };
         setTasks(prevTasks => [gradesTask, ...prevTasks]);
-        if (supabaseConfigured) upsertLiveTask(gradesTask).catch(err => console.error("Error creating grades task:", err));
+        if (supabaseConfigured) {
+          upsertLiveTask(gradesTask).catch(err => console.error("Error creating grades task:", err));
+        }
       }
+
       return next;
     });
   };
@@ -1309,28 +1395,36 @@ export default function App() {
   const handleDeleteStudent = (id: string) => {
     setStudents(prev => prev.filter(s => s.id !== id));
     setInvoices(prev => prev.filter(i => i.studentId !== id));
-    if (supabaseConfigured) deleteLiveStudent(id).catch(err => console.error("Error deleting student:", err));
+    if (supabaseConfigured) {
+      deleteLiveStudent(id).catch(err => console.error("Error deleting student:", err));
+    }
   };
 
   const handleAddTeacher = (newTeacherData: Omit<Teacher, 'id'>) => {
     const id = `PROF-${Math.floor(105 + Math.random() * 900)}`;
     const teacher: Teacher = { ...newTeacherData, id };
     setTeachers(prev => [teacher, ...prev]);
-    if (supabaseConfigured) upsertLiveTeacher(teacher).catch(err => console.error("Error creating teacher:", err));
+    if (supabaseConfigured) {
+      upsertLiveTeacher(teacher).catch(err => console.error("Error creating teacher:", err));
+    }
   };
 
   const handleUpdateTeacher = (id: string, updatedFields: Partial<Teacher>) => {
     setTeachers(prev => {
       const next = prev.map(t => t.id === id ? { ...t, ...updatedFields } : t);
       const updatedT = next.find(t => t.id === id);
-      if (updatedT && supabaseConfigured) upsertLiveTeacher(updatedT).catch(err => console.error("Error updating teacher:", err));
+      if (updatedT && supabaseConfigured) {
+        upsertLiveTeacher(updatedT).catch(err => console.error("Error updating teacher:", err));
+      }
       return next;
     });
   };
 
   const handleDeleteTeacher = (id: string) => {
     setTeachers(prev => prev.filter(t => t.id !== id));
-    if (supabaseConfigured) deleteLiveTeacher(id).catch(err => console.error("Error deleting teacher:", err));
+    if (supabaseConfigured) {
+      deleteLiveTeacher(id).catch(err => console.error("Error deleting teacher:", err));
+    }
   };
 
   const handleUpdateInvoiceStatus = (id: string, status: 'paid' | 'pending' | 'overdue') => {
@@ -1338,16 +1432,25 @@ export default function App() {
       const nextInvoices = prev.map(i => {
         if (i.id === id) {
           const amountDiff = status === 'paid' ? -i.amount : i.amount;
-          setStudents(prevStuds => prevStuds.map(s => {
-            if (s.id === i.studentId) {
-              const updatedSt = { ...s, outstandingFees: Math.max(0, s.outstandingFees + amountDiff) };
-              if (supabaseConfigured) upsertLiveStudent(updatedSt).catch(err => console.error("Error syncing student outstanding fees:", err));
-              return updatedSt;
-            }
-            return s;
-          }));
+          setStudents(prevStuds => {
+            const nextStuds = prevStuds.map(s => {
+              if (s.id === i.studentId) {
+                const updatedSt = { ...s, outstandingFees: Math.max(0, s.outstandingFees + amountDiff) };
+                if (supabaseConfigured) {
+                  upsertLiveStudent(updatedSt).catch(err => console.error("Error syncing student outstanding fees:", err));
+                }
+                return updatedSt;
+              }
+              return s;
+            });
+            return nextStuds;
+          });
           const updatedIv = { ...i, status };
-          if (supabaseConfigured) upsertLiveInvoice(updatedIv).catch(err => console.error("Error updating invoice status:", err));
+          if (supabaseConfigured) {
+            upsertLiveInvoice(updatedIv).catch(err => console.error("Error updating invoice status:", err));
+          }
+
+          // Trigger: Pagamento em atraso -> criar tarefa automática para financeiro
           if (status === 'overdue') {
             const taskId = `TSK-COB-${i.id}`;
             const today = new Date().toISOString().split('T')[0];
@@ -1356,13 +1459,34 @@ export default function App() {
               id: taskId,
               title: `Cobrar propinas em atraso - ${i.studentName}`,
               description: `A fatura ${i.id} de €${i.amount} está em atraso desde ${i.dueDate}. Enviar notificação e contactar o encarregado.`,
-              assignedTo: 'Financeiro Executivo', department: 'Financeiro', priority: 'Crítica', status: 'Atrasada', createdAt: today, dueDate: today,
-              limitDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], createdAutomatically: true, createdBy: 'Sistema (Fluxo Financeiro)', referenceId: i.id, referenceType: 'financeiro', dependencies: [],
-              history: [{ id: `H-1-${taskId}`, timestamp, action: 'Cobrança urgente iniciada', user: 'Sistema (Fluxo Financeiro)', details: `Fatura ${i.id} de valor €${i.amount} vencida em ${i.dueDate}.` }]
+              assignedTo: 'Financeiro Executivo',
+              department: 'Financeiro',
+              priority: 'Crítica',
+              status: 'Atrasada',
+              createdAt: today,
+              dueDate: today,
+              limitDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              createdAutomatically: true,
+              createdBy: 'Sistema (Fluxo Financeiro)',
+              referenceId: i.id,
+              referenceType: 'financeiro',
+              dependencies: [],
+              history: [
+                {
+                  id: `H-1-${taskId}`,
+                  timestamp,
+                  action: 'Cobrança urgente iniciada',
+                  user: 'Sistema (Fluxo Financeiro)',
+                  details: `Fatura ${i.id} de valor €${i.amount} vencida em ${i.dueDate}.`
+                }
+              ]
             };
-            setTasks(prevTasks => [lateTask, ...prevTasks]);
-            if (supabaseConfigured) upsertLiveTask(lateTask).catch(err => console.error("Error creating late payment task:", err));
+            setTasks(prev => [lateTask, ...prev]);
+            if (supabaseConfigured) {
+              upsertLiveTask(lateTask).catch(err => console.error("Error creating late payment task:", err));
+            }
           }
+
           return updatedIv;
         }
         return i;
@@ -1375,15 +1499,22 @@ export default function App() {
     const id = `FAT-${Math.floor(8810 + Math.random() * 1000)}`;
     const invoice: Invoice = { ...newInv, id };
     setInvoices(prev => {
-      setStudents(prevStuds => prevStuds.map(s => {
-        if (s.name.toLowerCase() === newInv.studentName.toLowerCase()) {
-          const updatedSt = { ...s, outstandingFees: s.outstandingFees + newInv.amount };
-          if (supabaseConfigured) upsertLiveStudent(updatedSt).catch(err => console.error("Error updating student outstanding fees for invoice:", err));
-          return updatedSt;
-        }
-        return s;
-      }));
-      if (supabaseConfigured) upsertLiveInvoice(invoice).catch(err => console.error("Error creating invoice:", err));
+      setStudents(prevStuds => {
+        const nextStuds = prevStuds.map(s => {
+          if (s.name.toLowerCase() === newInv.studentName.toLowerCase()) {
+            const updatedSt = { ...s, outstandingFees: s.outstandingFees + newInv.amount };
+            if (supabaseConfigured) {
+              upsertLiveStudent(updatedSt).catch(err => console.error("Error updating student outstanding fees for invoice:", err));
+            }
+            return updatedSt;
+          }
+          return s;
+        });
+        return nextStuds;
+      });
+      if (supabaseConfigured) {
+        upsertLiveInvoice(invoice).catch(err => console.error("Error creating invoice:", err));
+      }
       return [invoice, ...prev];
     });
   };
@@ -1393,20 +1524,43 @@ export default function App() {
     const id = `AVISO-${Math.floor(10 + Math.random() * 90)}`;
     const announcement: Announcement = { ...newAnn, id, date };
     setAnnouncements(prev => [announcement, ...prev]);
-    if (supabaseConfigured) upsertLiveAnnouncement(announcement).catch(err => console.error("Error creating announcement:", err));
+    if (supabaseConfigured) {
+      upsertLiveAnnouncement(announcement).catch(err => console.error("Error creating announcement:", err));
+    }
 
+    // Automatically trigger task to publish across secondary communication channels
     const taskId = `TSK-COM-${id}`;
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
     const commTask: SchoolTask = {
       id: taskId,
       title: `Divulgar anúncio nos canais secundários - ${newAnn.title}`,
       description: `Garantir que o comunicado "${newAnn.title}" seja divulgado nos canais auxiliares, grupos institucionais de WhatsApp e email geral.`,
-      assignedTo: 'Secretaria Executiva', department: 'Secretaria', priority: 'Normal', status: 'Pendente', createdAt: date, dueDate: date,
-      limitDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], createdAutomatically: true, createdBy: 'Sistema (Fluxo Comunicação)', referenceId: id, referenceType: 'documento', dependencies: [],
-      history: [{ id: `H-1-${taskId}`, timestamp, action: 'Tarefa de divulgação criada automaticamente', user: 'Sistema (Fluxo Comunicação)', details: `Iniciado após publicação do aviso formal ${id}.` }]
+      assignedTo: 'Secretaria Executiva',
+      department: 'Secretaria',
+      priority: 'Normal',
+      status: 'Pendente',
+      createdAt: date,
+      dueDate: date,
+      limitDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      createdAutomatically: true,
+      createdBy: 'Sistema (Fluxo Comunicação)',
+      referenceId: id,
+      referenceType: 'documento',
+      dependencies: [],
+      history: [
+        {
+          id: `H-1-${taskId}`,
+          timestamp,
+          action: 'Tarefa de divulgação criada automaticamente',
+          user: 'Sistema (Fluxo Comunicação)',
+          details: `Iniciado após publicação do aviso formal ${id}.`
+        }
+      ]
     };
     setTasks(prev => [commTask, ...prev]);
-    if (supabaseConfigured) upsertLiveTask(commTask).catch(err => console.error("Error creating communication task:", err));
+    if (supabaseConfigured) {
+      upsertLiveTask(commTask).catch(err => console.error("Error creating communication task:", err));
+    }
   };
 
   const handleAddMessage = (newMsg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
@@ -1415,7 +1569,9 @@ export default function App() {
     const id = `M-${Math.floor(100 + Math.random() * 900)}`;
     const message: ChatMessage = { ...newMsg, id, timestamp };
     setMessages(prev => [...prev, message]);
-    if (supabaseConfigured) upsertLiveMessage(message).catch(err => console.error("Error saving message:", err));
+    if (supabaseConfigured) {
+      upsertLiveMessage(message).catch(err => console.error("Error saving message:", err));
+    }
   };
 
   const handleCreateApproval = async (title: string, description: string, flowType: ApprovalFlowType) => {
@@ -1442,7 +1598,9 @@ export default function App() {
     setAutomationFlows(prev => {
       const next = prev.map(f => f.id === id ? { ...f, active: !f.active } : f);
       const updatedFlow = next.find(f => f.id === id);
-      if (updatedFlow && supabaseConfigured) upsertLiveAutomation(updatedFlow).catch(err => console.error("Error toggling automation flow:", err));
+      if (updatedFlow && supabaseConfigured) {
+        upsertLiveAutomation(updatedFlow).catch(err => console.error("Error toggling automation flow:", err));
+      }
       return next;
     });
   };
@@ -1451,60 +1609,176 @@ export default function App() {
     setAutomationFlows(prev => {
       const next = prev.map(f => f.id === id ? { ...f, executions: f.executions + 1 } : f);
       const updatedFlow = next.find(f => f.id === id);
-      if (updatedFlow && supabaseConfigured) upsertLiveAutomation(updatedFlow).catch(err => console.error("Error triggering automation run:", err));
+      if (updatedFlow && supabaseConfigured) {
+        upsertLiveAutomation(updatedFlow).catch(err => console.error("Error triggering automation run:", err));
+      }
       return next;
     });
   };
 
   const handleBonusPointsToStudent = (id: string, amount: number) => {
     setStudents(prev => {
-      const next = prev.map(s => s.id === id ? { ...s, averageGrade: Number(Math.min(10, s.averageGrade + (amount / 400)).toFixed(1)) } : s);
+      const next = prev.map(s => {
+        if (s.id === id) {
+          return {
+            ...s,
+            averageGrade: Number(Math.min(10, s.averageGrade + (amount / 400)).toFixed(1))
+          };
+        }
+        return s;
+      });
       const updatedSt = next.find(s => s.id === id);
-      if (updatedSt && supabaseConfigured) upsertLiveStudent(updatedSt).catch(err => console.error("Error rewarding points:", err));
+      if (updatedSt && supabaseConfigured) {
+        upsertLiveStudent(updatedSt).catch(err => console.error("Error rewarding points:", err));
+      }
       return next;
     });
   };
 
   const handleBonusPointsToTeacher = (id: string, amount: number) => {
     setTeachers(prev => {
-      const next = prev.map(t => t.id === id ? { ...t, productivityScore: Math.min(100, t.productivityScore + Math.floor(amount / 50)) } : t);
+      const next = prev.map(t => {
+        if (t.id === id) {
+          return {
+            ...t,
+            productivityScore: Math.min(100, t.productivityScore + Math.floor(amount / 50))
+          };
+        }
+        return t;
+      });
       const updatedTc = next.find(t => t.id === id);
-      if (updatedTc && supabaseConfigured) upsertLiveTeacher(updatedTc).catch(err => console.error("Error rewarding points:", err));
+      if (updatedTc && supabaseConfigured) {
+        upsertLiveTeacher(updatedTc).catch(err => console.error("Error rewarding points:", err));
+      }
       return next;
     });
   };
 
   const handleAddSchoolDocs = (doc: SchoolDoc) => {
     setSchoolDocs(prev => [doc, ...prev]);
+
     const today = new Date().toISOString().split('T')[0];
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
+
     const valTaskId = `TSK-VALDOC-${doc.id}`;
     const classTaskId = `TSK-CLASSDOC-${doc.id}`;
     const aprTaskId = `TSK-APRDOC-${doc.id}`;
 
+    // 1. Validar documento
     const valTask: SchoolTask = {
-      id: valTaskId, title: `Validar documento - ${doc.title}`, description: `Verificar integridade digital, legibilidade e autenticidade do ficheiro submetido (${doc.id}).`, assignedTo: 'Secretaria Executiva', department: 'Secretaria', priority: 'Normal', status: 'Pendente', createdAt: today,
-      dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], limitDate: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0], createdAutomatically: true, createdBy: 'Sistema (Fluxo Documentos)', referenceId: doc.id, referenceType: 'documento', dependencies: [], history: [{ id: `H-1-${valTaskId}`, timestamp, action: 'Tarefa de validação iniciada', user: 'Sistema (Fluxo Documentos)', details: `Iniciada automaticamente após carregamento do documento ${doc.title}.` }]
+      id: valTaskId,
+      title: `Validar documento - ${doc.title}`,
+      description: `Verificar integridade digital, legibilidade e autenticidade do ficheiro submetido (${doc.id}).`,
+      assignedTo: 'Secretaria Executiva',
+      department: 'Secretaria',
+      priority: 'Normal',
+      status: 'Pendente',
+      createdAt: today,
+      dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      limitDate: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0],
+      createdAutomatically: true,
+      createdBy: 'Sistema (Fluxo Documentos)',
+      referenceId: doc.id,
+      referenceType: 'documento',
+      dependencies: [],
+      history: [
+        {
+          id: `H-1-${valTaskId}`,
+          timestamp,
+          action: 'Tarefa de validação iniciada',
+          user: 'Sistema (Fluxo Documentos)',
+          details: `Iniciada automaticamente após carregamento do documento ${doc.title}.`
+        }
+      ]
     };
+
+    // 2. Classificar documento (Depende de 1)
     const classTask: SchoolTask = {
-      id: classTaskId, title: `Classificar documento - ${doc.title}`, description: `Arquivar, indexar e rotular digitalmente o documento "${doc.title}" nas pastas adequadas de arquivo geral de ${doc.id}.`, assignedTo: 'Secretaria Executiva', department: 'Secretaria', priority: 'Baixa', status: 'Pendente', createdAt: today,
-      dueDate: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0], limitDate: new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString().split('T')[0], createdAutomatically: true, createdBy: 'Sistema (Fluxo Documentos)', referenceId: doc.id, referenceType: 'documento', dependencies: [valTaskId], history: [{ id: `H-1-${classTaskId}`, timestamp, action: 'Tarefa de classificação criada', user: 'Sistema (Fluxo Documentos)', details: `Requer a conclusão prévia da validação documental (${valTaskId}).` }]
+      id: classTaskId,
+      title: `Classificar documento - ${doc.title}`,
+      description: `Arquivar, indexar e rotular digitalmente o documento "${doc.title}" nas pastas adequadas de arquivo geral de ${doc.id}.`,
+      assignedTo: 'Secretaria Executiva',
+      department: 'Secretaria',
+      priority: 'Baixa',
+      status: 'Pendente',
+      createdAt: today,
+      dueDate: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0],
+      limitDate: new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString().split('T')[0],
+      createdAutomatically: true,
+      createdBy: 'Sistema (Fluxo Documentos)',
+      referenceId: doc.id,
+      referenceType: 'documento',
+      dependencies: [valTaskId],
+      history: [
+        {
+          id: `H-1-${classTaskId}`,
+          timestamp,
+          action: 'Tarefa de classificação criada',
+          user: 'Sistema (Fluxo Documentos)',
+          details: `Requer a conclusão prévia da validação documental (${valTaskId}).`
+        }
+      ]
     };
+
+    // 3. Aprovar documento (Depende de 2)
     const appTask: SchoolTask = {
-      id: aprTaskId, title: `Aprovar documento - ${doc.title}`, description: `Homologação final e assinatura formal do diretor sobre o documento "${doc.title}" de arquivo letivo.`, assignedTo: 'Direção Executiva', department: 'Direção', priority: 'Normal', status: 'Pendente', createdAt: today,
-      dueDate: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString().split('T')[0], limitDate: new Date(Date.now() + 120 * 60 * 60 * 1000).toISOString().split('T')[0], createdAutomatically: true, createdBy: 'Sistema (Fluxo Documentos)', referenceId: doc.id, referenceType: 'documento', dependencies: [classTaskId], history: [{ id: `H-1-${aprTaskId}`, timestamp, action: 'Tarefa de homologação de arquivo criada', user: 'Sistema (Fluxo Documentos)', details: `Dependente da classificação física e digital prévia pela secretaria (${classTaskId}).` }]
+      id: aprTaskId,
+      title: `Aprovar documento - ${doc.title}`,
+      description: `Homologação final e assinatura formal do diretor sobre o documento "${doc.title}" de arquivo letivo.`,
+      assignedTo: 'Direção Executiva',
+      department: 'Direção',
+      priority: 'Normal',
+      status: 'Pendente',
+      createdAt: today,
+      dueDate: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString().split('T')[0],
+      limitDate: new Date(Date.now() + 120 * 60 * 60 * 1000).toISOString().split('T')[0],
+      createdAutomatically: true,
+      createdBy: 'Sistema (Fluxo Documentos)',
+      referenceId: doc.id,
+      referenceType: 'documento',
+      dependencies: [classTaskId],
+      history: [
+        {
+          id: `H-1-${aprTaskId}`,
+          timestamp,
+          action: 'Tarefa de homologação de arquivo criada',
+          user: 'Sistema (Fluxo Documentos)',
+          details: `Dependente da classificação física e digital prévia pela secretaria (${classTaskId}).`
+        }
+      ]
     };
 
     setTasks(prev => [valTask, classTask, appTask, ...prev]);
-    if (supabaseConfigured) Promise.all([upsertLiveTask(valTask), upsertLiveTask(classTask), upsertLiveTask(appTask)]).catch(err => console.error("Error creating document tasks:", err));
+    if (supabaseConfigured) {
+      Promise.all([
+        upsertLiveTask(valTask),
+        upsertLiveTask(classTask),
+        upsertLiveTask(appTask)
+      ]).catch(err => console.error("Error creating document tasks:", err));
+    }
   };
 
-  const handleUpdateSchoolDocs = (doc: SchoolDoc) => setSchoolDocs(prev => prev.map(d => d.id === doc.id ? doc : d));
-  const handleDeleteSchoolDocs = (id: string) => setSchoolDocs(prev => prev.filter(d => d.id !== id));
-  const handleAddSignature = (sig: DigitalSignatureRequest) => setSignatures(prev => [sig, ...prev]);
-  const handleUpdateSignature = (sig: DigitalSignatureRequest) => setSignatures(prev => prev.map(s => s.id === sig.id ? sig : s));
-  const handleDeleteSignature = (id: string) => setSignatures(prev => prev.filter(s => s.id !== id));
+  const handleUpdateSchoolDocs = (doc: SchoolDoc) => {
+    setSchoolDocs(prev => prev.map(d => d.id === doc.id ? doc : d));
+  };
 
+  const handleDeleteSchoolDocs = (id: string) => {
+    setSchoolDocs(prev => prev.filter(d => d.id !== id));
+  };
+
+  const handleAddSignature = (sig: DigitalSignatureRequest) => {
+    setSignatures(prev => [sig, ...prev]);
+  };
+
+  const handleUpdateSignature = (sig: DigitalSignatureRequest) => {
+    setSignatures(prev => prev.map(s => s.id === sig.id ? sig : s));
+  };
+
+  const handleDeleteSignature = (id: string) => {
+    setSignatures(prev => prev.filter(s => s.id !== id));
+  };
+
+  // Filter sidebar items according to executive guidelines: "Cada utilizador deve ver apenas o necessário"
   const sidebarItems = [
     { id: 'dashboard', name: 'Painel Geral', icon: LayoutDashboard },
     { id: 'tasks', name: 'Centro de Tarefas', icon: ListTodo },
@@ -1518,39 +1792,184 @@ export default function App() {
     { id: 'workflows', name: 'Central de Processos', icon: Zap },
     { id: 'approvals', name: 'Aprovações Internas', icon: ClipboardCheck },
     { id: 'signatures', name: 'Assinatura Digital', icon: PenTool }
-  ].filter(item => (rolePermissions[currentUserRole] || []).includes(item.id));
+  ].filter(item => {
+    const allowedList = rolePermissions[currentUserRole] || [];
+    return allowedList.includes(item.id);
+  });
 
   const sidebarGroups = [
-    { title: currentUserRole === 'parent' ? "Espaço do Enc." : "Visão Geral", items: [{ id: 'dashboard', name: currentUserRole === 'parent' ? 'Portal do Responsável' : 'Painel Geral', icon: LayoutDashboard }, { id: 'tasks', name: 'Centro de Tarefas', icon: ListTodo }] },
-    { title: "Secretaria Escolar", items: [{ id: 'students', name: 'Alunos & Matrículas', icon: Users }, { id: 'teachers', name: 'Corpo Docente', icon: GraduationCap }] },
-    { title: "Administrativo", items: [{ id: 'financials', name: 'Finanças & Contas', icon: DollarSign }, { id: 'documents', name: 'Dossier & Processos Automáticos', icon: FolderOpen }, { id: 'sheets', name: 'Google Sheets', icon: FileSpreadsheet }, { id: 'communications', name: 'Comunicação', icon: Megaphone }] },
-    { title: "Processos & Execução", items: [{ id: 'workflows', name: 'Central de Processos', icon: Zap }, { id: 'approvals', name: 'Aprovações Internas', icon: ClipboardCheck }, { id: 'signatures', name: 'Assinatura Digital', icon: PenTool }] },
-    { title: "Configuração", items: [{ id: 'config', name: 'Definições do Sistema', icon: Sliders }] }
+    {
+      title: currentUserRole === 'parent' ? "Espaço do Enc." : "Visão Geral",
+      items: [
+        { id: 'dashboard', name: currentUserRole === 'parent' ? 'Portal do Responsável' : 'Painel Geral', icon: LayoutDashboard },
+        { id: 'tasks', name: 'Centro de Tarefas', icon: ListTodo }
+      ]
+    },
+    {
+      title: "Secretaria Escolar",
+      items: [
+        { id: 'students', name: 'Alunos & Matrículas', icon: Users },
+        { id: 'teachers', name: 'Corpo Docente', icon: GraduationCap }
+      ]
+    },
+    {
+      title: "Administrativo",
+      items: [
+        { id: 'financials', name: 'Finanças & Contas', icon: DollarSign },
+        { id: 'documents', name: 'Dossier & Processos Automáticos', icon: FolderOpen },
+        { id: 'sheets', name: 'Google Sheets', icon: FileSpreadsheet },
+        { id: 'communications', name: 'Comunicação', icon: Megaphone }
+      ]
+    },
+    {
+      title: "Processos & Execução",
+      items: [
+        { id: 'workflows', name: 'Central de Processos', icon: Zap },
+        { id: 'approvals', name: 'Aprovações Internas', icon: ClipboardCheck },
+        { id: 'signatures', name: 'Assinatura Digital', icon: PenTool }
+      ]
+    },
+    {
+      title: "Configuração",
+      items: [
+        { id: 'config', name: 'Definições do Sistema', icon: Sliders }
+      ]
+    }
   ];
 
+  // Auto-validate active tab on role changes to satisfy granular role isolation
   useEffect(() => {
     const allowedIds = sidebarItems.map(item => item.id);
-    if (!allowedIds.includes(activeTab) && allowedIds.length > 0) setActiveTab(allowedIds[0]);
+    if (!allowedIds.includes(activeTab) && allowedIds.length > 0) {
+      setActiveTab(allowedIds[0]);
+    }
   }, [currentUserRole, rolePermissions]);
 
   if (authLoading) {
-    return <div className={`min-h-screen ${theme === 'light' ? 'bg-[#F8FAFC]' : 'bg-zinc-950'} flex flex-col items-center justify-center font-sans`}><div className="flex flex-col items-center gap-4"><div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div><p className={`text-base font-semibold tracking-wide ${theme === 'light' ? 'text-zinc-650' : 'text-zinc-400'}`}>A estabelecer ligação segura com a Plataforma...</p></div></div>;
+    return (
+      <div className={`min-h-screen ${theme === 'light' ? 'bg-[#F8FAFC]' : 'bg-zinc-950'} flex flex-col items-center justify-center font-sans`}>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <p className={`text-base font-semibold tracking-wide ${theme === 'light' ? 'text-zinc-650' : 'text-zinc-400'}`}>A estabelecer ligação segura com a Plataforma...</p>
+        </div>
+      </div>
+    );
   }
 
   if (firebaseUser && currentUserStatus === 'unverified_email') {
     return (
       <div className={`min-h-screen ${theme === 'light' ? 'bg-slate-50 text-zinc-900' : 'bg-zinc-950 text-zinc-100'} flex flex-col items-center justify-center font-sans p-6 relative overflow-hidden transition-colors duration-200`}>
+        {/* Abstract blur background lights */}
         <div className={`absolute top-1/4 left-1/4 -translate-y-1/2 -translate-x-1/2 w-96 h-96 ${theme === 'light' ? 'bg-indigo-400/5' : 'bg-indigo-500/10'} rounded-full blur-[120px] pointer-events-none`}></div>
         <div className={`absolute bottom-1/4 right-1/4 translate-y-1/2 translate-x-1/2 w-96 h-96 ${theme === 'light' ? 'bg-emerald-400/5' : 'bg-emerald-500/10'} rounded-full blur-[120px] pointer-events-none`}></div>
-        <div className="absolute top-6 right-6 z-50 flex items-center gap-4"><button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-center shadow-md ${theme === 'light' ? 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100' : 'bg-zinc-900 border-white/10 text-white hover:bg-zinc-800'}`}>{theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}</button><button onClick={handleSignOut} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-350 rounded-xl text-xs font-semibold cursor-pointer">Sair / Cancelar</button></div>
+
+        {/* Theme Switcher Floating */}
+        <div className="absolute top-6 right-6 z-50 flex items-center gap-4">
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-center shadow-md ${
+              theme === 'light' 
+                ? 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100' 
+                : 'bg-zinc-900 border-white/10 text-white hover:bg-zinc-800'
+            }`}
+          >
+            {theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}
+          </button>
+          <button
+            onClick={handleSignOut}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-350 rounded-xl text-xs font-semibold cursor-pointer"
+          >
+            Sair / Cancelar
+          </button>
+        </div>
+
         <div className={`w-full max-w-lg ${theme === 'light' ? 'bg-white border-zinc-200 shadow-xl text-zinc-900' : 'bg-zinc-900 border-white/5 text-zinc-100'} border rounded-3xl p-8 relative z-10 space-y-6 transition-all duration-200`}>
-          <div className="text-center space-y-3"><div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${theme === 'light' ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-500/10 text-indigo-400'}`}><Mail className="w-8 h-8" /></div><div className="space-y-1"><h1 className="text-[24px] font-bold tracking-tight font-display text-zinc-900 dark:text-zinc-100">Confirme o seu E-mail</h1><p className={`text-[13px] ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} max-w-sm mx-auto leading-relaxed`}>Enviámos um código de confirmação de 6 dígitos para o endereço de email <strong>{firebaseUser.email}</strong>. Introduza-o abaixo para entrar no sistema.</p></div></div>
-          {verificationError && <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-xs text-rose-500 font-semibold text-center leading-relaxed">{verificationError}</div>}
-          {sendCodeSuccess && <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl text-xs text-indigo-500 dark:text-indigo-400 font-semibold text-center leading-relaxed">{sendCodeSuccess}</div>}
-          {verificationSuccess && <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-xs text-emerald-500 font-semibold text-center leading-relaxed">{verificationSuccess}</div>}
-          <form onSubmit={handleVerifyVerificationCode} className="space-y-4"><div className="space-y-2"><label className={`text-[12px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-zinc-600' : 'text-zinc-400'} block text-center`}>Código de Verificação (6 Dígitos)</label><input type="text" maxLength={6} value={verificationCode} onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))} placeholder="123456" className={`w-full text-center tracking-[12px] font-mono text-2xl h-14 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-2xl outline-none transition-all`} required /></div><button type="submit" disabled={isVerifying || verificationCode.length !== 6} className="w-full h-12 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 text-white rounded-2xl text-sm font-semibold tracking-wide transition-all cursor-pointer flex items-center justify-center gap-2">{isVerifying ? <><RefreshCw className="w-4 h-4 animate-spin" />A validar código...</> : 'Confirmar Código e Entrar'}</button></form>
-          {debugCodeReceived && <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-2 text-center"><span className="text-xs font-bold text-amber-500 uppercase tracking-wide block">Ambiente de Demonstração / Testes</span><p className="text-xs text-zinc-400 leading-normal">Como as credenciais de SMTP não estão ativas neste contentor, apresentamos o código de email gerado para facilitar os testes:</p><div className="inline-block bg-zinc-950 border border-white/10 rounded-xl px-4 py-1.5 font-mono text-lg font-bold text-amber-400 tracking-wider">{debugCodeReceived}</div></div>}
-          <div className="flex items-center justify-center gap-3 text-xs pt-2"><span className={theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'}>Não recebeu o código?</span><button type="button" disabled={isSendingCode} onClick={() => handleSendVerificationCode(true)} className="text-indigo-500 hover:text-indigo-400 font-semibold cursor-pointer flex items-center gap-1 hover:underline disabled:opacity-50">{isSendingCode ? 'A reenviar...' : 'Reenviar Código'}</button></div>
+          <div className="text-center space-y-3">
+            <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${theme === 'light' ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-500/10 text-indigo-400'}`}>
+              <Mail className="w-8 h-8" />
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-[24px] font-bold tracking-tight font-display text-zinc-900 dark:text-zinc-100">Confirme o seu E-mail</h1>
+              <p className={`text-[13px] ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} max-w-sm mx-auto leading-relaxed`}>
+                Enviámos um código de confirmação de 6 dígitos para o endereço de email <strong>{firebaseUser.email}</strong>. Introduza-o abaixo para entrar no sistema.
+              </p>
+            </div>
+          </div>
+
+          {verificationError && (
+            <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-xs text-rose-500 font-semibold text-center leading-relaxed">
+              {verificationError}
+            </div>
+          )}
+
+          {sendCodeSuccess && (
+            <div className="p-3.5 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl text-xs text-indigo-500 dark:text-indigo-400 font-semibold text-center leading-relaxed">
+              {sendCodeSuccess}
+            </div>
+          )}
+
+          {verificationSuccess && (
+            <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-xs text-emerald-500 font-semibold text-center leading-relaxed">
+              {verificationSuccess}
+            </div>
+          )}
+
+          <form onSubmit={handleVerifyVerificationCode} className="space-y-4">
+            <div className="space-y-2">
+              <label className={`text-[12px] font-bold uppercase tracking-wider ${theme === 'light' ? 'text-zinc-600' : 'text-zinc-400'} block text-center`}>
+                Código de Verificação (6 Dígitos)
+              </label>
+              <input
+                type="text"
+                maxLength={6}
+                value={verificationCode}
+                onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="123456"
+                className={`w-full text-center tracking-[12px] font-mono text-2xl h-14 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-2xl outline-none transition-all`}
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isVerifying || verificationCode.length !== 6}
+              className="w-full h-12 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 text-white rounded-2xl text-sm font-semibold tracking-wide transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              {isVerifying ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  A validar código...
+                </>
+              ) : (
+                'Confirmar Código e Entrar'
+              )}
+            </button>
+          </form>
+
+          {/* SIMULATION HELP BOX */}
+          {debugCodeReceived && (
+            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-2 text-center">
+              <span className="text-xs font-bold text-amber-500 uppercase tracking-wide block">Ambiente de Demonstração / Testes</span>
+              <p className="text-xs text-zinc-400 leading-normal">
+                Como as credenciais de SMTP não estão ativas neste contentor, apresentamos o código de email gerado para facilitar os testes:
+              </p>
+              <div className="inline-block bg-zinc-950 border border-white/10 rounded-xl px-4 py-1.5 font-mono text-lg font-bold text-amber-400 tracking-wider">
+                {debugCodeReceived}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-center gap-3 text-xs pt-2">
+            <span className={theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'}>Não recebeu o código?</span>
+            <button
+              type="button"
+              disabled={isSendingCode}
+              onClick={() => handleSendVerificationCode(true)}
+              className="text-indigo-500 hover:text-indigo-400 font-semibold cursor-pointer flex items-center gap-1 hover:underline disabled:opacity-50"
+            >
+              {isSendingCode ? 'A reenviar...' : 'Reenviar Código'}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1559,20 +1978,209 @@ export default function App() {
   if (firebaseUser && currentUserStatus === 'pending') {
     return (
       <div className={`min-h-screen ${theme === 'light' ? 'bg-slate-50 text-zinc-900' : 'bg-zinc-950 text-zinc-100'} flex flex-col items-center justify-center font-sans p-6 relative overflow-hidden transition-colors duration-200`}>
+        {/* Abstract blur background lights */}
         <div className={`absolute top-1/4 left-1/4 -translate-y-1/2 -translate-x-1/2 w-96 h-96 ${theme === 'light' ? 'bg-indigo-400/5' : 'bg-indigo-500/10'} rounded-full blur-[120px] pointer-events-none`}></div>
         <div className={`absolute bottom-1/4 right-1/4 translate-y-1/2 translate-x-1/2 w-96 h-96 ${theme === 'light' ? 'bg-emerald-400/5' : 'bg-emerald-500/10'} rounded-full blur-[120px] pointer-events-none`}></div>
-        <div className="absolute top-6 right-6 z-50 flex items-center gap-4"><button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-center shadow-md ${theme === 'light' ? 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100' : 'bg-zinc-900 border-white/10 text-white hover:bg-zinc-800'}`}>{theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}</button><button onClick={handleSignOut} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded-xl text-xs font-semibold">Sair</button></div>
+
+        {/* Theme Switcher Floating */}
+        <div className="absolute top-6 right-6 z-50 flex items-center gap-4">
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-center shadow-md ${
+              theme === 'light' 
+                ? 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100' 
+                : 'bg-zinc-900 border-white/10 text-white hover:bg-zinc-800'
+            }`}
+          >
+            {theme === 'dark' ? 'Modo Claro' : 'Modo Escuro'}
+          </button>
+          <button
+            onClick={handleSignOut}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 rounded-xl text-xs font-semibold"
+          >
+            Sair
+          </button>
+        </div>
+
         <div className={`w-full max-w-lg ${theme === 'light' ? 'bg-white border-zinc-200 shadow-xl text-zinc-900' : 'bg-zinc-900 border-white/5 text-zinc-100'} border rounded-3xl p-8 relative z-10 space-y-6 transition-all duration-200`}>
-          <div className="text-center space-y-3"><div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${theme === 'light' ? 'bg-amber-50 text-amber-600' : 'bg-amber-500/10 text-amber-400'}`}><ShieldAlert className="w-8 h-8" /></div><div className="space-y-1"><h1 className="text-[24px] font-bold tracking-tight font-display text-zinc-900 dark:text-zinc-100">Acesso Pendente de Aprovação</h1><p className={`text-[13px] ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} max-w-sm mx-auto leading-relaxed`}>Olá, <strong>{firebaseUser.displayName || firebaseUser.email}</strong>. A sua conta real foi registada com sucesso, mas necessita de aprovação da Direção Escolar para aceder aos recursos da plataforma.</p></div></div>
+          <div className="text-center space-y-3">
+            <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${theme === 'light' ? 'bg-amber-50 text-amber-600' : 'bg-amber-500/10 text-amber-400'}`}>
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-[24px] font-bold tracking-tight font-display text-zinc-900 dark:text-zinc-100">Acesso Pendente de Aprovação</h1>
+              <p className={`text-[13px] ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} max-w-sm mx-auto leading-relaxed`}>
+                Olá, <strong>{firebaseUser.displayName || firebaseUser.email}</strong>. A sua conta real foi registada com sucesso, mas necessita de aprovação da Direção Escolar para aceder aos recursos da plataforma.
+              </p>
+            </div>
+          </div>
+
           {requestAccessSuccess ? (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl space-y-3"><h4 className="text-sm font-bold text-emerald-400 flex items-center gap-2"><Check className="w-4 h-4" /> Solicitação de Acesso Enviada!</h4><p className="text-xs text-zinc-400 leading-relaxed">O seu pedido para o cargo de <strong>{requestedRole === 'teacher' ? 'Professor' : requestedRole === 'parent' ? 'Encarregado de Educação' : requestedRole === 'financial' ? 'Financeiro' : requestedRole === 'secretariat' ? 'Secretaria' : requestedRole === 'director' ? 'Diretor' : 'Aluno'}</strong> foi registado com sucesso no departamento de <strong>{requestedDepartment}</strong>.</p><p className="text-xs text-zinc-400 leading-relaxed">Por favor, aguarde que o administrador ative a sua conta. Pode recarregar esta página para verificar o estado.</p><div className="flex justify-between items-center pt-2"><button onClick={async () => { try { const token = await firebaseUser.getIdToken(); const pRes = await fetch('/api/profile', { headers: { 'Authorization': `Bearer ${token}` } }); if (pRes.ok) { const profile = await pRes.json(); setCurrentUserStatus(profile.status || 'active'); setCurrentUserRole(profile.role); } } catch (e) { console.error(e); } }} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer"><RefreshCw className="w-3.5 h-3.5" /> Verificar Estado</button><button onClick={handleSignOut} className="text-xs text-zinc-500 hover:text-zinc-350 underline">Utilizar outra conta</button></div></motion.div>
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl space-y-3"
+            >
+              <h4 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                <Check className="w-4 h-4" /> Solicitação de Acesso Enviada!
+              </h4>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                O seu pedido para o cargo de <strong>{requestedRole === 'teacher' ? 'Professor' : requestedRole === 'parent' ? 'Encarregado de Educação' : requestedRole === 'financial' ? 'Financeiro' : requestedRole === 'secretariat' ? 'Secretaria' : requestedRole === 'director' ? 'Diretor' : 'Aluno'}</strong> foi registado com sucesso no departamento de <strong>{requestedDepartment}</strong>.
+              </p>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Por favor, aguarde que o administrador (carlossmiranda1914@gmail.com) ative a sua conta. Pode recarregar esta página para verificar o estado da sua conta.
+              </p>
+              <div className="flex justify-between items-center pt-2">
+                <button
+                  onClick={async () => {
+                    // Refresh status
+                    try {
+                      const token = await firebaseUser.getIdToken();
+                      const pRes = await fetch('/api/profile', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                      });
+                      if (pRes.ok) {
+                        const profile = await pRes.json();
+                        setCurrentUserStatus(profile.status || 'active');
+                        setCurrentUserRole(profile.role);
+                      }
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  }}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Verificar Estado
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  className="text-xs text-zinc-500 hover:text-zinc-350 underline"
+                >
+                  Utilizar outra conta
+                </button>
+              </div>
+            </motion.div>
           ) : (
-            <form onSubmit={async (e) => { e.preventDefault(); setIsSubmittingRequest(true); setRequestAccessError(''); try { const token = await firebaseUser.getIdToken(); const res = await fetch('/api/profile/request-access', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ name: firebaseUser.displayName || authRegisterName || firebaseUser.email.split('@')[0], phone: requestedPhone, role: requestedRole, department: requestedDepartment }) }); if (res.ok) setRequestAccessSuccess(true); else { const data = await res.json(); setRequestAccessError(data.error || 'Falha ao submeter a solicitação de acesso.'); } } catch (err: any) { setRequestAccessError(err.message || 'Erro de rede ao submeter o pedido.'); } finally { setIsSubmittingRequest(false); } }} className="space-y-4">
-              <div className="bg-zinc-950/40 p-4 border border-zinc-800/60 rounded-2xl space-y-2"><p className="text-xs font-semibold text-indigo-400">Dados do Registo:</p><div className="grid grid-cols-2 gap-2 text-xs text-zinc-400"><div>Email: <span className="font-mono text-zinc-300">{firebaseUser.email}</span></div><div>Nome: <span className="font-mono text-zinc-300">{firebaseUser.displayName || 'Não definido'}</span></div></div></div>
-              {requestAccessError && <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs rounded-xl font-medium">{requestAccessError}</div>}
-              <div className="space-y-1"><label className="text-xs font-bold text-zinc-300 block">Número de Telemóvel / Contacto</label><input type="text" value={requestedPhone} onChange={(e) => setRequestedPhone(e.target.value)} placeholder="Ex: +351 912 345 678" className={`w-full h-10 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-xl px-3 text-xs outline-none transition-all`} required /></div>
-              <div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-xs font-bold text-zinc-300 block">Cargo Solicitado</label><select value={requestedRole} onChange={(e) => { setRequestedRole(e.target.value); const mapping: Record<string, string> = { student: 'Alunos', parent: 'Acompanhamento', teacher: 'Professorado', financial: 'Financeiro', secretariat: 'Secretaria', director: 'Direção' }; if (mapping[e.target.value]) setRequestedDepartment(mapping[e.target.value]); }} className={`w-full h-10 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900' : 'bg-zinc-950 border-white/5 text-zinc-100'} border rounded-xl px-3 text-xs outline-none cursor-pointer`}><option value="student">Aluno</option><option value="parent">Responsável (Encarregado)</option><option value="teacher">Professor</option><option value="financial">Colaborador Financeiro</option><option value="secretariat">Colaborador de Secretaria</option><option value="director">Diretor / Gestor</option></select></div><div className="space-y-1"><label className="text-xs font-bold text-zinc-300 block">Departamento</label><select value={requestedDepartment} onChange={(e) => setRequestedDepartment(e.target.value)} className={`w-full h-10 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900' : 'bg-zinc-950 border-white/5 text-zinc-100'} border rounded-xl px-3 text-xs outline-none cursor-pointer`}><option value="Alunos">Alunos</option><option value="Acompanhamento">Acompanhamento</option><option value="Professorado">Professorado</option><option value="Financeiro">Financeiro</option><option value="Secretaria">Secretaria</option><option value="Direção">Direção</option></select></div></div>
-              <button type="submit" disabled={isSubmittingRequest} className="w-full h-11 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:bg-zinc-700 text-white rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer shadow-lg shadow-indigo-600/10 text-center flex items-center justify-center gap-2">{isSubmittingRequest ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Enviando Pedido de Acesso...</> : 'Submeter Pedido de Acesso Real'}</button>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setIsSubmittingRequest(true);
+              setRequestAccessError('');
+              try {
+                const token = await firebaseUser.getIdToken();
+                const res = await fetch('/api/profile/request-access', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({
+                    name: firebaseUser.displayName || authRegisterName || firebaseUser.email.split('@')[0],
+                    phone: requestedPhone,
+                    role: requestedRole,
+                    department: requestedDepartment
+                  })
+                });
+
+                if (res.ok) {
+                  setRequestAccessSuccess(true);
+                } else {
+                  const data = await res.json();
+                  setRequestAccessError(data.error || 'Falha ao submeter a solicitação de acesso.');
+                }
+              } catch (err: any) {
+                setRequestAccessError(err.message || 'Erro de rede ao submeter o pedido.');
+              } finally {
+                setIsSubmittingRequest(false);
+              }
+            }} className="space-y-4">
+              <div className="bg-zinc-950/40 p-4 border border-zinc-800/60 rounded-2xl space-y-2">
+                <p className="text-xs font-semibold text-indigo-400">Dados do Registo:</p>
+                <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
+                  <div>Email: <span className="font-mono text-zinc-300">{firebaseUser.email}</span></div>
+                  <div>Nome: <span className="font-mono text-zinc-300">{firebaseUser.displayName || 'Não definido'}</span></div>
+                </div>
+              </div>
+
+              {requestAccessError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs rounded-xl font-medium">
+                  {requestAccessError}
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-zinc-300 block">Número de Telemóvel / Contacto</label>
+                <input
+                  type="text"
+                  value={requestedPhone}
+                  onChange={(e) => setRequestedPhone(e.target.value)}
+                  placeholder="Ex: +351 912 345 678"
+                  className={`w-full h-10 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-xl px-3 text-xs outline-none transition-all`}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-zinc-300 block">Cargo Solicitado</label>
+                  <select
+                    value={requestedRole}
+                    onChange={(e) => {
+                      setRequestedRole(e.target.value);
+                      // Auto-select department
+                      const mapping: Record<string, string> = {
+                        student: 'Alunos',
+                        parent: 'Acompanhamento',
+                        teacher: 'Professorado',
+                        financial: 'Financeiro',
+                        secretariat: 'Secretaria',
+                        director: 'Direção'
+                      };
+                      if (mapping[e.target.value]) {
+                        setRequestedDepartment(mapping[e.target.value]);
+                      }
+                    }}
+                    className={`w-full h-10 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900' : 'bg-zinc-950 border-white/5 text-zinc-100'} border rounded-xl px-3 text-xs outline-none cursor-pointer`}
+                  >
+                    <option value="student">Aluno</option>
+                    <option value="parent">Responsável (Encarregado)</option>
+                    <option value="teacher">Professor</option>
+                    <option value="financial">Colaborador Financeiro</option>
+                    <option value="secretariat">Colaborador de Secretaria</option>
+                    <option value="director">Diretor / Gestor</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-zinc-300 block">Departamento</label>
+                  <select
+                    value={requestedDepartment}
+                    onChange={(e) => setRequestedDepartment(e.target.value)}
+                    className={`w-full h-10 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900' : 'bg-zinc-950 border-white/5 text-zinc-100'} border rounded-xl px-3 text-xs outline-none cursor-pointer`}
+                  >
+                    <option value="Alunos">Alunos</option>
+                    <option value="Acompanhamento">Acompanhamento</option>
+                    <option value="Professorado">Professorado</option>
+                    <option value="Financeiro">Financeiro</option>
+                    <option value="Secretaria">Secretaria</option>
+                    <option value="Direção">Direção</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmittingRequest}
+                className="w-full h-11 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:bg-zinc-700 text-white rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer shadow-lg shadow-indigo-600/10 text-center flex items-center justify-center gap-2"
+              >
+                {isSubmittingRequest ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Enviando Pedido de Acesso...
+                  </>
+                ) : (
+                  'Submeter Pedido de Acesso Real'
+                )}
+              </button>
             </form>
           )}
         </div>
@@ -1583,63 +2191,966 @@ export default function App() {
   if (!firebaseUser) {
     return (
       <div className={`min-h-screen ${theme === 'light' ? 'bg-slate-50 text-zinc-900' : 'bg-zinc-950 text-zinc-100'} flex flex-col items-center justify-center font-sans p-6 relative overflow-hidden transition-colors duration-200`}>
+        {/* Abstract blur background lights */}
         <div className={`absolute top-1/4 left-1/4 -translate-y-1/2 -translate-x-1/2 w-96 h-96 ${theme === 'light' ? 'bg-indigo-400/5' : 'bg-indigo-500/10'} rounded-full blur-[120px] pointer-events-none`}></div>
         <div className={`absolute bottom-1/4 right-1/4 translate-y-1/2 translate-x-1/2 w-96 h-96 ${theme === 'light' ? 'bg-emerald-400/5' : 'bg-emerald-500/10'} rounded-full blur-[120px] pointer-events-none`}></div>
-        <div className="absolute top-6 right-6 z-50"><button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-center shadow-md ${theme === 'light' ? 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100' : 'bg-zinc-900 border-white/10 text-white hover:bg-zinc-800'}`}>{theme === 'dark' ? <span className="flex items-center gap-2 text-xs font-semibold font-mono tracking-wide"><svg className="w-4 h-4 text-amber-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.344l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" /></svg>Modo Claro</span> : <span className="flex items-center gap-2 text-xs font-semibold font-mono tracking-wide"><svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>Modo Escuro</span>}</button></div>
+
+        {/* Theme Switcher Floating */}
+        <div className="absolute top-6 right-6 z-50">
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-center shadow-md ${
+              theme === 'light' 
+                ? 'bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-100' 
+                : 'bg-zinc-900 border-white/10 text-white hover:bg-zinc-800'
+            }`}
+          >
+            {theme === 'dark' ? (
+              <span className="flex items-center gap-2 text-xs font-semibold font-mono tracking-wide">
+                <svg className="w-4 h-4 text-amber-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.344l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
+                </svg>
+                Modo Claro
+              </span>
+            ) : (
+              <span className="flex items-center gap-2 text-xs font-semibold font-mono tracking-wide">
+                <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+                Modo Escuro
+              </span>
+            )}
+          </button>
+        </div>
+
         <div className={`w-full max-w-md ${theme === 'light' ? 'bg-white border-zinc-200 shadow-xl text-zinc-900' : 'bg-zinc-900 border-white/5 text-zinc-100'} border rounded-3xl p-8 relative z-10 space-y-6 transition-all duration-200`}>
-          <div className="text-center space-y-3"><div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${theme === 'light' ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-500/10 text-indigo-400'}`}><GraduationCap className="w-8 h-8" /></div><div className="space-y-1"><h1 className="text-[28px] font-bold tracking-tight font-display text-zinc-900 dark:text-zinc-100">Nexus Edu AI</h1><p className={`text-[14px] ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} max-w-xs mx-auto`}>Plataforma Escolar Inteligente e Gestão Unificada</p></div></div>
-          <div className="flex bg-zinc-100 dark:bg-zinc-950 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800"><button type="button" onClick={() => { setIsRegistering(false); setLoginError(''); }} className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${!isRegistering ? (theme === 'light' ? 'bg-white shadow-sm text-indigo-600' : 'bg-zinc-900 text-indigo-400') : 'text-zinc-500 hover:text-zinc-400'}`}>Iniciar Sessão</button><button type="button" onClick={() => { setIsRegistering(true); setLoginError(''); }} className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${isRegistering ? (theme === 'light' ? 'bg-white shadow-sm text-indigo-600' : 'bg-zinc-900 text-indigo-400') : 'text-zinc-500 hover:text-zinc-400'}`}>Criar Conta Real</button></div>
-          {loginError && <div className="space-y-3"><div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-sm text-rose-500 font-semibold text-center leading-relaxed">{loginError}</div></div>}
+          <div className="text-center space-y-3">
+            <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center ${theme === 'light' ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-500/10 text-indigo-400'}`}>
+              <GraduationCap className="w-8 h-8" />
+            </div>
+            <div className="space-y-1">
+              <h1 className="text-[28px] font-bold tracking-tight font-display text-zinc-900 dark:text-zinc-100">Nexus Edu AI</h1>
+              <p className={`text-[14px] ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} max-w-xs mx-auto`}>
+                Plataforma Escolar Inteligente e Gestão Unificada
+              </p>
+            </div>
+          </div>
+
+          {/* REAL AUTHENTICATION SWITCHER */}
+          <div className="flex bg-zinc-100 dark:bg-zinc-950 p-1 rounded-2xl border border-zinc-200 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegistering(false);
+                setLoginError('');
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
+                !isRegistering
+                  ? (theme === 'light' ? 'bg-white shadow-sm text-indigo-600' : 'bg-zinc-900 text-indigo-400')
+                  : 'text-zinc-500 hover:text-zinc-400'
+              }`}
+            >
+              Iniciar Sessão
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegistering(true);
+                setLoginError('');
+              }}
+              className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer text-center ${
+                isRegistering
+                  ? (theme === 'light' ? 'bg-white shadow-sm text-indigo-600' : 'bg-zinc-900 text-indigo-400')
+                  : 'text-zinc-500 hover:text-zinc-400'
+              }`}
+            >
+              Criar Conta Real
+            </button>
+          </div>
+
+          {loginError && (
+            <div className="space-y-3">
+              <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-sm text-rose-500 font-semibold text-center leading-relaxed">
+                {loginError}
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleModularLogin} className="space-y-5">
-            {isRegistering && <div className="space-y-2 animate-fade-in"><label className={`text-[14px] font-semibold tracking-wide ${theme === 'light' ? 'text-zinc-700' : 'text-zinc-300'} block`}>Nome Completo</label><input type="text" value={authRegisterName} onChange={(e) => setAuthRegisterName(e.target.value)} placeholder="Insira o seu nome real completo" className={`w-full h-11 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-xl px-4 text-base outline-none transition-all`} required={isRegistering} /></div>}
-            <div className="space-y-2"><label className={`text-[14px] font-semibold tracking-wide ${theme === 'light' ? 'text-zinc-700' : 'text-zinc-300'} block`}>Endereço de Email</label><input type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} placeholder="exemplo@nexus.edu" className={`w-full h-11 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-xl px-4 text-base outline-none transition-all`} required /></div>
-            <div className="space-y-2"><div className="flex justify-between items-center"><label className={`text-[14px] font-semibold tracking-wide ${theme === 'light' ? 'text-zinc-700' : 'text-zinc-300'} block`}>Palavra-passe</label></div><input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="Insira a sua senha" className={`w-full h-11 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-xl px-4 text-base outline-none transition-all`} required /></div>
-            <button type="submit" className="w-full h-11 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-xl text-[16px] tracking-wide transition-all cursor-pointer shadow-lg shadow-indigo-600/10 text-center flex items-center justify-center font-semibold">{isRegistering ? 'Criar Nova Conta Real' : 'Entrar na Plataforma'}</button>
-            <div className="text-center pt-1"><button type="button" onClick={() => setShowRecoveryInfo(true)} className={`text-[13px] font-medium hover:underline cursor-pointer ${theme === 'light' ? 'text-indigo-600' : 'text-indigo-400'}`}>Recuperar acesso</button></div>
+            {isRegistering && (
+              <div className="space-y-2 animate-fade-in">
+                <label className={`text-[14px] font-semibold tracking-wide ${theme === 'light' ? 'text-zinc-700' : 'text-zinc-300'} block`}>
+                  Nome Completo
+                </label>
+                <input
+                  type="text"
+                  value={authRegisterName}
+                  onChange={(e) => setAuthRegisterName(e.target.value)}
+                  placeholder="Insira o seu nome real completo"
+                  className={`w-full h-11 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-xl px-4 text-base outline-none transition-all`}
+                  required={isRegistering}
+                />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className={`text-[14px] font-semibold tracking-wide ${theme === 'light' ? 'text-zinc-700' : 'text-zinc-300'} block`}>
+                Endereço de Email
+              </label>
+              <input
+                type="email"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                placeholder="exemplo@nexus.edu"
+                className={`w-full h-11 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-xl px-4 text-base outline-none transition-all`}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className={`text-[14px] font-semibold tracking-wide ${theme === 'light' ? 'text-zinc-700' : 'text-zinc-300'} block`}>
+                  Palavra-passe
+                </label>
+              </div>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="Insira a sua senha"
+                className={`w-full h-11 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-indigo-500' : 'bg-zinc-950 border-white/5 text-zinc-100 focus:border-indigo-500'} border rounded-xl px-4 text-base outline-none transition-all`}
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full h-11 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-xl text-[16px] tracking-wide transition-all cursor-pointer shadow-lg shadow-indigo-600/10 text-center flex items-center justify-center font-semibold"
+            >
+              {isRegistering ? 'Criar Nova Conta Real' : 'Entrar na Plataforma'}
+            </button>
+
+            <div className="text-center pt-1">
+              <button
+                type="button"
+                onClick={() => setShowRecoveryInfo(true)}
+                className={`text-[13px] font-medium hover:underline cursor-pointer ${theme === 'light' ? 'text-indigo-600' : 'text-indigo-400'}`}
+              >
+                Recuperar acesso
+              </button>
+            </div>
           </form>
         </div>
-        <AnimatePresence>{showRecoveryInfo && <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[99999]"><motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className={`w-full max-w-md ${theme === 'light' ? 'bg-white text-zinc-900' : 'bg-zinc-900 text-zinc-100'} p-6 rounded-2xl border ${theme === 'light' ? 'border-zinc-200' : 'border-zinc-800'} space-y-4`}><div className="flex items-center gap-3"><div className={`p-2 rounded-xl ${theme === 'light' ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-500/10 text-indigo-400'}`}><Mail className="w-6 h-6" /></div><h3 className="text-[20px] font-bold font-display">Recuperação de Acesso</h3></div>{recoverySuccess ? <div className="space-y-4"><div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs leading-relaxed">{recoverySuccess}</div><p className="text-[12px] text-zinc-400">Após redefinir a palavra-passe no link enviado, tente iniciar sessão novamente com as novas credenciais.</p><div className="flex justify-end pt-2"><button onClick={() => { setShowRecoveryInfo(false); setRecoverySuccess(''); setRecoveryEmail(''); }} className="h-10 px-6 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm cursor-pointer transition-all">Voltar ao Login</button></div></div> : <form onSubmit={async (e) => { e.preventDefault(); setRecoveryError(''); setRecoverySuccess(''); setSendingRecovery(true); try { const emailToRecover = (recoveryEmail || loginEmail).trim().toLowerCase(); if (!emailToRecover) { setRecoveryError('Por favor, introduza o seu endereço de email.'); return; } await sendPasswordResetEmail(auth, emailToRecover); setRecoverySuccess(`E-mail de recuperação enviado com sucesso para: ${emailToRecover}`); } catch (err: any) { let errorMsg = 'Erro ao enviar o email de recuperação. Verifique se o endereço está correto.'; if (err.code === 'auth/user-not-found') errorMsg = 'Nenhum utilizador registado com este endereço de email.'; else if (err.code === 'auth/invalid-email') errorMsg = 'O endereço de email introduzido é inválido.'; setRecoveryError(errorMsg); } finally { setSendingRecovery(false); } }} className="space-y-4"><p className="text-[13px] leading-relaxed text-zinc-500 dark:text-zinc-400">Introduza o seu email registado abaixo para receber um link oficial de redefinição de palavra-passe do Firebase Auth.</p>{recoveryError && <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs rounded-xl font-medium">{recoveryError}</div>}<div className="space-y-1"><label className="text-xs font-bold text-zinc-300 block">Endereço de Email</label><input type="email" value={recoveryEmail || loginEmail} onChange={(e) => setRecoveryEmail(e.target.value)} placeholder="Ex: exemplo@nexus.edu" className={`w-full h-10 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900' : 'bg-zinc-950 border-white/5 text-zinc-100'} border rounded-xl px-3 text-xs outline-none`} required /></div><div className="pt-2 flex justify-between gap-3"><button type="button" onClick={() => { setShowRecoveryInfo(false); setRecoveryError(''); setRecoverySuccess(''); }} className={`h-10 px-4 ${theme === 'light' ? 'bg-slate-100 hover:bg-slate-200 text-zinc-750' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'} font-semibold rounded-xl text-xs cursor-pointer transition-all`}>Cancelar</button><button type="submit" disabled={sendingRecovery} className="h-10 px-6 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-700 text-white font-semibold rounded-xl text-xs cursor-pointer transition-all flex items-center justify-center gap-2">{sendingRecovery ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" />Enviando...</> : 'Enviar Link de Recuperação Real'}</button></div></form>}</motion.div></div>}</AnimatePresence>
+
+        {/* RECOVERY MODAL */}
+        <AnimatePresence>
+          {showRecoveryInfo && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[99999]">
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className={`w-full max-w-md ${theme === 'light' ? 'bg-white text-zinc-900' : 'bg-zinc-900 text-zinc-100'} p-6 rounded-2xl border ${theme === 'light' ? 'border-zinc-200' : 'border-zinc-800'} space-y-4`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-xl ${theme === 'light' ? 'bg-indigo-50 text-indigo-600' : 'bg-indigo-500/10 text-indigo-400'}`}>
+                    <Mail className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-[20px] font-bold font-display">Recuperação de Acesso</h3>
+                </div>
+
+                {recoverySuccess ? (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-xs leading-relaxed">
+                      {recoverySuccess}
+                    </div>
+                    <p className="text-[12px] text-zinc-400">
+                      Após redefinir a palavra-passe no link enviado, tente iniciar sessão novamente com as novas credenciais.
+                    </p>
+                    <div className="flex justify-end pt-2">
+                      <button
+                        onClick={() => {
+                          setShowRecoveryInfo(false);
+                          setRecoverySuccess('');
+                          setRecoveryEmail('');
+                        }}
+                        className="h-10 px-6 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm cursor-pointer transition-all"
+                      >
+                        Voltar ao Login
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setRecoveryError('');
+                    setRecoverySuccess('');
+                    setSendingRecovery(true);
+                    try {
+                      const emailToRecover = (recoveryEmail || loginEmail).trim().toLowerCase();
+                      if (!emailToRecover) {
+                        setRecoveryError('Por favor, introduza o seu endereço de email.');
+                        return;
+                      }
+                      await sendPasswordResetEmail(auth, emailToRecover);
+                      setRecoverySuccess(`E-mail de recuperação enviado com sucesso para: ${emailToRecover}`);
+                    } catch (err: any) {
+                      console.error('[RECOVERY-ERROR]', err);
+                      let errorMsg = 'Erro ao enviar o email de recuperação. Verifique se o endereço está correto.';
+                      if (err.code === 'auth/user-not-found') {
+                        errorMsg = 'Nenhum utilizador registado com este endereço de email.';
+                      } else if (err.code === 'auth/invalid-email') {
+                        errorMsg = 'O endereço de email introduzido é inválido.';
+                      }
+                      setRecoveryError(errorMsg);
+                    } finally {
+                      setSendingRecovery(false);
+                    }
+                  }} className="space-y-4">
+                    <p className="text-[13px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+                      Introduza o seu email registado abaixo para receber um link oficial de redefinição de palavra-passe do Firebase Auth.
+                    </p>
+
+                    {recoveryError && (
+                      <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs rounded-xl font-medium">
+                        {recoveryError}
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-zinc-300 block">Endereço de Email</label>
+                      <input
+                        type="email"
+                        value={recoveryEmail || loginEmail}
+                        onChange={(e) => setRecoveryEmail(e.target.value)}
+                        placeholder="Ex: exemplo@nexus.edu"
+                        className={`w-full h-10 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-900' : 'bg-zinc-950 border-white/5 text-zinc-100'} border rounded-xl px-3 text-xs outline-none`}
+                        required
+                      />
+                    </div>
+
+                    <div className="pt-2 flex justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowRecoveryInfo(false);
+                          setRecoveryError('');
+                          setRecoverySuccess('');
+                        }}
+                        className={`h-10 px-4 ${theme === 'light' ? 'bg-slate-100 hover:bg-slate-200 text-zinc-750' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'} font-semibold rounded-xl text-xs cursor-pointer transition-all`}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={sendingRecovery}
+                        className="h-10 px-6 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-700 text-white font-semibold rounded-xl text-xs cursor-pointer transition-all flex items-center justify-center gap-2"
+                      >
+                        {sendingRecovery ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            Enviando...
+                          </>
+                        ) : (
+                          'Enviar Link de Recuperação Real'
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
 
   return (
     <div ref={constraintsRef} id="nexus_container" className={`min-h-screen ${theme === 'light' ? 'bg-slate-50 text-zinc-800' : 'bg-zinc-950 text-zinc-105'} flex flex-col font-sans selection:bg-indigo-500/10 transition-colors duration-200`}>
+      
+      {/* HEADER PRINCIPAL (Sleek Minimalist Theme) */}
       <header className={`h-20 ${theme === 'light' ? 'bg-white border-b border-zinc-200 text-zinc-900' : 'bg-zinc-900 border-b border-white/5 text-white'} flex items-center justify-between px-6 md:px-10 sticky top-0 z-50 backdrop-blur-md`}>
-        <div className="flex items-center gap-3.5"><div className="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">N</div><div><h1 className={`text-base font-bold font-display tracking-tight ${theme === 'light' ? 'text-zinc-900' : 'text-white'}`}>Nexus Edu</h1><p className={`text-[11px] ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} mt-0.5 leading-none`}>Portal Escolar</p></div></div>
-        <div className="hidden lg:flex flex-1 max-w-sm mx-8"><GlobalSearch students={students} teachers={teachers} invoices={invoices} announcements={announcements} messages={messages} activeTab={activeTab} setActiveTab={setActiveTab} theme={theme} onUpdateStudent={(id, updatedFields) => { const std = students.find(s => s.id === id); if (std) { const updatedStd = { ...std, ...updatedFields }; setStudents(prev => prev.map(s => s.id === id ? updatedStd : s)); upsertLiveStudent(updatedStd); } }} /></div>
-        <div className="hidden md:flex items-center gap-4"><div className="flex items-center gap-3"><button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className={`p-2 rounded-lg border transition-all cursor-pointer flex items-center justify-center ${theme === 'light' ? 'bg-zinc-100 border-zinc-200 text-zinc-750 hover:bg-zinc-200' : 'bg-white/5 border-white/5 text-zinc-300 hover:bg-zinc-800'}`} title={theme === 'dark' ? 'Alternar para Modo Claro' : 'Alternar para Modo Escuro'}>{theme === 'dark' ? <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.344l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" /></svg> : <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>}</button><div className="flex flex-col items-end"><span className={`text-[12px] font-sans ${theme === 'light' ? 'text-zinc-650 font-medium' : 'text-zinc-300'} tracking-tight`}>{firebaseUser?.email || 'admin@nexus.edu'}</span><div className={`flex items-center gap-1 text-[10px] font-sans ${theme === 'light' ? 'text-zinc-550' : 'text-white/40'} mt-0.5`}><span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span><span className={`font-bold uppercase text-[10px] ${theme === 'light' ? 'text-zinc-600' : 'text-zinc-400'}`}>{getFriendlyRoleName(currentUserRole)}</span></div></div><button onClick={handleSignOut} className={`px-3-5 py-2.0 ${theme === 'light' ? 'bg-zinc-100 border-zinc-200 text-zinc-700 hover:bg-rose-50 hover:text-rose-600' : 'bg-zinc-850 border-white/5 text-zinc-400 hover:bg-rose-500/10 hover:text-rose-400'} rounded-lg text-xs font-semibold tracking-wide transition-all cursor-pointer`}>Sair</button></div></div>
-        <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className={`md:hidden p-1.5 rounded border ${theme === 'light' ? 'border-zinc-200 hover:bg-zinc-100 text-zinc-700' : 'border-white/10 hover:bg-zinc-805 text-zinc-300 hover:text-white'} cursor-pointer`}>{isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}</button>
+        <div className="flex items-center gap-3.5">
+          <div className="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+            N
+          </div>
+          <div>
+            <h1 className={`text-base font-bold font-display tracking-tight ${theme === 'light' ? 'text-zinc-900' : 'text-white'}`}>
+              Nexus Edu
+            </h1>
+            <p className={`text-[11px] ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} mt-0.5 leading-none`}>Portal Escolar</p>
+          </div>
+        </div>
+
+        {/* FUZZY GLOBAL SEARCH BAR */}
+        <div className="hidden lg:flex flex-1 max-w-sm mx-8">
+          <GlobalSearch
+            students={students}
+            teachers={teachers}
+            invoices={invoices}
+            announcements={announcements}
+            messages={messages}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            theme={theme}
+            onUpdateStudent={(id, updatedFields) => {
+              const std = students.find(s => s.id === id);
+              if (std) {
+                const updatedStd = { ...std, ...updatedFields };
+                setStudents(prev => prev.map(s => s.id === id ? updatedStd : s));
+                upsertLiveStudent(updatedStd);
+              }
+            }}
+          />
+        </div>
+
+        {/* Minimalist Profile & Controls */}
+        <div className="hidden md:flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {/* Theme Toggle Button */}
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className={`p-2 rounded-lg border transition-all cursor-pointer flex items-center justify-center ${
+                theme === 'light'
+                  ? 'bg-zinc-100 border-zinc-200 text-zinc-750 hover:bg-zinc-200'
+                  : 'bg-white/5 border-white/5 text-zinc-300 hover:bg-zinc-800'
+              }`}
+              title={theme === 'dark' ? 'Alternar para Modo Claro' : 'Alternar para Modo Escuro'}
+            >
+              {theme === 'dark' ? (
+                <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.344l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
+            </button>
+
+            <div className="flex flex-col items-end">
+              <span className={`text-[12px] font-sans ${theme === 'light' ? 'text-zinc-650 font-medium' : 'text-zinc-300'} tracking-tight`}>
+                {firebaseUser?.email || 'admin@nexus.edu'}
+              </span>
+              <div className={`flex items-center gap-1 text-[10px] font-sans ${theme === 'light' ? 'text-zinc-550' : 'text-white/40'} mt-0.5`}>
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                <span className={`font-bold uppercase text-[10px] ${theme === 'light' ? 'text-zinc-600' : 'text-zinc-400'}`}>{getFriendlyRoleName(currentUserRole)}</span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleSignOut}
+              className={`px-3-5 py-2.0 ${theme === 'light' ? 'bg-zinc-100 border-zinc-200 text-zinc-700 hover:bg-rose-50 hover:text-rose-600' : 'bg-zinc-850 border-white/5 text-zinc-400 hover:bg-rose-500/10 hover:text-rose-400'} rounded-lg text-xs font-semibold tracking-wide transition-all cursor-pointer`}
+            >
+              Sair
+            </button>
+          </div>
+        </div>
+
+        {/* Hamburguer Mobile */}
+        <button 
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} 
+          className={`md:hidden p-1.5 rounded border ${theme === 'light' ? 'border-zinc-200 hover:bg-zinc-100 text-zinc-700' : 'border-white/10 hover:bg-zinc-805 text-zinc-300 hover:text-white'} cursor-pointer`}
+        >
+          {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
       </header>
 
+      {/* CORE FRAME LAYOUT */}
       <div className="flex-1 flex relative">
-        <aside className={`hidden md:flex flex-col w-64 ${theme === 'light' ? 'bg-white border-r border-zinc-200' : 'bg-zinc-900 border-r border-white/5'} p-4 select-none justify-between h-[calc(100vh-80px)] sticky top-[80px]`}><div className="space-y-4 overflow-y-auto pr-1 flex-1">{sidebarGroups.map(group => { const allowedItems = group.items.filter(item => (rolePermissions[currentUserRole] || []).includes(item.id)); if (allowedItems.length === 0) return null; return <div key={group.title} className="space-y-1"><span className={`text-[9px] font-bold tracking-[0.2em] ${theme === 'light' ? 'text-zinc-550' : 'text-white/40'} uppercase font-mono block px-2.5 mb-1.5`}>{group.title}</span>{allowedItems.map(item => { const IconComp = item.icon; const isActive = activeTab === item.id; return <button key={item.id} onClick={() => setActiveTab(item.id)} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all cursor-pointer ${isActive ? theme === 'light' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/60 shadow-sm' : 'bg-white/5 text-white border border-white/10' : theme === 'light' ? 'text-zinc-650 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}><IconComp className={`w-4 h-4 shrink-0 ${isActive ? theme === 'light' ? 'text-indigo-600' : 'text-white' : theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'}`} /><span className="font-sans">{item.name}</span></button>; })}</div>; })}</div></aside>
+        
+        {/* SIDEBAR DESKTOP */}
+        <aside className={`hidden md:flex flex-col w-64 ${theme === 'light' ? 'bg-white border-r border-zinc-200' : 'bg-zinc-900 border-r border-white/5'} p-4 select-none justify-between h-[calc(100vh-80px)] sticky top-[80px]`}>
+          <div className="space-y-4 overflow-y-auto pr-1 flex-1">
+            {sidebarGroups.map(group => {
+              const allowedItems = group.items.filter(item => {
+                const allowedList = rolePermissions[currentUserRole] || [];
+                return allowedList.includes(item.id);
+              });
 
-        <AnimatePresence>{isMobileMenuOpen && <motion.div initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: 'tween', duration: 0.2 }} className={`md:hidden fixed top-[80px] bottom-0 left-0 w-64 ${theme === 'light' ? 'bg-white border-r border-zinc-200' : 'bg-zinc-900 border-r border-white/5'} z-40 p-4 flex flex-col justify-between shadow-2xl overflow-y-auto`}><div className="space-y-4"><div className="px-2.5 mb-2 relative"><span className={`text-[10px] font-mono ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-500'} uppercase tracking-widest block mb-2`}>Procurar Global</span><GlobalSearch students={students} teachers={teachers} invoices={invoices} announcements={announcements} messages={messages} activeTab={activeTab} setActiveTab={setActiveTab} theme={theme} onUpdateStudent={(id, updatedFields) => { const std = students.find(s => s.id === id); if (std) { const updatedStd = { ...std, ...updatedFields }; setStudents(prev => prev.map(s => s.id === id ? updatedStd : s)); upsertLiveStudent(updatedStd); } }} /></div><div className="space-y-4">{sidebarGroups.map(group => { const allowedItems = group.items.filter(item => (rolePermissions[currentUserRole] || []).includes(item.id)); if (allowedItems.length === 0) return null; return <div key={group.title} className="space-y-1"><span className={`text-[9.5px] font-bold tracking-wider ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-500'} uppercase font-mono block px-2.5 mb-1`}>{group.title}</span>{allowedItems.map(item => { const IconComp = item.icon; const isActive = activeTab === item.id; return <button key={item.id} onClick={() => { setActiveTab(item.id); setIsMobileMenuOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer ${isActive ? theme === 'light' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-zinc-800 text-zinc-100 border border-zinc-700/50' : theme === 'light' ? 'text-zinc-650 hover:bg-zinc-100' : 'text-zinc-400 hover:bg-zinc-850 hover:text-white'}`}><IconComp className="w-4 h-4 shrink-0" /><span className="font-sans">{item.name}</span></button>; })}</div>; })}</div></div><div className={`p-3 rounded-lg border text-[9px] leading-relaxed space-y-0.5 ${theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-500' : 'bg-zinc-950 border-zinc-850 text-zinc-550'} mt-4`}><p className="font-semibold">Tenant: lisboa_central_01</p><p className="text-emerald-500 font-mono">● Online via Edge CDN</p></div></motion.div>}</AnimatePresence>
+              if (allowedItems.length === 0) return null;
 
+              return (
+                <div key={group.title} className="space-y-1">
+                  <span className={`text-[9px] font-bold tracking-[0.2em] ${theme === 'light' ? 'text-zinc-550' : 'text-white/40'} uppercase font-mono block px-2.5 mb-1.5`}>
+                    {group.title}
+                  </span>
+                  {allowedItems.map(item => {
+                    const IconComp = item.icon;
+                    const isActive = activeTab === item.id;
+
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setActiveTab(item.id)}
+                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all cursor-pointer ${
+                          isActive 
+                            ? theme === 'light'
+                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/60 shadow-sm'
+                              : 'bg-white/5 text-white border border-white/10'
+                            : theme === 'light'
+                            ? 'text-zinc-650 hover:bg-zinc-100 hover:text-zinc-900'
+                            : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                        }`}
+                      >
+                        <IconComp className={`w-4 h-4 shrink-0 ${
+                          isActive
+                            ? theme === 'light'
+                              ? 'text-indigo-600'
+                              : 'text-white'
+                            : theme === 'light'
+                              ? 'text-zinc-500'
+                              : 'text-zinc-400'
+                        }`} />
+                        <span className="font-sans">{item.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </aside>
+
+        {/* SIDEBAR MOBILE OVERLAY */}
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <motion.div 
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'tween', duration: 0.2 }}
+              className={`md:hidden fixed top-[80px] bottom-0 left-0 w-64 ${
+                theme === 'light' ? 'bg-white border-r border-zinc-200' : 'bg-zinc-900 border-r border-white/5'
+              } z-40 p-4 flex flex-col justify-between shadow-2xl overflow-y-auto`}
+            >
+              <div className="space-y-4">
+                {/* Mobile Fuzzy Search Input */}
+                <div className="px-2.5 mb-2 relative">
+                  <span className={`text-[10px] font-mono ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-500'} uppercase tracking-widest block mb-2`}>Procurar Global</span>
+                  <GlobalSearch
+                    students={students}
+                    teachers={teachers}
+                    invoices={invoices}
+                    announcements={announcements}
+                    messages={messages}
+                    activeTab={activeTab}
+                    setActiveTab={setActiveTab}
+                    theme={theme}
+                    onUpdateStudent={(id, updatedFields) => {
+                      const std = students.find(s => s.id === id);
+                      if (std) {
+                        const updatedStd = { ...std, ...updatedFields };
+                        setStudents(prev => prev.map(s => s.id === id ? updatedStd : s));
+                        upsertLiveStudent(updatedStd);
+                      }
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-4">
+                  {sidebarGroups.map(group => {
+                    const allowedItems = group.items.filter(item => {
+                      const allowedList = rolePermissions[currentUserRole] || [];
+                      return allowedList.includes(item.id);
+                    });
+
+                    if (allowedItems.length === 0) return null;
+
+                    return (
+                      <div key={group.title} className="space-y-1">
+                        <span className={`text-[9.5px] font-bold tracking-wider ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-500'} uppercase font-mono block px-2.5 mb-1`}>
+                          {group.title}
+                        </span>
+                        {allowedItems.map(item => {
+                          const IconComp = item.icon;
+                          const isActive = activeTab === item.id;
+
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => {
+                                setActiveTab(item.id);
+                                setIsMobileMenuOpen(false);
+                              }}
+                              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer ${
+                                isActive 
+                                  ? theme === 'light'
+                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                    : 'bg-zinc-800 text-zinc-100 border border-zinc-700/50'
+                                  : theme === 'light'
+                                  ? 'text-zinc-650 hover:bg-zinc-100'
+                                  : 'text-zinc-400 hover:bg-zinc-850 hover:text-white'
+                              }`}
+                            >
+                              <IconComp className="w-4 h-4 shrink-0" />
+                              <span className="font-sans">{item.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className={`p-3 rounded-lg border text-[9px] leading-relaxed space-y-0.5 ${
+                theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-500' : 'bg-zinc-950 border-zinc-850 text-zinc-550'
+              } mt-4`}>
+                <p className="font-semibold">Tenant: lisboa_central_01</p>
+                <p className="text-emerald-500 font-mono">● Online via Edge CDN</p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* VISOR PRINCIPAL DE CONTEÚDO */}
         <main className={`flex-1 p-6 md:p-8 min-h-[calc(100vh-80px)] overflow-x-hidden ${theme === 'light' ? 'bg-slate-50' : 'bg-zinc-950'} relative`}>
-          {activeTab === 'teachers' && <div className={`flex flex-wrap items-center gap-1.5 border-b pb-4 mb-6 ${theme === 'light' ? 'border-zinc-200' : 'border-white/5'}`}><button onClick={() => setTeachersSubTab('list')} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${teachersSubTab === 'list' ? theme === 'light' ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white' : theme === 'light' ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}>Lista de Professores</button><button onClick={() => setTeachersSubTab('ai')} className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${teachersSubTab === 'ai' ? theme === 'light' ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white' : theme === 'light' ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}>IA Pedagógica (Planos & Provas)</button></div>}
-          <AnimatePresence mode="wait"><motion.div key={activeTab} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }} className="h-full">{!(rolePermissions[currentUserRole] || []).includes(activeTab) ? <div className={`p-10 text-center space-y-6 max-w-lg mx-auto border rounded-2xl shadow-xl mt-12 animate-fadeIn ${theme === 'light' ? 'bg-white border-red-200 text-zinc-800' : 'bg-zinc-900/80 border-red-500/10 text-zinc-200'}`}><div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto border border-red-500/20"><ShieldAlert className="w-8 h-8 text-red-500 animate-pulse" /></div><div className="space-y-2"><h3 className="text-xl font-bold font-display text-red-500">Módulo de Acesso Restrito</h3><p className={`text-[16px] leading-relaxed ${theme === 'light' ? 'text-zinc-600' : 'text-zinc-300'}`}>Desculpe, o perfil de utilizador <strong>{getFriendlyRoleName(currentUserRole)}</strong> não está autorizado para visualizar esta secção ou o seu privilégio foi suspenso pela administração escolar.</p></div></div> : <Suspense fallback={<div className="flex flex-col items-center justify-center min-h-[400px] gap-3 text-center"><RefreshCw className="w-8 h-8 animate-spin text-indigo-600" /><p className={`text-xs font-semibold ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} animate-pulse`}>Carregando módulo inteligente...</p></div>}><>{activeTab === 'dashboard' && (currentUserRole === 'parent' ? <ParentPortal students={students} invoices={invoices} announcements={announcements} messages={messages} onUpdateStudent={handleUpdateStudent} onUpdateInvoiceStatus={handleUpdateInvoiceStatus} theme={theme} /> : <Dashboard students={visibleStudents} teachers={teachers} invoices={visibleInvoices} announcements={announcements} setCurrentTab={setActiveTab} onQuickAction={(type) => { if (type === 'add-student') setActiveTab('students'); }} approvals={approvals} signatures={signatures} schoolDocs={schoolDocs} currentUserRole={currentUserRole} theme={theme} />)}
-            {activeTab === 'students' && <EnrollmentOperationsWorkspace theme={theme} />}
-            {activeTab === 'teachers' && <>{teachersSubTab === 'list' && <TeachersList teachers={teachers} currentUserRole={currentUserRole} onAddTeacher={handleAddTeacher} onUpdateTeacher={handleUpdateTeacher} onDeleteTeacher={handleDeleteTeacher} onSelectTeacherForChat={() => setActiveTab('communications')} globalSearchTerm={globalSearchQuery} />}{teachersSubTab === 'ai' && <TeacherAI students={visibleStudents} teachers={teachers} />}</>}
-            {activeTab === 'financials' && <FinancialPanel invoices={visibleInvoices} students={students} onUpdateInvoiceStatus={handleUpdateInvoiceStatus} onAddInvoice={handleAddInvoice} globalSearchTerm={globalSearchQuery} />}
-            {activeTab === 'communications' && <CommunicationCenter announcements={announcements} messages={messages} currentUserRole={currentUserRole} onAddAnnouncement={handleAddAnnouncement} onAddMessage={handleAddMessage} notificationPresets={notificationPresets} onUpdateNotificationPresets={handleUpdateNotificationPresets} />}
-            {activeTab === 'documents' && <SchoolDocuments documents={schoolDocs} onAddDocument={handleAddSchoolDocs} onUpdateDocument={handleUpdateSchoolDocs} onDeleteDocument={handleDeleteSchoolDocs} currentUserRole={currentUserRole} />}
-            {activeTab === 'workflows' && <WorkflowsCentral students={visibleStudents} invoices={visibleInvoices} onAddStudent={handleAddStudent} onUpdateStudent={handleUpdateStudent} onUpdateInvoiceStatus={handleUpdateInvoiceStatus} currentUserRole={currentUserRole} />}
-            {activeTab === 'approvals' && <InstitutionalApprovals currentUserRole={currentUserRole} currentUserName={firebaseUser?.displayName || firebaseUser?.email || 'Administrador'} approvals={approvals} onCreateApproval={handleCreateApproval} onTransitionApproval={handleTransitionApproval} isLoading={approvalsLoading} />}
-            {activeTab === 'signatures' && <DigitalSignatureSystem currentUserRole={currentUserRole} currentUserName={firebaseUser?.displayName || firebaseUser?.email || 'Administrador'} currentUserEmail={firebaseUser?.email || 'admin@nexus.edu.pt'} students={visibleStudents} invoices={visibleInvoices} schoolDocuments={schoolDocs} signatures={signatures} onAddSignature={handleAddSignature} onUpdateSignature={handleUpdateSignature} onDeleteSignature={handleDeleteSignature} />}
-            {activeTab === 'tasks' && <TasksCenter tasks={tasks} setTasks={setTasks} currentUserRole={currentUserRole} theme={theme} />}
-            {activeTab === 'sheets' && <GoogleSheetsCenter students={students} setStudents={setStudents} invoices={invoices} theme={theme} />}
-            {activeTab === 'config' && <SystemConfig currentRole={currentUserRole} onRoleChange={handleSimulationRoleChange} students={students} teachers={teachers} invoices={invoices} announcements={announcements} messages={messages} automationFlows={automationFlows} onImportLiveDatabase={handleImportLiveDatabase} rolePermissions={rolePermissions} onUpdatePermissions={handleUpdatePermissions} auditLogs={auditLogs} onClearAuditLogs={handleClearAuditLogs} firebaseUser={firebaseUser} onWipeSystem={handleWipeSystemSessions} />}
-          </></Suspense>}</motion.div></AnimatePresence>
+          
+          {/* Elegant Minimalist Sub-tabs Navigation */}
+          {['students', 'teachers'].includes(activeTab) && (
+            <div className={`flex flex-wrap items-center gap-1.5 border-b pb-4 mb-6 ${theme === 'light' ? 'border-zinc-200' : 'border-white/5'}`}>
+              {activeTab === 'students' && (
+                <>
+                  <button
+                    onClick={() => setStudentsSubTab('list')}
+                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      studentsSubTab === 'list'
+                        ? theme === 'light' ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white'
+                        : theme === 'light' ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    Lista de Alunos
+                  </button>
+                  <button
+                    onClick={() => setStudentsSubTab('matriculas')}
+                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      studentsSubTab === 'matriculas'
+                        ? theme === 'light' ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white'
+                        : theme === 'light' ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    Portal de Matrícula
+                  </button>
+                  <button
+                    onClick={() => setStudentsSubTab('gamification')}
+                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      studentsSubTab === 'gamification'
+                        ? theme === 'light' ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white'
+                        : theme === 'light' ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    Mérito & Engajamento / Pódio
+                  </button>
+                </>
+              )}
+
+              {activeTab === 'teachers' && (
+                <>
+                  <button
+                    onClick={() => setTeachersSubTab('list')}
+                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      teachersSubTab === 'list'
+                        ? theme === 'light' ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white'
+                        : theme === 'light' ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    Lista de Professores
+                  </button>
+                  <button
+                    onClick={() => setTeachersSubTab('ai')}
+                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      teachersSubTab === 'ai'
+                        ? theme === 'light' ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white'
+                        : theme === 'light' ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    IA Pedagógica (Planos & Provas)
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.15 }}
+              className="h-full"
+            >
+              {!(rolePermissions[currentUserRole] || []).includes(activeTab) ? (
+                <div className={`p-10 text-center space-y-6 max-w-lg mx-auto border rounded-2xl shadow-xl mt-12 animate-fadeIn ${
+                  theme === 'light' 
+                    ? 'bg-white border-red-200 text-zinc-800' 
+                    : 'bg-zinc-900/80 border-red-500/10 text-zinc-200'
+                }`}>
+                  <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto border border-red-500/20">
+                    <ShieldAlert className="w-8 h-8 text-red-500 animate-pulse" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-bold font-display text-red-500">Módulo de Acesso Restrito</h3>
+                    <p className={`text-[16px] leading-relaxed ${theme === 'light' ? 'text-zinc-600' : 'text-zinc-300'}`}>
+                      Desculpe, o perfil de utilizador <strong>{getFriendlyRoleName(currentUserRole)}</strong> não está autorizado para visualizar esta secção ou o seu privilégio foi suspenso pela administração escolar.
+                    </p>
+                  </div>
+                  <div className={`text-[14px] p-4 rounded-xl border leading-relaxed text-left space-y-2 ${
+                    theme === 'light' ? 'bg-zinc-50 border-zinc-200 text-zinc-600' : 'bg-zinc-950 border-zinc-850 text-zinc-400'
+                  }`}>
+                    <p><strong>Estado:</strong> Acesso Bloqueado</p>
+                    <p><strong>Secção de destino:</strong> {TAB_NAMES[activeTab] || activeTab}</p>
+                    <p><strong>Data de tentativa:</strong> {new Date().toLocaleDateString('pt-PT')} às {new Date().toLocaleTimeString('pt-PT')}</p>
+                    <p className="text-[12px] border-t pt-2 mt-2 border-zinc-200/50">Caso necessite de aceder a esta funcionalidade, por favor contacte o Administrador do agrupamento para atualizar as definições de privilégios.</p>
+                  </div>
+                </div>
+              ) : (
+                <Suspense fallback={
+                  <div className="flex flex-col items-center justify-center min-h-[400px] gap-3 text-center">
+                    <RefreshCw className="w-8 h-8 animate-spin text-indigo-600" />
+                    <p className={`text-xs font-semibold ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-400'} animate-pulse`}>Carregando módulo inteligente...</p>
+                  </div>
+                }>
+                  <>
+                    {activeTab === 'dashboard' && (
+                    currentUserRole === 'parent' ? (
+                      <ParentPortal 
+                        students={students}
+                        invoices={invoices}
+                        announcements={announcements}
+                        messages={messages}
+                        onUpdateStudent={handleUpdateStudent}
+                        onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
+                        theme={theme}
+                      />
+                    ) : (
+                      <Dashboard 
+                        students={visibleStudents} 
+                        teachers={teachers} 
+                        invoices={visibleInvoices} 
+                        announcements={announcements}
+                        setCurrentTab={setActiveTab}
+                        onQuickAction={(type) => {
+                          if (type === 'add-student') {
+                            setActiveTab('students');
+                            setStudentsSubTab('matriculas');
+                          }
+                        }}
+                        approvals={approvals}
+                        signatures={signatures}
+                        schoolDocs={schoolDocs}
+                        currentUserRole={currentUserRole}
+                        theme={theme}
+                      />
+                    )
+                  )}
+                  
+                  {activeTab === 'students' && (
+                    <>
+                      {studentsSubTab === 'list' && (
+                        <StudentsList 
+                          students={visibleStudents}
+                          currentUserRole={currentUserRole}
+                          onAddStudent={handleAddStudent}
+                          onUpdateStudent={handleUpdateStudent}
+                          onDeleteStudent={handleDeleteStudent}
+                          globalSearchTerm={globalSearchQuery}
+                        />
+                      )}
+                      
+                      {studentsSubTab === 'matriculas' && (
+                        <EnrollmentWorkspace />
+                      )}
+                      
+                      {studentsSubTab === 'gamification' && (
+                        <Gamification 
+                          students={visibleStudents}
+                          teachers={teachers}
+                          onBonusPointsToStudent={handleBonusPointsToStudent}
+                          onBonusPointsToTeacher={handleBonusPointsToTeacher}
+                        />
+                      )}
+                    </>
+                  )}
+
+                  {activeTab === 'teachers' && (
+                    <>
+                      {teachersSubTab === 'list' && (
+                        <TeachersList 
+                          teachers={teachers}
+                          currentUserRole={currentUserRole}
+                          onAddTeacher={handleAddTeacher}
+                          onUpdateTeacher={handleUpdateTeacher}
+                          onDeleteTeacher={handleDeleteTeacher}
+                          onSelectTeacherForChat={(tchName) => {
+                            setActiveTab('communications');
+                          }}
+                          globalSearchTerm={globalSearchQuery}
+                        />
+                      )}
+                      
+                      {teachersSubTab === 'ai' && (
+                        <TeacherAI 
+                          students={visibleStudents}
+                          teachers={teachers}
+                        />
+                      )}
+                    </>
+                  )}
+
+                  {activeTab === 'financials' && (
+                    <FinancialPanel 
+                      invoices={visibleInvoices}
+                      students={students}
+                      onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
+                      onAddInvoice={handleAddInvoice}
+                      globalSearchTerm={globalSearchQuery}
+                    />
+                  )}
+
+                  {activeTab === 'communications' && (
+                    <CommunicationCenter 
+                      announcements={announcements}
+                      messages={messages}
+                      currentUserRole={currentUserRole}
+                      onAddAnnouncement={handleAddAnnouncement}
+                      onAddMessage={handleAddMessage}
+                      notificationPresets={notificationPresets}
+                      onUpdateNotificationPresets={handleUpdateNotificationPresets}
+                    />
+                  )}
+
+                  {activeTab === 'documents' && (
+                    <SchoolDocuments 
+                      documents={schoolDocs}
+                      onAddDocument={handleAddSchoolDocs}
+                      onUpdateDocument={handleUpdateSchoolDocs}
+                      onDeleteDocument={handleDeleteSchoolDocs}
+                      currentUserRole={currentUserRole}
+                    />
+                  )}
+
+                  {activeTab === 'workflows' && (
+                    <WorkflowsCentral 
+                      students={visibleStudents}
+                      invoices={visibleInvoices}
+                      onAddStudent={handleAddStudent}
+                      onUpdateStudent={handleUpdateStudent}
+                      onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
+                      currentUserRole={currentUserRole}
+                    />
+                  )}
+
+                  {activeTab === 'approvals' && (
+                    <InstitutionalApprovals
+                      currentUserRole={currentUserRole}
+                      currentUserName={firebaseUser?.displayName || firebaseUser?.email || 'Administrador'}
+                      approvals={approvals}
+                      onCreateApproval={handleCreateApproval}
+                      onTransitionApproval={handleTransitionApproval}
+                      isLoading={approvalsLoading}
+                    />
+                  )}
+
+                  {activeTab === 'signatures' && (
+                    <DigitalSignatureSystem
+                      currentUserRole={currentUserRole}
+                      currentUserName={firebaseUser?.displayName || firebaseUser?.email || 'Administrador'}
+                      currentUserEmail={firebaseUser?.email || 'admin@nexus.edu.pt'}
+                      students={visibleStudents}
+                      invoices={visibleInvoices}
+                      schoolDocuments={schoolDocs}
+                      signatures={signatures}
+                      onAddSignature={handleAddSignature}
+                      onUpdateSignature={handleUpdateSignature}
+                      onDeleteSignature={handleDeleteSignature}
+                    />
+                  )}
+
+                  {activeTab === 'tasks' && (
+                    <TasksCenter 
+                      tasks={tasks}
+                      setTasks={setTasks}
+                      currentUserRole={currentUserRole}
+                      theme={theme}
+                    />
+                  )}
+
+                  {activeTab === 'sheets' && (
+                    <GoogleSheetsCenter 
+                      students={students}
+                      setStudents={setStudents}
+                      invoices={invoices}
+                      theme={theme}
+                    />
+                  )}
+
+                  {activeTab === 'config' && (
+                    <SystemConfig 
+                      currentRole={currentUserRole}
+                      onRoleChange={handleSimulationRoleChange}
+                      students={students}
+                      teachers={teachers}
+                      invoices={invoices}
+                      announcements={announcements}
+                      messages={messages}
+                      automationFlows={automationFlows}
+                      onImportLiveDatabase={handleImportLiveDatabase}
+                      rolePermissions={rolePermissions}
+                      onUpdatePermissions={handleUpdatePermissions}
+                      auditLogs={auditLogs}
+                      onClearAuditLogs={handleClearAuditLogs}
+                      firebaseUser={firebaseUser}
+                      onWipeSystem={handleWipeSystemSessions}
+                    />
+                  )}
+                </>
+                </Suspense>
+              )}
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
 
-      <motion.button id="copilot_floating_trigger" drag dragConstraints={constraintsRef} dragElastic={0.15} dragMomentum={false} whileHover={{ scale: 1.1, rotate: 4 }} whileTap={{ scale: 0.92 }} onClick={() => setIsCopilotOpen(true)} className="fixed bottom-6 right-6 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-2xl flex items-center justify-center transition-all duration-150 z-[9999] cursor-grab active:cursor-grabbing border border-indigo-400/30 w-12 h-12 md:w-13 md:h-13 shadow-indigo-900/50" title="Nexus Copilot IA (Arraste-me para qualquer lado!)"><div className="relative flex items-center justify-center"><Bot className="w-5.5 h-5.5 text-white animate-pulse" /><span className="absolute -top-1.5 -right-1.5 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span></span></div></motion.button>
+      {/* FLOATING DRAGGABLE COPILOT TOGGLE TRIGGER BUTTON */}
+      <motion.button
+        id="copilot_floating_trigger"
+        drag
+        dragConstraints={constraintsRef}
+        dragElastic={0.15}
+        dragMomentum={false}
+        whileHover={{ scale: 1.1, rotate: 4 }}
+        whileTap={{ scale: 0.92 }}
+        onClick={() => setIsCopilotOpen(true)}
+        className="fixed bottom-6 right-6 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-2xl flex items-center justify-center transition-all duration-150 z-[9999] cursor-grab active:cursor-grabbing border border-indigo-400/30 w-12 h-12 md:w-13 md:h-13 shadow-indigo-900/50"
+        title="Nexus Copilot IA (Arraste-me para qualquer lado!)"
+      >
+        <div className="relative flex items-center justify-center">
+          <Bot className="w-5.5 h-5.5 text-white animate-pulse" />
+          <span className="absolute -top-1.5 -right-1.5 flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+          </span>
+        </div>
+      </motion.button>
 
-      <AnimatePresence>{isCopilotOpen && <><motion.div initial={{ opacity: 0 }} animate={{ opacity: 0.5 }} exit={{ opacity: 0 }} onClick={() => setIsCopilotOpen(false)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000]" /><motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 26, stiffness: 220 }} className={`fixed top-0 right-0 bottom-0 w-full max-w-lg md:max-w-2xl ${theme === 'light' ? 'bg-white text-zinc-900 border-l border-zinc-200' : 'bg-zinc-900 text-white border-l border-white/5'} z-[10001] flex flex-col shadow-2xl`}><div className={`p-4 border-b flex items-center justify-between ${theme === 'light' ? 'border-zinc-200 bg-slate-50' : 'border-white/5 bg-zinc-950/40'}`}><div className="flex items-center gap-2.5"><div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold animate-pulse"><Bot className="w-5 h-5" /></div><div><h3 className="text-sm font-bold font-display leading-tight">Nexus Copilot AI</h3><p className="text-[11px] text-zinc-400 font-sans leading-none mt-0.5">Assistente Digital Integrado • Gestão Escolar Inteligente</p></div></div><button onClick={() => setIsCopilotOpen(false)} className={`p-2 rounded-lg transition-all cursor-pointer ${theme === 'light' ? 'hover:bg-zinc-200 text-zinc-650' : 'hover:bg-white/5 text-zinc-450 hover:text-white'}`} aria-label="Minimizar Copilot"><X className="w-5 h-5" /></button></div><div className="flex-1 overflow-hidden relative"><AIAssistant students={students} teachers={teachers} invoices={invoices} onRefreshData={loadLiveDb} /></div></motion.div></>}</AnimatePresence>
+      {/* FLOATING COPILOT SLIDE-OUT DRAWER OVERLAY */}
+      <AnimatePresence>
+        {isCopilotOpen && (
+          <>
+            {/* Dark glass backdrop overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsCopilotOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000]"
+            />
+            
+            {/* Drawer Sliding container */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 26, stiffness: 220 }}
+              className={`fixed top-0 right-0 bottom-0 w-full max-w-lg md:max-w-2xl ${
+                theme === 'light' ? 'bg-white text-zinc-900 border-l border-zinc-200' : 'bg-zinc-900 text-white border-l border-white/5'
+              } z-[10001] flex flex-col shadow-2xl`}
+            >
+              <div className={`p-4 border-b flex items-center justify-between ${theme === 'light' ? 'border-zinc-200 bg-slate-50' : 'border-white/5 bg-zinc-950/40'}`}>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold animate-pulse">
+                    <Bot className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold font-display leading-tight">Nexus Copilot AI</h3>
+                    <p className="text-[11px] text-zinc-400 font-sans leading-none mt-0.5">Assistente Digital Integrado • Gestão Escolar Inteligente</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsCopilotOpen(false)}
+                  className={`p-2 rounded-lg transition-all cursor-pointer ${
+                    theme === 'light' ? 'hover:bg-zinc-200 text-zinc-650' : 'hover:bg-white/5 text-zinc-450 hover:text-white'
+                  }`}
+                  aria-label="Minimizar Copilot"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              {/* Actual Copilot interface */}
+              <div className="flex-1 overflow-hidden relative">
+                <AIAssistant 
+                  students={students}
+                  teachers={teachers}
+                  invoices={invoices}
+                  onRefreshData={loadLiveDb}
+                />
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
-      <div className="fixed top-24 right-6 z-[99999] flex flex-col gap-3 w-full max-w-sm pointer-events-none"><AnimatePresence>{realtimeNotifications.map((not) => { const colors = { success: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 shadow-emerald-500/5', info: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400 shadow-indigo-500/5', warning: 'bg-amber-500/10 border-amber-500/20 text-amber-400 shadow-amber-500/5', alert: 'bg-rose-500/10 border-rose-500/20 text-rose-400 shadow-rose-500/5' }; const icons = { success: <div className="w-5 h-5 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">✓</div>, info: <div className="w-5 h-5 rounded bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">ℹ</div>, warning: <div className="w-5 h-5 rounded bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">⚠</div>, alert: <div className="w-5 h-5 rounded bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">✖</div> }; return <motion.div key={not.id} initial={{ opacity: 0, y: -20, scale: 0.95, x: 20 }} animate={{ opacity: 1, y: 0, scale: 1, x: 0 }} exit={{ opacity: 0, scale: 0.9, x: 30 }} transition={{ duration: 0.25, ease: 'easeOut' }} className={`pointer-events-auto border rounded-xl p-4 flex gap-3 backdrop-blur-md shadow-lg ${colors[not.type] || colors.info}`}>{icons[not.type] || icons.info}<div className="flex-1"><div className="flex items-center justify-between gap-2"><span className="text-xs font-bold tracking-tight">{not.title}</span><span className="text-[9px] opacity-65 font-mono">{not.timestamp}</span></div><p className="text-[11px] opacity-90 mt-1 font-sans leading-relaxed">{not.message}</p></div></motion.div>; })}</AnimatePresence></div>
+      {/* REAL-TIME NOTIFICATION TOAST OVERLAY STACK */}
+      <div className="fixed top-24 right-6 z-[99999] flex flex-col gap-3 w-full max-w-sm pointer-events-none">
+        <AnimatePresence>
+          {realtimeNotifications.map((not) => {
+            const colors = {
+              success: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 shadow-emerald-500/5',
+              info: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400 shadow-indigo-500/5',
+              warning: 'bg-amber-500/10 border-amber-500/20 text-amber-400 shadow-amber-500/5',
+              alert: 'bg-rose-500/10 border-rose-500/20 text-rose-400 shadow-rose-500/5'
+            };
+            const icons = {
+              success: (
+                <div className="w-5 h-5 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  ✓
+                </div>
+              ),
+              info: (
+                <div className="w-5 h-5 rounded bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  ℹ
+                </div>
+              ),
+              warning: (
+                <div className="w-5 h-5 rounded bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  ⚠
+                </div>
+              ),
+              alert: (
+                <div className="w-5 h-5 rounded bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                  ✖
+                </div>
+              )
+            };
+
+            return (
+              <motion.div
+                key={not.id}
+                initial={{ opacity: 0, y: -20, scale: 0.95, x: 20 }}
+                animate={{ opacity: 1, y: 0, scale: 1, x: 0 }}
+                exit={{ opacity: 0, scale: 0.9, x: 30 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                className={`pointer-events-auto border rounded-xl p-4 flex gap-3 backdrop-blur-md shadow-lg ${
+                  colors[not.type] || colors.info
+                }`}
+              >
+                {icons[not.type] || icons.info}
+                <div className="flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold tracking-tight">{not.title}</span>
+                    <span className="text-[9px] opacity-65 font-mono">{not.timestamp}</span>
+                  </div>
+                  <p className="text-[11px] opacity-90 mt-1 font-sans leading-relaxed">{not.message}</p>
+                </div>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
