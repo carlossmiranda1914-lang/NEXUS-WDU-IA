@@ -39,7 +39,9 @@ function rowToCandidate(row: CandidateRow): PersonResolutionCandidate {
     personId: row.person_id,
     name: row.name,
     birthDate: row.birth_date,
-    phone: row.is_local ? row.phone : null,
+    // Sensitive values may be used internally by the deterministic resolver,
+    // but disclosure policy below prevents them from leaving this boundary.
+    phone: row.phone,
     studentNumber: row.is_local ? row.student_number : null,
     legacyStudentId: row.is_local ? row.legacy_student_id : null,
     relationship,
@@ -113,5 +115,19 @@ export async function resolvePersonForInstitution(
   }
 
   const candidates = await loadPersonResolutionCandidates(client, institutionId, input);
-  return resolvePersonCandidates(input, candidates);
+  const result = resolvePersonCandidates(input, candidates);
+
+  // Any plausible candidate outside the current institution becomes a single
+  // opaque signal. Do not leak the number of external records, match reasons,
+  // Person IDs, institution names, or other cross-tenant details.
+  const hasRestrictedCandidate = candidates.some((candidate) => candidate.disclosure === 'restricted');
+  if (hasRestrictedCandidate && result.status !== 'NO_MATCH') {
+    return {
+      status: 'RESTRICTED_POSSIBLE_MATCH',
+      matchReasons: [],
+      candidateCount: 1,
+    };
+  }
+
+  return result;
 }
