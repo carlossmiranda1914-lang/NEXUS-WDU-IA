@@ -18,6 +18,12 @@ Preencher somente com execução real dos gates.
 - E12 contratos API / legacy 410:
 - E15 riscos P0–P3:
 
+## Regressões encontradas no primeiro gate real
+- T4 cross-institution sem autorização: corrigido para `PERSON_NOT_FOUND` fail-closed, sem probe global.
+- T5 PostgreSQL `42P08` (`text versus uuid`): corrigido com casts UUID explícitos no `UPDATE identity_resolution_decisions`.
+
+Estas correções exigem reexecução integral; resultados anteriores não contam como evidência final da T6.
+
 ## Critérios mínimos de PASS
 - nenhum endpoint T6 aceita `institutionId`, `role`, `approved`, `academicYearId` ou `studentPersonId` do browser como autoridade;
 - `POST /api/enrollments/drafts` e POST legado `/api/enrollments` não escrevem mais;
@@ -30,4 +36,6 @@ Preencher somente com execução real dos gates.
 - T4 revalida decisão dentro da transação;
 - retry após novo pool/restart devolve o mesmo Enrollment;
 - cross-institution reuse somente ocorre após decisão T5 aprovada;
+- direct reuse cross-institution sem autorização falha `PERSON_NOT_FOUND` e não consulta existência global;
+- PostgreSQL executa a decisão T5 sem erro de inferência de parâmetros UUID;
 - nenhuma regressão T2–T5.
