@@ -40,7 +40,7 @@ Estas correções não alteram privilégios nem expandem o domínio funcional; r
 ## Restart/persistência
 `test:enrollment-intake-api:postgres` usa `TEST_DATABASE_URL`, cria schema descartável, aplica migrations 0001→0009, executa intake, fecha o pool, abre um novo pool e repete a mesma idempotency key. O resultado deve ser o mesmo Enrollment com `replayed=true`.
 
-O mesmo teste cobre Escola A/B, restricted match e reutilização cross-institution somente após proposta T5 + aprovação independente.
+O mesmo teste cobre Escola A/B, restricted match, fail-closed T4 e reutilização cross-institution somente após proposta T5 + aprovação independente.
 
 ## Gates
 - regressões T2/T3/T4/T5;
@@ -49,7 +49,7 @@ O mesmo teste cobre Escola A/B, restricted match e reutilização cross-institut
 - `test:migrations:isolated`;
 - lint;
 - build;
-- diff controlado: 9 ficheiros, sendo o nono `identity-resolution-decision.ts` exclusivamente para a correção PostgreSQL descoberta no gate real.
+- diff controlado: 10 ficheiros. Os dois ficheiros adicionais ao escopo T6 original são `identity-resolution-decision.ts` (correção PostgreSQL real T5) e `tests/enrollment-intake.test.ts` (regressão T4 fail-closed explícita).
 
 ## Fora do escopo
 - UI T7;
