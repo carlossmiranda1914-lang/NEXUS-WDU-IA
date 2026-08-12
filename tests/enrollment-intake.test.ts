@@ -111,6 +111,7 @@ try {
 expect(crossInstitutionError instanceof EnrollmentIntakeError, 'External Person without local StudentProfile must be rejected.');
 expect((crossInstitutionError as EnrollmentIntakeError).code === 'PERSON_NOT_FOUND', 'Cross-institution reuse must fail closed without revealing external existence.');
 expect(crossInstitutionClient.statements.includes('ROLLBACK'), 'Rejected external reuse must rollback command reservation.');
+expect(!crossInstitutionClient.statements.some((sql) => sql.startsWith('SELECT id FROM people WHERE id = $1')), 'Rejected external reuse must not probe global Person existence.');
 expect(!crossInstitutionClient.statements.some((sql) => sql.startsWith('INSERT INTO enrollment_applications')), 'Rejected external reuse must never create enrollment.');
 
 const rollbackClient = new ScriptedClient((sql) => {
