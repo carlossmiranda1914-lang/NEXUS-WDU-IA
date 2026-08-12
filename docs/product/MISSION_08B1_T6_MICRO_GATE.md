@@ -1,6 +1,6 @@
 # MISSÃO 08B.1 — T6 Micro-gate
 
-Estado: IMPLEMENTADA / AGUARDA EVIDÊNCIA EXECUTÁVEL
+Estado: IMPLEMENTADA / AGUARDA REEXECUÇÃO COMPLETA DOS GATES
 
 ## Objetivo
 Integrar Person Resolution, restricted match, intake transacional/idempotente e decisões D-05 em uma API institucional única, eliminando os bypasses legados de criação direta de `Person` e de linking por UUID global vindo do browser.
@@ -31,6 +31,12 @@ Integrar Person Resolution, restricted match, intake transacional/idempotente e 
 
 GETs, configuração de ofertas/ano letivo e transições de status permanecem no controller atual.
 
+## Correções encontradas pela validação real
+- regressão T4: tentativa de reuse cross-institution sem autorização volta a falhar fechado com `PERSON_NOT_FOUND`, sem consultar existência global de Person;
+- PostgreSQL T5: parâmetros UUID do `UPDATE identity_resolution_decisions` são tipados explicitamente (`::uuid`) para eliminar inferência incompatível `text versus uuid` (`42P08`).
+
+Estas correções não alteram privilégios nem expandem o domínio funcional; restauram o contrato T4 e tornam o contrato T5 executável em PostgreSQL real.
+
 ## Restart/persistência
 `test:enrollment-intake-api:postgres` usa `TEST_DATABASE_URL`, cria schema descartável, aplica migrations 0001→0009, executa intake, fecha o pool, abre um novo pool e repete a mesma idempotency key. O resultado deve ser o mesmo Enrollment com `replayed=true`.
 
@@ -43,7 +49,7 @@ O mesmo teste cobre Escola A/B, restricted match e reutilização cross-institut
 - `test:migrations:isolated`;
 - lint;
 - build;
-- diff T6 apenas.
+- diff controlado: 9 ficheiros, sendo o nono `identity-resolution-decision.ts` exclusivamente para a correção PostgreSQL descoberta no gate real.
 
 ## Fora do escopo
 - UI T7;
