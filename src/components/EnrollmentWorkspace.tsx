@@ -102,9 +102,9 @@ export default function EnrollmentWorkspace() {
     setNotice(null);
   }
 
-  function clearStudent() {
+  function clearStudentAfterSuccess() {
     setStudentName(''); setBirthDate(''); setPhone(''); setStudentNumber(''); setLegacyStudentId('');
-    resetResolution();
+    setResolution(null); setSelectedCandidateId(''); setDecision(null); setIdempotencyKey(''); setError(null);
   }
 
   async function identifyStudent(event: FormEvent) {
@@ -131,7 +131,7 @@ export default function EnrollmentWorkspace() {
         body: JSON.stringify({ offerId, student }),
       });
       setNotice('Matrícula iniciada com sucesso. A identidade foi confirmada novamente pelo servidor antes da criação.');
-      clearStudent();
+      clearStudentAfterSuccess();
       await load();
     } catch (submitError) { setError(submitError instanceof Error ? submitError.message : 'Não foi possível iniciar a matrícula.'); }
     finally { setSubmitting(false); }
