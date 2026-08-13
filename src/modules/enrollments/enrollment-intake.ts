@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { captureEnrollmentDocumentPolicy } from './enrollment-document-snapshot.ts';
 
 export interface TransactionQueryClient {
   query<T = any>(text: string, values?: readonly unknown[]): Promise<{ rows: T[]; rowCount?: number | null }>;
@@ -315,6 +316,12 @@ export async function executeEnrollmentIntake(
          RETURNING id`,
         [command.institutionId, studentPersonId, offer.rows[0].academic_year_id, command.offerId, command.actorPersonId],
       );
+
+      await captureEnrollmentDocumentPolicy(client, {
+        institutionId: command.institutionId,
+        offerId: command.offerId,
+        enrollmentId: enrollment.rows[0].id,
+      });
 
       await client.query(
         `INSERT INTO enrollment_events (
