@@ -15,6 +15,7 @@ import { EnrollmentIntakeError } from './enrollment-intake.ts';
 import { canConfigureEnrollment, canManageEnrollment, canTransitionEnrollment, EnrollmentStatus, isEnrollmentStatus } from './enrollment-policy.ts';
 import { registerAcademicYearRoutes } from './academic-year.controller.ts';
 import { registerEnrollmentDocumentRoutes } from './enrollment-document.controller.ts';
+import { documentValidationGate } from './enrollment-document-requirement-policy.ts';
 
 function reject(res: Response, status: number, error: string) { return res.status(status).json({ error }); }
 
@@ -261,12 +262,37 @@ export function registerEnrollmentRoutes(app: Application) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const existing = await client.query<{ status: EnrollmentStatus }>(
-        `SELECT status FROM enrollment_applications WHERE id = $1 AND institution_id = $2 FOR UPDATE`, [req.params.id, context.institutionId],
+      const existing = await client.query<{ status: EnrollmentStatus; document_policy_id: string | null }>(
+        `SELECT status, document_policy_id FROM enrollment_applications WHERE id = $1 AND institution_id = $2 FOR UPDATE`, [req.params.id, context.institutionId],
       );
       if (!existing.rowCount) { await client.query('ROLLBACK'); return reject(res, 404, 'Matrícula não encontrada nesta instituição.'); }
       const from = existing.rows[0].status;
       if (!canTransitionEnrollment(context.role, from, target)) { await client.query('ROLLBACK'); return reject(res, 403, 'Transição de matrícula não autorizada.'); }
+
+      if (target === 'validated') {
+        const documents = await client.query<{ document_type: string; required: boolean; status: 'pending' | 'submitted' | 'verified' | 'rejected' }>(
+          'SELECT document_type, required, status FROM enrollment_documents WHERE enrollment_application_id = $1 AND institution_id = $2',
+          [req.params.id, context.institutionId],
+        );
+        const documentGate = documentValidationGate(
+          existing.rows[0].document_policy_id !== null,
+          documents.rows.map((row) => ({
+            documentType: row.document_type,
+            required: row.required,
+            status: row.status,
+          })),
+        );
+        if (!documentGate.ready) {
+          await client.query('ROLLBACK');
+          return reject(
+            res,
+            409,
+            documentGate.reason === 'POLICY_NOT_CAPTURED'
+              ? 'A política documental desta matrícula ainda não foi capturada.'
+              : 'Existem documentos obrigatórios por verificar.',
+          );
+        }
+      }
       const updated = await client.query(
         `UPDATE enrollment_applications SET status = $1, updated_by = $2, updated_at = now()
          WHERE id = $3 AND institution_id = $4 RETURNING id, status, updated_at`,
