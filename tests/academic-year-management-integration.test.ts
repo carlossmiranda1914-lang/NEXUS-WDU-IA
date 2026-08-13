@@ -13,8 +13,15 @@ assert(source.includes("setView('academic-year')"), 'Admin/director must have an
 assert(source.includes("view === 'academic-year' ?"), 'AY management must render only when selected.');
 assert(source.includes('<AcademicYearManagement currentRole={props.currentRole} firebaseUser={props.firebaseUser} />'), 'AY panel must receive role and authenticated user context.');
 assert(source.includes('<SystemConfigLegacy {...props} />'), 'Existing settings must remain available without reimplementation.');
-assert(legacy.includes('Gestão de Utilizadores'), 'Legacy settings must preserve valid Portuguese text.');
-assert(!/[ÃÂ�]/u.test(legacy), 'Legacy settings must not contain mojibake markers.');
+
+assert(legacy.includes('Gestão de Utilizadores'), 'Legacy settings must preserve the user-management title in Portuguese.');
+assert(legacy.includes('Direção Executiva'), 'Legacy settings must preserve Portuguese diacritics in role labels.');
+assert(legacy.includes('Configurações de Perfis e Segurança'), 'Legacy settings must preserve the settings heading in Portuguese.');
+assert(!legacy.includes('GestÃ£o'), 'Legacy settings must not contain mojibake for Gestão.');
+assert(!legacy.includes('DireÃ§Ã£o'), 'Legacy settings must not contain mojibake for Direção.');
+assert(!legacy.includes('ConfiguraÃ§Ãµes'), 'Legacy settings must not contain mojibake for Configurações.');
+assert(!legacy.includes('ATENÃ‡ÃƒO'), 'Legacy settings must not contain double-encoded warning text.');
+assert(!legacy.includes('\uFFFD'), 'Legacy settings must not contain Unicode replacement characters.');
 assert(legacy.charCodeAt(0) !== 0xfeff, 'Legacy settings must not contain a BOM marker in decoded text.');
 
 console.log(`Academic year management integration gate passed (${assertions} assertions).`);
