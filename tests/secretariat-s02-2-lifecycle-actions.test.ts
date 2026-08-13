@@ -13,7 +13,7 @@ assert(allowedOperationalTransitions('secretariat', 'blocked').join(',') === 'un
 assert(!allowedOperationalTransitions('secretariat', 'validated').includes('active'), 'Secretariat must never activate enrollment.');
 assert(allowedOperationalTransitions('director', 'validated').includes('active'), 'Director must be able to activate validated enrollment.');
 assert(allowedOperationalTransitions('institution_admin', 'validated').includes('active'), 'Institution admin must be able to activate validated enrollment.');
-assert(allowedOperationalTransitions('secretariat', 'active').join(',') === 'cancelled', 'Active cancellation remains explicit policy.');
-assert(allowedOperationalTransitions('secretariat', 'cancelled').length === 0, 'Cancelled enrollment must remain terminal.');
+assert(allowedOperationalTransitions('secretariat', 'active').length === 0, 'S02.2 must not expose generic cancellation for active students.');
+assert(allowedOperationalTransitions('secretariat', 'cancelled').length === 0, 'Cancelled enrollment must remain terminal in S02.2.');
 
 console.log(`Secretariat S02.2 lifecycle action model passed (${assertions} assertions).`);
