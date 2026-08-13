@@ -13,6 +13,7 @@ import {
 } from './enrollment-intake-api.ts';
 import { EnrollmentIntakeError } from './enrollment-intake.ts';
 import { canConfigureEnrollment, canManageEnrollment, canTransitionEnrollment, EnrollmentStatus, isEnrollmentStatus } from './enrollment-policy.ts';
+import { registerAcademicYearRoutes } from './academic-year.controller.ts';
 
 function reject(res: Response, status: number, error: string) { return res.status(status).json({ error }); }
 
@@ -65,6 +66,7 @@ function rejectDomainError(res: Response, error: unknown) {
 }
 
 export function registerEnrollmentRoutes(app: Application) {
+  registerAcademicYearRoutes(app);
   app.get('/api/enrollments/setup', requireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentConfigurator(req, res); if (!context) return;
     try {
@@ -278,3 +280,4 @@ export function registerEnrollmentRoutes(app: Application) {
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   });
 }
+
