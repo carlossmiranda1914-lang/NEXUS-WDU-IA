@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react';
 import { auth } from '../lib/firebase.ts';
+import EnrollmentNewEntryDrawer from './EnrollmentNewEntryDrawer.tsx';
 import {
   buildOperationalMetrics,
   getAttentionQueue,
@@ -257,7 +258,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
       )}
 
       {selected && <ProcessDrawer record={selected} light={light} onClose={() => setSelected(null)} />}
-      {newEntryOpen && <NewEntryDrawer offers={offers} light={light} onClose={() => setNewEntryOpen(false)} onCreated={async () => { setNewEntryOpen(false); setNotice('Processo de matrícula iniciado com segurança e adicionado à fila institucional.'); await load(); setView('enrollments'); }} />}
+      {newEntryOpen && <EnrollmentNewEntryDrawer offers={offers} light={light} onClose={() => setNewEntryOpen(false)} onCreated={async () => { setNewEntryOpen(false); setNotice('Processo de matrícula iniciado com segurança e adicionado à fila institucional.'); await load(); setView('enrollments'); }} />}
     </section>
   );
 }
