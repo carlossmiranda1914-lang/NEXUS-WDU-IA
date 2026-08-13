@@ -22,7 +22,8 @@ expect(!source.includes("'/api/enrollments/drafts'"), 'Legacy draft endpoint mus
 expect(!source.includes("request('/api/enrollments', { method: 'POST'"), 'Legacy enrollment POST must not return.');
 expect(!source.includes('institutionId:'), 'Browser must not supply institution authority.');
 expect(!source.includes('studentPersonId:'), 'Browser must not supply global Person authority.');
-expect(source.includes('Domínio ainda não persistido'), 'Unavailable pipeline domains must be explicit, never simulated.');
+expect(source.includes('Ainda não disponível'), 'Unavailable pipeline domains must remain explicit in product language and never be simulated.');
+expect(!source.includes('Domínio ainda não persistido'), 'Technical backend wording must not leak into the user-facing pipeline.');
 expect(source.includes('Não são usados registos demonstrativos'), 'Empty student view must explicitly reject demo records.');
 
 expect(app.includes("const EnrollmentOperationsWorkspace = lazy(() => import('./components/EnrollmentOperationsWorkspace'));"), 'App shell must load the vNext enrollment workspace.');
