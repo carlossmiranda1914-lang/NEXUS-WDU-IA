@@ -64,15 +64,13 @@ import type { SchoolDoc } from './components/SchoolDocuments';
 
 // Subcomponents - Lazy Loaded for Code Splitting and Bundle Optimization
 const Dashboard = lazy(() => import('./components/Dashboard'));
-const StudentsList = lazy(() => import('./components/StudentsList'));
+const EnrollmentOperationsWorkspace = lazy(() => import('./components/EnrollmentOperationsWorkspace'));
 const TeachersList = lazy(() => import('./components/TeachersList'));
 const FinancialPanel = lazy(() => import('./components/FinancialPanel'));
 const CommunicationCenter = lazy(() => import('./components/CommunicationCenter'));
 const SystemConfig = lazy(() => import('./components/SystemConfig'));
 const AIAssistant = lazy(() => import('./components/AIAssistant'));
 const TeacherAI = lazy(() => import('./components/TeacherAI'));
-const Gamification = lazy(() => import('./components/Gamification'));
-const EnrollmentWorkspace = lazy(() => import('./components/EnrollmentWorkspace'));
 const SchoolDocuments = lazy(() => import('./components/SchoolDocuments'));
 const WorkflowsCentral = lazy(() => import('./components/WorkflowsCentral'));
 const ParentPortal = lazy(() => import('./components/ParentPortal'));
@@ -149,9 +147,9 @@ export const TABS_LAYOUT_CONFIG: Record<string, {
     description: "Gestão financeira de propinas, faturação e controlo administrativo de pagamentos."
   },
   students: {
-    type: 'Layout de Lista Geral',
-    containerClass: "space-y-6 w-full max-w-7xl mx-auto",
-    description: "Espaço para acompanhamento de matrículas, frequência estudantil e progresso comportamental."
+    type: 'Workspace Operacional de Alunos & Matrículas',
+    containerClass: "space-y-6 w-full max-w-[1600px] mx-auto",
+    description: "Entradas, matrículas em curso, exceções e alunos ativos num fluxo institucional único."
   },
   teachers: {
     type: 'Layout de Lista Geral',
@@ -162,16 +160,6 @@ export const TABS_LAYOUT_CONFIG: Record<string, {
     type: 'Portal de Apoio Pedagógico',
     containerClass: "w-full max-w-7xl mx-auto space-y-6",
     description: "Plataforma de auxílio ao professor para planos de aula e orientação académica."
-  },
-  gamification: {
-    type: 'Painel de Méritos e Destaques',
-    containerClass: "w-full max-w-[1600px] mx-auto space-y-6",
-    description: "Registo de comportamento positivo, prémios de dedicação e pódio de alunos."
-  },
-  matriculas: {
-    type: 'Formatador Sequencial de Registos',
-    containerClass: "w-full max-w-[1500px] mx-auto space-y-6",
-    description: "Portal de Matrícula para conferência de dados e validação de documentos de acesso."
   },
   communications: {
     type: 'Painel de Avisos e Comunicação',
@@ -386,7 +374,6 @@ export default function App() {
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
 
   // Reorganized navigation: sub-tab states for modular layout
-  const [studentsSubTab, setStudentsSubTab] = useState<'list' | 'matriculas' | 'gamification'>('list');
   const [teachersSubTab, setTeachersSubTab] = useState<'list' | 'ai'>('list');
   const [documentsSubTab, setDocumentsSubTab] = useState<'list' | 'automations'>('list');
   const [configSubTab, setConfigSubTab] = useState<'settings' | 'migration'>('settings');
@@ -2708,68 +2695,29 @@ export default function App() {
         {/* VISOR PRINCIPAL DE CONTEÚDO */}
         <main className={`flex-1 p-6 md:p-8 min-h-[calc(100vh-80px)] overflow-x-hidden ${theme === 'light' ? 'bg-slate-50' : 'bg-zinc-950'} relative`}>
           
-          {/* Elegant Minimalist Sub-tabs Navigation */}
-          {['students', 'teachers'].includes(activeTab) && (
+          {/* Teacher-only sub-navigation. Alunos & Matrículas is now one operational workspace. */}
+          {activeTab === 'teachers' && (
             <div className={`flex flex-wrap items-center gap-1.5 border-b pb-4 mb-6 ${theme === 'light' ? 'border-zinc-200' : 'border-white/5'}`}>
-              {activeTab === 'students' && (
-                <>
-                  <button
-                    onClick={() => setStudentsSubTab('list')}
-                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      studentsSubTab === 'list'
-                        ? theme === 'light' ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white'
-                        : theme === 'light' ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
-                    }`}
-                  >
-                    Lista de Alunos
-                  </button>
-                  <button
-                    onClick={() => setStudentsSubTab('matriculas')}
-                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      studentsSubTab === 'matriculas'
-                        ? theme === 'light' ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white'
-                        : theme === 'light' ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
-                    }`}
-                  >
-                    Portal de Matrícula
-                  </button>
-                  <button
-                    onClick={() => setStudentsSubTab('gamification')}
-                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      studentsSubTab === 'gamification'
-                        ? theme === 'light' ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white'
-                        : theme === 'light' ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
-                    }`}
-                  >
-                    Mérito & Engajamento / Pódio
-                  </button>
-                </>
-              )}
-
-              {activeTab === 'teachers' && (
-                <>
-                  <button
-                    onClick={() => setTeachersSubTab('list')}
-                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      teachersSubTab === 'list'
-                        ? theme === 'light' ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white'
-                        : theme === 'light' ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
-                    }`}
-                  >
-                    Lista de Professores
-                  </button>
-                  <button
-                    onClick={() => setTeachersSubTab('ai')}
-                    className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-                      teachersSubTab === 'ai'
-                        ? theme === 'light' ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white'
-                        : theme === 'light' ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
-                    }`}
-                  >
-                    IA Pedagógica (Planos & Provas)
-                  </button>
-                </>
-              )}
+              <button
+                onClick={() => setTeachersSubTab('list')}
+                className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  teachersSubTab === 'list'
+                    ? theme === 'light' ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white'
+                    : theme === 'light' ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                Lista de Professores
+              </button>
+              <button
+                onClick={() => setTeachersSubTab('ai')}
+                className={`px-4 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  teachersSubTab === 'ai'
+                    ? theme === 'light' ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white'
+                    : theme === 'light' ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'
+                }`}
+              >
+                IA Pedagógica (Planos & Provas)
+              </button>
             </div>
           )}
 
@@ -2835,7 +2783,6 @@ export default function App() {
                         onQuickAction={(type) => {
                           if (type === 'add-student') {
                             setActiveTab('students');
-                            setStudentsSubTab('matriculas');
                           }
                         }}
                         approvals={approvals}
@@ -2848,31 +2795,7 @@ export default function App() {
                   )}
                   
                   {activeTab === 'students' && (
-                    <>
-                      {studentsSubTab === 'list' && (
-                        <StudentsList 
-                          students={visibleStudents}
-                          currentUserRole={currentUserRole}
-                          onAddStudent={handleAddStudent}
-                          onUpdateStudent={handleUpdateStudent}
-                          onDeleteStudent={handleDeleteStudent}
-                          globalSearchTerm={globalSearchQuery}
-                        />
-                      )}
-                      
-                      {studentsSubTab === 'matriculas' && (
-                        <EnrollmentWorkspace />
-                      )}
-                      
-                      {studentsSubTab === 'gamification' && (
-                        <Gamification 
-                          students={visibleStudents}
-                          teachers={teachers}
-                          onBonusPointsToStudent={handleBonusPointsToStudent}
-                          onBonusPointsToTeacher={handleBonusPointsToTeacher}
-                        />
-                      )}
-                    </>
+                    <EnrollmentOperationsWorkspace theme={theme} />
                   )}
 
                   {activeTab === 'teachers' && (
