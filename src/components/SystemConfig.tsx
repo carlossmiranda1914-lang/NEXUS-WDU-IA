@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { 
   Shield, User, Users, Server, Database, Globe, ArrowRight, CheckCircle, Code2, Sparkles, 
   Sliders, Key, Zap, Check, AlertCircle, Copy, RefreshCw, UploadCloud, DownloadCloud,
@@ -6,6 +6,7 @@ import {
   Bot, Lock, Unlock, Info, ShieldAlert, FolderOpen, Trash2
 } from 'lucide-react';
 import { UserRole, Student, Teacher, Invoice, Announcement, ChatMessage, AutomationFlow, AuditLog } from '../types';
+import AcademicYearManagement from './AcademicYearManagement';
 import { 
   supabaseConfigured, 
   supabaseUrl, 
@@ -76,18 +77,18 @@ const COLLABORATIVE_PERMISSIONS: Record<UserRole, string[]> = {
 };
 
 const MATRIX_PERMISSIONS = [
-  { id: 'dashboard', name: 'Dashboard Geral', desc: 'Métricas executivas, KPIs financeiros e taxas de retenção.', icon: LayoutDashboard },
-  { id: 'students', name: 'Gestão de Alunos', desc: 'Visualização, registo, faltas e comportamento dos alunos.', icon: Users },
-  { id: 'teachers', name: 'Páginas de Professores', desc: 'Visualização de currículos, pautas e produtividade docente.', icon: GraduationCap },
-  { id: 'teacher_ai', name: 'IA Pedagógica', desc: 'Gerador inteligente de planos curriculares e exames.', icon: Brain },
-  { id: 'gamification', name: 'Mérito & Engajamento', desc: 'Consulta de medalhas e lançamento de incentivos/atribuições.', icon: Trophy },
-  { id: 'matriculas', name: 'Portal de Matrícula', desc: 'Execução de matrículas e verificação de compliance documental.', icon: ClipboardCheck },
-  { id: 'financials', name: 'Painel Financeiro', desc: 'Faturação, emissor de faturas PDF de propinas.', icon: DollarSign },
-  { id: 'communications', name: 'Comunicação Directa', desc: 'Quadro inteligente de editais e canais de chat instantâneo.', icon: Megaphone },
-  { id: 'automations', name: 'Mensagens de Alerta', desc: 'Controlo e configuração de notificações e comunicações automáticas da escola.', icon: Zap },
-  { id: 'config', name: 'Perfis de Segurança', desc: 'Modos de visualização de perfis e controlo geral de permissões de utilizadores.', icon: Sliders },
-  { id: 'copilot', name: 'Nexus Copilot AI', desc: 'Agente cross-browser para relatórios preditivos de IA.', icon: Bot },
-  { id: 'documents', name: 'Documentos Escolares', desc: 'Sítio organizacional de atas, regulamentos e circulares administrativas com editor.', icon: FolderOpen }
+  { id: 'dashboard', name: 'Dashboard Geral', desc: 'MÃ©tricas executivas, KPIs financeiros e taxas de retenÃ§Ã£o.', icon: LayoutDashboard },
+  { id: 'students', name: 'GestÃ£o de Alunos', desc: 'VisualizaÃ§Ã£o, registo, faltas e comportamento dos alunos.', icon: Users },
+  { id: 'teachers', name: 'PÃ¡ginas de Professores', desc: 'VisualizaÃ§Ã£o de currÃ­culos, pautas e produtividade docente.', icon: GraduationCap },
+  { id: 'teacher_ai', name: 'IA PedagÃ³gica', desc: 'Gerador inteligente de planos curriculares e exames.', icon: Brain },
+  { id: 'gamification', name: 'MÃ©rito & Engajamento', desc: 'Consulta de medalhas e lanÃ§amento de incentivos/atribuiÃ§Ãµes.', icon: Trophy },
+  { id: 'matriculas', name: 'Portal de MatrÃ­cula', desc: 'ExecuÃ§Ã£o de matrÃ­culas e verificaÃ§Ã£o de compliance documental.', icon: ClipboardCheck },
+  { id: 'financials', name: 'Painel Financeiro', desc: 'FaturaÃ§Ã£o, emissor de faturas PDF de propinas.', icon: DollarSign },
+  { id: 'communications', name: 'ComunicaÃ§Ã£o Directa', desc: 'Quadro inteligente de editais e canais de chat instantÃ¢neo.', icon: Megaphone },
+  { id: 'automations', name: 'Mensagens de Alerta', desc: 'Controlo e configuraÃ§Ã£o de notificaÃ§Ãµes e comunicaÃ§Ãµes automÃ¡ticas da escola.', icon: Zap },
+  { id: 'config', name: 'Perfis de SeguranÃ§a', desc: 'Modos de visualizaÃ§Ã£o de perfis e controlo geral de permissÃµes de utilizadores.', icon: Sliders },
+  { id: 'copilot', name: 'Nexus Copilot AI', desc: 'Agente cross-browser para relatÃ³rios preditivos de IA.', icon: Bot },
+  { id: 'documents', name: 'Documentos Escolares', desc: 'SÃ­tio organizacional de atas, regulamentos e circulares administrativas com editor.', icon: FolderOpen }
 ];
 
 export default function SystemConfig({ 
@@ -107,7 +108,7 @@ export default function SystemConfig({
   firebaseUser,
   onWipeSystem
 }: SystemConfigProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'audit' | 'users' | 'reset'>('users');
+  const [activeSubTab, setActiveSubTab] = useState<'academic-year' | 'profile' | 'audit' | 'users' | 'reset'>('users');
 
   // User Management State
   const [usersList, setUsersList] = useState<any[]>([]);
@@ -129,7 +130,7 @@ export default function SystemConfig({
   const [wipeError, setWipeError] = useState<string | null>(null);
 
   const handlePerformWipeSystem = async () => {
-    if (!window.confirm("ATENÇÃO: Tem a certeza absoluta que deseja redefinir o sistema de fábrica? Esta ação irá apagar permanentemente todos os estudantes, professores, faturas, avisos, logs e utilizadores registados do sistema. Apenas o seu utilizador administrador será preservado para manter o acesso.")) {
+    if (!window.confirm("ATENÃ‡ÃƒO: Tem a certeza absoluta que deseja redefinir o sistema de fÃ¡brica? Esta aÃ§Ã£o irÃ¡ apagar permanentemente todos os estudantes, professores, faturas, avisos, logs e utilizadores registados do sistema. Apenas o seu utilizador administrador serÃ¡ preservado para manter o acesso.")) {
       return;
     }
 
@@ -159,7 +160,7 @@ export default function SystemConfig({
       }
     } catch (err: any) {
       console.error('[WIPE-ERROR]', err);
-      setWipeError(err.message || 'Erro de rede ao ligar ao servidor de redefinição.');
+      setWipeError(err.message || 'Erro de rede ao ligar ao servidor de redefiniÃ§Ã£o.');
     } finally {
       setIsWiping(false);
     }
@@ -329,7 +330,7 @@ export default function SystemConfig({
 
   const handleSeedDatabase = async () => {
     setSyncStatus('running');
-    setSyncLogs('Estabelecendo túnel de sincronização...\n');
+    setSyncLogs('Estabelecendo tÃºnel de sincronizaÃ§Ã£o...\n');
     try {
       const result = await seedSupabaseDatabase({
         students,
@@ -348,7 +349,7 @@ export default function SystemConfig({
       }
     } catch (err: any) {
       setSyncStatus('failed');
-      setSyncLogs(`\n[ERRO CRÍTICO DE REDE]: ${err.message || err}`);
+      setSyncLogs(`\n[ERRO CRÃTICO DE REDE]: ${err.message || err}`);
     }
   };
 
@@ -378,15 +379,15 @@ export default function SystemConfig({
       setSyncLogs(`[SUCESSO] Base de Dados Escolar carregada na consola escolar!\n` +
         `- Alunos importados: ${liveSt.length}\n` +
         `- Professores importados: ${liveTc.length}\n` +
-        `- Faturas e Títulos: ${liveIv.length}\n` +
+        `- Faturas e TÃ­tulos: ${liveIv.length}\n` +
         `- Avisos / Edital: ${liveAn.length}\n` +
-        `- Comunicações de Chat: ${liveMs.length}\n` +
-        `- Automações: ${liveAu.length}`
+        `- ComunicaÃ§Ãµes de Chat: ${liveMs.length}\n` +
+        `- AutomaÃ§Ãµes: ${liveAu.length}`
       );
     } catch (err: any) {
       setImportStatus('failed');
-      setSyncLogs(`[ERRO] FALHA DE IMPORTAÇÃO: ${err.message || err}\n\n` +
-        `Orientação: Garanta que o Script de Banco fornecido na consola de gestão foi executado primeiro para que as relações e as tabelas estejam estruturadas no Servidor de Dados.`);
+      setSyncLogs(`[ERRO] FALHA DE IMPORTAÃ‡ÃƒO: ${err.message || err}\n\n` +
+        `OrientaÃ§Ã£o: Garanta que o Script de Banco fornecido na consola de gestÃ£o foi executado primeiro para que as relaÃ§Ãµes e as tabelas estejam estruturadas no Servidor de Dados.`);
     }
   };
 
@@ -409,7 +410,7 @@ export default function SystemConfig({
       ...rolePermissions,
       [role]: MATRIX_PERMISSIONS.map(p => p.id)
     });
-    triggerPresetNotification('Acesso Total atribuído para: ' + role);
+    triggerPresetNotification('Acesso Total atribuÃ­do para: ' + role);
   };
 
   const handleClearRole = (role: UserRole) => {
@@ -417,19 +418,19 @@ export default function SystemConfig({
       ...rolePermissions,
       [role]: []
     });
-    triggerPresetNotification('Permissões revogadas para: ' + role);
+    triggerPresetNotification('PermissÃµes revogadas para: ' + role);
   };
 
   const handleApplyPreset = (presetName: 'default' | 'high_security' | 'collaborative') => {
     if (presetName === 'default') {
       onUpdatePermissions(FACTORY_PERMISSIONS);
-      triggerPresetNotification('Preset "Padrão de Fábrica" aplicado com sucesso!');
+      triggerPresetNotification('Preset "PadrÃ£o de FÃ¡brica" aplicado com sucesso!');
     } else if (presetName === 'high_security') {
       onUpdatePermissions(HIGH_SECURITY_PERMISSIONS);
-      triggerPresetNotification('Preset "Segurança Máxima" aplicado com sucesso!');
+      triggerPresetNotification('Preset "SeguranÃ§a MÃ¡xima" aplicado com sucesso!');
     } else {
       onUpdatePermissions(COLLABORATIVE_PERMISSIONS);
-      triggerPresetNotification('Preset "Colaboração Ampla" aplicado com sucesso!');
+      triggerPresetNotification('Preset "ColaboraÃ§Ã£o Ampla" aplicado com sucesso!');
     }
   };
 
@@ -439,21 +440,21 @@ export default function SystemConfig({
   };
 
   const profiles = [
-    { role: 'admin' as const, name: 'Administrador Principal', icon: Shield, desc: 'Acesso total irrestrito: faturas, professores, pautas, alertas automáticos e IA assistente.' },
-    { role: 'director' as const, name: 'Direção Executiva', icon: Sliders, desc: 'Acesso a relatórios consultivos, comunicados formais, IA assistente e pautas pedagógicas.' },
-    { role: 'secretariat' as const, name: 'Secretaria Executiva', icon: Users, desc: 'Focado em matrículas, documentação escolar em falta e controle de inadimplências.' },
-    { role: 'financial' as const, name: 'Administração Financeira', icon: DollarSign, desc: 'Gestão exclusiva de faturas, faturamento, recebimento de mensalidades e cobradas escolares.' },
-    { role: 'teacher' as const, name: 'Corpo Pedagógico', icon: GraduationCap, desc: 'Lança observações de comportamento, de mérito, ajusta pautas e consulta horários.' },
-    { role: 'parent' as const, name: 'Encarregado de Educação', icon: CheckCircle, desc: 'Acompanha o boletim de mérito do educando, situação financeira e comunicados gerais.' },
-    { role: 'student' as const, name: 'Aluno / Educando', icon: User, desc: 'Acede ao quadro de medalhas, notas individuais e interage via canais gerais de comunicação.' }
+    { role: 'admin' as const, name: 'Administrador Principal', icon: Shield, desc: 'Acesso total irrestrito: faturas, professores, pautas, alertas automÃ¡ticos e IA assistente.' },
+    { role: 'director' as const, name: 'DireÃ§Ã£o Executiva', icon: Sliders, desc: 'Acesso a relatÃ³rios consultivos, comunicados formais, IA assistente e pautas pedagÃ³gicas.' },
+    { role: 'secretariat' as const, name: 'Secretaria Executiva', icon: Users, desc: 'Focado em matrÃ­culas, documentaÃ§Ã£o escolar em falta e controle de inadimplÃªncias.' },
+    { role: 'financial' as const, name: 'AdministraÃ§Ã£o Financeira', icon: DollarSign, desc: 'GestÃ£o exclusiva de faturas, faturamento, recebimento de mensalidades e cobradas escolares.' },
+    { role: 'teacher' as const, name: 'Corpo PedagÃ³gico', icon: GraduationCap, desc: 'LanÃ§a observaÃ§Ãµes de comportamento, de mÃ©rito, ajusta pautas e consulta horÃ¡rios.' },
+    { role: 'parent' as const, name: 'Encarregado de EducaÃ§Ã£o', icon: CheckCircle, desc: 'Acompanha o boletim de mÃ©rito do educando, situaÃ§Ã£o financeira e comunicados gerais.' },
+    { role: 'student' as const, name: 'Aluno / Educando', icon: User, desc: 'Acede ao quadro de medalhas, notas individuais e interage via canais gerais de comunicaÃ§Ã£o.' }
   ];
 
   return (
     <div id="nexus_system_configurations" className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-zinc-100">Configurações de Perfis e Segurança</h2>
-          <p className="text-xs text-zinc-400 mt-1">Gerencie os cargos e permissões dos utilizadores, atribua perfis específicos e audite as tentativas críticas de acesso no sistema.</p>
+          <h2 className="text-xl font-bold tracking-tight text-zinc-100">ConfiguraÃ§Ãµes de Perfis e SeguranÃ§a</h2>
+          <p className="text-xs text-zinc-400 mt-1">Gerencie os cargos e permissÃµes dos utilizadores, atribua perfis especÃ­ficos e audite as tentativas crÃ­ticas de acesso no sistema.</p>
         </div>
       </div>
 
@@ -466,8 +467,16 @@ export default function SystemConfig({
           }`}
         >
           <Users className="w-3.5 h-3.5 text-indigo-400" />
-          Gestão de Utilizadores
+          GestÃ£o de Utilizadores
         </button>
+        {(currentRole === 'admin' || currentRole === 'director') && (
+          <button
+            onClick={() => setActiveSubTab('academic-year')}
+            className={'pb-3 border-b-2 transition-all cursor-pointer ' + (activeSubTab === 'academic-year' ? 'border-emerald-500 text-emerald-400 font-bold' : 'border-transparent text-zinc-500 hover:text-zinc-300')}
+          >
+            Ano Letivo
+          </button>
+        )}
         <button
           onClick={() => setActiveSubTab('profile')}
           className={`pb-3 border-b-2 transition-all cursor-pointer ${
@@ -497,9 +506,13 @@ export default function SystemConfig({
           }`}
         >
           <Trash2 className="w-3.5 h-3.5 text-red-500" />
-          Redefinição de Fábrica
+          RedefiniÃ§Ã£o de FÃ¡brica
         </button>
       </div>
+
+      {activeSubTab === 'academic-year' && (
+        <AcademicYearManagement currentRole={currentRole} firebaseUser={firebaseUser} />
+      )}
 
       {activeSubTab === 'profile' && (
         <div className="space-y-6">
@@ -510,7 +523,7 @@ export default function SystemConfig({
               Simulador de Perfis Operacionais
             </h3>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              Diferentes cargos na escola operam sob permissões específicas. Escolha um perfil abaixo para simular 
+              Diferentes cargos na escola operam sob permissÃµes especÃ­ficas. Escolha um perfil abaixo para simular 
               e experimentar instantaneamente a filtragem e as visibilidades exclusivas configuradas no portal:
             </p>
           </div>
@@ -559,12 +572,12 @@ export default function SystemConfig({
                     <Sliders className="w-4 h-4" />
                   </span>
                   <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-wide">
-                    Matriz Geral de Permissões e Controlo de Acesso
+                    Matriz Geral de PermissÃµes e Controlo de Acesso
                   </h3>
                 </div>
                 <p className="text-xs text-zinc-400 max-w-3xl leading-relaxed">
-                  Gerencie granularmente quais abas e recursos estão ativos para os perfis. As alterações são persistidas no portal instantaneamente.
-                  Símbolos de perigo (<ShieldAlert className="w-3.5 h-3.5 inline text-amber-500" />) sinalizam acesso crítico concedido a papéis menos privilegiados.
+                  Gerencie granularmente quais abas e recursos estÃ£o ativos para os perfis. As alteraÃ§Ãµes sÃ£o persistidas no portal instantaneamente.
+                  SÃ­mbolos de perigo (<ShieldAlert className="w-3.5 h-3.5 inline text-amber-500" />) sinalizam acesso crÃ­tico concedido a papÃ©is menos privilegiados.
                 </p>
               </div>
 
@@ -576,21 +589,21 @@ export default function SystemConfig({
                   type="button"
                   className="px-3 py-1.5 bg-zinc-950 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-300 rounded-lg text-xs font-semibold cursor-pointer transition-all"
                 >
-                  Padrão de Fábrica
+                  PadrÃ£o de FÃ¡brica
                 </button>
                 <button
                   onClick={() => handleApplyPreset('high_security')}
                   type="button"
                   className="px-3 py-1.5 bg-zinc-950 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-300 rounded-lg text-xs font-semibold cursor-pointer transition-all"
                 >
-                  Segurança Máxima
+                  SeguranÃ§a MÃ¡xima
                 </button>
                 <button
                   onClick={() => handleApplyPreset('collaborative')}
                   type="button"
                   className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs font-semibold cursor-pointer transition-all"
                 >
-                  Colaboração Ampla
+                  ColaboraÃ§Ã£o Ampla
                 </button>
               </div>
             </div>
@@ -666,7 +679,7 @@ export default function SystemConfig({
                     {filteredMatrix.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="py-8 text-center text-zinc-550 font-mono">
-                          Nenhuma funcionalidade escolar corresponde à pesquisa "{permissionQuery}"
+                          Nenhuma funcionalidade escolar corresponde Ã  pesquisa "{permissionQuery}"
                         </td>
                       </tr>
                     ) : (
@@ -714,7 +727,7 @@ export default function SystemConfig({
                                     {isCriticalAccessWarning && (
                                       <span 
                                         className="text-amber-500 hover:text-amber-400" 
-                                        title={`Atenção: Conceder o recurso "${perm.name}" ao perfil "${p.name}" representa um privilégio crítico.`}
+                                        title={`AtenÃ§Ã£o: Conceder o recurso "${perm.name}" ao perfil "${p.name}" representa um privilÃ©gio crÃ­tico.`}
                                       >
                                         <ShieldAlert className="w-3.5 h-3.5 animate-pulse" />
                                       </span>
@@ -737,16 +750,16 @@ export default function SystemConfig({
             <div className="p-4 bg-zinc-950 border border-zinc-850 rounded-xl flex items-start gap-3">
               <Shield className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <h5 className="text-xs font-bold text-zinc-300">Modificações Aplicadas Dinamicamente</h5>
+                <h5 className="text-xs font-bold text-zinc-300">ModificaÃ§Ãµes Aplicadas Dinamicamente</h5>
                 <p className="text-[10px] text-zinc-500 leading-relaxed">
-                  As permissões utilizam uma arquitetura reativa integrada ao router principal. Ao simular ou alternar o perfil de acesso ativo usando as cartões superiores, o menu lateral da escola reconfigura as abas e canais sem requerer logout ou refresh da página.
+                  As permissÃµes utilizam uma arquitetura reativa integrada ao router principal. Ao simular ou alternar o perfil de acesso ativo usando as cartÃµes superiores, o menu lateral da escola reconfigura as abas e canais sem requerer logout ou refresh da pÃ¡gina.
                 </p>
               </div>
             </div>
 
           </div>
 
-          {/* Phase 3: Gestão de Contas Clientes & Configuração de Visibilidade Individual */}
+          {/* Phase 3: GestÃ£o de Contas Clientes & ConfiguraÃ§Ã£o de Visibilidade Individual */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5">
             <div>
               <div className="flex items-center gap-2">
@@ -754,11 +767,11 @@ export default function SystemConfig({
                   <Users className="w-4 h-4 text-indigo-455" />
                 </span>
                 <h3 className="text-sm font-bold text-zinc-100 uppercase tracking-wide">
-                  Configuração de Visibilidade de Outras Contas Clientes
+                  ConfiguraÃ§Ã£o de Visibilidade de Outras Contas Clientes
                 </h3>
               </div>
               <p className="text-xs text-zinc-400 mt-2 leading-relaxed font-sans">
-                Configure a visibilidade de abas e controlo de utilitários específicos para contas de outros perfis (Encarregados de Educação, Alunos, Docentes e Gestores Externos). Como utilizador principal (Administrador), pode simular o login de qualquer conta abaixo para testar instantaneamente a visibilidade configurada de forma organizada e limpa.
+                Configure a visibilidade de abas e controlo de utilitÃ¡rios especÃ­ficos para contas de outros perfis (Encarregados de EducaÃ§Ã£o, Alunos, Docentes e Gestores Externos). Como utilizador principal (Administrador), pode simular o login de qualquer conta abaixo para testar instantaneamente a visibilidade configurada de forma organizada e limpa.
               </p>
             </div>
 
@@ -777,14 +790,14 @@ export default function SystemConfig({
                     <div key={std.id} className="p-3 bg-zinc-900/40 border border-zinc-855 rounded-lg flex items-center justify-between gap-3 text-xs">
                       <div>
                         <div className="font-semibold text-zinc-200">{std.name}</div>
-                        <div className="text-[10px] text-zinc-500 font-mono mt-0.5">ID: {std.id} • Aluno</div>
+                        <div className="text-[10px] text-zinc-500 font-mono mt-0.5">ID: {std.id} â€¢ Aluno</div>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => {
                             onRoleChange('student');
-                            alert(`Modo Simulação Ativo: Entrou com o utilizador ${std.name} (Papel: Aluno). Todas as visualizações e abas do menu lateral foram calibradas de acordo com as permissões da matriz deste cliente! Logins individuais de alunos ocultam as estatísticas agregadas.`);
+                            alert(`Modo SimulaÃ§Ã£o Ativo: Entrou com o utilizador ${std.name} (Papel: Aluno). Todas as visualizaÃ§Ãµes e abas do menu lateral foram calibradas de acordo com as permissÃµes da matriz deste cliente! Logins individuais de alunos ocultam as estatÃ­sticas agregadas.`);
                           }}
                           className="text-[10px] bg-indigo-505/10 hover:bg-indigo-505/20 border border-indigo-500/20 text-[#818cf8] font-bold px-2.5 py-1 rounded transition-colors cursor-pointer text-center"
                         >
@@ -796,33 +809,33 @@ export default function SystemConfig({
                 </div>
               </div>
 
-              {/* Contas Clientes - Encarregados de Educação (Pais) */}
+              {/* Contas Clientes - Encarregados de EducaÃ§Ã£o (Pais) */}
               <div className="bg-zinc-950 p-4 border border-zinc-850 rounded-xl space-y-3">
                 <div className="flex items-center justify-between border-b border-zinc-850 pb-2">
-                  <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-zinc-400">Contas Responsáveis: Encarregados</span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider font-mono text-zinc-400">Contas ResponsÃ¡veis: Encarregados</span>
                   <span className="text-[9px] text-emerald-400 font-mono">Simulador Ativo</span>
                 </div>
                 
                 <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
                   {[
                     { id: 'ENC-402', name: 'Carlos Medeiros (Pai)', rel: 'Bruno Medeiros' },
-                    { id: 'ENC-809', name: 'Helena Siqueira (Mãe)', rel: 'Alice Siqueira' }
+                    { id: 'ENC-809', name: 'Helena Siqueira (MÃ£e)', rel: 'Alice Siqueira' }
                   ].map(p => (
                     <div key={p.id} className="p-3 bg-zinc-900/40 border border-zinc-855 rounded-lg flex items-center justify-between gap-3 text-xs">
                       <div>
                         <div className="font-semibold text-zinc-200">{p.name}</div>
-                        <div className="text-[10px] text-zinc-500 font-mono mt-0.5">ID: {p.id} • Responsando: {p.rel}</div>
+                        <div className="text-[10px] text-zinc-500 font-mono mt-0.5">ID: {p.id} â€¢ Responsando: {p.rel}</div>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => {
                             onRoleChange('parent');
-                            alert(`Modo Simulação Ativo: Entrou com o Encarregado de Educação ${p.name} (Papel: Encarregado). Verá no menu lateral apenas o financeiro consolidado, o boletim do educando e os editais de avisos relevantes!`);
+                            alert(`Modo SimulaÃ§Ã£o Ativo: Entrou com o Encarregado de EducaÃ§Ã£o ${p.name} (Papel: Encarregado). VerÃ¡ no menu lateral apenas o financeiro consolidado, o boletim do educando e os editais de avisos relevantes!`);
                           }}
                           className="text-[10px] bg-emerald-505/10 hover:bg-emerald-505/20 border border-emerald-500/25 text-emerald-400 font-bold px-2.5 py-1 rounded transition-colors cursor-pointer text-center"
                         >
-                          Simular Responsável
+                          Simular ResponsÃ¡vel
                         </button>
                       </div>
                     </div>
@@ -833,9 +846,9 @@ export default function SystemConfig({
 
             {/* Granular Control Config for Visibility Exclusions */}
             <div className="bg-zinc-950 p-4 border border-zinc-850 rounded-xl space-y-4">
-              <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider block">Garantia de Divisões Individuais de Áreas</span>
+              <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider block">Garantia de DivisÃµes Individuais de Ãreas</span>
               <p className="text-[11px] text-zinc-450 leading-relaxed font-sans">
-                Pretende calibrar a visibilidade de outras contas de clientes individuais em múltiplos canais de recepção?
+                Pretende calibrar a visibilidade de outras contas de clientes individuais em mÃºltiplos canais de recepÃ§Ã£o?
                 Pode usar as seguintes caixas para excluir do menu geral os canais redundantes de cada perfil, organizando melhor as abas de cada zona do portal de forma limpa:
               </p>
 
@@ -846,13 +859,13 @@ export default function SystemConfig({
                     defaultChecked 
                     id="chk_student_exclusive"
                     onChange={(e) => {
-                      alert(`Organização de abas de Alunos configurada! Menu lateral de Alunos agora está simplificado com foco na Central de Méritos (Gamificação) e Portal de Matrícula, ocultando ferramentas administrativas redundantes de forma isolada.`);
+                      alert(`OrganizaÃ§Ã£o de abas de Alunos configurada! Menu lateral de Alunos agora estÃ¡ simplificado com foco na Central de MÃ©ritos (GamificaÃ§Ã£o) e Portal de MatrÃ­cula, ocultando ferramentas administrativas redundantes de forma isolada.`);
                     }}
                     className="mt-0.5 rounded border-zinc-800 bg-zinc-950 text-emerald-520 focus:ring-opacity-0 cursor-pointer" 
                   />
                   <div className="text-xs">
                     <label htmlFor="chk_student_exclusive" className="font-semibold text-zinc-300 block cursor-pointer">Menu Simplificado Alunos</label>
-                    <span className="text-[10px] text-zinc-500 block">Foco estrito em Notas, Méritos e Atividades</span>
+                    <span className="text-[10px] text-zinc-500 block">Foco estrito em Notas, MÃ©ritos e Atividades</span>
                   </div>
                 </div>
 
@@ -862,13 +875,13 @@ export default function SystemConfig({
                     defaultChecked 
                     id="chk_parent_exclusive"
                     onChange={(e) => {
-                      alert(`Organização de abas de Encarregados calibrada! O painel consolidado exibe exclusivamente boletos de propinas e canais diretos de comunicação com a secretaria.`);
+                      alert(`OrganizaÃ§Ã£o de abas de Encarregados calibrada! O painel consolidado exibe exclusivamente boletos de propinas e canais diretos de comunicaÃ§Ã£o com a secretaria.`);
                     }}
                     className="mt-0.5 rounded border-zinc-800 bg-zinc-950 text-emerald-520 focus:ring-opacity-0 cursor-pointer" 
                   />
                   <div className="text-xs">
                     <label htmlFor="chk_parent_exclusive" className="font-semibold text-zinc-300 block cursor-pointer">Menu Isolado Encarregados</label>
-                    <span className="text-[10px] text-zinc-500 block">Canal estrito de Propinas e Avisos Rápidos</span>
+                    <span className="text-[10px] text-zinc-500 block">Canal estrito de Propinas e Avisos RÃ¡pidos</span>
                   </div>
                 </div>
 
@@ -878,13 +891,13 @@ export default function SystemConfig({
                     defaultChecked 
                     id="chk_docente_filtering"
                     onChange={(e) => {
-                      alert(`Isolamento de Área Docente definido! O menu do corpo de professores está focado na assistente pedagógica de IA, ocultando pautas financeiras confidenciais dos educadores.`);
+                      alert(`Isolamento de Ãrea Docente definido! O menu do corpo de professores estÃ¡ focado na assistente pedagÃ³gica de IA, ocultando pautas financeiras confidenciais dos educadores.`);
                     }}
                     className="mt-0.5 rounded border-zinc-800 bg-zinc-950 text-emerald-520 focus:ring-opacity-0 cursor-pointer" 
                   />
                   <div className="text-xs">
-                    <label htmlFor="chk_docente_filtering" className="font-semibold text-zinc-300 block cursor-pointer">Segregamento da Área Docente</label>
-                    <span className="text-[10px] text-zinc-500 block">Acesso estrito a utilitários de IA e turmas</span>
+                    <label htmlFor="chk_docente_filtering" className="font-semibold text-zinc-300 block cursor-pointer">Segregamento da Ãrea Docente</label>
+                    <span className="text-[10px] text-zinc-500 block">Acesso estrito a utilitÃ¡rios de IA e turmas</span>
                   </div>
                 </div>
               </div>
@@ -900,10 +913,10 @@ export default function SystemConfig({
             <div className="space-y-1">
               <h3 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
                 <ShieldAlert className="w-4 h-4 text-amber-500 animate-pulse" />
-                Registo de Eventos e Auditoria de Segurança
+                Registo de Eventos e Auditoria de SeguranÃ§a
               </h3>
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Logs de acesso gerados em tempo real na camada de roteamento reativa. Tentativas fora do perfil autorizado são barradas na origem intelectual.
+                Logs de acesso gerados em tempo real na camada de roteamento reativa. Tentativas fora do perfil autorizado sÃ£o barradas na origem intelectual.
               </p>
             </div>
             {onClearAuditLogs && (
@@ -931,7 +944,7 @@ export default function SystemConfig({
               <span className="text-lg font-bold font-mono text-zinc-200 mt-0.5 block">{auditLogs.length}</span>
             </div>
             <div className="bg-zinc-950 p-4 border border-zinc-850 rounded-xl">
-              <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase block">Último Incidente</span>
+              <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase block">Ãšltimo Incidente</span>
               <span className="text-xs font-semibold text-zinc-300 mt-1 block truncate">
                 {auditLogs[0] ? `${auditLogs[0].attemptedTabName} (${auditLogs[0].timestamp})` : 'Nenhum incidente hoje'}
               </span>
@@ -941,9 +954,9 @@ export default function SystemConfig({
           {auditLogs.length === 0 ? (
             <div className="border border-zinc-800/50 bg-zinc-900/30 p-10 rounded-xl text-center space-y-2">
               <CheckCircle className="w-8 h-8 text-emerald-555 mx-auto" />
-              <p className="text-xs font-semibold text-zinc-300">Nenhum evento anômalo pendente!</p>
+              <p className="text-xs font-semibold text-zinc-300">Nenhum evento anÃ´malo pendente!</p>
               <p className="text-[10px] text-zinc-500 max-w-md mx-auto">
-                Tente alterar as permissões de acesso do perfil simulado ativo, mude para o perfil e tente aceder àquela aba para emitir logs de auditoria real.
+                Tente alterar as permissÃµes de acesso do perfil simulado ativo, mude para o perfil e tente aceder Ã quela aba para emitir logs de auditoria real.
               </p>
             </div>
           ) : (
@@ -955,9 +968,9 @@ export default function SystemConfig({
                       <th className="p-3">Ref ID</th>
                       <th className="p-3">Data / Hora</th>
                       <th className="p-3">Perfil do Utilizador</th>
-                      <th className="p-3">Aba / Módulo Tentado</th>
+                      <th className="p-3">Aba / MÃ³dulo Tentado</th>
                       <th className="p-3">IP Origem</th>
-                      <th className="p-3">Status Segurança</th>
+                      <th className="p-3">Status SeguranÃ§a</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1014,7 +1027,7 @@ export default function SystemConfig({
                 Controlo Geral de Contas de Utilizadores
               </h3>
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Adicione novos colaboradores, edite funções, controle acessos e suspenda ou exclua contas ativas. Cada conta está integrada de forma coerente com a autenticação.
+                Adicione novos colaboradores, edite funÃ§Ãµes, controle acessos e suspenda ou exclua contas ativas. Cada conta estÃ¡ integrada de forma coerente com a autenticaÃ§Ã£o.
               </p>
             </div>
             <button
@@ -1066,8 +1079,8 @@ export default function SystemConfig({
                     <th className="py-4 px-3">Cargo Escolar</th>
                     <th className="py-4 px-3">Departamento</th>
                     <th className="py-4 px-3">Estado</th>
-                    <th className="py-4 px-3">Último Acesso</th>
-                    <th className="py-4 px-5 text-right">Ações</th>
+                    <th className="py-4 px-3">Ãšltimo Acesso</th>
+                    <th className="py-4 px-5 text-right">AÃ§Ãµes</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/40 text-xs">
@@ -1114,7 +1127,7 @@ export default function SystemConfig({
                       };
                       
                       const deptStyles: Record<string, string> = {
-                        'Direção': 'text-amber-400',
+                        'DireÃ§Ã£o': 'text-amber-400',
                         'Secretaria': 'text-indigo-400',
                         'Professorado': 'text-sky-400',
                         'Financeiro': 'text-emerald-400',
@@ -1136,7 +1149,7 @@ export default function SystemConfig({
                             </div>
                           </td>
                           <td className="py-4 px-3 text-zinc-350 font-mono tracking-tight text-xs">
-                            {u.phone || <span className="opacity-45 select-none">—</span>}
+                            {u.phone || <span className="opacity-45 select-none">â€”</span>}
                           </td>
                           <td className="py-4 px-3">
                             <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono tracking-wide uppercase shadow-sm ${roleStyles[u.role] || 'bg-zinc-800 text-zinc-400'}`}>
@@ -1237,31 +1250,31 @@ export default function SystemConfig({
               </div>
               <div className="space-y-1">
                 <h3 className="text-base font-bold text-red-450 uppercase tracking-wide font-mono">
-                  Zona de Perigo: Redefinição Total do Sistema
+                  Zona de Perigo: RedefiniÃ§Ã£o Total do Sistema
                 </h3>
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  Esta funcionalidade destina-se a limpar todos os dados de testes, dados fictícios ou ilustrativos e sessões antigas
-                  para preparar o sistema para uma utilização real e em produção do portal NexusEduAI.
+                  Esta funcionalidade destina-se a limpar todos os dados de testes, dados fictÃ­cios ou ilustrativos e sessÃµes antigas
+                  para preparar o sistema para uma utilizaÃ§Ã£o real e em produÃ§Ã£o do portal NexusEduAI.
                 </p>
               </div>
             </div>
 
             <div className="border-t border-zinc-800/60 pt-4 space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300 font-mono">O que será apagado permanentemente:</h4>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300 font-mono">O que serÃ¡ apagado permanentemente:</h4>
               <ul className="text-xs text-zinc-400 space-y-1.5 list-disc pl-5">
                 <li><strong className="text-zinc-200">Alunos & Professores:</strong> Todos os perfis de alunos e corpo docente registados.</li>
-                <li><strong className="text-zinc-200">Faturação & Pagamentos:</strong> Todas as faturas, recibos e estados financeiros emitidos.</li>
-                <li><strong className="text-zinc-200">Comunicação & Chat:</strong> Todos os avisos, editais, conversas e canais de chat ativos.</li>
-                <li><strong className="text-zinc-200">Módulos Escolares & Tarefas:</strong> Todos os fluxos de trabalho, aprovações, automações e documentos organizacionais.</li>
+                <li><strong className="text-zinc-200">FaturaÃ§Ã£o & Pagamentos:</strong> Todas as faturas, recibos e estados financeiros emitidos.</li>
+                <li><strong className="text-zinc-200">ComunicaÃ§Ã£o & Chat:</strong> Todos os avisos, editais, conversas e canais de chat ativos.</li>
+                <li><strong className="text-zinc-200">MÃ³dulos Escolares & Tarefas:</strong> Todos os fluxos de trabalho, aprovaÃ§Ãµes, automaÃ§Ãµes e documentos organizacionais.</li>
                 <li><strong className="text-zinc-200">Contas de Utilizadores:</strong> Todos os utilizadores (exceto o administrador principal <code className="text-emerald-400 font-mono bg-zinc-950 px-1 py-0.5 rounded">carlossmiranda1914@gmail.com</code>).</li>
               </ul>
             </div>
 
             <div className="border-t border-zinc-800/60 pt-4 space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300 font-mono">Segurança & Sessões:</h4>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300 font-mono">SeguranÃ§a & SessÃµes:</h4>
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Ao redefinir o sistema, todas as sessões ativas do cliente e cache local serão destruídas de imediato, forçando o logout geral.
-                Dessa forma, poderá criar e testar novas contas (simuladas ou 100% reais) a partir de um estado completamente limpo e seguro.
+                Ao redefinir o sistema, todas as sessÃµes ativas do cliente e cache local serÃ£o destruÃ­das de imediato, forÃ§ando o logout geral.
+                Dessa forma, poderÃ¡ criar e testar novas contas (simuladas ou 100% reais) a partir de um estado completamente limpo e seguro.
               </p>
             </div>
 
@@ -1275,7 +1288,7 @@ export default function SystemConfig({
             {wipeSuccess && (
               <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-4 py-3 rounded-xl flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 flex-shrink-0" />
-                <span>Redefinição efetuada com sucesso! A terminar sessões e a reiniciar o portal...</span>
+                <span>RedefiniÃ§Ã£o efetuada com sucesso! A terminar sessÃµes e a reiniciar o portal...</span>
               </div>
             )}
 
@@ -1293,7 +1306,7 @@ export default function SystemConfig({
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" />
-                    Iniciar Redefinição Limpa
+                    Iniciar RedefiniÃ§Ã£o Limpa
                   </>
                 )}
               </button>
@@ -1325,7 +1338,7 @@ export default function SystemConfig({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-zinc-300 block">Email de Identificação</label>
+                <label className="text-xs font-semibold text-zinc-300 block">Email de IdentificaÃ§Ã£o</label>
                 <input
                   type="email"
                   value={formEmail}
@@ -1338,7 +1351,7 @@ export default function SystemConfig({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-zinc-300 block">Telemóvel / Telefone</label>
+                <label className="text-xs font-semibold text-zinc-300 block">TelemÃ³vel / Telefone</label>
                 <input
                   type="text"
                   value={formPhone}
@@ -1357,7 +1370,7 @@ export default function SystemConfig({
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-sans text-zinc-200 outline-none focus:border-indigo-505 cursor-pointer"
                   >
                     <option value="student">Aluno</option>
-                    <option value="parent">Responsável</option>
+                    <option value="parent">ResponsÃ¡vel</option>
                     <option value="teacher">Professor</option>
                     <option value="financial">Financeiro</option>
                     <option value="secretariat">Secretaria</option>
@@ -1378,7 +1391,7 @@ export default function SystemConfig({
                     <option value="Professorado">Professorado</option>
                     <option value="Financeiro">Financeiro</option>
                     <option value="Secretaria">Secretaria</option>
-                    <option value="Direção">Direção</option>
+                    <option value="DireÃ§Ã£o">DireÃ§Ã£o</option>
                   </select>
                 </div>
               </div>
@@ -1417,3 +1430,4 @@ export default function SystemConfig({
     </div>
   );
 }
+

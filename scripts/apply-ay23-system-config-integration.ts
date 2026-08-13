@@ -16,7 +16,7 @@ const stateAfter = "useState<'academic-year' | 'profile' | 'audit' | 'users' | '
 if (source.includes(stateBefore)) source = source.replace(stateBefore, stateAfter);
 if (!source.includes(stateAfter)) throw new Error('AY-2.3 subtab state anchor not found.');
 
-const navAnchor = `        <button\n          onClick={() => setActiveSubTab('profile')}`;
+const navAnchor = "onClick={() => setActiveSubTab('profile')}";
 const navBlock = `        {(currentRole === 'admin' || currentRole === 'director') && (\n          <button\n            onClick={() => setActiveSubTab('academic-year')}\n            className={'pb-3 border-b-2 transition-all cursor-pointer ' + (activeSubTab === 'academic-year' ? 'border-emerald-500 text-emerald-400 font-bold' : 'border-transparent text-zinc-500 hover:text-zinc-300')}\n          >\n            Ano Letivo\n          </button>\n        )}\n`;
 if (!source.includes("setActiveSubTab('academic-year')")) {
   if (!source.includes(navAnchor)) throw new Error('AY-2.3 navigation anchor not found.');
@@ -32,3 +32,4 @@ if (!source.includes("activeSubTab === 'academic-year' &&")) {
 
 await writeFile(target, source, 'utf8');
 console.log('[AY-2.3] SystemConfig integration applied.');
+
