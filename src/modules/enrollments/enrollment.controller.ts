@@ -16,6 +16,9 @@ import { canConfigureEnrollment, canManageEnrollment, canTransitionEnrollment, E
 import { registerAcademicYearRoutes } from './academic-year.controller.ts';
 import { registerEnrollmentDocumentRoutes } from './enrollment-document.controller.ts';
 import { documentValidationGate } from './enrollment-document-requirement-policy.ts';
+import { registerEnrollmentRegistrationRoutes } from './enrollment-registration.controller.ts';
+import { getEnrollmentRegistrationReadiness } from './enrollment-registration-api.ts';
+import { REGISTRATION_FIELD_LABELS } from './enrollment-registration-policy.ts';
 
 function reject(res: Response, status: number, error: string) { return res.status(status).json({ error }); }
 
@@ -70,6 +73,7 @@ function rejectDomainError(res: Response, error: unknown) {
 export function registerEnrollmentRoutes(app: Application) {
   registerAcademicYearRoutes(app);
   registerEnrollmentDocumentRoutes(app);
+  registerEnrollmentRegistrationRoutes(app);
   app.get('/api/enrollments/setup', requireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentConfigurator(req, res); if (!context) return;
     try {
@@ -270,6 +274,17 @@ export function registerEnrollmentRoutes(app: Application) {
       if (!canTransitionEnrollment(context.role, from, target)) { await client.query('ROLLBACK'); return reject(res, 403, 'Transição de matrícula não autorizada.'); }
 
       if (target === 'validated') {
+        const registrationGate = await getEnrollmentRegistrationReadiness(client, context.institutionId, req.params.id);
+        if (!registrationGate) {
+          await client.query('ROLLBACK');
+          return reject(res, 404, 'Matrícula não encontrada nesta instituição.');
+        }
+        if (!registrationGate.ready) {
+          await client.query('ROLLBACK');
+          const missing = registrationGate.missing.map((field) => REGISTRATION_FIELD_LABELS[field] || field).join(', ');
+          return reject(res, 409, `Complete o cadastro da matrícula antes da validação. Em falta: ${missing}.`);
+        }
+
         const documents = await client.query<{ document_type: string; required: boolean; status: 'pending' | 'submitted' | 'verified' | 'rejected' }>(
           'SELECT document_type, required, status FROM enrollment_documents WHERE enrollment_application_id = $1 AND institution_id = $2',
           [req.params.id, context.institutionId],
@@ -308,4 +323,3 @@ export function registerEnrollmentRoutes(app: Application) {
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   });
 }
-
