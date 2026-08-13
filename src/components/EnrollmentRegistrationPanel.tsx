@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { EnrollmentOperationalStatus } from '../modules/enrollments/enrollment-operations-model.ts';
 
 type Request = (path: string, options?: RequestInit) => Promise<any>;
@@ -199,7 +199,7 @@ export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentSt
   </section>;
 }
 
-function FormSection({ title, description, light, children }: { title: string; description: string; light: boolean; children: React.ReactNode }) {
+function FormSection({ title, description, light, children }: { title: string; description: string; light: boolean; children: ReactNode }) {
   return <div className={`rounded-xl border p-4 ${light ? 'border-zinc-200 bg-slate-50' : 'border-white/10 bg-zinc-900/70'}`}><div className="mb-4"><h4 className={`text-xs font-bold ${light ? 'text-zinc-900' : 'text-zinc-100'}`}>{title}</h4><p className={`mt-1 text-[11px] leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{description}</p></div>{children}</div>;
 }
 
