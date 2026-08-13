@@ -8,9 +8,9 @@ function assert(condition: unknown, message: string): asserts condition {
 
 const calls: Array<{ sql: string; values?: unknown[] }> = [];
 const noYearDb = {
-  async query(sql: string, values?: unknown[]) {
+  async query<Row = any>(sql: string, values?: unknown[]) {
     calls.push({ sql, values });
-    return { rows: [] };
+    return { rows: [] as Row[] };
   },
 };
 
@@ -23,13 +23,13 @@ assert(calls[0].sql.includes("status = 'active'"), 'Temporal context must resolv
 
 let step = 0;
 const activeWithoutOffersDb = {
-  async query(sql: string, values?: unknown[]) {
+  async query<Row = any>(sql: string, values?: unknown[]) {
     step += 1;
     calls.push({ sql, values });
     if (step === 1) {
-      return { rows: [{ id: 'year-a', name: '2026/2027', starts_on: '2026-09-01', ends_on: '2027-07-31', status: 'active' }] };
+      return { rows: [{ id: 'year-a', name: '2026/2027', starts_on: '2026-09-01', ends_on: '2027-07-31', status: 'active' }] as Row[] };
     }
-    return { rows: [] };
+    return { rows: [] as Row[] };
   },
 };
 
@@ -41,14 +41,14 @@ assert(activeWithoutOffers.offers.length === 0, 'Active year with no offers must
 
 step = 0;
 const activeWithOffersDb = {
-  async query(_sql: string, values?: unknown[]) {
+  async query<Row = any>(_sql: string, values?: unknown[]) {
     step += 1;
     if (step === 1) {
-      return { rows: [{ id: 'year-a', name: '2026/2027', starts_on: new Date('2026-09-01T00:00:00Z'), ends_on: new Date('2027-07-31T00:00:00Z'), status: 'active' }] };
+      return { rows: [{ id: 'year-a', name: '2026/2027', starts_on: new Date('2026-09-01T00:00:00Z'), ends_on: new Date('2027-07-31T00:00:00Z'), status: 'active' }] as Row[] };
     }
     assert(values?.[0] === 'institution-a', 'Offer lookup must be institution scoped.');
     assert(values?.[1] === 'year-a', 'Offer lookup must be constrained to the resolved active year.');
-    return { rows: [{ id: 'offer-a', name: 'Ensino regular', code: 'REG', academic_year_id: 'year-a' }] };
+    return { rows: [{ id: 'offer-a', name: 'Ensino regular', code: 'REG', academic_year_id: 'year-a' }] as Row[] };
   },
 };
 
