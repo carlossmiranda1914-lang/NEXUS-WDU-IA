@@ -7,6 +7,7 @@ import {
   canManageAcademicYear,
   canTransitionAcademicYear,
 } from './academic-year-policy.ts';
+import { resolveEnrollmentTemporalContext } from './enrollment-temporal-context.ts';
 
 function reject(res: Response, status: number, error: string) {
   return res.status(status).json({ error });
@@ -22,12 +23,18 @@ function validDate(value: unknown): value is string {
     && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
 }
 
-function academicYearActor(req: AuthRequest, res: Response) {
+function institutionActor(req: AuthRequest, res: Response) {
   const context = req.institutionalContext;
   if (!context) {
     reject(res, 401, 'Autenticação institucional necessária.');
     return null;
   }
+  return context;
+}
+
+function academicYearActor(req: AuthRequest, res: Response) {
+  const context = institutionActor(req, res);
+  if (!context) return null;
   if (!canManageAcademicYear(context.role)) {
     reject(res, 403, 'Apenas a administração ou direção pode gerir anos letivos.');
     return null;
@@ -48,6 +55,28 @@ function parseDefinition(body: unknown) {
 }
 
 export function registerAcademicYearRoutes(app: Application) {
+  app.get('/api/enrollments/context', requireAuth, async (req: AuthRequest, res: Response) => {
+    const context = institutionActor(req, res); if (!context) return;
+    try {
+      const temporal = await resolveEnrollmentTemporalContext(pool, context.institutionId);
+      return res.json({
+        institution: { id: context.institutionId, name: context.institutionName },
+        academicYear: temporal.academicYear,
+        offers: temporal.offers.map((offer) => ({
+          id: offer.id,
+          name: offer.name,
+          code: offer.code,
+          academicYearId: offer.academicYearId,
+          academic_year_id: offer.academicYearId,
+          academic_year_name: temporal.academicYear?.name ?? null,
+        })),
+      });
+    } catch (error) {
+      console.error('[ENROLLMENTS] temporal context', error);
+      return reject(res, 500, 'Não foi possível carregar o contexto temporal de matrícula.');
+    }
+  });
+
   app.post('/api/enrollments/setup', requireAuth, async (req: AuthRequest, res: Response) => {
     const context = academicYearActor(req, res); if (!context) return;
     return reject(res, 410, 'Configuração legada desativada. Gira o ano letivo através de /api/academic-years e as ofertas separadamente.');
