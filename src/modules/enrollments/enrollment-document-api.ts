@@ -40,7 +40,7 @@ export async function listEnrollmentDocuments(pool: EnrollmentDocumentPool, cont
   const application = await pool.query('SELECT id FROM enrollment_applications WHERE id = $1 AND institution_id = $2', [enrollmentId, context.institutionId]);
   if (!application.rowCount) throw new EnrollmentDocumentApiError('NOT_FOUND', 'Matrícula não encontrada nesta instituição.');
   const result = await pool.query(
-    `SELECT id, document_type, status, evidence_reference, verified_by, verified_at, created_at, updated_at
+    `SELECT id, document_type, required, source_requirement_id, status, evidence_reference, verified_by, verified_at, created_at, updated_at
        FROM enrollment_documents
       WHERE enrollment_application_id = $1 AND institution_id = $2
       ORDER BY document_type ASC`,
