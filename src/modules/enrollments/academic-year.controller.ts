@@ -48,6 +48,11 @@ function parseDefinition(body: unknown) {
 }
 
 export function registerAcademicYearRoutes(app: Application) {
+  app.post('/api/enrollments/setup', requireAuth, async (req: AuthRequest, res: Response) => {
+    const context = academicYearActor(req, res); if (!context) return;
+    return reject(res, 410, 'Configuração legada desativada. Gira o ano letivo através de /api/academic-years e as ofertas separadamente.');
+  });
+
   app.get('/api/academic-years', requireAuth, async (req: AuthRequest, res: Response) => {
     const context = academicYearActor(req, res); if (!context) return;
     try {
