@@ -1,5 +1,5 @@
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
-import type { EnrollmentStatus } from './enrollment-policy.ts';
+import { canManageEnrollment, type EnrollmentStatus } from './enrollment-policy.ts';
 import {
   canManageEnrollmentDocuments,
   canTransitionEnrollmentDocument,
@@ -35,6 +35,7 @@ function validUuid(value: unknown): value is string {
 
 export async function listEnrollmentDocuments(pool: EnrollmentDocumentPool, context: InstitutionalContext, enrollmentId: string) {
   if (!validUuid(enrollmentId)) throw new EnrollmentDocumentApiError('INVALID_INPUT', 'Matrícula inválida.');
+  if (!canManageEnrollment(context.role)) throw new EnrollmentDocumentApiError('FORBIDDEN', 'O seu papel não pode consultar documentos de matrícula.');
   const application = await pool.query('SELECT id FROM enrollment_applications WHERE id = $1 AND institution_id = $2', [enrollmentId, context.institutionId]);
   if (!application.rowCount) throw new EnrollmentDocumentApiError('NOT_FOUND', 'Matrícula não encontrada nesta instituição.');
   const result = await pool.query(
