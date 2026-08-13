@@ -23,10 +23,10 @@ expect('unavailable product language', 'Ainda não disponível');
 expect('selected stage contextual heading', 'selectedStage?.label');
 expect('selected stage contextual description', 'selectedStage?.description');
 expect('selected stage process count', 'processo{visible.length === 1');
-expect('selected stage badge', 'Etapa do fluxo');
 expect('simplified pipeline typography', 'truncate text-sm font-semibold');
 expect('whole card indicates navigation', 'group-hover:translate-x-0.5');
 
+reject('redundant selected-stage badge removed', 'Etapa do fluxo');
 reject('repeated open-stage label removed', 'Abrir etapa <ChevronRight');
 reject('technical backend language removed', 'Domínio ainda não persistido');
 reject('pipeline must not become separate top-level navigation', "{ id: 'documents', label: 'Documentos' }");
