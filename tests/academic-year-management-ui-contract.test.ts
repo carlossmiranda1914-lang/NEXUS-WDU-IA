@@ -7,8 +7,10 @@ const assert = (condition: unknown, message: string) => { assertions += 1; if (!
 assert(source.includes("['admin','director'].includes(currentRole)"), 'Only admin/director UI roles may render the management screen.');
 assert(source.includes("api('/api/academic-years')"), 'The UI must load academic years from the lifecycle API.');
 assert(source.includes("editing?'PATCH':'POST'"), 'Draft edits and draft creation must use distinct API methods.');
-assert(source.includes("/activate"), 'The UI must expose explicit activation.');
-assert(source.includes("/close"), 'The UI must expose explicit closure.');
+assert(source.includes("action:'activate'|'close'"), 'Lifecycle actions must be constrained to activate/close.');
+assert(source.includes('`/api/academic-years/${year.id}/${action}`'), 'Lifecycle requests must target the selected academic year action endpoint.');
+assert(source.includes("transition(year,'activate')"), 'The UI must expose explicit activation.');
+assert(source.includes("transition(year,'close')"), 'The UI must expose explicit closure.');
 assert(source.includes("year.status!=='draft'"), 'Only draft years may enter edit mode.');
 assert(source.includes('não pode voltar a Planeamento'), 'Activation must communicate irreversibility.');
 assert(source.includes('não pode voltar a Ativo'), 'Closure must communicate irreversibility.');
