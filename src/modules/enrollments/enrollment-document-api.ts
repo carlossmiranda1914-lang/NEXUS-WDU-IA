@@ -1,5 +1,6 @@
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
-import { canManageEnrollment, type EnrollmentStatus } from './enrollment-policy.ts';
+import type { EnrollmentStatus } from './enrollment-policy.ts';
+import { canManageEnrollment } from './enrollment-policy.ts';
 import {
   canManageEnrollmentDocuments,
   canTransitionEnrollmentDocument,
@@ -122,9 +123,9 @@ export async function transitionEnrollmentDocument(pool: EnrollmentDocumentPool,
     const updated = await client.query(
       `UPDATE enrollment_documents
           SET status = $1,
-              evidence_reference = CASE WHEN $1 = 'submitted' THEN $2 ELSE evidence_reference END,
-              verified_by = CASE WHEN $1 = 'verified' THEN $3 ELSE NULL END,
-              verified_at = CASE WHEN $1 = 'verified' THEN now() ELSE NULL END,
+              evidence_reference = CASE WHEN $1 = 'submitted' THEN $2::text ELSE evidence_reference END,
+              verified_by = CASE WHEN $1 = 'verified' THEN $3::uuid ELSE NULL::uuid END,
+              verified_at = CASE WHEN $1 = 'verified' THEN now() ELSE NULL::timestamptz END,
               updated_at = now()
         WHERE id = $4 AND enrollment_application_id = $5 AND institution_id = $6
         RETURNING id, document_type, status, evidence_reference, verified_by, verified_at, updated_at`,
