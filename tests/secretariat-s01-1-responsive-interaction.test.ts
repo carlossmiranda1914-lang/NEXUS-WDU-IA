@@ -24,7 +24,7 @@ expectContains('Unavailable pipeline stages must remain disabled.', 'disabled={!
 expectContains('Pipeline click must filter by real persisted statuses.', 'setStatusFilter(stage.statuses)');
 expectContains('Entry pipeline stage must route to Entradas.', "stage.id === 'entry' ? 'entries'");
 expectContains('Activation pipeline stage must route to Alunos.', "stage.id === 'activation' ? 'students'");
-expectContains('Available pipeline stages must communicate affordance.', 'Abrir etapa <ChevronRight');
+expectContains('Available pipeline stages must communicate affordance through the whole actionable card.', 'cursor-pointer');
 expectContains('Search input must have accessible label.', 'aria-label="Procurar processos"');
 expectContains('Search text must have sufficient icon separation.', 'pl-12 pr-3 text-sm');
 expectNotContains('Old two-column mobile action grid must be gone.', 'grid-cols-[auto_minmax(0,1fr)]');
