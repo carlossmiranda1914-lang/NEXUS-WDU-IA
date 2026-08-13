@@ -8,6 +8,7 @@ const expect = (label: string, token: string, source: string) => { if (!source.i
 expect('document states explicit', "['pending', 'submitted', 'verified', 'rejected']", policy);
 expect('mutable enrollment states explicit', 'MUTABLE_ENROLLMENT_STATUSES', policy);
 expect('service locks mutable row', 'FOR UPDATE', service);
+expect('read uses enrollment role policy', 'canManageEnrollment(context.role)', service);
 expect('creation uses document policy', 'canManageEnrollmentDocuments', service);
 expect('transition uses document policy', 'canTransitionEnrollmentDocument', service);
 expect('submission requires evidence', 'validEvidenceReference', service);
@@ -16,4 +17,4 @@ expect('document transition audited', 'document_status_changed', service);
 expect('institution context scopes service', 'context.institutionId', service);
 
 if (failures.length) throw new Error(failures.join('\n'));
-console.log('Secretariat S02.3 document service contract passed (9 assertions).');
+console.log('Secretariat S02.3 document service contract passed (10 assertions).');
