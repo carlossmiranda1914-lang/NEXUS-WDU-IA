@@ -39,7 +39,7 @@ The former existing-student HTTP 500 caused by persistent-schema drift on `peopl
 
 ### S03 — Professional enrollment process and persisted stages
 
-Issue #38 is the active functional priority.
+Issue #38 is the active functional priority and owns the implementation contract.
 
 S03 must turn an enrollment into a resumable institutional process whose progress, blockers, responsibility and next action are derived from real persisted domain state. It must not become a second source of truth for identity, registration, documents, Academic Year, offers or lifecycle.
 
@@ -53,7 +53,7 @@ S03 explicitly does not implement later roadmap scope:
 
 Until those domains exist, S03 must not display synthetic completion, financial state or downstream activation. Future-domain steps are omitted from the S03 progress model rather than faked.
 
-The implementation contract must preserve the existing enrollment lifecycle statuses in `enrollment-policy.ts` and add process/stage persistence without inventing a competing enrollment state machine.
+The implementation contract preserves the existing enrollment lifecycle statuses in `enrollment-policy.ts`; process/stage persistence may orchestrate those states but may not introduce a competing enrollment state machine.
 
 ## 4. Academic-year work
 
