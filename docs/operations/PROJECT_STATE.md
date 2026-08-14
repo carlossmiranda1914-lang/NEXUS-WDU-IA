@@ -9,7 +9,7 @@ This file records the current factual engineering state only. It is not a histor
 - Repository: `carlossmiranda1914-lang/NEXUS-WDU-IA`.
 - Canonical local checkout: `C:\Users\Administrador\NEXUS-WDU-IA-main`.
 - Main development lineage for the enrollment/Secretariat vertical has been `feature/enrollment-vertical-vnext-rebuild` and subsequent S02 branches.
-- The current knowledge-control branch was created from `feature/secretariat-s02-final-complete` to avoid mixing governance documentation with functional code changes.
+- Current S02 final-closure branch: `feature/secretariat-s02-final-complete`.
 - Existing repository documentation already contains architecture, mission, product and Definition-of-Done material. This control layer references those documents instead of replacing them.
 
 ## 2. Secretariat vertical status
@@ -35,46 +35,21 @@ The repository contains the following implemented S02 capabilities:
 
 ### S02 current release status
 
-S02 must NOT yet be treated as fully closed for real-user release.
+The S02 engineering blocker is corrected and its technical closure gates pass. Issue `#37` remains open for external audit/release decision; this repository state does not activate S03.
 
-The latest manual visual validation exposed a blocking defect in the `Existing student` path:
+The `Existing student` HTTP 500 was reproduced against a legacy PostgreSQL schema and traced to schema drift: Person resolution selected `people.birth_date`, while the persistent schema did not contain that column, causing PostgreSQL error `42703` and the controller's unexpected-error fallback.
 
-- UI action: confirm an existing student during enrollment intake;
-- observed result: generic `Nao foi possivel concluir a operacao de matricula.` error;
-- backend classification: the generic controller fallback is used for an unexpected/unhandled error, therefore this is effectively an HTTP 500 path rather than a valid `NO_MATCH`, `LOCAL_MATCH` or review outcome;
-- release classification: BLOCKER.
+The smallest owning-layer correction is forward-only migration `0015_s02_existing_student_schema_reconciliation.sql`, which adds the nullable `people.birth_date DATE` column idempotently. Historical migration `0007` remains immutable. A PostgreSQL regression now proves the same registered HTTP handler returns the generic HTTP 500 before reconciliation and `LOCAL_MATCH` after migration `0015` is applied twice.
 
-The code path depends on the vNext schema, including `people`, `student_profiles`, `enrollment_applications`, `people.birth_date`, `student_profiles.student_number` and `student_profiles.legacy_student_id`.
+Schema safety is now supported by a read-only DB preflight and an explicitly targeted, confirmation-gated reconciliation runner. Clean-schema migration isolation, S01/S02 regression matrices, lint, TypeScript/build gates and real browser validation are part of the S02 final-closure evidence.
 
-A structural risk was identified during diagnosis: server startup `DB-INIT` provisions/self-heals legacy operational tables, but it does not itself prove that the complete vNext enrollment migration chain is applied to the operational database. Therefore a server startup success message is not sufficient evidence that enrollment schema parity exists.
-
-The last known local S02 final registration migration runner applied and verified the S02-final columns successfully, but that verification alone does not prove the entire historical migration chain was present in the operational database.
+Real browser validation passed in desktop and mobile widths against the dedicated test database: the safe local match was shown, the desktop flow continued to full registration, mobile had no horizontal overflow, and a repeated process start was rejected by the anti-duplication invariant.
 
 ## 3. Current active priority
 
-### Priority: close S02 as a real operational workflow
+### Priority: external S02 audit and release decision
 
-Do not start S03 while the existing-student enrollment path can fail with an unexpected server error.
-
-Required closure sequence:
-
-1. Reproduce the existing-student failure with PostgreSQL-backed evidence.
-2. Prove operational schema compatibility for every table/column used by Person resolution and intake.
-3. Identify the exact root cause of the unexpected error.
-4. Fix the smallest correct layer; do not patch the UI to hide a backend failure.
-5. Add a permanent regression test for existing-student resolution/intake.
-6. Verify at least these outcomes:
-   - new student / no match;
-   - safe local existing-student match;
-   - ambiguous/review-required match;
-   - duplicate prevention;
-   - idempotent retry;
-   - institutional isolation;
-   - persistence of full registration;
-   - document and registration validation gates.
-7. Run relevant S01/S02 regressions, migrations, TypeScript/static checks and production build.
-8. Repeat the real browser flow in desktop and mobile widths.
-9. Only then mark S02 closed and choose S03 or another product priority.
+Preserve the completed S02 evidence, keep issue `#37` open for independent audit/release decision, and do not start S03 until that decision explicitly selects the next priority.
 
 ## 4. Academic-year work
 
@@ -88,8 +63,8 @@ Earlier planning material identified operational academic-year management as an 
 
 ## 5. Known operational risks
 
-- Operational DB schema parity is not yet governed strongly enough by server startup evidence.
-- A generic 500 remains observable in a normal existing-student enrollment user path until root cause is fixed.
+- Server startup `DB-INIT` is not a substitute for the migration/preflight gates; deployment operations must continue to run the explicit schema contract.
+- The operational migration runner is intentionally confirmation-gated; deployment evidence must identify the exact target without exposing credentials.
 - Local working trees have previously contained unrelated modified/untracked files; destructive Git operations are prohibited without explicit verified recovery intent.
 - Historical conversation handoffs may be stale relative to the repository. Use them as context, never as the final source of truth.
 
