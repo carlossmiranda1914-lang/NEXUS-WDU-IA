@@ -19,69 +19,48 @@ S01 established the operational Secretariat workspace and its visual/interaction
 
 ### S02 — DONE
 
-S02 provides the real enrollment intake foundation:
-
-- explicit new-student versus existing-student intent;
-- protected server-side Person resolution;
-- idempotent enrollment intake;
-- enrollment lifecycle actions;
-- enrollment document domain/API;
-- versioned document requirements and enrollment snapshots;
-- validation gates for missing document policy / unverified required documents;
-- document checklist UI integration;
-- full-registration profile work for student/guardian/enrollment administrative data;
-- PostgreSQL-backed registration and schema-drift regressions;
-- Academic Year temporal closure with institution-scoped historical filtering.
-
-The former existing-student HTTP 500 caused by persistent-schema drift on `people.birth_date` is closed by forward-only migration `0015_s02_existing_student_schema_reconciliation.sql` and permanent PostgreSQL regression. The audited S02 head passed the remote Secretariat Quality Gate before integration into `main`.
+S02 provides the real enrollment intake foundation, including protected Person resolution, idempotent intake, lifecycle, registration data, document requirements, schema-drift protection and Academic Year temporal closure. The audited S02 head passed the remote Secretariat Quality Gate before integration into `main`.
 
 ## 3. Current active priority
 
 ### S03 — Professional enrollment process and persisted stages
 
-Issue #38 is the active functional priority and is the authoritative implementation contract for S03.
+Issue #38 is the active functional priority and the authoritative implementation contract.
 
-S03 must turn an enrollment into a resumable institutional process whose progress, blockers, responsibility and next action are derived from real persisted domain state. It must not become a second source of truth for identity, registration, documents, Academic Year, offers or lifecycle.
+S03 turns an enrollment into a resumable institutional process whose progress, blockers, responsibility and next action come from real persisted domain state. It does not create a second source of truth for identity, registration, documents, Academic Year, offers or enrollment lifecycle.
 
-The S03 contract is constrained by the canonical Enrollment + Student 360 blueprint: `Entrada -> Resolver identidade -> Resolver relações -> Elegibilidade/oferta -> Checklist -> Recolha/verificação -> Ready for decision`. S03 ends at a technically and operationally valid `validated` enrollment ready for the later activation/handoff phase.
+Canonical process scope for S03:
 
-S03 explicitly does not implement later roadmap scope:
+`Entrada -> Identidade resolvida -> Dados/relacoes -> Oferta/contexto -> Requisitos/documentos -> Revisao -> Ready for decision`
+
+S03 ends at an enrollment that legitimately reaches existing lifecycle state `validated`.
+
+Roadmap boundaries:
 
 - S04 owns institutional requirement configuration;
-- S05 owns `validated -> active` activation and downstream Student 360 handoff;
-- S07 owns real Finance integration.
+- S05 owns `validated -> active` and downstream Student 360 handoff;
+- S07 owns Finance integration.
 
-Until those domains exist, S03 must not display synthetic completion, financial state or downstream activation. Future-domain steps are omitted from the S03 progress model rather than faked.
+S03 must not fake future-domain states. It preserves the existing lifecycle in `enrollment-policy.ts`; persisted process stages orchestrate and explain that lifecycle but do not replace it.
 
-The implementation contract preserves the existing enrollment lifecycle statuses in `enrollment-policy.ts`; process/stage persistence may orchestrate those states but may not introduce a competing enrollment state machine.
-
-The first implementation slice must prioritize backend/domain persistence and API contracts before frontend orchestration. UI becomes READY only after the persisted process projection and transition gates are proven with PostgreSQL.
+Backend/domain persistence and API contracts are implemented and proven with PostgreSQL before frontend orchestration.
 
 ## 4. Academic-year work
 
-Academic-year governance implements:
-
-`draft -> active -> closed`
-
-with a single active academic year per institution and authority reserved for appropriate institutional roles.
-
-`GET /api/enrollments` accepts an optional institution-scoped `academicYearId` for historical reads. Historical queries do not change the active institutional year. Enrollment context exposes only active offers belonging to an active year.
+Academic-year governance implements `draft -> active -> closed`, one active year per institution, explicit historical filtering and institution-scoped enrollment context.
 
 ## 5. Known operational risks / non-blocking debt
 
-- Server startup `DB-INIT` is not a substitute for migration/preflight gates; deployment operations must continue to run explicit schema verification.
-- Build retains pre-existing bundle-size and direct-eval warnings that are not S03 blockers but remain technical debt.
-- Historical conversation handoffs may be stale relative to the repository. Use them as context, never as final source of truth.
-- The historical local stash must not be destroyed by unrelated work.
+- Server startup `DB-INIT` is not a substitute for migration/preflight gates.
+- Build retains pre-existing bundle-size and direct-eval warnings.
+- Historical handoffs may be stale relative to repository truth.
+- Historical local stash must not be destroyed by unrelated work.
 
 ## 6. Existing canonical documentation
 
-Do not duplicate these subjects in new files without a clear reason:
-
 - Architecture: `docs/ARCHITECTURE_V4.md` and `docs/architecture/`
 - Definition of Ready/Done/Evidence: `docs/DEFINITION_READY_DONE_EVIDENCE.md`
-- Codex workflow: `docs/WORKFLOW_CODEX.md`
-- Mission template: `docs/MISSION_CODEX_TEMPLATE.md`
+- Workflow: `docs/WORKFLOW_CODEX.md`
 - Canonical source hierarchy: `docs/product/NEXUS_CANONICAL_SOURCES.md`
 - Enrollment + Student 360 blueprint: `docs/product/MISSION_08A_ENROLLMENT_STUDENT360_BLUEPRINT.md`
 - Product decisions: `docs/product/`
@@ -89,12 +68,4 @@ Do not duplicate these subjects in new files without a clear reason:
 
 ## 7. Update rule
 
-Update this file only when one of these changes materially:
-
-- active priority;
-- release-blocking defect status;
-- branch/release state;
-- major implemented capability;
-- major verified architectural risk.
-
-Do not append day-by-day logs here. Use commits, PRs, issues and mission evidence for history.
+Update only when active priority, blocker status, branch/release state, major capability or architectural risk changes materially.
