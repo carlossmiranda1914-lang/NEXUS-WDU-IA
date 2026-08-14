@@ -8,6 +8,8 @@
     "dev:test": "tsx scripts/run-test-server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
+    "nexus:preflight": "tsx scripts/nexus-preflight.ts",
+    "nexus:preflight:db": "tsx scripts/nexus-preflight.ts --require-db",
     "test:integrity": "tsx test-integrity.ts",
     "test:auth": "tsx test-auth-stabilization.ts",
     "test:schema": "tsx scripts/verify-vnext-schema.ts",
