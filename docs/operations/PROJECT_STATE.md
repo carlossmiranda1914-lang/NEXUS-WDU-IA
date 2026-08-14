@@ -55,6 +55,8 @@ Until those domains exist, S03 must not display synthetic completion, financial 
 
 The implementation contract preserves the existing enrollment lifecycle statuses in `enrollment-policy.ts`; process/stage persistence may orchestrate those states but may not introduce a competing enrollment state machine.
 
+The first implementation slice must prioritize backend/domain persistence and API contracts before frontend orchestration. UI becomes READY only after the persisted process projection and transition gates are proven with PostgreSQL.
+
 ## 4. Academic-year work
 
 Academic-year governance implements:
