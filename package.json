@@ -36,7 +36,7 @@
     "test:enrollment-operations-ui": "tsx tests/enrollment-operations-ui-contract.test.ts",
     "test:enrollment-vnext-layer1": "npm run test:enrollment-operations-model && npm run test:enrollment-operations-ui && npm run test:t6",
     "test:migrations:isolated": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx scripts/verify-migrations-isolated.ts",
-    "test:database:setup": "tsx scripts/setup-test-database.ts",
+    "test:database:setup": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx scripts/setup-test-database.ts",
     "test:identity": "tsx scripts/seed-test-institutional-identity.ts",
     "migrate:audit": "tsx scripts/apply-audit-observability-migration.ts",
     "migrate:enrollment": "tsx scripts/apply-enrollment-migration.ts",
