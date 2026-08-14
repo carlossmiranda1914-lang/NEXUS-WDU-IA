@@ -45,6 +45,7 @@ const happyClient = new ScriptedClient((sql) => {
   if (sql.startsWith('INSERT INTO people')) return { rows: [{ id: 'person-1' }], rowCount: 1 };
   if (sql.startsWith('INSERT INTO student_profiles')) return { rows: [{ id: 'profile-1' }], rowCount: 1 };
   if (sql.startsWith('INSERT INTO enrollment_applications')) return { rows: [{ id: 'enrollment-1' }], rowCount: 1 };
+  if (sql.includes('FROM enrollment_document_policies')) return { rows: [], rowCount: 0 };
   if (sql.startsWith('INSERT INTO enrollment_events')) return { rows: [], rowCount: 1 };
   if (sql.startsWith('UPDATE enrollment_intake_commands')) return { rows: [], rowCount: 1 };
   throw new Error(`Unexpected SQL in happy path: ${sql}`);
@@ -84,6 +85,7 @@ const reuseClient = new ScriptedClient((sql, values) => {
     return { rows: [{ person_id: 'person-existing', student_profile_id: 'profile-existing' }], rowCount: 1 };
   }
   if (sql.startsWith('INSERT INTO enrollment_applications')) return { rows: [{ id: 'enrollment-2' }], rowCount: 1 };
+  if (sql.includes('FROM enrollment_document_policies')) return { rows: [], rowCount: 0 };
   if (sql.startsWith('INSERT INTO enrollment_events')) return { rows: [], rowCount: 1 };
   if (sql.startsWith('UPDATE enrollment_intake_commands')) return { rows: [], rowCount: 1 };
   throw new Error(`Unexpected SQL in reuse path: ${sql}`);

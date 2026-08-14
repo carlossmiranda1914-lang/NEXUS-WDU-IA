@@ -12,8 +12,13 @@ import {
   startEnrollmentIntake,
 } from './enrollment-intake-api.ts';
 import { EnrollmentIntakeError } from './enrollment-intake.ts';
-import { canConfigureEnrollment, canManageEnrollment, canTransitionEnrollment, EnrollmentStatus, isEnrollmentStatus } from './enrollment-policy.ts';
+import { canManageEnrollment, canTransitionEnrollment, EnrollmentStatus, isEnrollmentStatus } from './enrollment-policy.ts';
 import { registerAcademicYearRoutes } from './academic-year.controller.ts';
+import { registerEnrollmentDocumentRoutes } from './enrollment-document.controller.ts';
+import { documentValidationGate } from './enrollment-document-requirement-policy.ts';
+import { registerEnrollmentRegistrationRoutes } from './enrollment-registration.controller.ts';
+import { getEnrollmentRegistrationReadiness } from './enrollment-registration-api.ts';
+import { REGISTRATION_FIELD_LABELS } from './enrollment-registration-policy.ts';
 
 function reject(res: Response, status: number, error: string) { return res.status(status).json({ error }); }
 
@@ -26,16 +31,6 @@ function enrollmentActor(req: AuthRequest, res: Response) {
   if (!context) { reject(res, 401, 'Autenticação institucional necessária.'); return null; }
   if (!canManageEnrollment(context.role)) { reject(res, 403, 'O seu papel não pode gerir matrículas.'); return null; }
   return context;
-}
-
-function enrollmentConfigurator(req: AuthRequest, res: Response) {
-  const context = enrollmentActor(req, res); if (!context) return null;
-  if (!canConfigureEnrollment(context.role)) { reject(res, 403, 'Apenas a administração ou direção pode configurar o ano letivo e as ofertas.'); return null; }
-  return context;
-}
-
-function validDate(value: unknown): value is string {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
 }
 
 function rejectDomainError(res: Response, error: unknown) {
@@ -67,67 +62,14 @@ function rejectDomainError(res: Response, error: unknown) {
 
 export function registerEnrollmentRoutes(app: Application) {
   registerAcademicYearRoutes(app);
-  app.get('/api/enrollments/setup', requireAuth, async (req: AuthRequest, res: Response) => {
-    const context = enrollmentConfigurator(req, res); if (!context) return;
-    try {
-      const result = await pool.query(
-        `SELECT y.id AS academic_year_id, y.name AS academic_year_name, y.starts_on, y.ends_on, y.status AS academic_year_status,
-                o.id AS offer_id, o.name AS offer_name, o.code AS offer_code, o.status AS offer_status
-           FROM academic_years y
-      LEFT JOIN enrollment_offers o ON o.academic_year_id = y.id AND o.institution_id = y.institution_id
-          WHERE y.institution_id = $1
-          ORDER BY y.starts_on DESC, o.name ASC`, [context.institutionId],
-      );
-      res.json({ configuration: result.rows });
-    } catch (error) { console.error('[ENROLLMENTS] setup list', error); return reject(res, 500, 'Não foi possível carregar a configuração institucional.'); }
-  });
-
-  app.post('/api/enrollments/setup', requireAuth, async (req: AuthRequest, res: Response) => {
-    const context = enrollmentConfigurator(req, res); if (!context) return;
-    const { academicYearName, startsOn, endsOn, offerName, offerCode } = req.body ?? {};
-    if (typeof academicYearName !== 'string' || academicYearName.trim().length < 4 || academicYearName.trim().length > 80) return reject(res, 400, 'Indique o nome do ano letivo.');
-    if (!validDate(startsOn) || !validDate(endsOn) || startsOn >= endsOn) return reject(res, 400, 'Indique datas válidas para o ano letivo.');
-    if (typeof offerName !== 'string' || offerName.trim().length < 2 || offerName.trim().length > 160) return reject(res, 400, 'Indique o nome da oferta de matrícula.');
-    if (typeof offerCode !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{1,39}$/.test(offerCode)) return reject(res, 400, 'O código da oferta deve ter entre 2 e 40 letras, números, hífen ou sublinhado.');
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const year = await client.query<{ id: string }>(
-        `INSERT INTO academic_years (institution_id, name, starts_on, ends_on, status)
-         VALUES ($1, $2, $3, $4, 'active')
-         ON CONFLICT (institution_id, name) DO UPDATE SET starts_on = EXCLUDED.starts_on, ends_on = EXCLUDED.ends_on, status = 'active', updated_at = now()
-         RETURNING id`, [context.institutionId, academicYearName.trim(), startsOn, endsOn],
-      );
-      const offer = await client.query<{ id: string }>(
-        `INSERT INTO enrollment_offers (institution_id, academic_year_id, name, code, status)
-         VALUES ($1, $2, $3, $4, 'active')
-         ON CONFLICT (institution_id, code) DO UPDATE SET academic_year_id = EXCLUDED.academic_year_id, name = EXCLUDED.name, status = 'active', updated_at = now()
-         RETURNING id`, [context.institutionId, year.rows[0].id, offerName.trim(), offerCode.trim()],
-      );
-      await client.query('COMMIT');
-      res.status(201).json({ academicYearId: year.rows[0].id, offerId: offer.rows[0].id });
-    } catch (error) {
-      await client.query('ROLLBACK'); console.error('[ENROLLMENTS] setup create', error); return reject(res, 500, 'Não foi possível guardar a configuração institucional.');
-    } finally { client.release(); }
-  });
-
-  app.get('/api/enrollments/context', requireAuth, async (req: AuthRequest, res: Response) => {
-    const context = enrollmentActor(req, res); if (!context) return;
-    try {
-      const result = await pool.query(
-        `SELECT o.id, o.name, o.code, o.academic_year_id, y.name AS academic_year_name
-         FROM enrollment_offers o INNER JOIN academic_years y ON y.id = o.academic_year_id
-         WHERE o.institution_id = $1 AND o.status = 'active' AND y.status = 'active'
-         ORDER BY y.starts_on DESC, o.name ASC`, [context.institutionId],
-      );
-      res.json({ institution: { id: context.institutionId, name: context.institutionName }, offers: result.rows });
-    } catch (error) { console.error('[ENROLLMENTS] context', error); return reject(res, 500, 'Não foi possível carregar a configuração de matrícula.'); }
-  });
-
+  registerEnrollmentDocumentRoutes(app);
+  registerEnrollmentRegistrationRoutes(app);
   app.get('/api/enrollments', requireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
     const status = req.query.status;
     if (status !== undefined && !isEnrollmentStatus(status)) return reject(res, 400, 'Estado de matrícula inválido.');
+    const academicYearId = req.query.academicYearId;
+    if (academicYearId !== undefined && !validUuid(academicYearId)) return reject(res, 400, 'Ano letivo inválido.');
     try {
       const result = await pool.query(
         `SELECT e.id, e.status, e.created_at, e.updated_at, student.name AS student_name,
@@ -137,8 +79,11 @@ export function registerEnrollmentRoutes(app: Application) {
          LEFT JOIN people guardian ON guardian.id = e.guardian_person_id
          INNER JOIN enrollment_offers offer ON offer.id = e.offer_id
          INNER JOIN academic_years year ON year.id = e.academic_year_id
-         WHERE e.institution_id = $1 AND ($2::text IS NULL OR e.status = $2) ORDER BY e.updated_at DESC`,
-        [context.institutionId, status ?? null],
+         WHERE e.institution_id = $1
+           AND ($2::text IS NULL OR e.status = $2)
+           AND ($3::uuid IS NULL OR e.academic_year_id = $3)
+         ORDER BY e.updated_at DESC`,
+        [context.institutionId, status ?? null, academicYearId ?? null],
       );
       res.json({ enrollments: result.rows });
     } catch (error) { console.error('[ENROLLMENTS] list', error); return reject(res, 500, 'Não foi possível carregar as matrículas.'); }
@@ -259,12 +204,48 @@ export function registerEnrollmentRoutes(app: Application) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const existing = await client.query<{ status: EnrollmentStatus }>(
-        `SELECT status FROM enrollment_applications WHERE id = $1 AND institution_id = $2 FOR UPDATE`, [req.params.id, context.institutionId],
+      const existing = await client.query<{ status: EnrollmentStatus; document_policy_id: string | null }>(
+        `SELECT status, document_policy_id FROM enrollment_applications WHERE id = $1 AND institution_id = $2 FOR UPDATE`, [req.params.id, context.institutionId],
       );
       if (!existing.rowCount) { await client.query('ROLLBACK'); return reject(res, 404, 'Matrícula não encontrada nesta instituição.'); }
       const from = existing.rows[0].status;
       if (!canTransitionEnrollment(context.role, from, target)) { await client.query('ROLLBACK'); return reject(res, 403, 'Transição de matrícula não autorizada.'); }
+
+      if (target === 'validated') {
+        const registrationGate = await getEnrollmentRegistrationReadiness(client, context.institutionId, req.params.id);
+        if (!registrationGate) {
+          await client.query('ROLLBACK');
+          return reject(res, 404, 'Matrícula não encontrada nesta instituição.');
+        }
+        if (!registrationGate.ready) {
+          await client.query('ROLLBACK');
+          const missing = registrationGate.missing.map((field) => REGISTRATION_FIELD_LABELS[field] || field).join(', ');
+          return reject(res, 409, `Complete o cadastro da matrícula antes da validação. Em falta: ${missing}.`);
+        }
+
+        const documents = await client.query<{ document_type: string; required: boolean; status: 'pending' | 'submitted' | 'verified' | 'rejected' }>(
+          'SELECT document_type, required, status FROM enrollment_documents WHERE enrollment_application_id = $1 AND institution_id = $2',
+          [req.params.id, context.institutionId],
+        );
+        const documentGate = documentValidationGate(
+          existing.rows[0].document_policy_id !== null,
+          documents.rows.map((row) => ({
+            documentType: row.document_type,
+            required: row.required,
+            status: row.status,
+          })),
+        );
+        if (!documentGate.ready) {
+          await client.query('ROLLBACK');
+          return reject(
+            res,
+            409,
+            documentGate.reason === 'POLICY_NOT_CAPTURED'
+              ? 'A política documental desta matrícula ainda não foi capturada.'
+              : 'Existem documentos obrigatórios por verificar.',
+          );
+        }
+      }
       const updated = await client.query(
         `UPDATE enrollment_applications SET status = $1, updated_by = $2, updated_at = now()
          WHERE id = $3 AND institution_id = $4 RETURNING id, status, updated_at`,
@@ -280,4 +261,3 @@ export function registerEnrollmentRoutes(app: Application) {
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   });
 }
-

@@ -16,6 +16,10 @@ const source = await readFile(
   new URL('../src/modules/enrollments/academic-year.controller.ts', import.meta.url),
   'utf8',
 );
+const enrollmentController = await readFile(
+  new URL('../src/modules/enrollments/enrollment.controller.ts', import.meta.url),
+  'utf8',
+);
 
 expect(source.includes("app.get('/api/academic-years'"), 'AY-2.1 must expose academic-year listing.');
 expect(source.includes("app.post('/api/academic-years'"), 'AY-2.1 must expose draft creation.');
@@ -30,6 +34,12 @@ expect(source.includes('WHERE institution_id = $1'), 'Academic-year listing must
 expect(source.includes('WHERE id = $1 AND institution_id = $2 FOR UPDATE'), 'Lifecycle transitions must lock only institution-owned academic years.');
 expect(source.includes('SELECT id FROM institutions WHERE id = $1 FOR UPDATE'), 'Activation must serialize lifecycle governance per institution.');
 expect(source.includes("error?.code === '23505'"), 'Unique-active conflicts must be handled as domain conflicts.');
+expect(!enrollmentController.includes("app.get('/api/enrollments/setup'"), 'Legacy setup listing must be removed.');
+expect(!enrollmentController.includes("app.post('/api/enrollments/setup'"), 'Enrollment controller must not duplicate the canonical legacy setup rejection.');
+expect(!enrollmentController.includes("app.get('/api/enrollments/context'"), 'Enrollment controller must not duplicate canonical temporal context.');
+expect(enrollmentController.includes('const academicYearId = req.query.academicYearId;'), 'Enrollment history must accept an explicit academicYearId filter.');
+expect(enrollmentController.includes('e.institution_id = $1'), 'Enrollment history must remain institution-scoped.');
+expect(enrollmentController.includes('e.academic_year_id = $3'), 'Enrollment history must constrain the requested academic year.');
 
 expect(canManageAcademicYear('institution_admin'), 'Institution admin must govern academic years.');
 expect(canManageAcademicYear('director'), 'Director must govern academic years.');

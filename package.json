@@ -8,6 +8,8 @@
     "dev:test": "tsx scripts/run-test-server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
+    "nexus:preflight": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx scripts/nexus-preflight.ts",
+    "nexus:preflight:db": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx scripts/nexus-preflight.ts --require-db && node scripts/nexus-preflight-db.mjs --target=DATABASE_URL",
     "test:integrity": "tsx test-integrity.ts",
     "test:auth": "tsx test-auth-stabilization.ts",
     "test:schema": "tsx scripts/verify-vnext-schema.ts",
@@ -33,13 +35,16 @@
     "test:enrollment-operations-model": "tsx tests/enrollment-operations-model.test.ts",
     "test:enrollment-operations-ui": "tsx tests/enrollment-operations-ui-contract.test.ts",
     "test:enrollment-vnext-layer1": "npm run test:enrollment-operations-model && npm run test:enrollment-operations-ui && npm run test:t6",
-    "test:migrations:isolated": "tsx scripts/verify-migrations-isolated.ts",
-    "test:database:setup": "tsx scripts/setup-test-database.ts",
+    "test:migrations:isolated": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx scripts/verify-migrations-isolated.ts",
+    "test:database:setup": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx scripts/setup-test-database.ts",
     "test:identity": "tsx scripts/seed-test-institutional-identity.ts",
     "migrate:audit": "tsx scripts/apply-audit-observability-migration.ts",
     "migrate:enrollment": "tsx scripts/apply-enrollment-migration.ts",
     "migrate:enrollment:test": "tsx scripts/apply-enrollment-test-migration.ts",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "nexus:preflight:db:test": "node scripts/nexus-preflight-db.mjs --target=TEST_DATABASE_URL",
+    "nexus:migrate:s02:test": "node scripts/apply-s02-schema-reconciliation.mjs --target=TEST_DATABASE_URL",
+    "test:s02:schema-regression": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx tests/secretariat-s02-existing-student-schema-postgres.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

@@ -1,0 +1,14 @@
+import { readFile } from 'node:fs/promises';
+const intake = await readFile('src/modules/enrollments/enrollment-intake.ts', 'utf8');
+const controller = await readFile('src/modules/enrollments/enrollment.controller.ts', 'utf8');
+const documents = await readFile('src/modules/enrollments/enrollment-document-api.ts', 'utf8');
+let assertions = 0;
+const assert = (condition: unknown, message: string) => { assertions += 1; if (!condition) throw new Error(message); };
+assert(intake.includes("captureEnrollmentDocumentPolicy"), 'Intake must import document policy snapshot service.');
+assert(intake.includes('await captureEnrollmentDocumentPolicy(client'), 'Intake must capture policy before commit.');
+assert(controller.includes("documentValidationGate"), 'Enrollment transition must use document validation policy.');
+assert(controller.includes("target === 'validated'"), 'Document validation gate must target validated transition.');
+assert(controller.includes('document_policy_id'), 'Transition lock must read captured policy id.');
+assert(controller.includes('Existem documentos obrigatórios por verificar.'), 'Incomplete required documents must block validation.');
+assert(documents.includes('required, source_requirement_id'), 'Document API must expose captured requirement metadata.');
+console.log(`Secretariat S02.3.2 final integration passed (${assertions} assertions).`);
