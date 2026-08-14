@@ -39,7 +39,7 @@ The former existing-student HTTP 500 caused by persistent-schema drift on `peopl
 
 ### S03 — Professional enrollment process and persisted stages
 
-Issue #38 is the active functional priority and owns the implementation contract.
+Issue #38 is the active functional priority and is the authoritative implementation contract for S03.
 
 S03 must turn an enrollment into a resumable institutional process whose progress, blockers, responsibility and next action are derived from real persisted domain state. It must not become a second source of truth for identity, registration, documents, Academic Year, offers or lifecycle.
 
