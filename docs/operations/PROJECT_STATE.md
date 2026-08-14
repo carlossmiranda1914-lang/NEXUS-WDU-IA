@@ -43,15 +43,17 @@ Issue #38 is the active functional priority.
 
 S03 must turn an enrollment into a resumable institutional process whose progress, blockers, responsibility and next action are derived from real persisted domain state. It must not become a second source of truth for identity, registration, documents, Academic Year, offers or lifecycle.
 
-Before implementation, #38 defines the authoritative S03 contract: stage model, ownership, derivation rules, API surface, persistence boundary, transitions, evidence and acceptance gates.
+The S03 contract is constrained by the canonical Enrollment + Student 360 blueprint: `Entrada -> Resolver identidade -> Resolver relações -> Elegibilidade/oferta -> Checklist -> Recolha/verificação -> Ready for decision`. S03 ends at a technically and operationally valid `validated` enrollment ready for the later activation/handoff phase.
 
 S03 explicitly does not implement later roadmap scope:
 
 - S04 owns institutional requirement configuration;
-- S05 owns activation/downstream handoff to Student 360;
+- S05 owns `validated -> active` activation and downstream Student 360 handoff;
 - S07 owns real Finance integration.
 
-Until those domains exist, S03 must use `not_applicable`/`unavailable` semantics rather than fake completion or synthetic data.
+Until those domains exist, S03 must not display synthetic completion, financial state or downstream activation. Future-domain steps are omitted from the S03 progress model rather than faked.
+
+The implementation contract must preserve the existing enrollment lifecycle statuses in `enrollment-policy.ts` and add process/stage persistence without inventing a competing enrollment state machine.
 
 ## 4. Academic-year work
 
