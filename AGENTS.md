@@ -18,7 +18,8 @@ Read, in this order:
 1. `AGENTS.md`
 2. `docs/operations/PROJECT_STATE.md`
 3. `docs/operations/ENGINEERING_PLAYBOOK.md`
-4. The relevant existing architecture/product documents for the task.
+4. `docs/operations/AGENT_TRAINING_AUTOMATION.md` when the task involves APIs, debugging, critical domains, CI, automation or autonomous execution.
+5. The relevant existing architecture/product documents for the task.
 
 Useful existing references include:
 
@@ -98,7 +99,7 @@ Use `docs/DEFINITION_READY_DONE_EVIDENCE.md` as an additional existing reference
 
 At the start of a new agent session:
 
-1. Read the three required files listed above.
+1. Read the required files listed above.
 2. Inspect `git status`, current branch and recent commits.
 3. Compare the documented current state with repository reality.
 4. If they conflict, repository reality wins and `PROJECT_STATE.md` must be corrected.
