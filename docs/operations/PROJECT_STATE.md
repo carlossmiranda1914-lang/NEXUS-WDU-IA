@@ -8,21 +8,20 @@ This file records the current factual engineering state only. It is not a histor
 
 - Repository: `carlossmiranda1914-lang/NEXUS-WDU-IA`.
 - Canonical local checkout: `C:\Users\Administrador\NEXUS-WDU-IA-main`.
-- Main development lineage for the enrollment/Secretariat vertical has been `feature/enrollment-vertical-vnext-rebuild` and subsequent S02 branches.
-- Current S02 final-closure branch: `feature/secretariat-s02-final-complete`.
+- `main` contains the audited S01 and S02 Secretariat foundations after merge of PR #61.
 - Existing repository documentation already contains architecture, mission, product and Definition-of-Done material. This control layer references those documents instead of replacing them.
 
 ## 2. Secretariat vertical status
 
-### S01
+### S01 — DONE
 
-S01 established the operational Secretariat workspace and its visual/interaction foundation. The relevant regression gates were previously validated and later included in Secretariat CI coverage.
+S01 established the operational Secretariat workspace and its visual/interaction foundation. Its regression gates remain part of the Secretariat quality gate.
 
-### S02 implemented foundations
+### S02 — DONE
 
-The repository contains the following implemented S02 capabilities:
+S02 provides the real enrollment intake foundation:
 
-- explicit new-student versus existing-student enrollment intent;
+- explicit new-student versus existing-student intent;
 - protected server-side Person resolution;
 - idempotent enrollment intake;
 - enrollment lifecycle actions;
@@ -31,46 +30,45 @@ The repository contains the following implemented S02 capabilities:
 - validation gates for missing document policy / unverified required documents;
 - document checklist UI integration;
 - full-registration profile work for student/guardian/enrollment administrative data;
-- PostgreSQL-backed registration tests and S02 registration CI.
+- PostgreSQL-backed registration and schema-drift regressions;
+- Academic Year temporal closure with institution-scoped historical filtering.
 
-### S02 current release status
-
-The S02 engineering blocker is corrected and its technical closure gates pass. Issue `#37` remains open for external audit/release decision; this repository state does not activate S03.
-
-The `Existing student` HTTP 500 was reproduced against a legacy PostgreSQL schema and traced to schema drift: Person resolution selected `people.birth_date`, while the persistent schema did not contain that column, causing PostgreSQL error `42703` and the controller's unexpected-error fallback.
-
-The smallest owning-layer correction is forward-only migration `0015_s02_existing_student_schema_reconciliation.sql`, which adds the nullable `people.birth_date DATE` column idempotently. Historical migration `0007` remains immutable. A PostgreSQL regression now proves the same registered HTTP handler returns the generic HTTP 500 before reconciliation and `LOCAL_MATCH` after migration `0015` is applied twice.
-
-Schema safety is now supported by a read-only DB preflight and an explicitly targeted, confirmation-gated reconciliation runner. Clean-schema migration isolation, S01/S02 regression matrices, lint, TypeScript/build gates and real browser validation are part of the S02 final-closure evidence.
-
-Real browser validation passed in desktop and mobile widths against the dedicated test database: the safe local match was shown, the desktop flow continued to full registration, mobile had no horizontal overflow, and a repeated process start was rejected by the anti-duplication invariant.
+The former existing-student HTTP 500 caused by persistent-schema drift on `people.birth_date` is closed by forward-only migration `0015_s02_existing_student_schema_reconciliation.sql` and permanent PostgreSQL regression. The audited S02 head passed the remote Secretariat Quality Gate before integration into `main`.
 
 ## 3. Current active priority
 
-### Priority: external S02 audit and release decision
+### S03 — Professional enrollment process and persisted stages
 
-Preserve the completed S02 evidence, keep issue `#37` open for independent audit/release decision, and do not start S03 until that decision explicitly selects the next priority.
+Issue #38 is the active functional priority.
+
+S03 must turn an enrollment into a resumable institutional process whose progress, blockers, responsibility and next action are derived from real persisted domain state. It must not become a second source of truth for identity, registration, documents, Academic Year, offers or lifecycle.
+
+Before implementation, #38 defines the authoritative S03 contract: stage model, ownership, derivation rules, API surface, persistence boundary, transitions, evidence and acceptance gates.
+
+S03 explicitly does not implement later roadmap scope:
+
+- S04 owns institutional requirement configuration;
+- S05 owns activation/downstream handoff to Student 360;
+- S07 owns real Finance integration.
+
+Until those domains exist, S03 must use `not_applicable`/`unavailable` semantics rather than fake completion or synthetic data.
 
 ## 4. Academic-year work
 
-Academic-year governance implements the lifecycle:
+Academic-year governance implements:
 
 `draft -> active -> closed`
 
 with a single active academic year per institution and authority reserved for appropriate institutional roles.
 
-The P0 temporal closure adds an optional, UUID-validated and institution-scoped `academicYearId` filter to `GET /api/enrollments`. Historical reads return the explicitly requested year without changing the active institutional year, and cross-institution year identifiers return no data.
+`GET /api/enrollments` accepts an optional institution-scoped `academicYearId` for historical reads. Historical queries do not change the active institutional year. Enrollment context exposes only active offers belonging to an active year.
 
-Enrollment temporal context now has one canonical implementation in `academic-year.controller.ts`; duplicated setup/context handlers were removed from `enrollment.controller.ts`. An active offer attached to a `draft` academic year remains unavailable for new enrollment until the year itself is explicitly active.
+## 5. Known operational risks / non-blocking debt
 
-The S02 branch is reconciled non-destructively with `origin/main`. Issue `#52` remains open for external audit; this engineering state does not close the issue or authorize S03.
-
-## 5. Known operational risks
-
-- Server startup `DB-INIT` is not a substitute for the migration/preflight gates; deployment operations must continue to run the explicit schema contract.
-- The operational migration runner is intentionally confirmation-gated; deployment evidence must identify the exact target without exposing credentials.
-- Local working trees have previously contained unrelated modified/untracked files; destructive Git operations are prohibited without explicit verified recovery intent.
-- Historical conversation handoffs may be stale relative to the repository. Use them as context, never as the final source of truth.
+- Server startup `DB-INIT` is not a substitute for migration/preflight gates; deployment operations must continue to run explicit schema verification.
+- Build retains pre-existing bundle-size and direct-eval warnings that are not S03 blockers but remain technical debt.
+- Historical conversation handoffs may be stale relative to the repository. Use them as context, never as final source of truth.
+- The historical local stash must not be destroyed by unrelated work.
 
 ## 6. Existing canonical documentation
 
@@ -80,9 +78,10 @@ Do not duplicate these subjects in new files without a clear reason:
 - Definition of Ready/Done/Evidence: `docs/DEFINITION_READY_DONE_EVIDENCE.md`
 - Codex workflow: `docs/WORKFLOW_CODEX.md`
 - Mission template: `docs/MISSION_CODEX_TEMPLATE.md`
+- Canonical source hierarchy: `docs/product/NEXUS_CANONICAL_SOURCES.md`
+- Enrollment + Student 360 blueprint: `docs/product/MISSION_08A_ENROLLMENT_STUDENT360_BLUEPRINT.md`
 - Product decisions: `docs/product/`
 - Mission records: `docs/missions/`
-- Existing S02.3.2 operational evidence: `docs/operations/S02_3_2_DOCUMENT_REQUIREMENTS_GATE.md`
 
 ## 7. Update rule
 
