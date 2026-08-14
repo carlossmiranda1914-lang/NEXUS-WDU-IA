@@ -33,7 +33,21 @@ Useful existing references include:
 
 Do not replace or duplicate these documents without a concrete reason.
 
-## 3. Work discipline
+## 3. Mandatory preflight
+
+Before production changes, run:
+
+`npm run nexus:preflight`
+
+Before enrollment, identity, migrations or other database-critical work, run:
+
+`npm run nexus:preflight:db`
+
+The preflight is read-only. It may inspect Git, documentation, package scripts, migration ordering and PostgreSQL schema compatibility, but it must not pull, stash, migrate, create data or mutate the working tree.
+
+If the result is `BLOCKED`, diagnose and resolve the blocker before implementation. Warnings require review but do not automatically authorize destructive cleanup.
+
+## 4. Work discipline
 
 For every production change:
 
@@ -52,7 +66,7 @@ Rules:
 - Never trust a browser-supplied global identity/person authority value.
 - Institutional isolation is mandatory for every read and write path.
 
-## 4. Critical-domain rules
+## 5. Critical-domain rules
 
 Enrollment, identity, academic-year governance, documents and financial/student lifecycle boundaries are critical paths.
 
@@ -67,7 +81,7 @@ For critical paths:
 - Error handling must distinguish domain rejection from unexpected server failure.
 - A generic HTTP 500 in a normal user workflow is a release blocker until root cause is identified.
 
-## 5. Frontend and UX
+## 6. Frontend and UX
 
 - The interface must remain simple, minimal, functional and progressive.
 - Do not expose several complex panels at once when a progressive flow is clearer.
@@ -76,7 +90,7 @@ For critical paths:
 - A compiled UI is not proof of a usable workflow.
 - Backend authorization and business rules remain authoritative even when the UI blocks an action.
 
-## 6. Definition of done
+## 7. Definition of done
 
 A task is not DONE because code exists or compiles.
 
@@ -95,17 +109,17 @@ DONE requires, as applicable:
 
 Use `docs/DEFINITION_READY_DONE_EVIDENCE.md` as an additional existing reference rather than duplicating its full content here.
 
-## 7. Session recovery
+## 8. Session recovery
 
 At the start of a new agent session:
 
 1. Read the required files listed above.
-2. Inspect `git status`, current branch and recent commits.
+2. Run the applicable Nexus preflight.
 3. Compare the documented current state with repository reality.
 4. If they conflict, repository reality wins and `PROJECT_STATE.md` must be corrected.
 5. Resume only the stated active priority unless the user explicitly changes priorities.
 
-## 8. Documentation hygiene
+## 9. Documentation hygiene
 
 - Keep filenames ASCII and without spaces for operational control documents.
 - Keep `PROJECT_STATE.md` factual and current; do not turn it into a historical diary.
