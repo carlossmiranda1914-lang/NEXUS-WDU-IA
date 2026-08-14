@@ -31,9 +31,10 @@ expect('server intake re-resolves identity', 'const resolution = await resolvePe
 expect('server creates only on no match', "if (resolution.status === 'NO_MATCH')", intakeApi);
 expect('server reuses local match', "if (resolution.status === 'LOCAL_MATCH' && resolution.candidatePersonId)", intakeApi);
 expect('server blocks ambiguous cases', "throw new EnrollmentIntakeApiError('IDENTITY_REVIEW_REQUIRED'", intakeApi);
+reject('new student must not be forced through visible identity confirmation', "intent === 'new' && <button", drawer);
 reject('browser must not authorize person id', 'studentPersonId:', drawer + client);
 reject('legacy enrollment write path remains forbidden', "'/api/enrollments/drafts'", drawer + client);
 reject('new path must not call resolution helper', "intent === 'new' && resolveExistingStudent", drawer);
 
 if (failures.length) throw new Error(failures.join('\n'));
-console.log('Secretariat S02.1 intake intent contract passed (20 assertions).');
+console.log('Secretariat S02.1 intake intent contract passed (21 assertions).');

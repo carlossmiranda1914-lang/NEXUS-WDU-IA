@@ -46,10 +46,20 @@ try {
     [institutionA, year.rows[0].id, `REG-A-${suffix}`, `REG-C-${suffix}`],
   );
 
+  const futureYear = await client.query<{ id: string }>(
+    "INSERT INTO academic_years (institution_id, name, starts_on, ends_on, status) VALUES ($1, $2, '2027-09-01', '2028-07-31', 'draft') RETURNING id",
+    [institutionA, `2027/2028 ${suffix}`],
+  );
+  await client.query(
+    "INSERT INTO enrollment_offers (institution_id, academic_year_id, name, code, status) VALUES ($1, $2, 'Oferta futura', $3, 'active')",
+    [institutionA, futureYear.rows[0].id, `REG-F-${suffix}`],
+  );
+
   const withOffers = await resolveEnrollmentTemporalContext(client, institutionA);
   assert(withOffers.academicYear?.status === 'active', 'Temporal context must expose only active academic year.');
   assert(withOffers.offers.length === 1, 'Only active offers from the active academic year must be exposed.');
   assert(withOffers.offers[0].name === 'Regular ativo', 'Closed offers must not leak into operational context.');
+  assert(!withOffers.offers.some((offer) => offer.name === 'Oferta futura'), 'An active offer in a draft academic year must not open future enrollment.');
 
   const isolated = await resolveEnrollmentTemporalContext(client, institutionB);
   assert(isolated.academicYear === null, 'Another institution must not see the active academic year.');

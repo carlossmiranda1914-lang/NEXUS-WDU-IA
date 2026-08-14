@@ -53,13 +53,17 @@ Preserve the completed S02 evidence, keep issue `#37` open for independent audit
 
 ## 4. Academic-year work
 
-Academic-year governance work exists in the repository lineage and introduced the lifecycle concept:
+Academic-year governance implements the lifecycle:
 
 `draft -> active -> closed`
 
 with a single active academic year per institution and authority reserved for appropriate institutional roles.
 
-Earlier planning material identified operational academic-year management as an important structural requirement. Before resuming or extending that work, agents must inspect current code and tests rather than rely on older handoff text, because S02 development continued after that handoff.
+The P0 temporal closure adds an optional, UUID-validated and institution-scoped `academicYearId` filter to `GET /api/enrollments`. Historical reads return the explicitly requested year without changing the active institutional year, and cross-institution year identifiers return no data.
+
+Enrollment temporal context now has one canonical implementation in `academic-year.controller.ts`; duplicated setup/context handlers were removed from `enrollment.controller.ts`. An active offer attached to a `draft` academic year remains unavailable for new enrollment until the year itself is explicitly active.
+
+The S02 branch is reconciled non-destructively with `origin/main`. Issue `#52` remains open for external audit; this engineering state does not close the issue or authorize S03.
 
 ## 5. Known operational risks
 
