@@ -143,7 +143,7 @@ export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentSt
 
   return <section className={`mt-6 rounded-2xl border ${compact ? 'p-4' : 'p-5'} ${light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-950/40'}`} aria-label="Cadastro completo da matrícula">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div><h3 className={`text-sm font-semibold ${light ? 'text-zinc-900' : 'text-white'}`}>Cadastro da matrícula</h3><p className={`mt-1 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Complete os dados do aluno e do encarregado. O processo só pode ser validado quando este cadastro e os documentos obrigatórios estiverem completos.</p></div>
+      <div className="min-w-0"><h3 className={`break-words text-sm font-semibold leading-5 ${light ? 'text-zinc-900' : 'text-white'}`}>Cadastro da matrícula</h3><p className={`mt-1 break-words text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Complete os dados do aluno e do encarregado. O processo só pode ser validado quando este cadastro e os documentos obrigatórios estiverem completos.</p></div>
       <span className={`w-fit shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold ${readiness.ready ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500' : 'border-amber-500/30 bg-amber-500/10 text-amber-500'}`}>{readiness.ready ? 'Cadastro completo' : 'Cadastro incompleto'}</span>
     </div>
 
@@ -202,7 +202,7 @@ export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentSt
 }
 
 function FormSection({ title, description, light, children }: { title: string; description: string; light: boolean; children: ReactNode }) {
-  return <div className={`rounded-xl border p-4 ${light ? 'border-zinc-200 bg-slate-50' : 'border-white/10 bg-zinc-900/70'}`}><div className="mb-4"><h4 className={`text-xs font-bold ${light ? 'text-zinc-900' : 'text-zinc-100'}`}>{title}</h4><p className={`mt-1 text-[11px] leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{description}</p></div>{children}</div>;
+  return <div className={`min-w-0 rounded-xl border p-4 ${light ? 'border-zinc-200 bg-slate-50' : 'border-white/10 bg-zinc-900/70'}`}><div className="mb-4 min-w-0"><h4 className={`break-words text-xs font-bold leading-5 ${light ? 'text-zinc-900' : 'text-zinc-100'}`}>{title}</h4><p className={`mt-1 break-words text-[11px] leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{description}</p></div>{children}</div>;
 }
 
 function TextField({ label, value, onChange, className, labelClass, disabled, type = 'text', placeholder }: { label: string; value: string; onChange: (value: string) => void; className: string; labelClass: string; disabled: boolean; type?: string; placeholder?: string }) {

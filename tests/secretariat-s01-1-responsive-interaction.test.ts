@@ -27,6 +27,11 @@ expectContains('Activation pipeline stage must route to Alunos.', "stage.id === 
 expectContains('Available pipeline stages must communicate affordance through the whole actionable card.', 'cursor-pointer');
 expectContains('Search input must have accessible label.', 'aria-label="Procurar processos"');
 expectContains('Search text must have sufficient icon separation.', 'pl-12 pr-3 text-sm');
+expectContains('Process rows must become vertical cards before the tablet layout.', 'grid-cols-1 gap-x-5 gap-y-3');
+expectContains('Process rows must use a hybrid two-column tablet layout.', 'sm:grid-cols-2 sm:px-5');
+expectContains('Process rows must preserve a desktop action column.', 'md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(112px,auto)]');
+expectContains('Critical student names must wrap instead of truncate.', 'line-clamp-2 break-words text-sm font-semibold leading-5');
+expectContains('Critical next actions must wrap instead of truncate.', 'min-w-0 break-words text-xs leading-5 sm:col-span-2 md:col-span-1');
 expectNotContains('Old two-column mobile action grid must be gone.', 'grid-cols-[auto_minmax(0,1fr)]');
 expectNotContains('Pipeline stage must no longer be a passive div.', '<div key={stage.id} className={`relative min-w-0 snap-start rounded-xl');
 
