@@ -68,7 +68,7 @@ const VIEW_LABELS: Array<{ id: OperationalView; label: string }> = [
   { id: 'overview', label: 'Visão Operacional' },
   { id: 'entries', label: 'Entradas' },
   { id: 'enrollments', label: 'Matrículas' },
-  { id: 'students', label: 'Alunos' },
+  { id: 'students', label: 'Alunos ativos' },
 ];
 
 const STATUS_TONE: Record<EnrollmentOperationalStatus, string> = {
@@ -180,7 +180,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
     <section className="min-w-0 max-w-full space-y-5 overflow-x-hidden sm:space-y-6" aria-label="Workspace operacional de Alunos e Matrículas">
       <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0 space-y-1.5">
-          <p className="break-words text-[10px] font-bold uppercase leading-5 tracking-[0.14em] text-indigo-500 sm:tracking-[0.18em]">Secretaria escolar</p>
+          <p className="break-words text-[10px] font-bold uppercase leading-5 tracking-[0.14em] text-emerald-700 sm:tracking-[0.18em]">Secretaria escolar</p>
           <h1 className={`text-2xl font-bold tracking-tight ${text}`}>Alunos & Matrículas</h1>
           <p className={`max-w-3xl text-sm leading-6 ${muted}`}>Entradas, matrículas em curso, exceções e alunos ativos num único fluxo operacional. Os indicadores abaixo são calculados apenas a partir dos processos reais da instituição atual.</p>
         </div>
@@ -188,7 +188,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
           <button type="button" onClick={() => void load()} disabled={loading} className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border px-3.5 py-2.5 text-xs font-semibold sm:w-auto ${light ? 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50' : 'border-white/10 bg-zinc-900 text-zinc-300 hover:bg-white/5'} disabled:opacity-50`}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </button>
-          <button type="button" onClick={() => setNewEntryOpen(true)} className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-center text-xs font-bold text-white hover:bg-indigo-500 sm:w-auto">
+          <button type="button" onClick={() => setNewEntryOpen(true)} className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-center text-xs font-bold text-white hover:bg-emerald-600 sm:w-auto">
             <Plus className="h-4 w-4" /> Nova entrada / matrícula
           </button>
         </div>
@@ -196,7 +196,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
 
       <nav className={`flex max-w-full gap-1 overflow-x-auto overscroll-x-contain border-b pb-3 ${light ? 'border-zinc-200' : 'border-white/10'}`} aria-label="Vistas de Alunos e Matrículas">
         {VIEW_LABELS.map((item) => (
-          <button key={item.id} type="button" onClick={() => { setView(item.id); setStatusFilter(null); setSelectedStageId(null); }} className={`min-h-11 whitespace-nowrap rounded-lg px-3.5 py-2 text-xs font-semibold transition ${view === item.id ? light ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white' : light ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}>
+          <button key={item.id} type="button" onClick={() => { setView(item.id); setStatusFilter(null); setSelectedStageId(null); }} className={`min-h-11 whitespace-nowrap rounded-lg px-3.5 py-2 text-xs font-semibold transition ${view === item.id ? light ? 'bg-emerald-50 text-emerald-800' : 'bg-emerald-500/15 text-emerald-200' : light ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}>
             {item.label}
           </button>
         ))}
@@ -224,15 +224,15 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
               </div>
 
               <div className={`rounded-2xl border p-5 ${surface}`}>
-                <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className={`font-semibold ${text}`}>Fluxo das matrículas</h2><p className={`mt-1 text-xs ${muted}`}>Acompanhe o percurso da matrícula. Selecione uma etapa disponível para abrir a respetiva fila de trabalho.</p></div><ShieldCheck className="h-5 w-5 text-indigo-500" /></div>
+                <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className={`font-semibold ${text}`}>Fluxo das matrículas</h2><p className={`mt-1 text-xs ${muted}`}>Acompanhe o percurso da matrícula. Selecione uma etapa disponível para abrir a respetiva fila de trabalho.</p></div><ShieldCheck className="h-5 w-5 text-emerald-700" /></div>
                 <div className="grid max-w-full snap-x snap-mandatory grid-flow-col auto-cols-[minmax(155px,78vw)] gap-2 overflow-x-auto overscroll-x-contain pb-2 sm:auto-cols-[minmax(170px,42vw)] xl:grid-flow-row xl:grid-cols-7 xl:auto-cols-auto xl:overflow-visible xl:pb-0">
                   {pipeline.map((stage, index) => (
-                    <button key={stage.id} type="button" disabled={!stage.available} aria-label={stage.available ? `Abrir etapa ${stage.label}` : `${stage.label}: domínio ainda não disponível`} onClick={() => { if (!stage.available) return; setSelectedStageId(stage.id); setStatusFilter(stage.statuses); setView(stage.id === 'entry' ? 'entries' : stage.id === 'activation' ? 'students' : 'enrollments'); }} className={`group relative min-w-0 snap-start rounded-xl border p-3 text-left transition ${mutedSurface} ${stage.available ? 'cursor-pointer hover:border-indigo-400/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40' : 'cursor-default opacity-65'}`}>
+                    <button key={stage.id} type="button" disabled={!stage.available} aria-label={stage.available ? `Abrir etapa ${stage.label}` : `${stage.label}: domínio ainda não disponível`} onClick={() => { if (!stage.available) return; setSelectedStageId(stage.id); setStatusFilter(stage.statuses); setView(stage.id === 'entry' ? 'entries' : stage.id === 'activation' ? 'students' : 'enrollments'); }} className={`group relative min-w-0 snap-start rounded-xl border p-3 text-left transition ${mutedSurface} ${stage.available ? 'cursor-pointer hover:border-emerald-500/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40' : 'cursor-default opacity-65'}`}>
                       <div className="flex min-w-0 items-center gap-2">
                         <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${light ? 'bg-zinc-200 text-zinc-700' : 'bg-white/10 text-zinc-300'}`}>{index + 1}</span>
                         <p className={`min-w-0 flex-1 truncate text-sm font-semibold ${text}`}>{stage.label}</p>
                         <span className={`shrink-0 text-sm font-bold tabular-nums ${stage.available ? text : muted}`}>{stage.available ? stage.count : '—'}</span>
-                        {stage.available && <ChevronRight className="h-4 w-4 shrink-0 text-indigo-500 opacity-60 transition group-hover:translate-x-0.5 group-hover:opacity-100" />}
+                        {stage.available && <ChevronRight className="h-4 w-4 shrink-0 text-emerald-700 opacity-60 transition group-hover:translate-x-0.5 group-hover:opacity-100" />}
                       </div>
                       {!stage.available && <p className={`mt-2 pl-8 text-[11px] ${muted}`}>Ainda não disponível</p>}
                     </button>
@@ -249,7 +249,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
                 </div>
 
                 <div className={`rounded-2xl border p-5 ${surface}`}>
-                  <div className="flex items-center gap-2"><ClipboardCheck className="h-5 w-5 text-indigo-500" /><h2 className={`font-semibold ${text}`}>Como trabalhar nesta área</h2></div>
+                  <div className="flex items-center gap-2"><ClipboardCheck className="h-5 w-5 text-emerald-700" /><h2 className={`font-semibold ${text}`}>Como trabalhar nesta área</h2></div>
                   <div className="mt-4 space-y-4">
                     <OperationalNote icon={<CircleDot className="h-4 w-4" />} title="Dados atuais" body="Os indicadores refletem os processos desta instituição." light={light} />
                     <OperationalNote icon={<Clock3 className="h-4 w-4" />} title="Prioridades primeiro" body="Pendências e bloqueios aparecem antes dos processos regulares." light={light} />
@@ -264,9 +264,9 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
             <div className={`overflow-hidden rounded-2xl border ${surface}`}>
               <div className={`flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between ${light ? 'border-zinc-200' : 'border-white/10'}`}>
                 <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className={`font-semibold ${text}`}>{selectedStage?.label || VIEW_LABELS.find((item) => item.id === view)?.label}</h2></div><p className={`mt-1 text-xs leading-5 ${muted}`}>{selectedStage?.description || `${visible.length} registo${visible.length === 1 ? '' : 's'} real${visible.length === 1 ? '' : 'is'} nesta vista.`}</p>{selectedStage && <p className={`mt-1 text-[11px] ${muted}`}>{visible.length} processo{visible.length === 1 ? '' : 's'} nesta etapa.</p>}</div>
-                <div className="relative w-full sm:w-80"><Search aria-hidden="true" className={`pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 ${muted}`} /><input aria-label="Procurar processos" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Procurar aluno, oferta ou ano" className={`min-h-11 w-full rounded-lg border py-2.5 pl-12 pr-3 text-sm outline-none focus:border-indigo-500 ${light ? 'border-zinc-200 bg-white text-zinc-900' : 'border-white/10 bg-zinc-950 text-white'}`} /></div>
+                <div className="relative w-full sm:w-80"><Search aria-hidden="true" className={`pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 ${muted}`} /><input aria-label="Procurar processos" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Procurar aluno, oferta ou ano" className={`min-h-11 w-full rounded-lg border py-2.5 pl-12 pr-3 text-sm outline-none focus:border-emerald-600 ${light ? 'border-zinc-200 bg-white text-zinc-900' : 'border-white/10 bg-zinc-950 text-white'}`} /></div>
               </div>
-              {visible.length === 0 ? <EmptyState title={view === 'students' ? 'Ainda não existem alunos ativos nesta base' : 'Nenhum processo nesta vista'} body={view === 'students' ? 'Um aluno só aparece aqui depois de uma matrícula ativa. Não são usados registos demonstrativos.' : 'Os dados desta vista são alimentados exclusivamente pelos processos institucionais persistidos.'} light={light} /> : <ul className={`divide-y ${light ? 'divide-zinc-200' : 'divide-white/10'}`}>{visible.map((record) => <li key={record.id}><ProcessRow record={record} light={light} onOpen={() => setSelected(record)} /></li>)}</ul>}
+              {visible.length === 0 ? <EmptyState title={view === 'students' ? 'Ainda não existem alunos ativos nesta base' : 'Nenhum processo nesta vista'} body={view === 'students' ? 'Um aluno aparece aqui depois de a matrícula estar ativa.' : 'Os dados desta vista são alimentados exclusivamente pelos processos institucionais persistidos.'} light={light} /> : <ul className={`divide-y ${light ? 'divide-zinc-200' : 'divide-white/10'}`}>{visible.map((record) => <li key={record.id}><ProcessRow record={record} light={light} onOpen={() => setSelected(record)} /></li>)}</ul>}
             </div>
           )}
         </>
@@ -279,7 +279,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
 }
 
 function ProcessRow({ record, light, onOpen }: { record: EnrollmentOperationalRecord; light: boolean; onOpen: () => void }) {
-  return <button type="button" onClick={onOpen} className={`flex w-full flex-col gap-3 px-5 py-4 text-left transition sm:flex-row sm:items-center sm:justify-between ${light ? 'hover:bg-zinc-50' : 'hover:bg-white/[0.03]'}`}><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className={`font-semibold ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</p><span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_TONE[record.status]}`}>{STATUS_LABELS[record.status]}</span></div><p className={`mt-1 truncate text-xs ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.offer_name} · {record.academic_year_name}</p><p className={`mt-2 text-xs ${record.status === 'blocked' ? 'text-rose-500' : light ? 'text-zinc-600' : 'text-zinc-300'}`}>{nextAction(record)}</p></div><div className={`flex shrink-0 items-center gap-2 text-xs ${light ? 'text-zinc-500' : 'text-zinc-400'}`}><span>Atualizado {formatDate(record.updated_at)}</span><ChevronRight className="h-4 w-4" /></div></button>;
+  return <button type="button" onClick={onOpen} className={`grid w-full min-w-0 gap-3 px-5 py-4 text-left transition md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-center ${light ? 'hover:bg-emerald-50/40' : 'hover:bg-emerald-500/[0.04]'}`}><div className="min-w-0"><p className={`truncate font-semibold ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</p><span className={`mt-1 inline-flex max-w-full rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_TONE[record.status]}`}>{STATUS_LABELS[record.status]}</span></div><div className={`min-w-0 text-xs ${light ? 'text-zinc-600' : 'text-zinc-300'}`}><p className="truncate font-medium">{record.offer_name}</p><p className={`mt-1 truncate ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.academic_year_name}</p></div><p className={`min-w-0 text-xs leading-5 ${record.status === 'blocked' ? 'text-rose-500' : light ? 'text-zinc-600' : 'text-zinc-300'}`}>{nextAction(record)}</p><div className={`flex shrink-0 items-center gap-2 text-xs ${light ? 'text-zinc-500' : 'text-zinc-400'}`}><span className="whitespace-nowrap">{formatDate(record.updated_at)}</span><ChevronRight className="h-4 w-4" /></div></button>;
 }
 
 function EmptyState({ title, body, light }: { title: string; body: string; light: boolean }) {
@@ -346,7 +346,8 @@ function ProcessDrawer({ record, light, onClose, onTransition }: { record: Enrol
         <section className="mt-6" aria-label="Etapas do processo"><div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">{process.stages.map((stage) => <article key={stage.key} aria-current={stage.key === process.currentStage ? 'step' : undefined} className={`rounded-xl border p-3 ${stage.key === process.currentStage ? light ? 'border-emerald-300 bg-emerald-50' : 'border-emerald-500/40 bg-emerald-500/10' : light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-950/40'}`}><div className="flex items-center gap-2"><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${stage.status === 'completed' ? 'bg-emerald-600 text-white' : stage.status === 'blocked' ? 'bg-amber-500 text-zinc-950' : light ? 'bg-zinc-100 text-zinc-600' : 'bg-white/10 text-zinc-300'}`}>{stage.status === 'completed' ? '✓' : stage.key.slice(1)}</span><p className={`text-xs font-semibold ${light ? 'text-zinc-900' : 'text-white'}`}>{stage.label}</p></div><p className={`mt-2 text-[11px] leading-4 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{stage.evidence.summary}</p></article>)}</div></section>
         <details className={`mt-5 rounded-xl border px-4 ${light ? 'border-zinc-200' : 'border-white/10'}`}><summary className={`cursor-pointer py-3 text-xs font-semibold ${light ? 'text-zinc-700' : 'text-zinc-300'}`}>Outras alterações de estado autorizadas</summary><EnrollmentLifecycleActions status={process.enrollmentStatus} light={light} onTransition={async (toStatus) => { await onTransition(toStatus); await loadProcess(); }} /></details>
         <div id="enrollment-process-work"><EnrollmentDocumentChecklist enrollmentId={record.id} enrollmentStatus={process.enrollmentStatus} light={light} request={request} onChanged={loadProcess} /></div>
-        <dl className="mt-6 grid gap-4 sm:grid-cols-2"><Detail label="Responsável" value={process.assignedTo?.name || 'Equipa da Secretaria'} light={light} /><Detail label="Encarregado" value={record.guardian_name || 'Ainda não associado'} light={light} /><Detail label="Iniciado" value={formatDate(process.timestamps.startedAt)} light={light} /><Detail label="Último progresso" value={formatDate(process.timestamps.lastProgressAt)} light={light} /><Detail label="ID do processo" value={record.id} light={light} /><Detail label="Versão" value={String(process.version)} light={light} /></dl>
+        <dl className="mt-6 grid gap-4 sm:grid-cols-2"><Detail label="Responsável operacional" value={process.assignedTo?.name || 'Equipa da Secretaria'} light={light} /><Detail label="Encarregado" value={record.guardian_name || 'Ainda não associado'} light={light} /><Detail label="Iniciado" value={formatDate(process.timestamps.startedAt)} light={light} /><Detail label="Último progresso" value={formatDate(process.timestamps.lastProgressAt)} light={light} /></dl>
+        <details className={`mt-5 rounded-xl border px-4 ${light ? 'border-zinc-200' : 'border-white/10'}`}><summary className={`cursor-pointer py-3 text-xs font-semibold ${light ? 'text-zinc-600' : 'text-zinc-400'}`}>Detalhes técnicos</summary><dl className="grid gap-4 pb-4 sm:grid-cols-2"><Detail label="ID do processo" value={record.id} light={light} /><Detail label="Versão" value={String(process.version)} light={light} /></dl></details>
         <p className={`mt-8 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Este painel reúne o estado atual da matrícula e a próxima ação necessária.</p>
       </>}
     </aside>

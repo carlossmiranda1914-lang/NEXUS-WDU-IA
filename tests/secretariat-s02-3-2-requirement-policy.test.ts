@@ -18,11 +18,11 @@ assert(normalized[0] === 'BI', 'First valid normalized requirement must be prese
 assert(normalized[1] === 'Certificado escolar', 'Internal whitespace must normalize.');
 
 assert(documentValidationGate(false, []).reason === 'POLICY_NOT_CAPTURED', 'Missing captured policy must fail closed.');
-assert(documentValidationGate(true, []).ready, 'Explicit policy with zero requirements must be valid.');
-assert(!documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'pending' }]).ready, 'Pending required document must block validation.');
-assert(!documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'submitted' }]).ready, 'Submitted required document must still block validation.');
-assert(!documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'rejected' }]).ready, 'Rejected required document must block validation.');
-assert(documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'verified' }]).ready, 'Verified required document must satisfy validation gate.');
-assert(documentValidationGate(true, [{ documentType: 'Foto', required: false, status: 'pending' }]).ready, 'Optional pending document must not block validation.');
+assert(!documentValidationGate(true, []).ready, 'A policy reference without a materialized requirement snapshot must block validation.');
+assert(!documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'pending', sourceRequirementId: 'bi' }]).ready, 'Pending required document must block validation.');
+assert(!documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'submitted', sourceRequirementId: 'bi' }]).ready, 'Submitted required document must still block validation.');
+assert(!documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'rejected', sourceRequirementId: 'bi' }]).ready, 'Rejected required document must block validation.');
+assert(documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'verified', sourceRequirementId: 'bi' }]).ready, 'Verified required document must satisfy validation gate.');
+assert(documentValidationGate(true, [{ documentType: 'Foto', required: false, status: 'pending', sourceRequirementId: 'foto' }]).ready, 'Materialized optional document configuration must not block validation.');
 
 console.log(`Secretariat S02.3.2 requirement policy passed (${assertions} assertions).`);

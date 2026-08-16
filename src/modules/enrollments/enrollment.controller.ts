@@ -225,8 +225,8 @@ export function registerEnrollmentRoutes(app: Application) {
           return reject(res, 409, `Complete o cadastro da matrícula antes da validação. Em falta: ${missing}.`);
         }
 
-        const documents = await client.query<{ document_type: string; required: boolean; status: 'pending' | 'submitted' | 'verified' | 'rejected' }>(
-          'SELECT document_type, required, status FROM enrollment_documents WHERE enrollment_application_id = $1 AND institution_id = $2',
+        const documents = await client.query<{ document_type: string; required: boolean; status: 'pending' | 'submitted' | 'verified' | 'rejected'; source_requirement_id: string | null }>(
+          'SELECT document_type, required, status, source_requirement_id FROM enrollment_documents WHERE enrollment_application_id = $1 AND institution_id = $2',
           [req.params.id, context.institutionId],
         );
         const documentGate = documentValidationGate(
@@ -235,6 +235,7 @@ export function registerEnrollmentRoutes(app: Application) {
             documentType: row.document_type,
             required: row.required,
             status: row.status,
+            sourceRequirementId: row.source_requirement_id,
           })),
         );
         if (!documentGate.ready) {
@@ -244,7 +245,11 @@ export function registerEnrollmentRoutes(app: Application) {
             409,
             documentGate.reason === 'POLICY_NOT_CAPTURED'
               ? 'A política documental desta matrícula ainda não foi capturada.'
-              : 'Existem documentos obrigatórios por verificar.',
+              : documentGate.reason === 'REQUIREMENTS_NOT_CONFIGURED'
+                ? 'A política documental não possui requisitos materializados para esta matrícula; a validação permanece bloqueada.'
+                : documentGate.reason === 'REQUIRED_DOCUMENTS_UNVERIFIED'
+                  ? 'Existem documentos obrigatórios recebidos que aguardam verificação.'
+                  : 'Existem documentos obrigatórios por verificar.',
           );
         }
       }

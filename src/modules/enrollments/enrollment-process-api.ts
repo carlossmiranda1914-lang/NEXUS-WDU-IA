@@ -76,8 +76,8 @@ async function lockApplication(client: QueryClient, institutionId: string, enrol
 async function calculateProjection(client: QueryClient, context: InstitutionalContext, application: ApplicationRow) {
   const registration = await getEnrollmentRegistrationReadiness(client, context.institutionId, application.id);
   if (!registration) throw new EnrollmentProcessApiError('NOT_FOUND', 'Matrícula não encontrada nesta instituição.');
-  const documents = await client.query<{ document_type: string; required: boolean; status: 'pending' | 'submitted' | 'verified' | 'rejected' }>(
-    `SELECT document_type, required, status
+  const documents = await client.query<{ document_type: string; required: boolean; status: 'pending' | 'submitted' | 'verified' | 'rejected'; source_requirement_id: string | null }>(
+    `SELECT document_type, required, status, source_requirement_id
        FROM enrollment_documents
       WHERE enrollment_application_id = $1 AND institution_id = $2
       ORDER BY document_type`,
@@ -89,7 +89,7 @@ async function calculateProjection(client: QueryClient, context: InstitutionalCo
     registrationMissing: registration.missing,
     academicContextValid: application.academic_context_valid,
     policyCaptured: application.document_policy_id !== null,
-    documents: documents.rows.map((item) => ({ documentType: item.document_type, required: item.required, status: item.status })),
+    documents: documents.rows.map((item) => ({ documentType: item.document_type, required: item.required, status: item.status, sourceRequirementId: item.source_requirement_id })),
   }, context.role);
 }
 

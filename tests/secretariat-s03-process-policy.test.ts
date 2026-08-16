@@ -5,7 +5,7 @@ function assert(condition: unknown, message: string): asserts condition { assert
 
 const base: EnrollmentProcessTruth = {
   enrollmentStatus: 'under_review', registrationReady: false, registrationMissing: ['guardian'], academicContextValid: true,
-  policyCaptured: true, documents: [{ documentType: 'Identificação', required: true, status: 'pending' }],
+  policyCaptured: true, documents: [{ documentType: 'Identificação', required: true, status: 'pending', sourceRequirementId: 'identificacao' }],
 };
 
 const incomplete = projectEnrollmentProcess(base, 'secretariat');
@@ -17,10 +17,10 @@ const documentPending = projectEnrollmentProcess({ ...base, registrationReady: t
 assert(documentPending.currentStage === 'P04', 'Pending required document must own P04.');
 assert(documentPending.nextAction?.code === 'SUBMIT_REQUIRED_DOCUMENTS', 'Pending document must yield submission action.');
 
-const documentSubmitted = projectEnrollmentProcess({ ...base, registrationReady: true, registrationMissing: [], documents: [{ documentType: 'Identificação', required: true, status: 'submitted' }] }, 'secretariat');
+const documentSubmitted = projectEnrollmentProcess({ ...base, registrationReady: true, registrationMissing: [], documents: [{ documentType: 'Identificação', required: true, status: 'submitted', sourceRequirementId: 'identificacao' }] }, 'secretariat');
 assert(documentSubmitted.nextAction?.code === 'VERIFY_REQUIRED_DOCUMENTS', 'Submitted document must yield verification action.');
 
-const ready = projectEnrollmentProcess({ ...base, registrationReady: true, registrationMissing: [], documents: [{ documentType: 'Identificação', required: true, status: 'verified' }] }, 'secretariat');
+const ready = projectEnrollmentProcess({ ...base, registrationReady: true, registrationMissing: [], documents: [{ documentType: 'Identificação', required: true, status: 'verified', sourceRequirementId: 'identificacao' }] }, 'secretariat');
 assert(ready.currentStage === 'P06' && ready.progress.completed === 5, 'Satisfied gates must reach P06 with five completed stages.');
 assert(ready.nextAction?.code === 'VALIDATE_ENROLLMENT', 'Under-review ready process must offer real validation.');
 
@@ -30,6 +30,10 @@ assert(validated.nextAction === null, 'Validated must not offer activation in S0
 
 const active = projectEnrollmentProcess({ ...base, enrollmentStatus: 'active', registrationReady: true, registrationMissing: [], documents: [] }, 'secretariat');
 assert(active.progress.percent === 100 && active.nextAction === null, 'Future active state must be terminal for S03.');
+
+const unconfigured = projectEnrollmentProcess({ ...base, registrationReady: true, registrationMissing: [], documents: [] }, 'secretariat');
+assert(unconfigured.currentStage === 'P04' && unconfigured.stages[3].reasonCode === 'DOCUMENT_REQUIREMENTS_NOT_CONFIGURED', 'A policy reference without materialized requirements must block P04.');
+assert(unconfigured.nextAction?.code === 'RESOLVE_BLOCKER' && unconfigured.nextAction.available === false, 'Unconfigured document readiness must not expose Validate enrollment.');
 
 const cancelled = projectEnrollmentProcess({ ...base, enrollmentStatus: 'cancelled' }, 'secretariat');
 assert(cancelled.currentStage === 'P06' && cancelled.stages[5].reasonCode === 'ENROLLMENT_CANCELLED', 'Cancelled process must close at P06.');

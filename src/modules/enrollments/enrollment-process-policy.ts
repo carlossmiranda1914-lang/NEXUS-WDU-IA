@@ -1,5 +1,6 @@
 import type { InstitutionalRole } from '../../auth/institutional-context.ts';
 import type { EnrollmentStatus } from './enrollment-policy.ts';
+import { documentValidationGate, type CapturedDocumentRequirement } from './enrollment-document-requirement-policy.ts';
 
 export const ENROLLMENT_PROCESS_STAGE_KEYS = ['P01', 'P02', 'P03', 'P04', 'P05', 'P06'] as const;
 export type EnrollmentProcessStageKey = (typeof ENROLLMENT_PROCESS_STAGE_KEYS)[number];
@@ -19,7 +20,7 @@ export interface EnrollmentProcessTruth {
   registrationMissing: string[];
   academicContextValid: boolean;
   policyCaptured: boolean;
-  documents: Array<{ documentType: string; required: boolean; status: 'pending' | 'submitted' | 'verified' | 'rejected' }>;
+  documents: CapturedDocumentRequirement[];
 }
 
 export interface EnrollmentProcessAction {
@@ -77,25 +78,28 @@ export function projectEnrollmentProcess(truth: EnrollmentProcessTruth, role: In
   const terminalComplete = truth.enrollmentStatus === 'validated' || truth.enrollmentStatus === 'active';
   const cancelled = truth.enrollmentStatus === 'cancelled';
   const enrollmentBlocked = truth.enrollmentStatus === 'blocked';
-  const required = truth.documents.filter((item) => item.required);
-  const unresolved = required.filter((item) => item.status !== 'verified');
-  const submitted = unresolved.filter((item) => item.status === 'submitted');
+  const documentGate = documentValidationGate(truth.policyCaptured, truth.documents);
   const missingGuardian = truth.registrationMissing.some((item) => item === 'guardian' || item.startsWith('guardian.'));
   const registrationAction = action(missingGuardian ? 'ADD_GUARDIAN_DATA' : 'COMPLETE_REGISTRATION', role);
   const registrationDone = truth.registrationReady;
   const contextDone = truth.academicContextValid;
-  const documentsDone = truth.policyCaptured && unresolved.length === 0;
+  // A persisted validated/active lifecycle is terminal historical evidence for S03.
+  // Before that terminal transition, readiness must remain strictly fail-closed.
+  const documentsDone = terminalComplete || documentGate.ready;
   const prerequisitesDone = registrationDone && contextDone && documentsDone;
 
   let documentAction: EnrollmentProcessAction | null = null;
   let documentReason: string | null = null;
-  if (!truth.policyCaptured) {
+  if (documentGate.reason === 'POLICY_NOT_CAPTURED') {
     documentReason = 'DOCUMENT_POLICY_NOT_CAPTURED';
     documentAction = action('RESOLVE_BLOCKER', role, false, 'A política documental deve ser configurada pela Direção ou Administração.');
-  } else if (submitted.length > 0) {
+  } else if (documentGate.reason === 'REQUIREMENTS_NOT_CONFIGURED') {
+    documentReason = 'DOCUMENT_REQUIREMENTS_NOT_CONFIGURED';
+    documentAction = action('RESOLVE_BLOCKER', role, false, 'Ainda não existe evidência de requisitos documentais configurados para esta matrícula.');
+  } else if (documentGate.reason === 'REQUIRED_DOCUMENTS_UNVERIFIED') {
     documentReason = 'REQUIRED_DOCUMENTS_UNVERIFIED';
     documentAction = action('VERIFY_REQUIRED_DOCUMENTS', role);
-  } else if (unresolved.length > 0) {
+  } else if (documentGate.reason === 'REQUIRED_DOCUMENTS_PENDING') {
     documentReason = 'REQUIRED_DOCUMENTS_PENDING';
     documentAction = action('SUBMIT_REQUIRED_DOCUMENTS', role);
   }
@@ -108,7 +112,7 @@ export function projectEnrollmentProcess(truth: EnrollmentProcessTruth, role: In
     stage('P01', 'completed', null, null, 'Identidade resolvida e matrícula criada pelo intake institucional.', 'enrollment_applications'),
     stage('P02', registrationDone ? 'completed' : cancelled ? 'pending' : 'blocked', registrationDone ? null : 'REGISTRATION_INCOMPLETE', registrationDone || cancelled ? null : registrationAction, registrationDone ? 'Cadastro obrigatório e relação responsável confirmados.' : `${truth.registrationMissing.length} requisito(s) obrigatório(s) em falta.`, 'registration_profile'),
     stage('P03', contextDone ? 'completed' : cancelled ? 'pending' : 'blocked', contextDone ? null : 'ACADEMIC_CONTEXT_INVALID', contextDone || cancelled ? null : action('RESOLVE_BLOCKER', role, false, 'A oferta e o ano letivo devem pertencer à instituição e estar válidos.'), contextDone ? 'Oferta e ano letivo institucionais válidos.' : 'Oferta ou ano letivo inválido para esta instituição.', 'academic_years/enrollment_offers'),
-    stage('P04', documentsDone ? 'completed' : cancelled || !registrationDone || !contextDone ? 'pending' : 'blocked', documentsDone ? null : documentReason, documentsDone || cancelled || !registrationDone || !contextDone ? null : documentAction, documentsDone ? 'Todos os requisitos documentais obrigatórios estão verificados.' : !truth.policyCaptured ? 'A política documental ainda não foi capturada para esta matrícula.' : `${unresolved.length} documento(s) obrigatório(s) por resolver.`, 'enrollment_documents'),
+    stage('P04', documentsDone ? 'completed' : cancelled || !registrationDone || !contextDone ? 'pending' : 'blocked', documentsDone ? null : documentReason, documentsDone || cancelled || !registrationDone || !contextDone ? null : documentAction, documentsDone ? 'A configuração documental foi capturada e todos os documentos obrigatórios estão verificados.' : documentGate.reason === 'POLICY_NOT_CAPTURED' ? 'A política documental ainda não foi capturada para esta matrícula.' : documentGate.reason === 'REQUIREMENTS_NOT_CONFIGURED' ? 'Ainda não há requisitos documentais materializados; a matrícula não pode seguir para decisão.' : documentGate.reason === 'REQUIRED_DOCUMENTS_UNVERIFIED' ? `${documentGate.submittedCount} documento(s) obrigatório(s) aguardam verificação.` : `${documentGate.pendingCount} documento(s) obrigatório(s) por resolver.`, 'enrollment_documents'),
     stage('P05', prerequisitesDone ? 'completed' : cancelled ? 'pending' : 'pending', null, prerequisitesDone && !terminalComplete && !cancelled ? reviewAction : null, prerequisitesDone ? 'Readiness técnico confirmado pelos gates de cadastro e documentos.' : 'A revisão aguarda a conclusão das etapas anteriores.', 'registration/document gates'),
     stage('P06', terminalComplete ? 'completed' : cancelled || enrollmentBlocked ? 'blocked' : prerequisitesDone ? 'in_progress' : 'pending', terminalComplete ? null : cancelled ? 'ENROLLMENT_CANCELLED' : enrollmentBlocked ? 'ENROLLMENT_BLOCKED' : null, terminalComplete || cancelled ? null : enrollmentBlocked ? action('RESOLVE_BLOCKER', role) : prerequisitesDone ? reviewAction : null, terminalComplete ? 'Matrícula validada; o processo S03 está concluído.' : cancelled ? 'Matrícula cancelada; a progressão está encerrada.' : prerequisitesDone ? 'Pré-condições satisfeitas para decisão.' : 'Ainda existem pré-condições por concluir.', 'enrollment lifecycle'),
   ];

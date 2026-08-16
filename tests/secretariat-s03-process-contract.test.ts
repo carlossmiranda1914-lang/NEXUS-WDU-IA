@@ -7,6 +7,8 @@ const controller = await readFile('src/modules/enrollments/enrollment-process.co
 const api = await readFile('src/modules/enrollments/enrollment-process-api.ts', 'utf8');
 const intake = await readFile('src/modules/enrollments/enrollment-intake.ts', 'utf8');
 const workspace = await readFile('src/components/EnrollmentOperationsWorkspace.tsx', 'utf8');
+const enrollmentController = await readFile('src/modules/enrollments/enrollment.controller.ts', 'utf8');
+const documentPolicy = await readFile('src/modules/enrollments/enrollment-document-requirement-policy.ts', 'utf8');
 const migration = await readFile('src/db/migrations/0016_s03_enrollment_process_persistence.sql', 'utf8');
 
 assert(controller.includes("app.get('/api/enrollments/:id/process'"), 'S03 must expose the institution-scoped process read contract.');
@@ -23,5 +25,8 @@ assert(workspace.includes('/process`'), 'Existing ProcessDrawer must load the se
 assert(workspace.includes('process.progress.percent'), 'Frontend must render server progress rather than calculate it.');
 assert(workspace.includes('grid-cols-1') && workspace.includes('sm:grid-cols-2'), 'Process stages must adapt from mobile list to wider grids.');
 assert(!workspace.includes('Financeiro pendente') && !workspace.includes('Ativar aluno'), 'S03 UI must not expose future Finance/Activation operations.');
+assert(documentPolicy.includes("'REQUIREMENTS_NOT_CONFIGURED'"), 'Shared document readiness must distinguish an unconfigured snapshot from a completed checklist.');
+assert(enrollmentController.includes("documentGate.reason === 'REQUIREMENTS_NOT_CONFIGURED'"), 'Validated transition must reject unconfigured document readiness with the shared gate.');
+assert(enrollmentController.includes('return reject(') && enrollmentController.includes('409,'), 'Document readiness rejection must remain an explicit 409 domain response.');
 
 console.log(`[S03-PROCESS-CONTRACT] passed (${assertions} assertions).`);

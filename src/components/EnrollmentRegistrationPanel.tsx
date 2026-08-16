@@ -119,7 +119,7 @@ export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentSt
   useEffect(() => { void load(); }, [load]);
 
   const missingText = useMemo(() => readiness.missing.map((item) => MISSING_LABELS[item] || item).join(', '), [readiness.missing]);
-  const inputClass = `mt-1.5 min-h-11 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-indigo-500 disabled:opacity-60 ${light ? 'border-zinc-200 bg-white text-zinc-900' : 'border-white/10 bg-zinc-950 text-white'}`;
+  const inputClass = `mt-1.5 min-h-11 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-emerald-600 disabled:opacity-60 ${light ? 'border-zinc-200 bg-white text-zinc-900' : 'border-white/10 bg-zinc-950 text-white'}`;
   const labelClass = `block text-xs font-semibold ${light ? 'text-zinc-700' : 'text-zinc-300'}`;
 
   async function save() {
@@ -195,7 +195,7 @@ export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentSt
       </FormSection>
     </div>
 
-    {editable ? <button type="button" onClick={() => void save()} disabled={saving} className="mt-5 min-h-11 w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-500 disabled:opacity-50">{saving ? 'A guardar…' : 'Guardar cadastro'}</button> : <p className={`mt-5 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Este cadastro está em modo de consulta porque a matrícula já passou da fase editável.</p>}
+    {editable ? <button type="button" onClick={() => void save()} disabled={saving} className="mt-5 min-h-11 w-full rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-50">{saving ? 'A guardar…' : 'Guardar cadastro'}</button> : <p className={`mt-5 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Este cadastro está em modo de consulta porque a matrícula já passou da fase editável.</p>}
     {notice && <p role="status" className="mt-3 text-xs text-emerald-500">{notice}</p>}
     {error && <p role="alert" className="mt-3 text-xs text-rose-500">{error}</p>}
   </section>;
