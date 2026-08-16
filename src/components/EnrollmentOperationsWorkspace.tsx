@@ -42,6 +42,19 @@ type Resolution = {
 };
 
 type PipelineContext = { label: string; description: string };
+type ProcessAction = { code: string; label: string; available: boolean; unavailableReason: string | null };
+type ProcessProjection = {
+  enrollmentId: string;
+  enrollmentStatus: EnrollmentOperationalStatus;
+  currentStage: string;
+  progress: { completed: number; applicable: number; percent: number };
+  assignedTo: { personId: string; name: string | null } | null;
+  stages: Array<{ key: string; label: string; status: 'pending' | 'in_progress' | 'blocked' | 'completed' | 'not_applicable'; reasonCode: string | null; nextAction: ProcessAction | null; evidence: { summary: string; source: string } }>;
+  nextAction: ProcessAction | null;
+  blockers: Array<{ reasonCode: string; message: string; stage: string }>;
+  version: number;
+  timestamps: { startedAt: string; lastProgressAt: string; blockedAt: string | null; updatedAt: string };
+};
 
 const PIPELINE_CONTEXT: Record<string, PipelineContext> = {
   entry: { label: 'Entrada', description: 'Processos iniciados que ainda precisam de tratamento pela Secretaria.' },
@@ -259,7 +272,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
         </>
       )}
 
-      {selected && <ProcessDrawer record={selected} light={light} onClose={() => setSelected(null)} onTransition={async (toStatus) => { await request(`/api/enrollments/${selected.id}/transitions`, { method: 'POST', body: JSON.stringify({ toStatus }) }); setSelected(null); setNotice('Estado da matrícula atualizado.'); await load(); }} />}
+      {selected && <ProcessDrawer record={selected} light={light} onClose={() => setSelected(null)} onTransition={async (toStatus) => { await request(`/api/enrollments/${selected.id}/transitions`, { method: 'POST', body: JSON.stringify({ toStatus }) }); setSelected((current) => current ? { ...current, status: toStatus, updated_at: new Date().toISOString() } : current); setNotice('Estado da matrícula atualizado.'); await load(); }} />}
       {newEntryOpen && <EnrollmentNewEntryDrawer offers={offers} light={light} onClose={() => setNewEntryOpen(false)} onCreated={async () => { setNewEntryOpen(false); setNotice('Processo de matrícula iniciado com segurança e adicionado à fila institucional.'); await load(); setView('enrollments'); }} />}
     </section>
   );
@@ -278,7 +291,66 @@ function OperationalNote({ icon, title, body, light }: { icon: ReactNode; title:
 }
 
 function ProcessDrawer({ record, light, onClose, onTransition }: { record: EnrollmentOperationalRecord; light: boolean; onClose: () => void; onTransition: (toStatus: EnrollmentOperationalStatus) => Promise<void> }) {
-  return <div className="fixed inset-0 z-[12000] flex justify-end bg-black/40" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className={`h-full w-full max-w-lg overflow-y-auto border-l p-6 shadow-2xl ${light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-900'}`}><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-500">Processo de matrícula</p><h2 className={`mt-1 text-xl font-bold ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</h2><p className={`mt-1 text-sm ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.offer_name} · {record.academic_year_name}</p></div><button type="button" onClick={onClose} className={`rounded-lg p-2 ${light ? 'hover:bg-zinc-100' : 'hover:bg-white/5'}`}><X className="h-5 w-5" /></button></div><div className={`mt-6 rounded-2xl border p-4 ${light ? 'border-zinc-200 bg-slate-50' : 'border-white/10 bg-zinc-950/60'}`}><span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_TONE[record.status]}`}>{STATUS_LABELS[record.status]}</span><p className={`mt-3 text-sm leading-6 ${light ? 'text-zinc-600' : 'text-zinc-300'}`}>{statusExplanation(record.status)}</p><div className={`mt-4 border-t pt-4 ${light ? 'border-zinc-200' : 'border-white/10'}`}><p className={`text-xs font-semibold ${light ? 'text-zinc-800' : 'text-zinc-200'}`}>Próxima ação</p><p className="mt-1 text-sm font-semibold text-indigo-500">{nextAction(record)}</p></div></div><EnrollmentLifecycleActions status={record.status} light={light} onTransition={onTransition} /><EnrollmentDocumentChecklist enrollmentId={record.id} enrollmentStatus={record.status} light={light} request={request} /><dl className="mt-6 grid gap-4 sm:grid-cols-2"><Detail label="Encarregado" value={record.guardian_name || 'Ainda não associado'} light={light} /><Detail label="Criado" value={formatDate(record.created_at)} light={light} /><Detail label="Última atualização" value={formatDate(record.updated_at)} light={light} /><Detail label="ID do processo" value={record.id} light={light} /></dl><p className={`mt-8 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Este painel reúne o estado atual da matrícula e a próxima ação necessária.</p></aside></div>;
+  const [process, setProcess] = useState<ProcessProjection | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const loadProcess = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await request(`/api/enrollments/${record.id}/process`);
+      setProcess(result.process);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível carregar as etapas do processo.');
+    } finally {
+      setLoading(false);
+    }
+  }, [record.id]);
+  useEffect(() => { void loadProcess(); }, [loadProcess]);
+
+  async function runPrimaryAction() {
+    if (!process?.nextAction?.available) return;
+    const target = process.nextAction.code === 'VALIDATE_ENROLLMENT'
+      ? 'validated'
+      : process.nextAction.code === 'RESUME_REVIEW' ? 'under_review' : null;
+    if (!target) {
+      document.getElementById('enrollment-process-work')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await onTransition(target);
+      await loadProcess();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível executar a próxima ação.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const currentStage = process?.stages.find((stage) => stage.key === process.currentStage);
+  return <div className="fixed inset-0 z-[12000] flex justify-end bg-black/40" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <aside className={`h-full w-full max-w-2xl overflow-y-auto border-l p-4 shadow-2xl sm:p-6 ${light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-900'}`} aria-label="Processo persistido de matrícula">
+      <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-600">Processo de matrícula</p><h2 className={`mt-1 truncate text-xl font-bold ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</h2><p className={`mt-1 text-sm ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.offer_name} · {record.academic_year_name}</p></div><button type="button" aria-label="Fechar processo" onClick={onClose} className={`rounded-lg p-2 ${light ? 'hover:bg-zinc-100' : 'hover:bg-white/5'}`}><X className="h-5 w-5" /></button></div>
+      {loading && <div className={`mt-6 flex min-h-40 items-center justify-center gap-2 rounded-2xl border ${light ? 'border-zinc-200 bg-slate-50 text-zinc-500' : 'border-white/10 bg-zinc-950/60 text-zinc-400'}`}><LoaderCircle className="h-4 w-4 animate-spin" /> A carregar etapas reais…</div>}
+      {error && <div role="alert" className="mt-6 flex gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-500"><AlertCircle className="h-5 w-5 shrink-0" />{error}<button type="button" onClick={() => void loadProcess()} className="ml-auto underline">Tentar novamente</button></div>}
+      {process && !loading && <>
+        <section className={`mt-6 rounded-2xl border p-4 ${light ? 'border-emerald-200 bg-emerald-50/60' : 'border-emerald-500/20 bg-emerald-500/[0.06]'}`} aria-label="Resumo do processo">
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_TONE[process.enrollmentStatus]}`}>{STATUS_LABELS[process.enrollmentStatus]}</span><p className={`mt-3 text-sm font-semibold ${light ? 'text-zinc-900' : 'text-white'}`}>{currentStage?.label}</p><p className={`mt-1 text-xs leading-5 ${light ? 'text-zinc-600' : 'text-zinc-300'}`}>{currentStage?.evidence.summary}</p></div><div className="text-right"><p className="text-2xl font-bold tabular-nums text-emerald-600">{process.progress.percent}%</p><p className={`text-[11px] ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{process.progress.completed} de {process.progress.applicable} etapas</p></div></div>
+          <div className={`mt-4 h-2 overflow-hidden rounded-full ${light ? 'bg-emerald-100' : 'bg-white/10'}`}><div className="h-full rounded-full bg-emerald-600 transition-[width]" style={{ width: `${process.progress.percent}%` }} /></div>
+          <div className={`mt-4 border-t pt-4 ${light ? 'border-emerald-200' : 'border-white/10'}`}><p className={`text-xs font-semibold ${light ? 'text-zinc-800' : 'text-zinc-200'}`}>Próxima ação</p>{process.nextAction ? <><button type="button" disabled={busy || !process.nextAction.available} onClick={() => void runPrimaryAction()} className="mt-2 min-h-11 w-full rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-bold !text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'A atualizar…' : process.nextAction.label}</button>{process.nextAction.unavailableReason && <p className="mt-2 text-xs text-amber-600">{process.nextAction.unavailableReason}</p>}</> : <p className="mt-1 text-sm font-semibold text-emerald-600">Processo S03 concluído.</p>}</div>
+        </section>
+        {process.blockers.length > 0 && <section className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4" aria-label="Bloqueio principal"><p className="text-xs font-bold uppercase tracking-wide text-amber-600">Pendência principal</p><p className={`mt-1 text-sm ${light ? 'text-amber-900' : 'text-amber-200'}`}>{process.blockers[0].message}</p></section>}
+        <section className="mt-6" aria-label="Etapas do processo"><div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">{process.stages.map((stage) => <article key={stage.key} aria-current={stage.key === process.currentStage ? 'step' : undefined} className={`rounded-xl border p-3 ${stage.key === process.currentStage ? light ? 'border-emerald-300 bg-emerald-50' : 'border-emerald-500/40 bg-emerald-500/10' : light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-950/40'}`}><div className="flex items-center gap-2"><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${stage.status === 'completed' ? 'bg-emerald-600 text-white' : stage.status === 'blocked' ? 'bg-amber-500 text-zinc-950' : light ? 'bg-zinc-100 text-zinc-600' : 'bg-white/10 text-zinc-300'}`}>{stage.status === 'completed' ? '✓' : stage.key.slice(1)}</span><p className={`text-xs font-semibold ${light ? 'text-zinc-900' : 'text-white'}`}>{stage.label}</p></div><p className={`mt-2 text-[11px] leading-4 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{stage.evidence.summary}</p></article>)}</div></section>
+        <details className={`mt-5 rounded-xl border px-4 ${light ? 'border-zinc-200' : 'border-white/10'}`}><summary className={`cursor-pointer py-3 text-xs font-semibold ${light ? 'text-zinc-700' : 'text-zinc-300'}`}>Outras alterações de estado autorizadas</summary><EnrollmentLifecycleActions status={process.enrollmentStatus} light={light} onTransition={async (toStatus) => { await onTransition(toStatus); await loadProcess(); }} /></details>
+        <div id="enrollment-process-work"><EnrollmentDocumentChecklist enrollmentId={record.id} enrollmentStatus={process.enrollmentStatus} light={light} request={request} onChanged={loadProcess} /></div>
+        <dl className="mt-6 grid gap-4 sm:grid-cols-2"><Detail label="Responsável" value={process.assignedTo?.name || 'Equipa da Secretaria'} light={light} /><Detail label="Encarregado" value={record.guardian_name || 'Ainda não associado'} light={light} /><Detail label="Iniciado" value={formatDate(process.timestamps.startedAt)} light={light} /><Detail label="Último progresso" value={formatDate(process.timestamps.lastProgressAt)} light={light} /><Detail label="ID do processo" value={record.id} light={light} /><Detail label="Versão" value={String(process.version)} light={light} /></dl>
+        <p className={`mt-8 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Este painel reúne o estado atual da matrícula e a próxima ação necessária.</p>
+      </>}
+    </aside>
+  </div>;
 }
 
 function Detail({ label, value, light }: { label: string; value: string; light: boolean }) {

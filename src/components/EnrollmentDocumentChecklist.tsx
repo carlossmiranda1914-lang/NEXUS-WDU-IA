@@ -32,7 +32,7 @@ const STATUS_CLASS: Record<EnrollmentDocumentStatus, string> = {
 
 const MUTABLE_ENROLLMENT_STATUSES: EnrollmentOperationalStatus[] = ['draft', 'under_review', 'awaiting_documents', 'blocked'];
 
-export default function EnrollmentDocumentChecklist({ enrollmentId, enrollmentStatus, light, request }: { enrollmentId: string; enrollmentStatus: EnrollmentOperationalStatus; light: boolean; request: Request }) {
+export default function EnrollmentDocumentChecklist({ enrollmentId, enrollmentStatus, light, request, onChanged }: { enrollmentId: string; enrollmentStatus: EnrollmentOperationalStatus; light: boolean; request: Request; onChanged?: () => void | Promise<void> }) {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -70,6 +70,7 @@ export default function EnrollmentDocumentChecklist({ enrollmentId, enrollmentSt
         body: JSON.stringify({ toStatus, ...(toStatus === 'submitted' ? { evidenceReference } : {}) }),
       });
       await load();
+      await onChanged?.();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível atualizar o documento.');
     } finally {
@@ -78,7 +79,7 @@ export default function EnrollmentDocumentChecklist({ enrollmentId, enrollmentSt
   }
 
   return <>
-    <EnrollmentRegistrationPanel enrollmentId={enrollmentId} enrollmentStatus={enrollmentStatus} light={light} request={request} />
+    <EnrollmentRegistrationPanel enrollmentId={enrollmentId} enrollmentStatus={enrollmentStatus} light={light} request={request} onChanged={onChanged} />
     <section className={`mt-6 rounded-2xl border p-4 ${light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-950/40'}`} aria-label="Documentos da matrícula">
       <div className="flex items-start justify-between gap-3">
         <div><h3 className={`text-sm font-semibold ${light ? 'text-zinc-900' : 'text-white'}`}>Documentos da matrícula</h3><p className={`mt-1 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Checklist capturada para este processo. Documentos obrigatórios precisam estar verificados antes da validação.</p></div>

@@ -70,12 +70,13 @@ const MISSING_LABELS: Record<string, string> = {
 
 function value(value: unknown): string { return typeof value === 'string' ? value : ''; }
 
-export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentStatus, light, request, compact = false }: {
+export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentStatus, light, request, compact = false, onChanged }: {
   enrollmentId: string;
   enrollmentStatus: EnrollmentOperationalStatus;
   light: boolean;
   request: Request;
   compact?: boolean;
+  onChanged?: () => void | Promise<void>;
 }) {
   const [student, setStudent] = useState<StudentForm>(BLANK_STUDENT);
   const [guardian, setGuardian] = useState<GuardianForm>(BLANK_GUARDIAN);
@@ -132,6 +133,7 @@ export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentSt
       setReadiness(registration.readiness);
       setEditable(registration.editable);
       setNotice(registration.readiness.ready ? 'Cadastro completo e pronto para verificação documental.' : 'Cadastro guardado. Ainda existem dados obrigatórios por preencher.');
+      await onChanged?.();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível guardar o cadastro.');
     } finally { setSaving(false); }
