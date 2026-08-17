@@ -70,12 +70,13 @@ const MISSING_LABELS: Record<string, string> = {
 
 function value(value: unknown): string { return typeof value === 'string' ? value : ''; }
 
-export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentStatus, light, request, compact = false }: {
+export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentStatus, light, request, compact = false, onChanged }: {
   enrollmentId: string;
   enrollmentStatus: EnrollmentOperationalStatus;
   light: boolean;
   request: Request;
   compact?: boolean;
+  onChanged?: () => void | Promise<void>;
 }) {
   const [student, setStudent] = useState<StudentForm>(BLANK_STUDENT);
   const [guardian, setGuardian] = useState<GuardianForm>(BLANK_GUARDIAN);
@@ -118,7 +119,7 @@ export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentSt
   useEffect(() => { void load(); }, [load]);
 
   const missingText = useMemo(() => readiness.missing.map((item) => MISSING_LABELS[item] || item).join(', '), [readiness.missing]);
-  const inputClass = `mt-1.5 min-h-11 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-indigo-500 disabled:opacity-60 ${light ? 'border-zinc-200 bg-white text-zinc-900' : 'border-white/10 bg-zinc-950 text-white'}`;
+  const inputClass = `mt-1.5 min-h-11 w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-emerald-600 disabled:opacity-60 ${light ? 'border-zinc-200 bg-white text-zinc-900' : 'border-white/10 bg-zinc-950 text-white'}`;
   const labelClass = `block text-xs font-semibold ${light ? 'text-zinc-700' : 'text-zinc-300'}`;
 
   async function save() {
@@ -132,6 +133,7 @@ export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentSt
       setReadiness(registration.readiness);
       setEditable(registration.editable);
       setNotice(registration.readiness.ready ? 'Cadastro completo e pronto para verificação documental.' : 'Cadastro guardado. Ainda existem dados obrigatórios por preencher.');
+      await onChanged?.();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível guardar o cadastro.');
     } finally { setSaving(false); }
@@ -141,7 +143,7 @@ export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentSt
 
   return <section className={`mt-6 rounded-2xl border ${compact ? 'p-4' : 'p-5'} ${light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-950/40'}`} aria-label="Cadastro completo da matrícula">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div><h3 className={`text-sm font-semibold ${light ? 'text-zinc-900' : 'text-white'}`}>Cadastro da matrícula</h3><p className={`mt-1 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Complete os dados do aluno e do encarregado. O processo só pode ser validado quando este cadastro e os documentos obrigatórios estiverem completos.</p></div>
+      <div className="min-w-0"><h3 className={`break-words text-sm font-semibold leading-5 ${light ? 'text-zinc-900' : 'text-white'}`}>Cadastro da matrícula</h3><p className={`mt-1 break-words text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Complete os dados do aluno e do encarregado. O processo só pode ser validado quando este cadastro e os documentos obrigatórios estiverem completos.</p></div>
       <span className={`w-fit shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold ${readiness.ready ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500' : 'border-amber-500/30 bg-amber-500/10 text-amber-500'}`}>{readiness.ready ? 'Cadastro completo' : 'Cadastro incompleto'}</span>
     </div>
 
@@ -193,14 +195,14 @@ export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentSt
       </FormSection>
     </div>
 
-    {editable ? <button type="button" onClick={() => void save()} disabled={saving} className="mt-5 min-h-11 w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-500 disabled:opacity-50">{saving ? 'A guardar…' : 'Guardar cadastro'}</button> : <p className={`mt-5 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Este cadastro está em modo de consulta porque a matrícula já passou da fase editável.</p>}
+    {editable ? <button type="button" onClick={() => void save()} disabled={saving} className="mt-5 min-h-11 w-full rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-50">{saving ? 'A guardar…' : 'Guardar cadastro'}</button> : <p className={`mt-5 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Este cadastro está em modo de consulta porque a matrícula já passou da fase editável.</p>}
     {notice && <p role="status" className="mt-3 text-xs text-emerald-500">{notice}</p>}
     {error && <p role="alert" className="mt-3 text-xs text-rose-500">{error}</p>}
   </section>;
 }
 
 function FormSection({ title, description, light, children }: { title: string; description: string; light: boolean; children: ReactNode }) {
-  return <div className={`rounded-xl border p-4 ${light ? 'border-zinc-200 bg-slate-50' : 'border-white/10 bg-zinc-900/70'}`}><div className="mb-4"><h4 className={`text-xs font-bold ${light ? 'text-zinc-900' : 'text-zinc-100'}`}>{title}</h4><p className={`mt-1 text-[11px] leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{description}</p></div>{children}</div>;
+  return <div className={`min-w-0 rounded-xl border p-4 ${light ? 'border-zinc-200 bg-slate-50' : 'border-white/10 bg-zinc-900/70'}`}><div className="mb-4 min-w-0"><h4 className={`break-words text-xs font-bold leading-5 ${light ? 'text-zinc-900' : 'text-zinc-100'}`}>{title}</h4><p className={`mt-1 break-words text-[11px] leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{description}</p></div>{children}</div>;
 }
 
 function TextField({ label, value, onChange, className, labelClass, disabled, type = 'text', placeholder }: { label: string; value: string; onChange: (value: string) => void; className: string; labelClass: string; disabled: boolean; type?: string; placeholder?: string }) {

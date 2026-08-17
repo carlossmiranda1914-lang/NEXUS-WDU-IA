@@ -324,6 +324,21 @@ export async function executeEnrollmentIntake(
       });
 
       await client.query(
+        `INSERT INTO enrollment_processes (
+           enrollment_application_id, institution_id, current_stage, started_at,
+           last_progress_at, projection_fingerprint
+         ) VALUES ($1, $2, 'P02', now(), now(), 'intake:pending-reconciliation')`,
+        [enrollment.rows[0].id, command.institutionId],
+      );
+
+      await client.query(
+        `INSERT INTO enrollment_events (
+           institution_id, enrollment_application_id, actor_person_id, event_type, metadata
+         ) VALUES ($1, $2, $3, 'process_started', $4::jsonb)`,
+        [command.institutionId, enrollment.rows[0].id, command.actorPersonId, JSON.stringify({ currentStage: 'P02', source: 'enrollment_intake' })],
+      );
+
+      await client.query(
         `INSERT INTO enrollment_events (
            institution_id, enrollment_application_id, actor_person_id, event_type, to_status, metadata
          ) VALUES ($1, $2, $3, 'created', 'draft', $4::jsonb)`,

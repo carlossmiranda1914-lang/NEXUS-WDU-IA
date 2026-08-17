@@ -50,7 +50,7 @@ try {
   const replay = await addEnrollmentDocument(pool, contextA, { enrollmentId: ids.enrollmentA, documentType: 'Certificado escolar' });
   assert(replay.document.id === created.document.id && replay.replayed === true, 'Duplicate document type must replay idempotently.');
   const listed = await listEnrollmentDocuments(pool, contextA, ids.enrollmentA);
-  assert(listed.length === 1, 'Institution must list its document exactly once.');
+  assert(listed.documents.length === 1, 'Institution must list its document exactly once.');
 
   let crossInstitutionBlocked = false;
   try { await listEnrollmentDocuments(pool, contextB, ids.enrollmentA); } catch (error) { crossInstitutionBlocked = error instanceof EnrollmentDocumentApiError && error.code === 'NOT_FOUND'; }

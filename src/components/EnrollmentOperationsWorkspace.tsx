@@ -42,6 +42,19 @@ type Resolution = {
 };
 
 type PipelineContext = { label: string; description: string };
+type ProcessAction = { code: string; label: string; available: boolean; unavailableReason: string | null };
+type ProcessProjection = {
+  enrollmentId: string;
+  enrollmentStatus: EnrollmentOperationalStatus;
+  currentStage: string;
+  progress: { completed: number; applicable: number; percent: number };
+  assignedTo: { personId: string; name: string | null } | null;
+  stages: Array<{ key: string; label: string; status: 'pending' | 'in_progress' | 'blocked' | 'completed' | 'not_applicable'; reasonCode: string | null; nextAction: ProcessAction | null; evidence: { summary: string; source: string } }>;
+  nextAction: ProcessAction | null;
+  blockers: Array<{ reasonCode: string; message: string; stage: string }>;
+  version: number;
+  timestamps: { startedAt: string; lastProgressAt: string; blockedAt: string | null; updatedAt: string };
+};
 
 const PIPELINE_CONTEXT: Record<string, PipelineContext> = {
   entry: { label: 'Entrada', description: 'Processos iniciados que ainda precisam de tratamento pela Secretaria.' },
@@ -55,7 +68,7 @@ const VIEW_LABELS: Array<{ id: OperationalView; label: string }> = [
   { id: 'overview', label: 'Visão Operacional' },
   { id: 'entries', label: 'Entradas' },
   { id: 'enrollments', label: 'Matrículas' },
-  { id: 'students', label: 'Alunos' },
+  { id: 'students', label: 'Alunos ativos' },
 ];
 
 const STATUS_TONE: Record<EnrollmentOperationalStatus, string> = {
@@ -167,7 +180,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
     <section className="min-w-0 max-w-full space-y-5 overflow-x-hidden sm:space-y-6" aria-label="Workspace operacional de Alunos e Matrículas">
       <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0 space-y-1.5">
-          <p className="break-words text-[10px] font-bold uppercase leading-5 tracking-[0.14em] text-indigo-500 sm:tracking-[0.18em]">Secretaria escolar</p>
+          <p className="break-words text-[10px] font-bold uppercase leading-5 tracking-[0.14em] text-emerald-700 sm:tracking-[0.18em]">Secretaria escolar</p>
           <h1 className={`text-2xl font-bold tracking-tight ${text}`}>Alunos & Matrículas</h1>
           <p className={`max-w-3xl text-sm leading-6 ${muted}`}>Entradas, matrículas em curso, exceções e alunos ativos num único fluxo operacional. Os indicadores abaixo são calculados apenas a partir dos processos reais da instituição atual.</p>
         </div>
@@ -175,7 +188,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
           <button type="button" onClick={() => void load()} disabled={loading} className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border px-3.5 py-2.5 text-xs font-semibold sm:w-auto ${light ? 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50' : 'border-white/10 bg-zinc-900 text-zinc-300 hover:bg-white/5'} disabled:opacity-50`}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </button>
-          <button type="button" onClick={() => setNewEntryOpen(true)} className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-center text-xs font-bold text-white hover:bg-indigo-500 sm:w-auto">
+          <button type="button" onClick={() => setNewEntryOpen(true)} className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-center text-xs font-bold text-white hover:bg-emerald-600 sm:w-auto">
             <Plus className="h-4 w-4" /> Nova entrada / matrícula
           </button>
         </div>
@@ -183,7 +196,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
 
       <nav className={`flex max-w-full gap-1 overflow-x-auto overscroll-x-contain border-b pb-3 ${light ? 'border-zinc-200' : 'border-white/10'}`} aria-label="Vistas de Alunos e Matrículas">
         {VIEW_LABELS.map((item) => (
-          <button key={item.id} type="button" onClick={() => { setView(item.id); setStatusFilter(null); setSelectedStageId(null); }} className={`min-h-11 whitespace-nowrap rounded-lg px-3.5 py-2 text-xs font-semibold transition ${view === item.id ? light ? 'bg-indigo-50 text-indigo-700' : 'bg-white/10 text-white' : light ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}>
+          <button key={item.id} type="button" onClick={() => { setView(item.id); setStatusFilter(null); setSelectedStageId(null); }} className={`min-h-11 whitespace-nowrap rounded-lg px-3.5 py-2 text-xs font-semibold transition ${view === item.id ? light ? 'bg-emerald-50 text-emerald-800' : 'bg-emerald-500/15 text-emerald-200' : light ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}>
             {item.label}
           </button>
         ))}
@@ -211,17 +224,21 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
               </div>
 
               <div className={`rounded-2xl border p-5 ${surface}`}>
-                <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className={`font-semibold ${text}`}>Fluxo das matrículas</h2><p className={`mt-1 text-xs ${muted}`}>Acompanhe o percurso da matrícula. Selecione uma etapa disponível para abrir a respetiva fila de trabalho.</p></div><ShieldCheck className="h-5 w-5 text-indigo-500" /></div>
-                <div className="grid max-w-full snap-x snap-mandatory grid-flow-col auto-cols-[minmax(155px,78vw)] gap-2 overflow-x-auto overscroll-x-contain pb-2 sm:auto-cols-[minmax(170px,42vw)] xl:grid-flow-row xl:grid-cols-7 xl:auto-cols-auto xl:overflow-visible xl:pb-0">
+                <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className={`font-semibold ${text}`}>Fluxo das matrículas</h2><p className={`mt-1 text-xs ${muted}`}>Acompanhe o percurso da matrícula. Selecione uma etapa disponível para abrir a respetiva fila de trabalho.</p></div><ShieldCheck className="h-5 w-5 text-emerald-700" /></div>
+                <div className="grid max-w-full snap-x snap-mandatory grid-flow-col auto-cols-[minmax(168px,78vw)] gap-2 overflow-x-auto overscroll-x-contain pb-2 sm:auto-cols-[minmax(176px,42vw)] lg:auto-cols-[minmax(176px,24vw)] xl:auto-cols-[minmax(168px,1fr)]">
                   {pipeline.map((stage, index) => (
-                    <button key={stage.id} type="button" disabled={!stage.available} aria-label={stage.available ? `Abrir etapa ${stage.label}` : `${stage.label}: domínio ainda não disponível`} onClick={() => { if (!stage.available) return; setSelectedStageId(stage.id); setStatusFilter(stage.statuses); setView(stage.id === 'entry' ? 'entries' : stage.id === 'activation' ? 'students' : 'enrollments'); }} className={`group relative min-w-0 snap-start rounded-xl border p-3 text-left transition ${mutedSurface} ${stage.available ? 'cursor-pointer hover:border-indigo-400/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/40' : 'cursor-default opacity-65'}`}>
-                      <div className="flex min-w-0 items-center gap-2">
+                    <button key={stage.id} type="button" disabled={!stage.available} aria-label={stage.available ? `Abrir etapa ${stage.label}` : `${stage.label}: domínio ainda não disponível`} onClick={() => { if (!stage.available) return; setSelectedStageId(stage.id); setStatusFilter(stage.statuses); setView(stage.id === 'entry' ? 'entries' : stage.id === 'activation' ? 'students' : 'enrollments'); }} className={`group relative flex min-h-24 min-w-0 snap-start flex-col rounded-xl border p-3 text-left transition ${mutedSurface} ${stage.available ? 'cursor-pointer hover:border-emerald-500/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40' : 'cursor-default opacity-65'}`}>
+                      <div className="flex min-w-0 items-start gap-2">
                         <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${light ? 'bg-zinc-200 text-zinc-700' : 'bg-white/10 text-zinc-300'}`}>{index + 1}</span>
-                        <p className={`min-w-0 flex-1 truncate text-sm font-semibold ${text}`}>{stage.label}</p>
-                        <span className={`shrink-0 text-sm font-bold tabular-nums ${stage.available ? text : muted}`}>{stage.available ? stage.count : '—'}</span>
-                        {stage.available && <ChevronRight className="h-4 w-4 shrink-0 text-indigo-500 opacity-60 transition group-hover:translate-x-0.5 group-hover:opacity-100" />}
+                        <p className={`min-w-0 whitespace-normal break-normal text-sm font-semibold leading-5 [overflow-wrap:normal] ${text}`}>{stage.label}</p>
                       </div>
-                      {!stage.available && <p className={`mt-2 pl-8 text-[11px] ${muted}`}>Ainda não disponível</p>}
+                      <div className="mt-auto flex min-w-0 items-end justify-between gap-2 pl-8 pt-3">
+                        <span className={`min-w-0 text-[11px] leading-4 ${muted}`}>{stage.available ? 'Processos nesta etapa' : 'Ainda não disponível'}</span>
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          <span className={`text-sm font-bold tabular-nums ${stage.available ? text : muted}`}>{stage.available ? stage.count : '—'}</span>
+                          {stage.available && <ChevronRight className="h-4 w-4 shrink-0 text-emerald-700 opacity-60 transition group-hover:translate-x-0.5 group-hover:opacity-100" />}
+                        </span>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -236,7 +253,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
                 </div>
 
                 <div className={`rounded-2xl border p-5 ${surface}`}>
-                  <div className="flex items-center gap-2"><ClipboardCheck className="h-5 w-5 text-indigo-500" /><h2 className={`font-semibold ${text}`}>Como trabalhar nesta área</h2></div>
+                  <div className="flex items-center gap-2"><ClipboardCheck className="h-5 w-5 text-emerald-700" /><h2 className={`font-semibold ${text}`}>Como trabalhar nesta área</h2></div>
                   <div className="mt-4 space-y-4">
                     <OperationalNote icon={<CircleDot className="h-4 w-4" />} title="Dados atuais" body="Os indicadores refletem os processos desta instituição." light={light} />
                     <OperationalNote icon={<Clock3 className="h-4 w-4" />} title="Prioridades primeiro" body="Pendências e bloqueios aparecem antes dos processos regulares." light={light} />
@@ -251,22 +268,42 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
             <div className={`overflow-hidden rounded-2xl border ${surface}`}>
               <div className={`flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between ${light ? 'border-zinc-200' : 'border-white/10'}`}>
                 <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className={`font-semibold ${text}`}>{selectedStage?.label || VIEW_LABELS.find((item) => item.id === view)?.label}</h2></div><p className={`mt-1 text-xs leading-5 ${muted}`}>{selectedStage?.description || `${visible.length} registo${visible.length === 1 ? '' : 's'} real${visible.length === 1 ? '' : 'is'} nesta vista.`}</p>{selectedStage && <p className={`mt-1 text-[11px] ${muted}`}>{visible.length} processo{visible.length === 1 ? '' : 's'} nesta etapa.</p>}</div>
-                <div className="relative w-full sm:w-80"><Search aria-hidden="true" className={`pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 ${muted}`} /><input aria-label="Procurar processos" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Procurar aluno, oferta ou ano" className={`min-h-11 w-full rounded-lg border py-2.5 pl-12 pr-3 text-sm outline-none focus:border-indigo-500 ${light ? 'border-zinc-200 bg-white text-zinc-900' : 'border-white/10 bg-zinc-950 text-white'}`} /></div>
+                <div className="relative w-full sm:w-80"><Search aria-hidden="true" className={`pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 ${muted}`} /><input aria-label="Procurar processos" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Procurar aluno, oferta ou ano" className={`min-h-11 w-full rounded-lg border py-2.5 pl-12 pr-3 text-sm outline-none focus:border-emerald-600 ${light ? 'border-zinc-200 bg-white text-zinc-900' : 'border-white/10 bg-zinc-950 text-white'}`} /></div>
               </div>
-              {visible.length === 0 ? <EmptyState title={view === 'students' ? 'Ainda não existem alunos ativos nesta base' : 'Nenhum processo nesta vista'} body={view === 'students' ? 'Um aluno só aparece aqui depois de uma matrícula ativa. Não são usados registos demonstrativos.' : 'Os dados desta vista são alimentados exclusivamente pelos processos institucionais persistidos.'} light={light} /> : <ul className={`divide-y ${light ? 'divide-zinc-200' : 'divide-white/10'}`}>{visible.map((record) => <li key={record.id}><ProcessRow record={record} light={light} onOpen={() => setSelected(record)} /></li>)}</ul>}
+              {visible.length === 0 ? <EmptyState title={view === 'students' ? 'Ainda não existem alunos ativos nesta base' : 'Nenhum processo nesta vista'} body={view === 'students' ? 'Um aluno aparece aqui depois de a matrícula estar ativa.' : 'Os dados desta vista são alimentados exclusivamente pelos processos institucionais persistidos.'} light={light} /> : <ul className={`divide-y ${light ? 'divide-zinc-200' : 'divide-white/10'}`}>{visible.map((record) => <li key={record.id}><ProcessRow record={record} light={light} onOpen={() => setSelected(record)} /></li>)}</ul>}
             </div>
           )}
         </>
       )}
 
-      {selected && <ProcessDrawer record={selected} light={light} onClose={() => setSelected(null)} onTransition={async (toStatus) => { await request(`/api/enrollments/${selected.id}/transitions`, { method: 'POST', body: JSON.stringify({ toStatus }) }); setSelected(null); setNotice('Estado da matrícula atualizado.'); await load(); }} />}
+      {selected && <ProcessDrawer record={selected} light={light} onClose={() => setSelected(null)} onTransition={async (toStatus) => { await request(`/api/enrollments/${selected.id}/transitions`, { method: 'POST', body: JSON.stringify({ toStatus }) }); setSelected((current) => current ? { ...current, status: toStatus, updated_at: new Date().toISOString() } : current); setNotice('Estado da matrícula atualizado.'); await load(); }} />}
       {newEntryOpen && <EnrollmentNewEntryDrawer offers={offers} light={light} onClose={() => setNewEntryOpen(false)} onCreated={async () => { setNewEntryOpen(false); setNotice('Processo de matrícula iniciado com segurança e adicionado à fila institucional.'); await load(); setView('enrollments'); }} />}
     </section>
   );
 }
 
 function ProcessRow({ record, light, onOpen }: { record: EnrollmentOperationalRecord; light: boolean; onOpen: () => void }) {
-  return <button type="button" onClick={onOpen} className={`flex w-full flex-col gap-3 px-5 py-4 text-left transition sm:flex-row sm:items-center sm:justify-between ${light ? 'hover:bg-zinc-50' : 'hover:bg-white/[0.03]'}`}><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className={`font-semibold ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</p><span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_TONE[record.status]}`}>{STATUS_LABELS[record.status]}</span></div><p className={`mt-1 truncate text-xs ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.offer_name} · {record.academic_year_name}</p><p className={`mt-2 text-xs ${record.status === 'blocked' ? 'text-rose-500' : light ? 'text-zinc-600' : 'text-zinc-300'}`}>{nextAction(record)}</p></div><div className={`flex shrink-0 items-center gap-2 text-xs ${light ? 'text-zinc-500' : 'text-zinc-400'}`}><span>Atualizado {formatDate(record.updated_at)}</span><ChevronRight className="h-4 w-4" /></div></button>;
+  return (
+    <button type="button" onClick={onOpen} className={`!grid h-auto w-full min-w-0 grid-cols-1 gap-x-5 gap-y-4 px-4 py-4 text-left transition sm:px-5 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)_7.5rem_1rem] lg:items-start lg:gap-x-4 lg:gap-y-0 ${light ? 'hover:bg-emerald-50/40' : 'hover:bg-emerald-500/[0.04]'}`}>
+      <div className="min-w-0">
+        <p className={`line-clamp-2 break-words text-sm font-semibold leading-5 [overflow-wrap:anywhere] ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</p>
+        <span className={`mt-1.5 inline-flex max-w-full whitespace-normal rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-4 ${STATUS_TONE[record.status]}`}>{STATUS_LABELS[record.status]}</span>
+      </div>
+      <div className={`min-w-0 text-xs ${light ? 'text-zinc-600' : 'text-zinc-300'}`}>
+        <span className={`mb-1 block text-[10px] font-semibold uppercase tracking-wide lg:sr-only ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Oferta</span>
+        <p className="line-clamp-2 break-words font-medium leading-5 [overflow-wrap:anywhere]">{record.offer_name}</p>
+        <p className={`mt-1 break-words leading-5 [overflow-wrap:anywhere] ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.academic_year_name}</p>
+      </div>
+      <div className={`min-w-0 border-t pt-3 text-xs md:col-span-2 lg:col-span-1 lg:border-t-0 lg:pt-0 ${record.status === 'blocked' ? light ? 'border-rose-200 text-rose-600' : 'border-rose-500/20 text-rose-400' : light ? 'border-zinc-200 text-zinc-600' : 'border-white/10 text-zinc-300'}`}>
+        <span className={`mb-1 block text-[10px] font-semibold uppercase tracking-wide lg:sr-only ${record.status === 'blocked' ? 'text-rose-500' : light ? 'text-zinc-500' : 'text-zinc-400'}`}>Próxima ação</span>
+        <p className="break-words leading-5 [overflow-wrap:anywhere]">{nextAction(record)}</p>
+      </div>
+      <div className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t pt-3 text-xs md:col-span-2 lg:contents ${light ? 'border-zinc-200 text-zinc-500' : 'border-white/10 text-zinc-400'}`}>
+        <span className="min-w-0 whitespace-nowrap leading-5"><span className="mr-1.5 font-semibold lg:sr-only">Atualizado</span>{formatDate(record.updated_at)}</span>
+        <ChevronRight className="h-4 w-4 shrink-0 lg:mt-0.5" />
+      </div>
+    </button>
+  );
 }
 
 function EmptyState({ title, body, light }: { title: string; body: string; light: boolean }) {
@@ -278,11 +315,71 @@ function OperationalNote({ icon, title, body, light }: { icon: ReactNode; title:
 }
 
 function ProcessDrawer({ record, light, onClose, onTransition }: { record: EnrollmentOperationalRecord; light: boolean; onClose: () => void; onTransition: (toStatus: EnrollmentOperationalStatus) => Promise<void> }) {
-  return <div className="fixed inset-0 z-[12000] flex justify-end bg-black/40" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className={`h-full w-full max-w-lg overflow-y-auto border-l p-6 shadow-2xl ${light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-900'}`}><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-500">Processo de matrícula</p><h2 className={`mt-1 text-xl font-bold ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</h2><p className={`mt-1 text-sm ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.offer_name} · {record.academic_year_name}</p></div><button type="button" onClick={onClose} className={`rounded-lg p-2 ${light ? 'hover:bg-zinc-100' : 'hover:bg-white/5'}`}><X className="h-5 w-5" /></button></div><div className={`mt-6 rounded-2xl border p-4 ${light ? 'border-zinc-200 bg-slate-50' : 'border-white/10 bg-zinc-950/60'}`}><span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_TONE[record.status]}`}>{STATUS_LABELS[record.status]}</span><p className={`mt-3 text-sm leading-6 ${light ? 'text-zinc-600' : 'text-zinc-300'}`}>{statusExplanation(record.status)}</p><div className={`mt-4 border-t pt-4 ${light ? 'border-zinc-200' : 'border-white/10'}`}><p className={`text-xs font-semibold ${light ? 'text-zinc-800' : 'text-zinc-200'}`}>Próxima ação</p><p className="mt-1 text-sm font-semibold text-indigo-500">{nextAction(record)}</p></div></div><EnrollmentLifecycleActions status={record.status} light={light} onTransition={onTransition} /><EnrollmentDocumentChecklist enrollmentId={record.id} enrollmentStatus={record.status} light={light} request={request} /><dl className="mt-6 grid gap-4 sm:grid-cols-2"><Detail label="Encarregado" value={record.guardian_name || 'Ainda não associado'} light={light} /><Detail label="Criado" value={formatDate(record.created_at)} light={light} /><Detail label="Última atualização" value={formatDate(record.updated_at)} light={light} /><Detail label="ID do processo" value={record.id} light={light} /></dl><p className={`mt-8 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Este painel reúne o estado atual da matrícula e a próxima ação necessária.</p></aside></div>;
+  const [process, setProcess] = useState<ProcessProjection | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const loadProcess = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await request(`/api/enrollments/${record.id}/process`);
+      setProcess(result.process);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível carregar as etapas do processo.');
+    } finally {
+      setLoading(false);
+    }
+  }, [record.id]);
+  useEffect(() => { void loadProcess(); }, [loadProcess]);
+
+  async function runPrimaryAction() {
+    if (!process?.nextAction?.available) return;
+    const target = process.nextAction.code === 'VALIDATE_ENROLLMENT'
+      ? 'validated'
+      : process.nextAction.code === 'RESUME_REVIEW' ? 'under_review' : null;
+    if (!target) {
+      document.getElementById('enrollment-process-work')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await onTransition(target);
+      await loadProcess();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível executar a próxima ação.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const currentStage = process?.stages.find((stage) => stage.key === process.currentStage);
+  return <div className="fixed inset-0 z-[12000] flex justify-end bg-black/40" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <aside className={`h-full w-full max-w-2xl overflow-y-auto border-l p-4 shadow-2xl sm:p-6 ${light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-900'}`} aria-label="Processo persistido de matrícula">
+      <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="break-words text-[10px] font-bold uppercase leading-5 tracking-[0.14em] text-emerald-600">Processo de matrícula</p><h2 className={`mt-1 line-clamp-2 break-words text-xl font-bold leading-7 ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</h2><p className={`mt-1 break-words text-sm leading-6 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.offer_name} · {record.academic_year_name}</p></div><button type="button" aria-label="Fechar processo" onClick={onClose} className={`min-h-11 min-w-11 shrink-0 rounded-lg p-2 ${light ? 'hover:bg-zinc-100' : 'hover:bg-white/5'}`}><X className="h-5 w-5" /></button></div>
+      {loading && <div className={`mt-6 flex min-h-40 items-center justify-center gap-2 rounded-2xl border ${light ? 'border-zinc-200 bg-slate-50 text-zinc-500' : 'border-white/10 bg-zinc-950/60 text-zinc-400'}`}><LoaderCircle className="h-4 w-4 animate-spin" /> A carregar etapas reais…</div>}
+      {error && <div role="alert" className="mt-6 flex gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-500"><AlertCircle className="h-5 w-5 shrink-0" />{error}<button type="button" onClick={() => void loadProcess()} className="ml-auto underline">Tentar novamente</button></div>}
+      {process && !loading && <>
+        <section className={`mt-6 rounded-2xl border p-4 ${light ? 'border-emerald-200 bg-emerald-50/60' : 'border-emerald-500/20 bg-emerald-500/[0.06]'}`} aria-label="Resumo do processo">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><span className={`inline-flex max-w-full whitespace-normal rounded-full border px-2.5 py-1 text-xs font-semibold leading-5 ${STATUS_TONE[process.enrollmentStatus]}`}>{STATUS_LABELS[process.enrollmentStatus]}</span><p className={`mt-3 break-words text-sm font-semibold leading-6 ${light ? 'text-zinc-900' : 'text-white'}`}>{currentStage?.label}</p><p className={`mt-1 break-words text-xs leading-5 ${light ? 'text-zinc-600' : 'text-zinc-300'}`}>{currentStage?.evidence.summary}</p></div><div className="shrink-0 text-right"><p className="text-2xl font-bold tabular-nums text-emerald-600">{process.progress.percent}%</p><p className={`text-[11px] leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{process.progress.completed} de {process.progress.applicable} etapas</p></div></div>
+          <div className={`mt-4 h-2 max-w-full overflow-hidden rounded-full ${light ? 'bg-emerald-100' : 'bg-white/10'}`}><div className="h-full rounded-full bg-emerald-600 transition-[width]" style={{ width: `${process.progress.percent}%` }} /></div>
+          <div className={`mt-4 min-w-0 border-t pt-4 ${light ? 'border-emerald-200' : 'border-white/10'}`}><p className={`text-xs font-semibold ${light ? 'text-zinc-800' : 'text-zinc-200'}`}>Próxima ação</p>{process.nextAction ? <><button type="button" disabled={busy || !process.nextAction.available} onClick={() => void runPrimaryAction()} className="mt-2 min-h-11 w-full break-words rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-bold !text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'A atualizar…' : process.nextAction.label}</button>{process.nextAction.unavailableReason && <p className="mt-2 break-words text-xs leading-5 text-amber-600">{process.nextAction.unavailableReason}</p>}</> : <p className="mt-1 text-sm font-semibold text-emerald-600">Processo S03 concluído.</p>}</div>
+        </section>
+        {process.blockers.length > 0 && <section className="mt-4 min-w-0 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4" aria-label="Bloqueio principal"><p className="text-xs font-bold uppercase tracking-wide text-amber-600">Pendência principal</p><p className={`mt-1 break-words text-sm leading-6 ${light ? 'text-amber-900' : 'text-amber-200'}`}>{process.blockers[0].message}</p></section>}
+        <section className="mt-6" aria-label="Etapas do processo"><div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">{process.stages.map((stage) => <article key={stage.key} aria-current={stage.key === process.currentStage ? 'step' : undefined} className={`min-w-0 rounded-xl border p-3 ${stage.key === process.currentStage ? light ? 'border-emerald-300 bg-emerald-50' : 'border-emerald-500/40 bg-emerald-500/10' : light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-950/40'}`}><div className="flex min-w-0 items-center gap-2"><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${stage.status === 'completed' ? 'bg-emerald-600 text-white' : stage.status === 'blocked' ? 'bg-amber-500 text-zinc-950' : light ? 'bg-zinc-100 text-zinc-600' : 'bg-white/10 text-zinc-300'}`}>{stage.status === 'completed' ? '✓' : stage.key.slice(1)}</span><p className={`min-w-0 break-words text-xs font-semibold leading-5 ${light ? 'text-zinc-900' : 'text-white'}`}>{stage.label}</p></div><p className={`mt-2 break-words text-[11px] leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{stage.evidence.summary}</p></article>)}</div></section>
+        <details className={`mt-5 rounded-xl border px-4 ${light ? 'border-zinc-200' : 'border-white/10'}`}><summary className={`cursor-pointer py-3 text-xs font-semibold ${light ? 'text-zinc-700' : 'text-zinc-300'}`}>Outras alterações de estado autorizadas</summary><EnrollmentLifecycleActions status={process.enrollmentStatus} light={light} onTransition={async (toStatus) => { await onTransition(toStatus); await loadProcess(); }} /></details>
+        <div id="enrollment-process-work"><EnrollmentDocumentChecklist enrollmentId={record.id} enrollmentStatus={process.enrollmentStatus} light={light} request={request} onChanged={loadProcess} /></div>
+        <dl className="mt-6 grid gap-4 sm:grid-cols-2"><Detail label="Responsável operacional" value={process.assignedTo?.name || 'Equipa da Secretaria'} light={light} /><Detail label="Encarregado" value={record.guardian_name || 'Ainda não associado'} light={light} /><Detail label="Iniciado" value={formatDate(process.timestamps.startedAt)} light={light} /><Detail label="Último progresso" value={formatDate(process.timestamps.lastProgressAt)} light={light} /></dl>
+        <details className={`mt-5 rounded-xl border px-4 ${light ? 'border-zinc-200' : 'border-white/10'}`}><summary className={`cursor-pointer py-3 text-xs font-semibold ${light ? 'text-zinc-600' : 'text-zinc-400'}`}>Detalhes técnicos</summary><dl className="grid gap-4 pb-4 sm:grid-cols-2"><Detail label="ID do processo" value={record.id} light={light} /><Detail label="Versão" value={String(process.version)} light={light} /></dl></details>
+        <p className={`mt-8 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Este painel reúne o estado atual da matrícula e a próxima ação necessária.</p>
+      </>}
+    </aside>
+  </div>;
 }
 
 function Detail({ label, value, light }: { label: string; value: string; light: boolean }) {
-  return <div><dt className={`text-[10px] font-bold uppercase tracking-wider ${light ? 'text-zinc-500' : 'text-zinc-500'}`}>{label}</dt><dd className={`mt-1 break-words text-sm ${light ? 'text-zinc-800' : 'text-zinc-200'}`}>{value}</dd></div>;
+  return <div className="min-w-0"><dt className={`text-[10px] font-bold uppercase tracking-wider ${light ? 'text-zinc-500' : 'text-zinc-500'}`}>{label}</dt><dd className={`mt-1 break-words text-sm leading-6 ${light ? 'text-zinc-800' : 'text-zinc-200'}`}>{value}</dd></div>;
 }
 
 function NewEntryDrawer({ offers, light, onClose, onCreated }: { offers: Offer[]; light: boolean; onClose: () => void; onCreated: () => Promise<void> }) {

@@ -44,7 +44,13 @@
     "lint": "tsc --noEmit",
     "nexus:preflight:db:test": "node scripts/nexus-preflight-db.mjs --target=TEST_DATABASE_URL",
     "nexus:migrate:s02:test": "node scripts/apply-s02-schema-reconciliation.mjs --target=TEST_DATABASE_URL",
-    "test:s02:schema-regression": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx tests/secretariat-s02-existing-student-schema-postgres.test.ts"
+    "test:s02:schema-regression": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx tests/secretariat-s02-existing-student-schema-postgres.test.ts",
+    "test:secretariat-s03:policy": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx tests/secretariat-s03-process-policy.test.ts",
+    "test:secretariat-s03:postgres": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx tests/secretariat-s03-process-postgres.test.ts",
+    "test:secretariat-s03:contract": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx tests/secretariat-s03-process-contract.test.ts",
+    "test:secretariat-s03": "npm run test:secretariat-s03:policy && npm run test:secretariat-s03:contract && npm run test:secretariat-s03:postgres",
+    "nexus:migrate:s03:test": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx scripts/apply-s03-process-migration.ts --target=TEST_DATABASE_URL",
+    "nexus:migrate:s03": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx scripts/apply-s03-process-migration.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

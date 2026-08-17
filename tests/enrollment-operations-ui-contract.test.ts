@@ -10,7 +10,7 @@ expect(source.includes('Alunos & Matrículas'), 'Workspace must present the unif
 expect(source.includes('Visão Operacional'), 'Workspace must expose the approved operational view.');
 expect(source.includes('Entradas'), 'Workspace must expose Entradas.');
 expect(source.includes('Matrículas'), 'Workspace must expose Matrículas.');
-expect(source.includes('Alunos'), 'Workspace must expose Alunos.');
+expect(source.includes('Alunos ativos'), 'Workspace must expose the approved active-student view label.');
 expect(source.includes('O que precisa da minha atenção'), 'Secretaria must receive an exception-first work queue.');
 expect(source.includes('Nova entrada / matrícula'), 'Workspace must expose the approved primary action.');
 expect(source.includes("request('/api/enrollments/context')"), 'Workspace must use real institutional context.');
@@ -24,7 +24,8 @@ expect(!source.includes('institutionId:'), 'Browser must not supply institution 
 expect(!source.includes('studentPersonId:'), 'Browser must not supply global Person authority.');
 expect(source.includes('Ainda não disponível'), 'Unavailable pipeline domains must remain explicit in product language and never be simulated.');
 expect(!source.includes('Domínio ainda não persistido'), 'Technical backend wording must not leak into the user-facing pipeline.');
-expect(source.includes('Não são usados registos demonstrativos'), 'Empty student view must explicitly reject demo records.');
+expect(source.includes('Um aluno aparece aqui depois de a matrícula estar ativa.'), 'Empty active-student view must explain that only activated enrollments appear.');
+expect(source.includes('exclusivamente pelos processos institucionais persistidos'), 'Workspace empty states must continue to reject demonstrative records.');
 
 expect(app.includes("const EnrollmentOperationsWorkspace = lazy(() => import('./components/EnrollmentOperationsWorkspace'));"), 'App shell must load the vNext enrollment workspace.');
 expect(app.includes("<EnrollmentOperationsWorkspace theme={theme} />"), 'Students module must mount the vNext operational workspace.');

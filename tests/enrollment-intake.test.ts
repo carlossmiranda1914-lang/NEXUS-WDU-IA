@@ -46,6 +46,7 @@ const happyClient = new ScriptedClient((sql) => {
   if (sql.startsWith('INSERT INTO student_profiles')) return { rows: [{ id: 'profile-1' }], rowCount: 1 };
   if (sql.startsWith('INSERT INTO enrollment_applications')) return { rows: [{ id: 'enrollment-1' }], rowCount: 1 };
   if (sql.includes('FROM enrollment_document_policies')) return { rows: [], rowCount: 0 };
+  if (sql.startsWith('INSERT INTO enrollment_processes')) return { rows: [], rowCount: 1 };
   if (sql.startsWith('INSERT INTO enrollment_events')) return { rows: [], rowCount: 1 };
   if (sql.startsWith('UPDATE enrollment_intake_commands')) return { rows: [], rowCount: 1 };
   throw new Error(`Unexpected SQL in happy path: ${sql}`);
@@ -54,6 +55,7 @@ const happyResult = await executeEnrollmentIntake(poolFor(happyClient), baseComm
 expect(happyResult.enrollmentApplicationId === 'enrollment-1', 'New intake must return created enrollment id.');
 expect(happyResult.studentPersonId === 'person-1', 'New intake must return created Person id.');
 expect(happyResult.studentProfileId === 'profile-1', 'New intake must return created StudentProfile id.');
+expect(happyClient.statements.some((sql) => sql.startsWith('INSERT INTO enrollment_processes')), 'New intake must create its 1:1 process in the same transaction.');
 expect(happyResult.replayed === false, 'First successful execution must not be marked replayed.');
 expect(happyClient.statements[0] === 'BEGIN', 'Intake must start a transaction before domain writes.');
 expect(happyClient.statements.includes('COMMIT'), 'Successful intake must commit.');
@@ -86,6 +88,7 @@ const reuseClient = new ScriptedClient((sql, values) => {
   }
   if (sql.startsWith('INSERT INTO enrollment_applications')) return { rows: [{ id: 'enrollment-2' }], rowCount: 1 };
   if (sql.includes('FROM enrollment_document_policies')) return { rows: [], rowCount: 0 };
+  if (sql.startsWith('INSERT INTO enrollment_processes')) return { rows: [], rowCount: 1 };
   if (sql.startsWith('INSERT INTO enrollment_events')) return { rows: [], rowCount: 1 };
   if (sql.startsWith('UPDATE enrollment_intake_commands')) return { rows: [], rowCount: 1 };
   throw new Error(`Unexpected SQL in reuse path: ${sql}`);

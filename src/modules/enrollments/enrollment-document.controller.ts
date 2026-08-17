@@ -35,8 +35,8 @@ export function registerEnrollmentDocumentRoutes(app: Application) {
   app.get('/api/enrollments/:id/documents', requireAuth, async (req: AuthRequest, res: Response) => {
     const context = institutionalContext(req, res); if (!context) return;
     try {
-      const documents = await listEnrollmentDocuments(pool, context, req.params.id);
-      return res.json({ documents });
+      const result = await listEnrollmentDocuments(pool, context, req.params.id);
+      return res.json(result);
     } catch (error) {
       return rejectDocumentError(res, error);
     }

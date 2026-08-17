@@ -20,12 +20,12 @@ assert(normalized[1] === 'Certificado escolar', 'Valid requirement must remain i
 const missingPolicy = documentValidationGate(false, []);
 assert(!missingPolicy.ready && missingPolicy.reason === 'POLICY_NOT_CAPTURED', 'Missing policy snapshot must fail closed.');
 const zeroRequirements = documentValidationGate(true, []);
-assert(zeroRequirements.ready, 'Explicit captured policy with zero requirements must be valid.');
-const pendingRequired = documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'submitted' }]);
-assert(!pendingRequired.ready && pendingRequired.reason === 'REQUIRED_DOCUMENTS_PENDING', 'Required submitted document must not satisfy validation.');
-const verifiedRequired = documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'verified' }]);
+assert(!zeroRequirements.ready && zeroRequirements.reason === 'REQUIREMENTS_NOT_CONFIGURED', 'A policy reference without materialized requirements must fail closed.');
+const pendingRequired = documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'submitted', sourceRequirementId: 'bi' }]);
+assert(!pendingRequired.ready && pendingRequired.reason === 'REQUIRED_DOCUMENTS_UNVERIFIED', 'Required submitted document must wait for verification.');
+const verifiedRequired = documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'verified', sourceRequirementId: 'bi' }]);
 assert(verifiedRequired.ready, 'Required verified document must satisfy validation.');
-const optionalPending = documentValidationGate(true, [{ documentType: 'Foto extra', required: false, status: 'pending' }]);
-assert(optionalPending.ready, 'Optional document must not block validation.');
+const optionalPending = documentValidationGate(true, [{ documentType: 'Foto extra', required: false, status: 'pending', sourceRequirementId: 'foto' }]);
+assert(optionalPending.ready, 'Materialized optional document configuration must not block validation.');
 
 console.log(`Secretariat S02.3.2 document requirement policy passed (${assertions} assertions).`);
