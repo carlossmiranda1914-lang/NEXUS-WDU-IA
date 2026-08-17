@@ -78,6 +78,7 @@ const STATUS_TONE: Record<EnrollmentOperationalStatus, string> = {
   validated: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300',
   blocked: 'border-rose-500/20 bg-rose-500/10 text-rose-300',
   active: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300',
+  transferred_out: 'border-sky-500/20 bg-sky-500/10 text-sky-300',
   cancelled: 'border-zinc-500/20 bg-zinc-500/10 text-zinc-400',
 };
 
@@ -112,6 +113,7 @@ function statusExplanation(status: EnrollmentOperationalStatus) {
     case 'validated': return 'As verificações atuais permitem encaminhar o processo para decisão.';
     case 'blocked': return 'Existe uma condição que impede o avanço normal do processo.';
     case 'active': return 'A matrícula está ativa e o aluno integra o contexto escolar.';
+    case 'transferred_out': return 'A saída foi autorizada e o histórico permanece disponível para consulta.';
     case 'cancelled': return 'O processo foi cancelado e permanece apenas para histórico.';
   }
 }
@@ -319,6 +321,8 @@ function ProcessDrawer({ record, light, onClose, onTransition }: { record: Enrol
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [transferDestination, setTransferDestination] = useState('');
+  const [transferReason, setTransferReason] = useState('');
   const loadProcess = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -354,6 +358,16 @@ function ProcessDrawer({ record, light, onClose, onTransition }: { record: Enrol
     }
   }
 
+  async function startTransferOut() {
+    setBusy(true); setError(null);
+    try {
+      await request(`/api/enrollments/${record.id}/transfer-out`, { method: 'POST', body: JSON.stringify({ destinationName: transferDestination, reason: transferReason }) });
+      setTransferDestination(''); setTransferReason('');
+      await loadProcess();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível iniciar a transferência.'); }
+    finally { setBusy(false); }
+  }
+
   const currentStage = process?.stages.find((stage) => stage.key === process.currentStage);
   return <div className="fixed inset-0 z-[12000] flex justify-end bg-black/40" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <aside className={`h-full w-full max-w-2xl overflow-y-auto border-l p-4 shadow-2xl sm:p-6 ${light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-900'}`} aria-label="Processo persistido de matrícula">
@@ -366,6 +380,7 @@ function ProcessDrawer({ record, light, onClose, onTransition }: { record: Enrol
           <div className={`mt-4 h-2 max-w-full overflow-hidden rounded-full ${light ? 'bg-emerald-100' : 'bg-white/10'}`}><div className="h-full rounded-full bg-emerald-600 transition-[width]" style={{ width: `${process.progress.percent}%` }} /></div>
           <div className={`mt-4 min-w-0 border-t pt-4 ${light ? 'border-emerald-200' : 'border-white/10'}`}><p className={`text-xs font-semibold ${light ? 'text-zinc-800' : 'text-zinc-200'}`}>Próxima ação</p>{process.nextAction ? <><button type="button" disabled={busy || !process.nextAction.available} onClick={() => void runPrimaryAction()} className="mt-2 min-h-11 w-full break-words rounded-lg bg-emerald-700 px-4 py-2.5 text-sm font-bold !text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">{busy ? 'A atualizar…' : process.nextAction.label}</button>{process.nextAction.unavailableReason && <p className="mt-2 break-words text-xs leading-5 text-amber-600">{process.nextAction.unavailableReason}</p>}</> : <p className="mt-1 text-sm font-semibold text-emerald-600">Processo S03 concluído.</p>}</div>
         </section>
+        {process.enrollmentStatus === 'active' && <section className={`mt-4 rounded-xl border p-4 ${light ? 'border-sky-200 bg-sky-50' : 'border-sky-500/20 bg-sky-500/[0.06]'}`} aria-label="Transferência de saída"><h3 className={`text-sm font-semibold ${light ? 'text-zinc-900' : 'text-white'}`}>Transferência de saída</h3><p className={`mt-1 text-xs leading-5 ${light ? 'text-zinc-600' : 'text-zinc-300'}`}>A Secretaria prepara o pedido; a Direção/Administração autoriza a saída e declara a situação académica e financeira.</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><input aria-label="Instituição de destino" value={transferDestination} onChange={(event) => setTransferDestination(event.target.value)} placeholder="Instituição de destino" className={`min-h-11 rounded-lg border px-3 text-sm ${light ? 'border-zinc-200 bg-white text-zinc-900' : 'border-white/10 bg-zinc-950 text-white'}`} /><input aria-label="Motivo da transferência" value={transferReason} onChange={(event) => setTransferReason(event.target.value)} placeholder="Motivo da transferência" className={`min-h-11 rounded-lg border px-3 text-sm ${light ? 'border-zinc-200 bg-white text-zinc-900' : 'border-white/10 bg-zinc-950 text-white'}`} /></div><button type="button" disabled={busy || transferDestination.trim().length < 2 || transferReason.trim().length < 2} onClick={() => void startTransferOut()} className="mt-3 min-h-11 rounded-lg bg-sky-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busy ? 'A registar…' : 'Preparar transferência de saída'}</button></section>}
         {process.blockers.length > 0 && <section className="mt-4 min-w-0 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4" aria-label="Bloqueio principal"><p className="text-xs font-bold uppercase tracking-wide text-amber-600">Pendência principal</p><p className={`mt-1 break-words text-sm leading-6 ${light ? 'text-amber-900' : 'text-amber-200'}`}>{process.blockers[0].message}</p></section>}
         <section className="mt-6" aria-label="Etapas do processo"><div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">{process.stages.map((stage) => <article key={stage.key} aria-current={stage.key === process.currentStage ? 'step' : undefined} className={`min-w-0 rounded-xl border p-3 ${stage.key === process.currentStage ? light ? 'border-emerald-300 bg-emerald-50' : 'border-emerald-500/40 bg-emerald-500/10' : light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-950/40'}`}><div className="flex min-w-0 items-center gap-2"><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${stage.status === 'completed' ? 'bg-emerald-600 text-white' : stage.status === 'blocked' ? 'bg-amber-500 text-zinc-950' : light ? 'bg-zinc-100 text-zinc-600' : 'bg-white/10 text-zinc-300'}`}>{stage.status === 'completed' ? '✓' : stage.key.slice(1)}</span><p className={`min-w-0 break-words text-xs font-semibold leading-5 ${light ? 'text-zinc-900' : 'text-white'}`}>{stage.label}</p></div><p className={`mt-2 break-words text-[11px] leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{stage.evidence.summary}</p></article>)}</div></section>
         <details className={`mt-5 rounded-xl border px-4 ${light ? 'border-zinc-200' : 'border-white/10'}`}><summary className={`cursor-pointer py-3 text-xs font-semibold ${light ? 'text-zinc-700' : 'text-zinc-300'}`}>Outras alterações de estado autorizadas</summary><EnrollmentLifecycleActions status={process.enrollmentStatus} light={light} onTransition={async (toStatus) => { await onTransition(toStatus); await loadProcess(); }} /></details>

@@ -213,7 +213,7 @@ export async function assignEnrollmentProcess(
     await client.query('BEGIN');
     const application = await lockApplication(client, context.institutionId, enrollmentId);
     if (!application) throw new EnrollmentProcessApiError('NOT_FOUND', 'Matrícula não encontrada nesta instituição.');
-    if (application.status === 'cancelled' || application.status === 'active') {
+    if (application.status === 'cancelled' || application.status === 'transferred_out' || application.status === 'active') {
       throw new EnrollmentProcessApiError('FORBIDDEN', 'Este processo está encerrado e não aceita nova atribuição.');
     }
     if (input.assignedToPersonId) {

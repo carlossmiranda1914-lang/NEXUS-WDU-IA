@@ -5,6 +5,7 @@ export type EnrollmentOperationalStatus =
   | 'validated'
   | 'blocked'
   | 'active'
+  | 'transferred_out'
   | 'cancelled';
 
 export type OperationalView = 'overview' | 'entries' | 'enrollments' | 'students';
@@ -36,6 +37,7 @@ export const STATUS_LABELS: Record<EnrollmentOperationalStatus, string> = {
   validated: 'Pronta para decisão',
   blocked: 'Requer atenção',
   active: 'Aluno ativo',
+  transferred_out: 'Transferido',
   cancelled: 'Cancelada',
 };
 
@@ -116,6 +118,7 @@ export function nextAction(record: EnrollmentOperationalRecord): string {
     case 'validated': return 'Preparar decisão';
     case 'blocked': return 'Resolver bloqueio';
     case 'active': return 'Abrir registo do aluno';
+    case 'transferred_out': return 'Consultar transferência';
     case 'cancelled': return 'Consultar histórico';
   }
 }

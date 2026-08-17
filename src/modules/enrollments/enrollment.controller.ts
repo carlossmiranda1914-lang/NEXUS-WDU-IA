@@ -20,6 +20,7 @@ import { registerEnrollmentRegistrationRoutes } from './enrollment-registration.
 import { getEnrollmentRegistrationReadiness } from './enrollment-registration-api.ts';
 import { REGISTRATION_FIELD_LABELS } from './enrollment-registration-policy.ts';
 import { registerEnrollmentProcessRoutes } from './enrollment-process.controller.ts';
+import { registerTransferOutRoutes } from './transfer-out.controller.ts';
 
 function reject(res: Response, status: number, error: string) { return res.status(status).json({ error }); }
 
@@ -66,6 +67,7 @@ export function registerEnrollmentRoutes(app: Application) {
   registerEnrollmentDocumentRoutes(app);
   registerEnrollmentRegistrationRoutes(app);
   registerEnrollmentProcessRoutes(app);
+  registerTransferOutRoutes(app);
   app.get('/api/enrollments', requireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
     const status = req.query.status;
