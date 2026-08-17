@@ -225,16 +225,20 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
 
               <div className={`rounded-2xl border p-5 ${surface}`}>
                 <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className={`font-semibold ${text}`}>Fluxo das matrículas</h2><p className={`mt-1 text-xs ${muted}`}>Acompanhe o percurso da matrícula. Selecione uma etapa disponível para abrir a respetiva fila de trabalho.</p></div><ShieldCheck className="h-5 w-5 text-emerald-700" /></div>
-                <div className="grid max-w-full snap-x snap-mandatory grid-flow-col auto-cols-[minmax(155px,78vw)] gap-2 overflow-x-auto overscroll-x-contain pb-2 sm:auto-cols-[minmax(170px,42vw)] xl:grid-flow-row xl:grid-cols-7 xl:auto-cols-auto xl:overflow-visible xl:pb-0">
+                <div className="grid max-w-full snap-x snap-mandatory grid-flow-col auto-cols-[minmax(168px,78vw)] gap-2 overflow-x-auto overscroll-x-contain pb-2 sm:auto-cols-[minmax(176px,42vw)] lg:auto-cols-[minmax(176px,24vw)] xl:auto-cols-[minmax(168px,1fr)]">
                   {pipeline.map((stage, index) => (
-                    <button key={stage.id} type="button" disabled={!stage.available} aria-label={stage.available ? `Abrir etapa ${stage.label}` : `${stage.label}: domínio ainda não disponível`} onClick={() => { if (!stage.available) return; setSelectedStageId(stage.id); setStatusFilter(stage.statuses); setView(stage.id === 'entry' ? 'entries' : stage.id === 'activation' ? 'students' : 'enrollments'); }} className={`group relative min-w-0 snap-start rounded-xl border p-3 text-left transition ${mutedSurface} ${stage.available ? 'cursor-pointer hover:border-emerald-500/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40' : 'cursor-default opacity-65'}`}>
-                      <div className="flex min-w-0 items-center gap-2">
+                    <button key={stage.id} type="button" disabled={!stage.available} aria-label={stage.available ? `Abrir etapa ${stage.label}` : `${stage.label}: domínio ainda não disponível`} onClick={() => { if (!stage.available) return; setSelectedStageId(stage.id); setStatusFilter(stage.statuses); setView(stage.id === 'entry' ? 'entries' : stage.id === 'activation' ? 'students' : 'enrollments'); }} className={`group relative flex min-h-24 min-w-0 snap-start flex-col rounded-xl border p-3 text-left transition ${mutedSurface} ${stage.available ? 'cursor-pointer hover:border-emerald-500/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40' : 'cursor-default opacity-65'}`}>
+                      <div className="flex min-w-0 items-start gap-2">
                         <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${light ? 'bg-zinc-200 text-zinc-700' : 'bg-white/10 text-zinc-300'}`}>{index + 1}</span>
-                        <p className={`min-w-0 flex-1 truncate text-sm font-semibold ${text}`}>{stage.label}</p>
-                        <span className={`shrink-0 text-sm font-bold tabular-nums ${stage.available ? text : muted}`}>{stage.available ? stage.count : '—'}</span>
-                        {stage.available && <ChevronRight className="h-4 w-4 shrink-0 text-emerald-700 opacity-60 transition group-hover:translate-x-0.5 group-hover:opacity-100" />}
+                        <p className={`min-w-0 whitespace-normal break-normal text-sm font-semibold leading-5 [overflow-wrap:normal] ${text}`}>{stage.label}</p>
                       </div>
-                      {!stage.available && <p className={`mt-2 pl-8 text-[11px] ${muted}`}>Ainda não disponível</p>}
+                      <div className="mt-auto flex min-w-0 items-end justify-between gap-2 pl-8 pt-3">
+                        <span className={`min-w-0 text-[11px] leading-4 ${muted}`}>{stage.available ? 'Processos nesta etapa' : 'Ainda não disponível'}</span>
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          <span className={`text-sm font-bold tabular-nums ${stage.available ? text : muted}`}>{stage.available ? stage.count : '—'}</span>
+                          {stage.available && <ChevronRight className="h-4 w-4 shrink-0 text-emerald-700 opacity-60 transition group-hover:translate-x-0.5 group-hover:opacity-100" />}
+                        </span>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -279,7 +283,27 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
 }
 
 function ProcessRow({ record, light, onOpen }: { record: EnrollmentOperationalRecord; light: boolean; onOpen: () => void }) {
-  return <button type="button" onClick={onOpen} className={`grid w-full min-w-0 grid-cols-1 gap-x-5 gap-y-3 px-4 py-4 text-left transition sm:grid-cols-2 sm:px-5 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(112px,auto)] md:items-center ${light ? 'hover:bg-emerald-50/40' : 'hover:bg-emerald-500/[0.04]'}`}><div className="min-w-0"><p className={`line-clamp-2 break-words text-sm font-semibold leading-5 ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</p><span className={`mt-1 inline-flex max-w-full whitespace-normal rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-4 ${STATUS_TONE[record.status]}`}>{STATUS_LABELS[record.status]}</span></div><div className={`min-w-0 text-xs ${light ? 'text-zinc-600' : 'text-zinc-300'}`}><p className="line-clamp-2 break-words font-medium leading-5">{record.offer_name}</p><p className={`mt-1 break-words leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.academic_year_name}</p></div><p className={`min-w-0 break-words text-xs leading-5 sm:col-span-2 md:col-span-1 ${record.status === 'blocked' ? 'text-rose-500' : light ? 'text-zinc-600' : 'text-zinc-300'}`}>{nextAction(record)}</p><div className={`flex min-w-0 items-center justify-between gap-3 text-xs sm:col-span-2 md:col-span-1 md:justify-end ${light ? 'text-zinc-500' : 'text-zinc-400'}`}><span className="min-w-0 break-words leading-5">{formatDate(record.updated_at)}</span><ChevronRight className="h-4 w-4 shrink-0" /></div></button>;
+  return (
+    <button type="button" onClick={onOpen} className={`!grid h-auto w-full min-w-0 grid-cols-1 gap-x-5 gap-y-4 px-4 py-4 text-left transition sm:px-5 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)_7.5rem_1rem] lg:items-start lg:gap-x-4 lg:gap-y-0 ${light ? 'hover:bg-emerald-50/40' : 'hover:bg-emerald-500/[0.04]'}`}>
+      <div className="min-w-0">
+        <p className={`line-clamp-2 break-words text-sm font-semibold leading-5 [overflow-wrap:anywhere] ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</p>
+        <span className={`mt-1.5 inline-flex max-w-full whitespace-normal rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-4 ${STATUS_TONE[record.status]}`}>{STATUS_LABELS[record.status]}</span>
+      </div>
+      <div className={`min-w-0 text-xs ${light ? 'text-zinc-600' : 'text-zinc-300'}`}>
+        <span className={`mb-1 block text-[10px] font-semibold uppercase tracking-wide lg:sr-only ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Oferta</span>
+        <p className="line-clamp-2 break-words font-medium leading-5 [overflow-wrap:anywhere]">{record.offer_name}</p>
+        <p className={`mt-1 break-words leading-5 [overflow-wrap:anywhere] ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.academic_year_name}</p>
+      </div>
+      <div className={`min-w-0 border-t pt-3 text-xs md:col-span-2 lg:col-span-1 lg:border-t-0 lg:pt-0 ${record.status === 'blocked' ? light ? 'border-rose-200 text-rose-600' : 'border-rose-500/20 text-rose-400' : light ? 'border-zinc-200 text-zinc-600' : 'border-white/10 text-zinc-300'}`}>
+        <span className={`mb-1 block text-[10px] font-semibold uppercase tracking-wide lg:sr-only ${record.status === 'blocked' ? 'text-rose-500' : light ? 'text-zinc-500' : 'text-zinc-400'}`}>Próxima ação</span>
+        <p className="break-words leading-5 [overflow-wrap:anywhere]">{nextAction(record)}</p>
+      </div>
+      <div className={`grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t pt-3 text-xs md:col-span-2 lg:contents ${light ? 'border-zinc-200 text-zinc-500' : 'border-white/10 text-zinc-400'}`}>
+        <span className="min-w-0 whitespace-nowrap leading-5"><span className="mr-1.5 font-semibold lg:sr-only">Atualizado</span>{formatDate(record.updated_at)}</span>
+        <ChevronRight className="h-4 w-4 shrink-0 lg:mt-0.5" />
+      </div>
+    </button>
+  );
 }
 
 function EmptyState({ title, body, light }: { title: string; body: string; light: boolean }) {

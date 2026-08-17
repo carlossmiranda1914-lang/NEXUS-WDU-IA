@@ -23,7 +23,8 @@ expect('unavailable product language', 'Ainda não disponível');
 expect('selected stage contextual heading', 'selectedStage?.label');
 expect('selected stage contextual description', 'selectedStage?.description');
 expect('selected stage process count', 'processo{visible.length === 1');
-expect('simplified pipeline typography', 'truncate text-sm font-semibold');
+expect('pipeline typography remains legible without truncation', 'whitespace-normal break-normal text-sm font-semibold leading-5 [overflow-wrap:normal]');
+reject('pipeline labels must not be truncated', 'flex-1 truncate text-sm font-semibold');
 expect('whole card indicates navigation', 'group-hover:translate-x-0.5');
 
 reject('redundant selected-stage badge removed', 'Etapa do fluxo');
