@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-Updated: 2026-08-16
+Updated: 2026-08-17
 
 This file records the current factual engineering state only. It is not a historical diary and must not contain planned work presented as implemented.
 
@@ -9,8 +9,8 @@ This file records the current factual engineering state only. It is not a histor
 - Repository: `carlossmiranda1914-lang/NEXUS-WDU-IA`.
 - Canonical local checkout: `C:\Users\Administrador\NEXUS-WDU-IA-main`.
 - `main` contains the audited S01/S02 line, including Academic Year temporal closure and existing-student schema reconciliation.
-- Active S03 branch: `feature/secretariat-s03-process-persistence`.
-- Active S03 PR: `#62`, still draft and not approved for merge while user-acceptance findings remain open.
+- S03 was integrated into `main` through PR #62 (`cddccec`) after CI success and positive human validation.
+- Active preparation branch: `codex/f04-transfer-out`.
 
 ## 2. Secretariat vertical status
 
@@ -20,8 +20,8 @@ DONE and integrated in `main`.
 ### S02
 DONE and integrated in `main`, including New/Existing student intent, Person Resolution, idempotent intake, registration profile, document requirements/snapshots, lifecycle gates, Academic Year temporal closure and the PostgreSQL schema-drift regression for `people.birth_date` / SQLSTATE 42703.
 
-### S03 engineering implementation
-Implemented on `feature/secretariat-s03-process-persistence` and exposed through PR #62:
+### S03
+DONE and integrated in `main` through PR #62, including:
 - persisted enrollment-process orchestration;
 - deterministic P01-P06 projection;
 - institution-scoped process API;
@@ -31,13 +31,19 @@ Implemented on `feature/secretariat-s03-process-persistence` and exposed through
 - focused S03 policy/contract/PostgreSQL tests;
 - migration 0016.
 
-The branch quality gate is green for the existing CI matrix, but external audit found that the remote workflow run did not execute the new `test:secretariat-s03` command explicitly. CI coverage must be strengthened before merge.
+The focused S03 suite executed explicitly in the final remote quality gate; no release blocker remains open.
 
 ## 3. Current active priority
 
-### S03 user-acceptance and release closure
+### F04.1 transfer-out blueprint
 
-User validation on 2026-08-16 found concrete release blockers/improvements that must be resolved before PR #62 can merge:
+F04.1 is in PREPARAÇÃO. It is a deliberate, narrow first increment for institutional transfer-out, not a cross-institution data-transfer feature. The authoritative blueprint is `docs/missions/MISSION_F04_TRANSFER_OUT_BLUEPRINT.md`.
+
+The mission remains outside implementation until its READY gate is complete: issue, affected-code map, pending-source contract and explicit consequence of approved transfer for the source enrollment.
+
+### Historical S03 findings and retained scope boundaries
+
+The following informed the S03 closure or remain explicitly deferred:
 
 1. **Document/readiness consistency**
    - A process can visually report `0/0` documents and state that the system does not assume a policy is configured, while P04 is shown as completed and P06 offers `Validar matrícula`.
@@ -66,16 +72,9 @@ User validation on 2026-08-16 found concrete release blockers/improvements that 
 6. **CI**
    - `Secretariat Quality Gate` must execute the S03 focused suite explicitly on the PR head before release.
 
-## 4. Release rule for PR #62
+## 4. PR #62 closure evidence
 
-Do not merge PR #62 until all of the following are true:
-- document policy/readiness inconsistency is corrected and regression-tested;
-- S03 focused tests execute explicitly in remote CI;
-- list/drawer visual defects raised in user acceptance are corrected and revalidated in desktop/tablet/mobile;
-- Nexus Aurora tokens/style are applied consistently to the touched Secretariat surface;
-- no unsafe production hard-delete is introduced;
-- user acceptance is repeated successfully;
-- external audit confirms PASS.
+PR #62 merged after document/readiness and visual regressions were corrected, the focused S03 suite ran in remote CI, no unsafe production hard-delete was introduced, and human user acceptance was positive.
 
 ## 5. Academic-year work
 
