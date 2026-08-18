@@ -63,6 +63,16 @@ try {
 
   const submitted = await transitionEnrollmentDocument(pool, contextA, { enrollmentId: ids.enrollmentA, documentId: created.document.id, toStatus: 'submitted', evidenceReference: 'arquivo/teste/certificado' });
   assert(submitted.status === 'submitted' && submitted.evidence_reference === 'arquivo/teste/certificado', 'Submission must persist evidence reference.');
+  let physicalFileRequired = false;
+  try { await transitionEnrollmentDocument(pool, contextA, { enrollmentId: ids.enrollmentA, documentId: created.document.id, toStatus: 'verified' }); }
+  catch (error) { physicalFileRequired = error instanceof EnrollmentDocumentApiError && error.code === 'INVALID_TRANSITION'; }
+  assert(physicalFileRequired, 'Historical evidence_reference must not satisfy physical-document verification.');
+  await pool.query(
+    `INSERT INTO enrollment_document_files (
+       institution_id,enrollment_application_id,enrollment_document_id,storage_key,original_filename,content_type,byte_size,sha256,idempotency_key,request_fingerprint,status,persisted_at,uploaded_by
+     ) VALUES ($1,$2,$3,repeat('a',64),'certificado.pdf','application/pdf',8,repeat('b',64),'s023-physical-file-0001',repeat('c',64),'persisted',now(),$4)`,
+    [ids.institutionA, ids.enrollmentA, created.document.id, ids.actorA],
+  );
   const verified = await transitionEnrollmentDocument(pool, contextA, { enrollmentId: ids.enrollmentA, documentId: created.document.id, toStatus: 'verified' });
   assert(verified.status === 'verified' && verified.verified_by === ids.actorA, 'Verification must persist verifier.');
 

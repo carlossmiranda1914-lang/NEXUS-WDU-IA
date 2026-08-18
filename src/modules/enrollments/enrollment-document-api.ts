@@ -41,9 +41,16 @@ export async function listEnrollmentDocuments(pool: EnrollmentDocumentPool, cont
   const application = await pool.query<{ id: string; document_policy_id: string | null }>('SELECT id, document_policy_id FROM enrollment_applications WHERE id = $1 AND institution_id = $2', [enrollmentId, context.institutionId]);
   if (!application.rowCount) throw new EnrollmentDocumentApiError('NOT_FOUND', 'Matrícula não encontrada nesta instituição.');
   const result = await pool.query(
-    `SELECT id, document_type, required, source_requirement_id, status, evidence_reference, verified_by, verified_at, created_at, updated_at
-       FROM enrollment_documents
-      WHERE enrollment_application_id = $1 AND institution_id = $2
+    `SELECT d.id, d.document_type, d.required, d.source_requirement_id, d.requirement_code, d.requirement_label, d.requirement_type, d.status, d.evidence_reference, d.verified_by, d.verified_at, d.created_at, d.updated_at,
+            EXISTS (
+              SELECT 1 FROM enrollment_document_files f
+               WHERE f.institution_id = d.institution_id
+                 AND f.enrollment_document_id = d.id
+                 AND f.enrollment_application_id = d.enrollment_application_id
+                 AND f.status = 'persisted'
+            ) AS physical_file_persisted
+       FROM enrollment_documents d
+      WHERE d.enrollment_application_id = $1 AND d.institution_id = $2
       ORDER BY document_type ASC`,
     [enrollmentId, context.institutionId],
   );
@@ -53,6 +60,8 @@ export async function listEnrollmentDocuments(pool: EnrollmentDocumentPool, cont
     required: document.required,
     status: document.status,
     sourceRequirementId: document.source_requirement_id,
+    requirementCode: document.requirement_code,
+    physicalFilePersisted: document.physical_file_persisted,
   })));
   return { documents, readiness };
 }
@@ -113,8 +122,15 @@ export async function transitionEnrollmentDocument(pool: EnrollmentDocumentPool,
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const current = await client.query<{ enrollment_status: EnrollmentStatus; document_status: EnrollmentDocumentStatus; document_type: string }>(
-      `SELECT e.status AS enrollment_status, d.status AS document_status, d.document_type
+    const current = await client.query<{ enrollment_status: EnrollmentStatus; document_status: EnrollmentDocumentStatus; document_type: string; physical_file_persisted: boolean }>(
+      `SELECT e.status AS enrollment_status, d.status AS document_status, d.document_type,
+              EXISTS (
+                SELECT 1 FROM enrollment_document_files f
+                 WHERE f.institution_id = d.institution_id
+                   AND f.enrollment_document_id = d.id
+                   AND f.enrollment_application_id = d.enrollment_application_id
+                   AND f.status = 'persisted'
+              ) AS physical_file_persisted
          FROM enrollment_documents d
          INNER JOIN enrollment_applications e ON e.id = d.enrollment_application_id
         WHERE d.id = $1 AND d.enrollment_application_id = $2
@@ -126,6 +142,9 @@ export async function transitionEnrollmentDocument(pool: EnrollmentDocumentPool,
     const row = current.rows[0];
     if (!canTransitionEnrollmentDocument(context.role, row.enrollment_status, row.document_status, input.toStatus)) {
       throw new EnrollmentDocumentApiError('INVALID_TRANSITION', 'Transição documental não autorizada.');
+    }
+    if (input.toStatus === 'verified' && !row.physical_file_persisted) {
+      throw new EnrollmentDocumentApiError('INVALID_TRANSITION', 'A verificação exige um ficheiro físico persistido.');
     }
     const evidenceReference = input.toStatus === 'submitted' ? String(input.evidenceReference).trim() : null;
     const updated = await client.query(

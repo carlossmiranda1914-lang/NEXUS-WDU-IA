@@ -250,6 +250,8 @@ export const enrollmentApplications = pgTable('enrollment_applications', {
   guardianPersonId: uuid('guardian_person_id').references(() => people.id, { onDelete: 'restrict' }),
   academicYearId: uuid('academic_year_id').notNull().references(() => academicYears.id, { onDelete: 'restrict' }),
   offerId: uuid('offer_id').notNull().references(() => enrollmentOffers.id, { onDelete: 'restrict' }),
+  documentPolicyId: uuid('document_policy_id'),
+  documentPolicyCapturedAt: timestamp('document_policy_captured_at', { withTimezone: true }),
   status: text('status').notNull().default('draft'),
   createdBy: uuid('created_by').notNull().references(() => people.id, { onDelete: 'restrict' }),
   updatedBy: uuid('updated_by').notNull().references(() => people.id, { onDelete: 'restrict' }),
@@ -267,11 +269,44 @@ export const enrollmentDocuments = pgTable('enrollment_documents', {
   documentType: text('document_type').notNull(),
   status: text('status').notNull().default('pending'),
   evidenceReference: text('evidence_reference'),
+  required: boolean('required').notNull().default(false),
+  sourceRequirementId: uuid('source_requirement_id'),
+  requirementCode: text('requirement_code'),
+  requirementLabel: text('requirement_label'),
+  requirementType: text('requirement_type'),
   verifiedBy: uuid('verified_by').references(() => people.id, { onDelete: 'restrict' }),
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [uniqueIndex('enrollment_documents_application_type_unique').on(table.enrollmentApplicationId, table.documentType)]);
+}, (table) => [
+  uniqueIndex('enrollment_documents_application_type_unique').on(table.enrollmentApplicationId, table.documentType),
+  uniqueIndex('enrollment_documents_institution_id_id_application_unique').on(table.institutionId, table.id, table.enrollmentApplicationId),
+]);
+
+// Metadata only: physical bytes remain in the private storage adapter.
+export const enrollmentDocumentFiles = pgTable('enrollment_document_files', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  enrollmentApplicationId: uuid('enrollment_application_id').notNull().references(() => enrollmentApplications.id, { onDelete: 'cascade' }),
+  enrollmentDocumentId: uuid('enrollment_document_id').notNull().references(() => enrollmentDocuments.id, { onDelete: 'cascade' }),
+  storageKey: text('storage_key').notNull(),
+  originalFilename: text('original_filename').notNull(),
+  contentType: text('content_type').notNull(),
+  byteSize: integer('byte_size'),
+  sha256: text('sha256'),
+  idempotencyKey: text('idempotency_key').notNull(),
+  requestFingerprint: text('request_fingerprint').notNull(),
+  status: text('status').notNull(),
+  leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }),
+  persistedAt: timestamp('persisted_at', { withTimezone: true }),
+  failureReason: text('failure_reason'),
+  uploadedBy: uuid('uploaded_by').notNull().references(() => people.id, { onDelete: 'restrict' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('enrollment_document_files_persisted_document_unique').on(table.institutionId, table.enrollmentDocumentId).where(sql`status = 'persisted'`),
+  uniqueIndex('enrollment_document_files_idempotency_unique').on(table.institutionId, table.enrollmentDocumentId, table.idempotencyKey),
+]);
 
 export const enrollmentEvents = pgTable('enrollment_events', {
   id: uuid('id').defaultRandom().primaryKey(),

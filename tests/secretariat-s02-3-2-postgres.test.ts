@@ -32,8 +32,9 @@ try {
   await pool.query("INSERT INTO enrollment_offers (id,institution_id,academic_year_id,name,code,status) VALUES ($1,$2,$3,'Geral','S0232','active')", [offer, institution, year]);
 
   const v1 = randomUUID();
-  await pool.query("INSERT INTO enrollment_document_policies (id,institution_id,offer_id,version,status,created_by,activated_at) VALUES ($1,$2,$3,1,'active',$4,now())", [v1, institution, offer, actor]);
-  await pool.query("INSERT INTO enrollment_document_requirements (institution_id,policy_id,document_type,required,sort_order) VALUES ($1,$2,'BI',true,1),($1,$2,'Foto',false,2)", [institution, v1]);
+  await pool.query("INSERT INTO enrollment_document_policies (id,institution_id,offer_id,version,status,created_by) VALUES ($1,$2,$3,1,'draft',$4)", [v1, institution, offer, actor]);
+  await pool.query("INSERT INTO enrollment_document_requirements (institution_id,policy_id,document_type,requirement_code,requirement_label,required,sort_order) VALUES ($1,$2,'BI','identity','Documento de identificação',true,1),($1,$2,'Foto','photo','Fotografia',false,2)", [institution, v1]);
+  await pool.query("UPDATE enrollment_document_policies SET status='active', activated_at=now() WHERE id=$1", [v1]);
 
   const first = await executeEnrollmentIntake(pool as any, { institutionId: institution, actorPersonId: actor, offerId: offer, idempotencyKey: `s0232-first-${randomUUID()}`, person: { kind: 'new_person', name: 'Aluno Um' } });
   const firstApp = await pool.query('SELECT document_policy_id FROM enrollment_applications WHERE id=$1', [first.enrollmentApplicationId]);
@@ -45,8 +46,9 @@ try {
 
   await pool.query("UPDATE enrollment_document_policies SET status='retired' WHERE id=$1", [v1]);
   const v2 = randomUUID();
-  await pool.query("INSERT INTO enrollment_document_policies (id,institution_id,offer_id,version,status,created_by,activated_at) VALUES ($1,$2,$3,2,'active',$4,now())", [v2, institution, offer, actor]);
-  await pool.query("INSERT INTO enrollment_document_requirements (institution_id,policy_id,document_type,required,sort_order) VALUES ($1,$2,'Certificado',true,1)", [institution, v2]);
+  await pool.query("INSERT INTO enrollment_document_policies (id,institution_id,offer_id,version,status,created_by) VALUES ($1,$2,$3,2,'draft',$4)", [v2, institution, offer, actor]);
+  await pool.query("INSERT INTO enrollment_document_requirements (institution_id,policy_id,document_type,requirement_code,requirement_label,required,sort_order) VALUES ($1,$2,'Certificado','certificate','Certificado de habilitações',true,1)", [institution, v2]);
+  await pool.query("UPDATE enrollment_document_policies SET status='active', activated_at=now() WHERE id=$1", [v2]);
 
   const firstAfter = await pool.query('SELECT document_policy_id FROM enrollment_applications WHERE id=$1', [first.enrollmentApplicationId]);
   assert(firstAfter.rows[0].document_policy_id === v1, 'Changing offer policy must not rewrite historical enrollment snapshot.');

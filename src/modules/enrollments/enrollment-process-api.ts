@@ -76,10 +76,11 @@ async function lockApplication(client: QueryClient, institutionId: string, enrol
 async function calculateProjection(client: QueryClient, context: InstitutionalContext, application: ApplicationRow) {
   const registration = await getEnrollmentRegistrationReadiness(client, context.institutionId, application.id);
   if (!registration) throw new EnrollmentProcessApiError('NOT_FOUND', 'Matrícula não encontrada nesta instituição.');
-  const documents = await client.query<{ document_type: string; required: boolean; status: 'pending' | 'submitted' | 'verified' | 'rejected'; source_requirement_id: string | null }>(
-    `SELECT document_type, required, status, source_requirement_id
-       FROM enrollment_documents
-      WHERE enrollment_application_id = $1 AND institution_id = $2
+  const documents = await client.query<{ document_type: string; required: boolean; status: 'pending' | 'submitted' | 'verified' | 'rejected'; source_requirement_id: string | null; requirement_code: string | null; physical_file_persisted: boolean }>(
+    `SELECT d.document_type, d.required, d.status, d.source_requirement_id, d.requirement_code,
+            EXISTS (SELECT 1 FROM enrollment_document_files f WHERE f.institution_id = d.institution_id AND f.enrollment_document_id = d.id AND f.enrollment_application_id = d.enrollment_application_id AND f.status = 'persisted') AS physical_file_persisted
+       FROM enrollment_documents d
+      WHERE d.enrollment_application_id = $1 AND d.institution_id = $2
       ORDER BY document_type`,
     [application.id, context.institutionId],
   );
@@ -89,7 +90,7 @@ async function calculateProjection(client: QueryClient, context: InstitutionalCo
     registrationMissing: registration.missing,
     academicContextValid: application.academic_context_valid,
     policyCaptured: application.document_policy_id !== null,
-    documents: documents.rows.map((item) => ({ documentType: item.document_type, required: item.required, status: item.status, sourceRequirementId: item.source_requirement_id })),
+    documents: documents.rows.map((item) => ({ documentType: item.document_type, required: item.required, status: item.status, sourceRequirementId: item.source_requirement_id, requirementCode: item.requirement_code, physicalFilePersisted: item.physical_file_persisted })),
   }, context.role);
 }
 

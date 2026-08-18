@@ -42,6 +42,7 @@ export interface EnrollmentIntakeResult {
   studentProfileId: string;
   replayed: boolean;
 }
+export interface EnrollmentIntakeTestHooks { failAfter?: 'snapshot'; }
 
 export class EnrollmentIntakeError extends Error {
   constructor(
@@ -175,6 +176,7 @@ async function requireApprovedIdentityDecision(
 export async function executeEnrollmentIntake(
   pool: TransactionPool,
   command: EnrollmentIntakeCommand,
+  testHooks?: EnrollmentIntakeTestHooks,
 ): Promise<EnrollmentIntakeResult> {
   const idempotencyKey = validateIdempotencyKey(command.idempotencyKey);
   const requestFingerprint = fingerprintEnrollmentIntake(command);
@@ -216,7 +218,8 @@ export async function executeEnrollmentIntake(
         WHERE o.id = $1
           AND o.institution_id = $2
           AND o.status = 'active'
-          AND y.status = 'active'`,
+          AND y.status = 'active'
+        FOR UPDATE OF o`,
       [command.offerId, command.institutionId],
     );
     if (!offer.rowCount) {
@@ -322,6 +325,7 @@ export async function executeEnrollmentIntake(
         offerId: command.offerId,
         enrollmentId: enrollment.rows[0].id,
       });
+      if (testHooks?.failAfter === 'snapshot') throw new Error('injected intake snapshot failure');
 
       await client.query(
         `INSERT INTO enrollment_processes (
