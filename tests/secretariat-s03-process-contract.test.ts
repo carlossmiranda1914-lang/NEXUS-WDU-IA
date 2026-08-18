@@ -24,7 +24,9 @@ assert(intake.includes('INSERT INTO enrollment_processes'), 'Intake must create 
 assert(workspace.includes('/process`'), 'Existing ProcessDrawer must load the server projection.');
 assert(workspace.includes('process.progress.percent'), 'Frontend must render server progress rather than calculate it.');
 assert(workspace.includes('grid-cols-1') && workspace.includes('sm:grid-cols-2'), 'Process stages must adapt from mobile list to wider grids.');
-assert(!workspace.includes('Financeiro pendente') && !workspace.includes('Ativar aluno'), 'S03 UI must not expose future Finance/Activation operations.');
+assert(!workspace.includes('Financeiro pendente'), 'S03 UI must not expose future Finance operations.');
+assert(workspace.includes('/activate') && workspace.includes('Ativar aluno'), 'P0-A activation must be an explicit operation after S03 reaches validated.');
+assert(enrollmentController.includes("if (target === 'active') return reject(res, 409"), 'S03 generic transitions must stop at validated; active belongs to the explicit P0-A operation.');
 assert(documentPolicy.includes("'REQUIREMENTS_NOT_CONFIGURED'"), 'Shared document readiness must distinguish an unconfigured snapshot from a completed checklist.');
 assert(enrollmentController.includes("documentGate.reason === 'REQUIREMENTS_NOT_CONFIGURED'"), 'Validated transition must reject unconfigured document readiness with the shared gate.');
 assert(enrollmentController.includes('return reject(') && enrollmentController.includes('409,'), 'Document readiness rejection must remain an explicit 409 domain response.');

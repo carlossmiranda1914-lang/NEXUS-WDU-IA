@@ -5,6 +5,8 @@ export interface CapturedDocumentRequirement {
   required: boolean;
   status: 'pending' | 'submitted' | 'verified' | 'rejected';
   sourceRequirementId?: string | null;
+  requirementCode?: string | null;
+  physicalFilePersisted?: boolean;
 }
 
 export type DocumentReadinessReason =
@@ -12,6 +14,7 @@ export type DocumentReadinessReason =
   | 'REQUIREMENTS_NOT_CONFIGURED'
   | 'REQUIRED_DOCUMENTS_PENDING'
   | 'REQUIRED_DOCUMENTS_UNVERIFIED'
+  | 'REQUIRED_DOCUMENT_FILES_MISSING'
   | null;
 
 export interface DocumentReadiness {
@@ -42,10 +45,13 @@ export function normalizeDocumentRequirements(values: readonly string[]): string
 }
 
 export function documentValidationGate(policyCaptured: boolean, documents: readonly CapturedDocumentRequirement[]): DocumentReadiness {
-  const configuredRequirements = documents.filter((document) => Boolean(document.sourceRequirementId));
+  // `requirementCode` is copied to the enrollment document at capture time.
+  // Keep the source-id fallback only for pre-0018 snapshots during migration.
+  const configuredRequirements = documents.filter((document) => Boolean(document.requirementCode || document.sourceRequirementId));
   const required = configuredRequirements.filter((document) => document.required);
   const submitted = required.filter((document) => document.status === 'submitted');
-  const unresolved = required.filter((document) => document.status !== 'verified');
+  const missingPhysicalFile = required.filter((document) => document.status === 'verified' && !document.physicalFilePersisted);
+  const unresolved = required.filter((document) => document.status !== 'verified' || !document.physicalFilePersisted);
   const pending = unresolved.filter((document) => document.status !== 'submitted');
   const base = {
     configuredRequirementCount: configuredRequirements.length,
@@ -57,6 +63,7 @@ export function documentValidationGate(policyCaptured: boolean, documents: reado
   // A policy reference alone does not prove an intentional zero-requirement decision.
   // S04 owns that configuration authority, so S03 must fail closed until a snapshot exists.
   if (configuredRequirements.length === 0) return { ready: false, reason: 'REQUIREMENTS_NOT_CONFIGURED', ...base };
+  if (missingPhysicalFile.length > 0) return { ready: false, reason: 'REQUIRED_DOCUMENT_FILES_MISSING', ...base };
   if (submitted.length > 0) return { ready: false, reason: 'REQUIRED_DOCUMENTS_UNVERIFIED', ...base };
   if (unresolved.length > 0) return { ready: false, reason: 'REQUIRED_DOCUMENTS_PENDING', ...base };
   return { ready: true, reason: null, ...base };

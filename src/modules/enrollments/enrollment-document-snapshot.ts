@@ -30,8 +30,8 @@ export async function captureEnrollmentDocumentPolicy(
     [policyId, input.enrollmentId, input.institutionId],
   );
 
-  const requirements = await client.query<{ id: string; document_type: string; required: boolean }>(
-    `SELECT id, document_type, required
+  const requirements = await client.query<{ id: string; document_type: string; required: boolean; requirement_code: string; requirement_label: string; requirement_type: 'document' }>(
+    `SELECT id, document_type, required, requirement_code, requirement_label, requirement_type
        FROM enrollment_document_requirements
       WHERE institution_id = $1 AND policy_id = $2
       ORDER BY sort_order ASC, document_type ASC`,
@@ -41,9 +41,10 @@ export async function captureEnrollmentDocumentPolicy(
   for (const requirement of requirements.rows) {
     await client.query(
       `INSERT INTO enrollment_documents (
-         institution_id, enrollment_application_id, document_type, status, required, source_requirement_id
-       ) VALUES ($1, $2, $3, 'pending', $4, $5)`,
-      [input.institutionId, input.enrollmentId, requirement.document_type, requirement.required, requirement.id],
+         institution_id, enrollment_application_id, document_type, status, required, source_requirement_id,
+         requirement_code, requirement_label, requirement_type
+       ) VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8)`,
+      [input.institutionId, input.enrollmentId, requirement.document_type, requirement.required, requirement.id, requirement.requirement_code, requirement.requirement_label, requirement.requirement_type],
     );
   }
 

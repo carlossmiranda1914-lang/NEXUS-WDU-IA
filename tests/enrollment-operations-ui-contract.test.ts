@@ -14,6 +14,11 @@ expect(source.includes('Alunos ativos'), 'Workspace must expose the approved act
 expect(source.includes('O que precisa da minha atenção'), 'Secretaria must receive an exception-first work queue.');
 expect(source.includes('Nova entrada / matrícula'), 'Workspace must expose the approved primary action.');
 expect(source.includes("request('/api/enrollments/context')"), 'Workspace must use real institutional context.');
+expect(source.includes('setInstitutionRole(typeof context.role'), 'Workspace must consume the backend-resolved role, never a client-supplied role.');
+expect(source.includes("institutionRole === 'director' || institutionRole === 'institution_admin'"), 'Activation visibility must be limited to Director and Institution Admin.');
+expect(source.includes("request(`/api/enrollments/${record.id}/activate`, { method: 'POST' })"), 'Activation must use the canonical backend route.');
+expect(!source.includes("toStatus: 'active'"), 'The workspace must never activate through the generic transitions route.');
+expect(source.includes("'Ativar aluno'"), 'Eligible users must receive the minimal activation action.');
 expect(source.includes("request('/api/enrollments')"), 'Workspace metrics and queues must use persisted enrollments.');
 expect(source.includes("'/api/enrollments/person-resolution'"), 'New entry must use secure identity resolution.');
 expect(source.includes("'/api/enrollments/intake'"), 'New entry must use secure transactional intake.');

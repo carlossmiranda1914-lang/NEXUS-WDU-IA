@@ -5,13 +5,11 @@ import {
   UserPlus, Users, CheckCircle, TrendingUp, Sparkles, ShieldAlert, DollarSign, 
   Search, Building2, UserCheck, RefreshCw, FileUp, Layers, Eye, History, FileDown, ShieldCheck, CreditCard
 } from 'lucide-react';
-import { Student, Invoice } from '../types';
+import { Invoice } from '../types';
 
 interface WorkflowsCentralProps {
-  students: Student[];
   invoices: Invoice[];
-  onAddStudent: (student: Omit<Student, 'id'>) => void;
-  onUpdateStudent: (id: string, updatedFields: Partial<Student>) => void;
+  onStartCanonicalEnrollment: () => void;
   onUpdateInvoiceStatus: (id: string, status: 'paid' | 'pending' | 'overdue') => void;
   currentUserRole: string;
 }
@@ -39,10 +37,8 @@ interface WorkflowInstance {
 }
 
 export default function WorkflowsCentral({ 
-  students, 
   invoices, 
-  onAddStudent, 
-  onUpdateStudent, 
+  onStartCanonicalEnrollment,
   onUpdateInvoiceStatus,
   currentUserRole 
 }: WorkflowsCentralProps) {
@@ -279,82 +275,8 @@ export default function WorkflowsCentral({
   ];
 
   // SIMULAÇÃO MATRÍCULA WORKFLOW (10 PASSOS)
-  const triggerMatriculaWorkflow = async () => {
-    if (!newStudName || !newStudGuardian) {
-      alert('Por favor, preencha o nome do aluno e do encarregado de educação.');
-      return;
-    }
-
-    setMatriculaRunning(true);
-    setMatriculaStep(0);
-    setCompletedStudent(null);
-    setMatriculaLogs([`[INÍCIO] Iniciação do Sistema de Processos Nexus para Matrícula de Estudante: ${newStudName}`]);
-
-    const stepMsgs = [
-      `[PASSO 1/10] Registo provisório de Aluno instanciado na pasta letiva: [Nome: ${newStudName}, Classe: ${newStudClass}]`,
-      `[PASSO 2/10] Encarregado de Educação vinculado com sucesso e contacto fiscal guardado: [Responsável: ${newStudGuardian}, Fone: ${newStudGuardianContact}]`,
-      `[PASSO 3/10] Criação de dossier eletrónico na pasta segura do servidor de Lisboa. Diretoria: /docs/secretaria/alunos/${newStudName.toLowerCase().replace(/\s+/g, '_')}`,
-      `[PASSO 4/10] Verificação automática de documentos: Digitalização pendente detetada. Registo pré-aprovado aguardando uploads regulamentares.`,
-      `[PASSO 5/10] Minuta oficial de Prestação de Serviços Digitais compilada com base na Propina Geral. ID de Contrato: CONTR-2026-${Math.floor(100+Math.random()*900)}`,
-      `[PASSO 6/10] Link de consentimento e recolha de Assinatura Digital cifrada enviada via SMS/Email para o encarregado: ${newStudGuardianContact}`,
-      `[PASSO 7/10] Modalidade de Plano Financeiro ativado: Anual Regular e Isenção de taxa de matrículas.`,
-      `[PASSO 8/10] Faturamento estruturado em lote: 10 mensalidades calculadas de 310,00 € emitidas eletronicamente.`,
-      `[PASSO 9/10] Contas criadas cifradas na base central. Login Aluno: ALU-${Math.floor(200+Math.random()*200)} | Login Encarregado vinculado.`,
-      `[PASSO 10/10] Notificação instantânea enviada à equipa académica da secretaria para feedback conclusivo.`
-    ];
-
-    for (let i = 0; i < 10; i++) {
-      await new Promise(resolve => setTimeout(resolve, 600));
-      setMatriculaStep(i + 1);
-      setMatriculaLogs(prev => [...prev, stepMsgs[i]]);
-    }
-
-    // Actually trigger real creation in parent state securely!
-    const studentObject: Omit<Student, 'id'> = {
-      name: newStudName,
-      class: newStudClass,
-      attendanceRate: 100,
-      averageGrade: 10,
-      status: 'active',
-      outstandingFees: 310,
-      guardiansName: newStudGuardian,
-      guardiansContact: newStudGuardianContact,
-      behaviorDegree: 'Excelente',
-      documents: [
-        { name: 'CC Aluno', submitted: true, date: new Date().toLocaleDateString('pt-PT') },
-        { name: 'CC Encarregado', submitted: false, date: '' },
-        { name: 'Atestado Desportivo', submitted: false, date: '' },
-        { name: 'Boletim de Vacinas', submitted: true, date: new Date().toLocaleDateString('pt-PT') }
-      ],
-      behaviorHistory: [
-        { date: new Date().toLocaleDateString('pt-PT'), note: 'Matrícula criada e homologada por processo automatizado de 10 passos.', categoryDefault: 'comportamento' }
-      ],
-      grades: []
-    };
-
-    onAddStudent(studentObject);
-    
-    // Create new workflow instance record to append to lists
-    const newInstance: WorkflowInstance = {
-      id: `WKF-${Math.floor(105 + Math.random() * 800)}`,
-      name: `Matrícula Completa: ${newStudName}`,
-      type: 'matricula',
-      status: 'completed',
-      startedBy: `Portal Escolar (${currentUserRole})`,
-      approvedBy: 'Sistema Autónomo Nexus AI',
-      timestamp: new Date().toLocaleTimeString('pt-PT'),
-      date: new Date().toISOString().split('T')[0],
-      durationMs: 6000,
-      entityName: newStudName,
-      history: [...stepMsgs, 'Matrícula homologada com sucesso e registada na base de dados escolar']
-    };
-
-    setInstances(prev => [newInstance, ...prev]);
-    setCompletedStudent({
-      id: `ALU-${Math.floor(120 + Math.random() * 800)}`,
-      ...studentObject
-    });
-    setMatriculaRunning(false);
+  const triggerMatriculaWorkflow = () => {
+    onStartCanonicalEnrollment();
   };
 
   // SIMULAÇÃO WORKFLOW FINANCEIRO (5 PASSOS)
@@ -954,10 +876,10 @@ export default function WorkflowsCentral({
             <div>
               <h2 className="text-base font-bold text-zinc-200 flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-indigo-400 animate-pulse" />
-                Matrícula em Lote & Pipeline de Integração Escolar
+                Entrada de Matrícula
               </h2>
               <p className="text-xs text-zinc-400 mt-1 max-w-xl">
-                Automatize de ponta-a-ponta a oficialização de um novo aluno em menos de 10 segundos. O sistema de processos executará os 10 passos sequenciais e integrará faturas, tutorias e credenciais.
+                Inicie a matrícula no fluxo oficial. A criação de aluno, documentos, validação e ativação são confirmadas pelo backend nesse processo.
               </p>
             </div>
             {matriculaRunning && (
@@ -1035,14 +957,14 @@ export default function WorkflowsCentral({
 
                 <button
                   onClick={triggerMatriculaWorkflow}
-                  disabled={matriculaRunning || !newStudName || !newStudGuardian}
+                  disabled={matriculaRunning}
                   className={`w-full py-2.5 rounded-lg text-xs font-bold font-sans tracking-wide transition-all border ${
-                    matriculaRunning || !newStudName || !newStudGuardian
+                    matriculaRunning
                       ? 'bg-zinc-800 text-zinc-500 border-zinc-850 cursor-not-allowed'
                       : 'bg-indigo-500 hover:bg-indigo-650 text-white border-indigo-400 cursor-pointer shadow-lg hover:shadow-indigo-500/10'
                   }`}
                 >
-                  {matriculaRunning ? 'Passo a Passo em Progresso...' : 'Disparar Automação de Matrícula'}
+                  {matriculaRunning ? 'A abrir matrícula...' : 'Abrir matrícula'}
                 </button>
               </div>
             </div>

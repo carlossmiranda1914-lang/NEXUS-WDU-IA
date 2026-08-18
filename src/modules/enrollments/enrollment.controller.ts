@@ -20,6 +20,7 @@ import { registerEnrollmentRegistrationRoutes } from './enrollment-registration.
 import { getEnrollmentRegistrationReadiness } from './enrollment-registration-api.ts';
 import { REGISTRATION_FIELD_LABELS } from './enrollment-registration-policy.ts';
 import { registerEnrollmentProcessRoutes } from './enrollment-process.controller.ts';
+import { activateEnrollment, EnrollmentActivationError } from './enrollment-activation.ts';
 
 function reject(res: Response, status: number, error: string) { return res.status(status).json({ error }); }
 
@@ -203,6 +204,7 @@ export function registerEnrollmentRoutes(app: Application) {
     const context = enrollmentActor(req, res); if (!context) return;
     if (!validUuid(req.params.id) || !isEnrollmentStatus(req.body?.toStatus)) return reject(res, 400, 'Pedido de transição inválido.');
     const target = req.body.toStatus as EnrollmentStatus;
+    if (target === 'active') return reject(res, 409, 'A ativação é executada exclusivamente por /api/enrollments/:id/activate.');
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -225,8 +227,10 @@ export function registerEnrollmentRoutes(app: Application) {
           return reject(res, 409, `Complete o cadastro da matrícula antes da validação. Em falta: ${missing}.`);
         }
 
-        const documents = await client.query<{ document_type: string; required: boolean; status: 'pending' | 'submitted' | 'verified' | 'rejected'; source_requirement_id: string | null }>(
-          'SELECT document_type, required, status, source_requirement_id FROM enrollment_documents WHERE enrollment_application_id = $1 AND institution_id = $2',
+        const documents = await client.query<{ document_type: string; required: boolean; status: 'pending' | 'submitted' | 'verified' | 'rejected'; source_requirement_id: string | null; requirement_code: string | null; physical_file_persisted: boolean }>(
+          `SELECT d.document_type, d.required, d.status, d.source_requirement_id, d.requirement_code,
+                  EXISTS (SELECT 1 FROM enrollment_document_files f WHERE f.institution_id = d.institution_id AND f.enrollment_document_id = d.id AND f.enrollment_application_id = d.enrollment_application_id AND f.status = 'persisted') AS physical_file_persisted
+             FROM enrollment_documents d WHERE d.enrollment_application_id = $1 AND d.institution_id = $2`,
           [req.params.id, context.institutionId],
         );
         const documentGate = documentValidationGate(
@@ -236,6 +240,8 @@ export function registerEnrollmentRoutes(app: Application) {
             required: row.required,
             status: row.status,
             sourceRequirementId: row.source_requirement_id,
+            requirementCode: row.requirement_code,
+            physicalFilePersisted: row.physical_file_persisted,
           })),
         );
         if (!documentGate.ready) {
@@ -247,6 +253,8 @@ export function registerEnrollmentRoutes(app: Application) {
               ? 'A política documental desta matrícula ainda não foi capturada.'
               : documentGate.reason === 'REQUIREMENTS_NOT_CONFIGURED'
                 ? 'A política documental não possui requisitos materializados para esta matrícula; a validação permanece bloqueada.'
+                : documentGate.reason === 'REQUIRED_DOCUMENT_FILES_MISSING'
+                  ? 'Existem documentos verificados sem ficheiro físico persistido; a validação permanece bloqueada.'
                 : documentGate.reason === 'REQUIRED_DOCUMENTS_UNVERIFIED'
                   ? 'Existem documentos obrigatórios recebidos que aguardam verificação.'
                   : 'Existem documentos obrigatórios por verificar.',
@@ -266,5 +274,11 @@ export function registerEnrollmentRoutes(app: Application) {
       await client.query('COMMIT');
       res.json({ enrollment: updated.rows[0] });
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+  });
+
+  app.post('/api/enrollments/:id/activate', requireAuth, async (req: AuthRequest, res: Response) => {
+    const context = req.institutionalContext; if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+    try { const result = await activateEnrollment(pool, context, req.params.id); return res.json({ enrollment: { status: result.status }, replayed: result.replayed }); }
+    catch (error) { if (error instanceof EnrollmentActivationError) return reject(res, error.code === 'NOT_FOUND' ? 404 : error.code === 'FORBIDDEN' ? 403 : 409, error.message); throw error; }
   });
 }

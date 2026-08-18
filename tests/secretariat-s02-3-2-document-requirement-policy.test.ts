@@ -24,7 +24,8 @@ assert(!zeroRequirements.ready && zeroRequirements.reason === 'REQUIREMENTS_NOT_
 const pendingRequired = documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'submitted', sourceRequirementId: 'bi' }]);
 assert(!pendingRequired.ready && pendingRequired.reason === 'REQUIRED_DOCUMENTS_UNVERIFIED', 'Required submitted document must wait for verification.');
 const verifiedRequired = documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'verified', sourceRequirementId: 'bi' }]);
-assert(verifiedRequired.ready, 'Required verified document must satisfy validation.');
+assert(!verifiedRequired.ready, 'Historical evidence alone must not satisfy the physical-document gate.');
+assert(documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'verified', sourceRequirementId: 'bi', physicalFilePersisted: true }]).ready, 'Verified required document with a persisted physical file must satisfy validation.');
 const optionalPending = documentValidationGate(true, [{ documentType: 'Foto extra', required: false, status: 'pending', sourceRequirementId: 'foto' }]);
 assert(optionalPending.ready, 'Materialized optional document configuration must not block validation.');
 

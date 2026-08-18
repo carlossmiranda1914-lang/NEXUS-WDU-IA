@@ -43,32 +43,6 @@ export async function getLiveStudents(): Promise<Student[]> {
   }
 }
 
-export async function upsertLiveStudent(student: Student): Promise<void> {
-  try {
-    const headers = await getHeaders();
-    const res = await fetch('/api/students', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(student)
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      console.warn('Falha ao salvar aluno no banco relacional:', res.status, errData);
-    }
-  } catch (err) {
-    console.warn('Erro ao conectar com /api/students:', err);
-  }
-}
-
-export async function deleteLiveStudent(id: string): Promise<void> {
-  const headers = await getHeaders();
-  const res = await fetch(`/api/students/${id}`, {
-    method: 'DELETE',
-    headers
-  });
-  if (!res.ok) throw new Error('Falha ao excluir estudante no banco de dados.');
-}
-
 // 2. Teachers Operations
 export async function getLiveTeachers(): Promise<Teacher[]> {
   try {

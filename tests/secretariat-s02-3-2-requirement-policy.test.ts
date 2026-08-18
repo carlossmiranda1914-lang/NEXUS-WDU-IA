@@ -22,7 +22,8 @@ assert(!documentValidationGate(true, []).ready, 'A policy reference without a ma
 assert(!documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'pending', sourceRequirementId: 'bi' }]).ready, 'Pending required document must block validation.');
 assert(!documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'submitted', sourceRequirementId: 'bi' }]).ready, 'Submitted required document must still block validation.');
 assert(!documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'rejected', sourceRequirementId: 'bi' }]).ready, 'Rejected required document must block validation.');
-assert(documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'verified', sourceRequirementId: 'bi' }]).ready, 'Verified required document must satisfy validation gate.');
+assert(!documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'verified', sourceRequirementId: 'bi' }]).ready, 'Historical evidence alone must not satisfy validation.');
+assert(documentValidationGate(true, [{ documentType: 'BI', required: true, status: 'verified', sourceRequirementId: 'bi', physicalFilePersisted: true }]).ready, 'Verified required document with persisted physical evidence must satisfy validation gate.');
 assert(documentValidationGate(true, [{ documentType: 'Foto', required: false, status: 'pending', sourceRequirementId: 'foto' }]).ready, 'Materialized optional document configuration must not block validation.');
 
 console.log(`Secretariat S02.3.2 requirement policy passed (${assertions} assertions).`);

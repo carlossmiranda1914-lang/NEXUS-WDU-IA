@@ -10,5 +10,5 @@ assert(controller.includes("documentValidationGate"), 'Enrollment transition mus
 assert(controller.includes("target === 'validated'"), 'Document validation gate must target validated transition.');
 assert(controller.includes('document_policy_id'), 'Transition lock must read captured policy id.');
 assert(controller.includes('Existem documentos obrigatórios por verificar.'), 'Incomplete required documents must block validation.');
-assert(documents.includes('required, source_requirement_id'), 'Document API must expose captured requirement metadata.');
+assert(documents.includes('d.required, d.source_requirement_id, d.requirement_code, d.requirement_label, d.requirement_type'), 'Document API must expose immutable captured requirement metadata.');
 console.log(`Secretariat S02.3.2 final integration passed (${assertions} assertions).`);

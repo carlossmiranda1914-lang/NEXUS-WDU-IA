@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-Updated: 2026-08-16
+Updated: 2026-08-18
 
 This file records the current factual engineering state only. It is not a historical diary and must not contain planned work presented as implemented.
 
@@ -9,8 +9,7 @@ This file records the current factual engineering state only. It is not a histor
 - Repository: `carlossmiranda1914-lang/NEXUS-WDU-IA`.
 - Canonical local checkout: `C:\Users\Administrador\NEXUS-WDU-IA-main`.
 - `main` contains the audited S01/S02 line, including Academic Year temporal closure and existing-student schema reconciliation.
-- Active S03 branch: `feature/secretariat-s03-process-persistence`.
-- Active S03 PR: `#62`, still draft and not approved for merge while user-acceptance findings remain open.
+- The local P0 foundation line is `codex/enrollment-p0-foundation`; it contains work not yet merged or released.
 
 ## 2. Secretariat vertical status
 
@@ -21,7 +20,7 @@ DONE and integrated in `main`.
 DONE and integrated in `main`, including New/Existing student intent, Person Resolution, idempotent intake, registration profile, document requirements/snapshots, lifecycle gates, Academic Year temporal closure and the PostgreSQL schema-drift regression for `people.birth_date` / SQLSTATE 42703.
 
 ### S03 engineering implementation
-Implemented on `feature/secretariat-s03-process-persistence` and exposed through PR #62:
+Implemented in the audited S03 line and retained in the local P0 foundation:
 - persisted enrollment-process orchestration;
 - deterministic P01-P06 projection;
 - institution-scoped process API;
@@ -31,11 +30,23 @@ Implemented on `feature/secretariat-s03-process-persistence` and exposed through
 - focused S03 policy/contract/PostgreSQL tests;
 - migration 0016.
 
-The branch quality gate is green for the existing CI matrix, but external audit found that the remote workflow run did not execute the new `test:secretariat-s03` command explicitly. CI coverage must be strengthened before merge.
+S03 governs the process through `validated`. The subsequent `validated -> active` transition is the explicit P0-A operation, not a generic S03 process transition.
 
 ## 3. Current active priority
 
-### S03 user-acceptance and release closure
+### S04 Slice 3 — validated
+
+S04 Slice 3 is validated locally. The document-policy-to-offer and enrollment-to-policy ownership are enforceable in PostgreSQL; snapshots are immutable per enrollment; publication is institution-scoped, serialized by offer, idempotent and audited; and the integrated runtime proof covers physical upload, document verification, S03 readiness, validated transition, missing required-document blocking, and rollback after snapshot failure.
+
+The final gate passed S03 PostgreSQL, activation, legacy-creation fences, migration isolation, TypeScript, production build and diff validation. The runtime integration exercises registered Express handlers with PostgreSQL and physical temporary storage; it is not TCP/Firebase/browser UAT. S04 backend administrative API implemented and validated, including migrations 0018–0020; the exploratory configurator was removed from the operational workspace because its institutional configuration location and canonical document taxonomy remain pending. End-to-end authenticated browser UAT of the Secretariat foundation remains pending. Implementation is frozen for the Master Plan audit.
+
+### P0 foundations implemented locally, pending normal integration/release
+
+- P0-A: minimum atomic activation (`validated -> active`) updates enrollment and `student_profile` together, behind the explicit `/activate` operation.
+- P0 documentary foundation: private physical-file storage metadata and backend-authorized upload/download are implemented; this is minimum S06 groundwork, not full S06 delivery.
+- P0-B: local legacy-creation fences prevent the normal legacy paths from creating new `students`; this is not a full legacy data reconciliation.
+
+### Historical S03 user-acceptance findings
 
 User validation on 2026-08-16 found concrete release blockers/improvements that must be resolved before PR #62 can merge:
 
@@ -47,7 +58,7 @@ User validation on 2026-08-16 found concrete release blockers/improvements that 
 2. **Real document evidence is not implemented yet**
    - Current document submission stores an `evidence_reference` string; it is not binary/file storage.
    - Do not present this as physical document upload.
-   - Requirement configuration remains S04 and advanced/real storage remains S06 unless roadmap is explicitly reprioritized.
+   - Requirement configuration remains S04. Physical file storage is now available as a minimum P0/S06 foundation; full S06 scope remains uncompleted.
 
 3. **Visual consistency / Nexus Aurora**
    - S03 drawer uses the new green/Aurora direction, but the parent `Alunos & Matrículas` workspace still contains blue/indigo accents and inconsistent visual language.

@@ -61,6 +61,10 @@ export function registerAcademicYearRoutes(app: Application) {
       const temporal = await resolveEnrollmentTemporalContext(pool, context.institutionId);
       return res.json({
         institution: { id: context.institutionId, name: context.institutionName },
+        // The role is resolved from the authenticated institutional membership.  It is
+        // returned solely for client-side action visibility; every write remains
+        // authorised by its backend route.
+        role: context.role,
         academicYear: temporal.academicYear,
         offers: temporal.offers.map((offer) => ({
           id: offer.id,

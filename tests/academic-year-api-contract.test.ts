@@ -22,6 +22,7 @@ const enrollmentController = await readFile(
 );
 
 expect(source.includes("app.get('/api/academic-years'"), 'AY-2.1 must expose academic-year listing.');
+expect(source.includes('role: context.role'), 'Enrollment context must expose only the server-resolved institutional role for UX visibility.');
 expect(source.includes("app.post('/api/academic-years'"), 'AY-2.1 must expose draft creation.');
 expect(source.includes("app.patch('/api/academic-years/:id'"), 'AY-2.1 must expose draft definition editing.');
 expect(source.includes("app.post('/api/academic-years/:id/activate'"), 'AY-2.1 must expose explicit activation.');

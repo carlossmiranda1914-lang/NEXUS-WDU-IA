@@ -33,15 +33,16 @@ const contextB: InstitutionalContext = { personId: ids.actorB, personName: 'Secr
 try {
   const migrations = (await readdir(migrationsDir)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
   for (const filename of migrations) await pool.query(await readFile(path.join(migrationsDir, filename), 'utf8'));
-  assert(migrations.length === 16, 'S03 clean schema must contain exactly 16 ordered migrations.');
+  assert(migrations.length === 20 && migrations.includes('0017_enrollment_document_files.sql') && migrations.includes('0018_s04_document_policy_tenant_integrity_snapshot.sql') && migrations.includes('0019_s04_document_policy_publication.sql') && migrations.includes('0020_s04_document_policy_admin_api.sql'), 'Clean S03 regression schema must include the physical-file and S04 policy foundations.');
 
   await pool.query("INSERT INTO institutions (id,name,slug,status) VALUES ($1,'Escola A','escola-a','active'),($2,'Escola B','escola-b','active')", [ids.institutionA, ids.institutionB]);
   await pool.query("INSERT INTO people (id,name) VALUES ($1,'Secretaria A'),($2,'Secretaria B'),($3,'Responsável A'),($4,'Pessoa B')", [ids.actorA, ids.actorB, ids.assigneeA, ids.outsiderB]);
   await pool.query("INSERT INTO memberships (id,person_id,institution_id,role,status) VALUES ($1,$2,$3,'secretariat','active'),($4,$5,$6,'secretariat','active'),($7,$8,$3,'secretariat','active'),($9,$10,$6,'secretariat','active')", [ids.membershipA, ids.actorA, ids.institutionA, ids.membershipB, ids.actorB, ids.institutionB, ids.assigneeMembershipA, ids.assigneeA, ids.outsiderMembershipB, ids.outsiderB]);
   await pool.query("INSERT INTO academic_years (id,institution_id,name,starts_on,ends_on,status) VALUES ($1,$2,'2026/2027','2026-09-01','2027-07-31','active')", [ids.yearA, ids.institutionA]);
   await pool.query("INSERT INTO enrollment_offers (id,institution_id,academic_year_id,name,code,status) VALUES ($1,$2,$3,'Ensino Geral','S03-GERAL','active')", [ids.offerA, ids.institutionA, ids.yearA]);
-  await pool.query("INSERT INTO enrollment_document_policies (id,institution_id,offer_id,version,status,created_by) VALUES ($1,$2,$3,1,'active',$4)", [ids.policyA, ids.institutionA, ids.offerA, ids.actorA]);
-  await pool.query("INSERT INTO enrollment_document_requirements (id,institution_id,policy_id,document_type,required,sort_order) VALUES ($1,$2,$3,'Identificação',true,1)", [ids.requirementA, ids.institutionA, ids.policyA]);
+  await pool.query("INSERT INTO enrollment_document_policies (id,institution_id,offer_id,version,status,created_by) VALUES ($1,$2,$3,1,'draft',$4)", [ids.policyA, ids.institutionA, ids.offerA, ids.actorA]);
+  await pool.query("INSERT INTO enrollment_document_requirements (id,institution_id,policy_id,document_type,requirement_code,requirement_label,required,sort_order) VALUES ($1,$2,$3,'Identificação','identity','Documento de identificação',true,1)", [ids.requirementA, ids.institutionA, ids.policyA]);
+  await pool.query("UPDATE enrollment_document_policies SET status='active', activated_at=now() WHERE id=$1", [ids.policyA]);
 
   const intake = await executeEnrollmentIntake(pool as any, {
     institutionId: ids.institutionA, actorPersonId: ids.actorA, offerId: ids.offerA,
@@ -74,6 +75,12 @@ try {
   await transitionEnrollmentDocument(pool as any, contextA, { enrollmentId: intake.enrollmentApplicationId, documentId, toStatus: 'submitted', evidenceReference: 's03/evidence/id' });
   const submitted = await loadEnrollmentProcess(pool as any, contextA, intake.enrollmentApplicationId);
   assert(submitted.nextAction?.code === 'VERIFY_REQUIRED_DOCUMENTS', 'Submitted evidence must change the process action without browser stage writes.');
+  await pool.query(
+    `INSERT INTO enrollment_document_files (
+       institution_id,enrollment_application_id,enrollment_document_id,storage_key,original_filename,content_type,byte_size,sha256,idempotency_key,request_fingerprint,status,persisted_at,uploaded_by
+     ) VALUES ($1,$2,$3,repeat('d',64),'identificacao.pdf','application/pdf',8,repeat('e',64),'s03-physical-file-0001',repeat('f',64),'persisted',now(),$4)`,
+    [ids.institutionA, intake.enrollmentApplicationId, documentId, ids.actorA],
+  );
   await transitionEnrollmentDocument(pool as any, contextA, { enrollmentId: intake.enrollmentApplicationId, documentId, toStatus: 'verified' });
   await pool.query("UPDATE enrollment_applications SET status='under_review',updated_at=now() WHERE id=$1", [intake.enrollmentApplicationId]);
   const ready = await loadEnrollmentProcess(pool as any, contextA, intake.enrollmentApplicationId);

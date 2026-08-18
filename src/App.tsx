@@ -38,8 +38,6 @@ import {
   getLiveAnnouncements,
   getLiveMessages,
   getLiveAutomations,
-  upsertLiveStudent,
-  deleteLiveStudent,
   upsertLiveTeacher,
   deleteLiveTeacher,
   upsertLiveInvoice,
@@ -1162,229 +1160,17 @@ export default function App() {
   };
 
   // State Mutators
-  const handleAddStudent = (newStudentData: Omit<Student, 'id'>) => {
-    const id = `ALU-${Math.floor(106 + Math.random() * 900)}`;
-    const student: Student = { ...newStudentData, id };
-    setStudents(prev => [student, ...prev]);
-    if (supabaseConfigured) {
-      upsertLiveStudent(student).catch(err => console.error("Error creating student:", err));
-    }
-
-    const today = new Date().toISOString().split('T')[0];
-    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
-
-    const t1Id = `TSK-REC-${student.id}`;
-    const t2Id = `TSK-VAL-${student.id}`;
-    const t3Id = `TSK-APR-${student.id}`;
-    const t4Id = `TSK-FIN-${student.id}`;
-    const t5Id = `TSK-CRE-${student.id}`;
-
-    // 1. Receber documentos
-    const t1: SchoolTask = {
-      id: t1Id,
-      title: `Receber documentos de matrícula - ${student.name}`,
-      description: `Coletar e organizar a ficha de matrícula assinada, documento de identificação e boletim escolar de ${student.name} (${student.id}).`,
-      assignedTo: 'Secretaria Executiva',
-      department: 'Secretaria',
-      priority: 'Normal',
-      status: 'Pendente',
-      createdAt: today,
-      dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      limitDate: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0],
-      createdAutomatically: true,
-      createdBy: 'Sistema (Fluxo Matrícula)',
-      referenceId: student.id,
-      referenceType: 'matricula',
-      dependencies: [],
-      history: [
-        {
-          id: `H-1-${t1Id}`,
-          timestamp,
-          action: 'Tarefa de recepção criada automaticamente',
-          user: 'Sistema (Fluxo Matrícula)',
-          details: 'Primeira etapa operacional do fluxo de matrícula.'
-        }
-      ]
-    };
-
-    // 2. Validar documentos (Depende de T1)
-    const t2: SchoolTask = {
-      id: t2Id,
-      title: `Validar documentos académicos - ${student.name}`,
-      description: `Verificar autenticidade, histórico escolar e validade legal da documentação submetida para o aluno ${student.name} (${student.id}).`,
-      assignedTo: 'Secretaria Executiva',
-      department: 'Secretaria',
-      priority: 'Alta',
-      status: 'Pendente',
-      createdAt: today,
-      dueDate: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0],
-      limitDate: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString().split('T')[0],
-      createdAutomatically: true,
-      createdBy: 'Sistema (Fluxo Matrícula)',
-      referenceId: student.id,
-      referenceType: 'matricula',
-      dependencies: [t1Id],
-      history: [
-        {
-          id: `H-1-${t2Id}`,
-          timestamp,
-          action: 'Tarefa de validação criada automaticamente',
-          user: 'Sistema (Fluxo Matrícula)',
-          details: `Dependente da recepção documental (${t1Id}).`
-        }
-      ]
-    };
-
-    // 3. Aprovar matrícula administrativamente (Depende de T2)
-    const t3: SchoolTask = {
-      id: t3Id,
-      title: `Aprovar matrícula administrativamente - ${student.name}`,
-      description: `Homologação formal do processo de inscrição do aluno ${student.name} (${student.id}) para atribuição de turma e dossier letivo.`,
-      assignedTo: 'Direção Executiva',
-      department: 'Direção',
-      priority: 'Alta',
-      status: 'Pendente',
-      createdAt: today,
-      dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      limitDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      createdAutomatically: true,
-      createdBy: 'Sistema (Fluxo Matrícula)',
-      referenceId: student.id,
-      referenceType: 'matricula',
-      dependencies: [t2Id],
-      history: [
-        {
-          id: `H-1-${t3Id}`,
-          timestamp,
-          action: 'Tarefa de aprovação administrativa criada',
-          user: 'Sistema (Fluxo Matrícula)',
-          details: `Aguardando a validação completa de documentos (${t2Id}).`
-        }
-      ]
-    };
-
-    // 4. Criar plano financeiro (Depende de T3)
-    const t4: SchoolTask = {
-      id: t4Id,
-      title: `Criar plano financeiro e propinas - ${student.name}`,
-      description: `Definir regime de mensalidades, descontos aplicáveis, isenções ou bolsas de estudo para o aluno ${student.name} (${student.id}).`,
-      assignedTo: 'Financeiro Executivo',
-      department: 'Financeiro',
-      priority: 'Normal',
-      status: 'Pendente',
-      createdAt: today,
-      dueDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      limitDate: new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      createdAutomatically: true,
-      createdBy: 'Sistema (Fluxo Matrícula)',
-      referenceId: student.id,
-      referenceType: 'matricula',
-      dependencies: [t3Id],
-      history: [
-        {
-          id: `H-1-${t4Id}`,
-          timestamp,
-          action: 'Tarefa de plano financeiro criada',
-          user: 'Sistema (Fluxo Matrícula)',
-          details: `Dependente da homologação formal da matrícula (${t3Id}).`
-        }
-      ]
-    };
-
-    // 5. Emitir credenciais de acesso (Depende de T4)
-    const t5: SchoolTask = {
-      id: t5Id,
-      title: `Emitir credenciais de acesso - ${student.name}`,
-      description: `Criar conta letiva na plataforma escolar e enviar o e-mail de boas-vindas com dados de login para o aluno/encarregado de ${student.name}.`,
-      assignedTo: 'Secretaria Executiva',
-      department: 'Secretaria',
-      priority: 'Normal',
-      status: 'Pendente',
-      createdAt: today,
-      dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      limitDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      createdAutomatically: true,
-      createdBy: 'Sistema (Fluxo Matrícula)',
-      referenceId: student.id,
-      referenceType: 'matricula',
-      dependencies: [t4Id],
-      history: [
-        {
-          id: `H-1-${t5Id}`,
-          timestamp,
-          action: 'Tarefa de emissão de acessos criada',
-          user: 'Sistema (Fluxo Matrícula)',
-          details: `Ativação letiva dependente da configuração financeira do aluno (${t4Id}).`
-        }
-      ]
-    };
-
-    setTasks(prev => [t1, t2, t3, t4, t5, ...prev]);
-    if (supabaseConfigured) {
-      Promise.all([
-        upsertLiveTask(t1),
-        upsertLiveTask(t2),
-        upsertLiveTask(t3),
-        upsertLiveTask(t4),
-        upsertLiveTask(t5)
-      ]).catch(err => console.error("Error creating student matricula tasks:", err));
-    }
+  // New students are created only by the canonical enrollment intake workspace.
+  const handleAddStudent = (_newStudentData: Omit<Student, 'id'>) => {
+    setActiveTab('students');
   };
 
-  const handleUpdateStudent = (id: string, updatedFields: Partial<Student>) => {
-    setStudents(prev => {
-      const next = prev.map(s => s.id === id ? { ...s, ...updatedFields } : s);
-      const updatedSt = next.find(s => s.id === id);
-      if (updatedSt && supabaseConfigured) {
-        upsertLiveStudent(updatedSt).catch(err => console.error("Error updating student:", err));
-      }
-
-      // Automatically trigger approval task for Directorate if grades are modified
-      if (updatedFields.grades && updatedSt) {
-        const studentName = updatedSt.name;
-        const today = new Date().toISOString().split('T')[0];
-        const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 16);
-        const gradesTask: SchoolTask = {
-          id: `TSK-AVAL-${id}-${Math.floor(100 + Math.random() * 899)}`,
-          title: `Homologar notas oficiais - ${studentName}`,
-          description: `Revisar e homologar a pauta de avaliação de notas submetida no diário escolar para o aluno ${studentName} (${id}).`,
-          assignedTo: 'Direção Executiva',
-          department: 'Direção',
-          priority: 'Alta',
-          status: 'Aguardando Aprovação',
-          createdAt: today,
-          dueDate: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split('T')[0],
-          limitDate: new Date(Date.now() + 96 * 60 * 60 * 1000).toISOString().split('T')[0],
-          createdAutomatically: true,
-          createdBy: 'Sistema (Fluxo Avaliações)',
-          referenceId: id,
-          referenceType: 'matricula',
-          history: [
-            {
-              id: `H-1-TSK-AVAL-${id}`,
-              timestamp,
-              action: 'Pauta de notas registada',
-              user: 'Sistema (Fluxo Avaliações)',
-              details: 'Lançamento de notas de disciplinas requer homologação de pauta pela direção.'
-            }
-          ]
-        };
-        setTasks(prevTasks => [gradesTask, ...prevTasks]);
-        if (supabaseConfigured) {
-          upsertLiveTask(gradesTask).catch(err => console.error("Error creating grades task:", err));
-        }
-      }
-
-      return next;
-    });
+  const handleUpdateStudent = (id: string, _updatedFields: Partial<Student>) => {
+    console.warn(`A edição do registo legacy ${id} não está disponível. Utilize o processo canónico aplicável.`);
   };
 
   const handleDeleteStudent = (id: string) => {
-    setStudents(prev => prev.filter(s => s.id !== id));
-    setInvoices(prev => prev.filter(i => i.studentId !== id));
-    if (supabaseConfigured) {
-      deleteLiveStudent(id).catch(err => console.error("Error deleting student:", err));
-    }
+    console.warn(`A eliminação do aluno ${id} não está disponível. Utilize o cancelamento canónico da matrícula quando aplicável.`);
   };
 
   const handleAddTeacher = (newTeacherData: Omit<Teacher, 'id'>) => {
@@ -1419,19 +1205,6 @@ export default function App() {
       const nextInvoices = prev.map(i => {
         if (i.id === id) {
           const amountDiff = status === 'paid' ? -i.amount : i.amount;
-          setStudents(prevStuds => {
-            const nextStuds = prevStuds.map(s => {
-              if (s.id === i.studentId) {
-                const updatedSt = { ...s, outstandingFees: Math.max(0, s.outstandingFees + amountDiff) };
-                if (supabaseConfigured) {
-                  upsertLiveStudent(updatedSt).catch(err => console.error("Error syncing student outstanding fees:", err));
-                }
-                return updatedSt;
-              }
-              return s;
-            });
-            return nextStuds;
-          });
           const updatedIv = { ...i, status };
           if (supabaseConfigured) {
             upsertLiveInvoice(updatedIv).catch(err => console.error("Error updating invoice status:", err));
@@ -1486,19 +1259,6 @@ export default function App() {
     const id = `FAT-${Math.floor(8810 + Math.random() * 1000)}`;
     const invoice: Invoice = { ...newInv, id };
     setInvoices(prev => {
-      setStudents(prevStuds => {
-        const nextStuds = prevStuds.map(s => {
-          if (s.name.toLowerCase() === newInv.studentName.toLowerCase()) {
-            const updatedSt = { ...s, outstandingFees: s.outstandingFees + newInv.amount };
-            if (supabaseConfigured) {
-              upsertLiveStudent(updatedSt).catch(err => console.error("Error updating student outstanding fees for invoice:", err));
-            }
-            return updatedSt;
-          }
-          return s;
-        });
-        return nextStuds;
-      });
       if (supabaseConfigured) {
         upsertLiveInvoice(invoice).catch(err => console.error("Error creating invoice:", err));
       }
@@ -1603,23 +1363,8 @@ export default function App() {
     });
   };
 
-  const handleBonusPointsToStudent = (id: string, amount: number) => {
-    setStudents(prev => {
-      const next = prev.map(s => {
-        if (s.id === id) {
-          return {
-            ...s,
-            averageGrade: Number(Math.min(10, s.averageGrade + (amount / 400)).toFixed(1))
-          };
-        }
-        return s;
-      });
-      const updatedSt = next.find(s => s.id === id);
-      if (updatedSt && supabaseConfigured) {
-        upsertLiveStudent(updatedSt).catch(err => console.error("Error rewarding points:", err));
-      }
-      return next;
-    });
+  const handleBonusPointsToStudent = (id: string, _amount: number) => {
+    console.warn(`A gamificação do aluno ${id} não altera o registo legacy. Aguarda domínio canónico próprio.`);
   };
 
   const handleBonusPointsToTeacher = (id: string, amount: number) => {
@@ -2481,14 +2226,7 @@ export default function App() {
             activeTab={activeTab}
             setActiveTab={setActiveTab}
             theme={theme}
-            onUpdateStudent={(id, updatedFields) => {
-              const std = students.find(s => s.id === id);
-              if (std) {
-                const updatedStd = { ...std, ...updatedFields };
-                setStudents(prev => prev.map(s => s.id === id ? updatedStd : s));
-                upsertLiveStudent(updatedStd);
-              }
-            }}
+            onUpdateStudent={handleUpdateStudent}
           />
         </div>
 
@@ -2625,14 +2363,7 @@ export default function App() {
                     activeTab={activeTab}
                     setActiveTab={setActiveTab}
                     theme={theme}
-                    onUpdateStudent={(id, updatedFields) => {
-                      const std = students.find(s => s.id === id);
-                      if (std) {
-                        const updatedStd = { ...std, ...updatedFields };
-                        setStudents(prev => prev.map(s => s.id === id ? updatedStd : s));
-                        upsertLiveStudent(updatedStd);
-                      }
-                    }}
+                    onUpdateStudent={handleUpdateStudent}
                   />
                 </div>
 
@@ -2857,10 +2588,8 @@ export default function App() {
 
                   {activeTab === 'workflows' && (
                     <WorkflowsCentral 
-                      students={visibleStudents}
                       invoices={visibleInvoices}
-                      onAddStudent={handleAddStudent}
-                      onUpdateStudent={handleUpdateStudent}
+                      onStartCanonicalEnrollment={() => setActiveTab('students')}
                       onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
                       currentUserRole={currentUserRole}
                     />

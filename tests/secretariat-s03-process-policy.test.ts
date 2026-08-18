@@ -20,7 +20,7 @@ assert(documentPending.nextAction?.code === 'SUBMIT_REQUIRED_DOCUMENTS', 'Pendin
 const documentSubmitted = projectEnrollmentProcess({ ...base, registrationReady: true, registrationMissing: [], documents: [{ documentType: 'Identificação', required: true, status: 'submitted', sourceRequirementId: 'identificacao' }] }, 'secretariat');
 assert(documentSubmitted.nextAction?.code === 'VERIFY_REQUIRED_DOCUMENTS', 'Submitted document must yield verification action.');
 
-const ready = projectEnrollmentProcess({ ...base, registrationReady: true, registrationMissing: [], documents: [{ documentType: 'Identificação', required: true, status: 'verified', sourceRequirementId: 'identificacao' }] }, 'secretariat');
+const ready = projectEnrollmentProcess({ ...base, registrationReady: true, registrationMissing: [], documents: [{ documentType: 'Identificação', required: true, status: 'verified', sourceRequirementId: 'identificacao', physicalFilePersisted: true }] }, 'secretariat');
 assert(ready.currentStage === 'P06' && ready.progress.completed === 5, 'Satisfied gates must reach P06 with five completed stages.');
 assert(ready.nextAction?.code === 'VALIDATE_ENROLLMENT', 'Under-review ready process must offer real validation.');
 
