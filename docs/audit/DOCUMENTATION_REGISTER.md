@@ -1,89 +1,101 @@
 # DOC-AUDIT-01 — Documentation Register
 
-**Status:** active consolidation register  
-**Rule:** classification precedes deletion.
+**Status:** active consolidation register — second rigorous pass  
+**Rule:** classify → reconcile → preserve authority/evidence → archive/retire → only then consider permanent deletion.
 
-## 1. Canonical / keep and evolve
+## 1. Current canonical authority
 
-| Path | Decision | Reason |
+| Path | State | Decision |
 |---|---|---|
-| `docs/README.md` | CREATE / CANONICAL | single entrypoint and authority hierarchy |
-| `docs/product/NEXUS_MASTER_PLAN_V2.md` | CREATE / CANONICAL | current market-informed product direction |
-| `docs/architecture/NEXUS_ARCHITECTURE_TO_BE_V2.md` | CREATE / CANONICAL | current target architecture |
-| `docs/audit/AUDIT_01_TECHNICAL_BASELINE.md` | CREATE / CANONICAL | factual AS-IS planning baseline |
-| `docs/audit/LEGACY_REPLACEMENT_MAP.md` | CREATE / CANONICAL | capability-by-capability migration authority |
-| `docs/roadmap/IMPLEMENTATION_PLAN_VNEXT_V2.md` | CREATE / CANONICAL | ordered execution strategy |
-| `docs/roadmap/missions/FND-01.md` … `FND-06.md` | CREATE / ACTIVE | first executable tranche; implementation remains gated |
-| `docs/DEFINITION_READY_DONE_EVIDENCE.md` | KEEP / UPDATE | strong gates; replace Codex-specific wording with tool-neutral agent/implementation language over time |
-| `docs/ARCHITECTURE_V4.md` | KEEP / MERGE LATER | strong principles; TO-BE V2 becomes primary, V4 remains supporting until reconciled line-by-line |
-| `docs/operations/ENGINEERING_PLAYBOOK.md` | KEEP / UPDATE | general engineering process remains useful |
-| `docs/operations/PROJECT_STATE.md` | UPDATE | must reflect frozen checkpoint, AUDIT-01 and current documentation phase |
+| `docs/README.md` | CANONICAL | single repository entrypoint/hierarchy |
+| `docs/product/NEXUS_MASTER_PLAN_V2.md` | CANONICAL | market-informed product direction |
+| `docs/architecture/NEXUS_ARCHITECTURE_TO_BE_V2.md` | CANONICAL | target architecture |
+| `docs/architecture/ADR-001-institutional-context.md` | ACCEPTED ADR | institutional-context decision |
+| `docs/audit/AUDIT_01_TECHNICAL_BASELINE.md` | CANONICAL | factual AS-IS planning baseline |
+| `docs/audit/LEGACY_REPLACEMENT_MAP.md` | CANONICAL | capability migration authority |
+| `docs/roadmap/IMPLEMENTATION_PLAN_VNEXT_V2.md` | CANONICAL | implementation order |
+| `docs/roadmap/missions/FND-01.md` … `FND-06.md` | PREPARATION | planned first tranche; no code authority yet |
+| `docs/templates/MISSION_PACK_TEMPLATE.md` | CANONICAL TEMPLATE | tool-neutral traceable mission format |
+| `docs/operations/IMPLEMENTATION_WORKFLOW.md` | CANONICAL | tool-neutral implementation workflow |
+| `docs/operations/PROJECT_STATE.md` | CANONICAL FACTUAL STATE | reconciled to frozen #65/AUDIT-01/#66 |
+| `docs/DEFINITION_READY_DONE_EVIDENCE.md` | CANONICAL GATES | retain; remove remaining tool-specific wording in later focused edit if present |
 
-## 2. Duplicate / conflicting identifiers
+## 2. Supporting documents
 
-| Path | Decision | Reason |
+| Path | State | Required reconciliation |
 |---|---|---|
-| `docs/architecture/ADR-001-institutional-context.md` | RENUMBER or MERGE | shares ADR-001 identifier with another distinct ADR |
-| `docs/architecture/ADR-001-institutional-identity-membership.md` | KEEP CONTENT / RENUMBER SET | substantial identity decision; duplicate numbering makes references ambiguous |
+| `docs/ARCHITECTURE_V4.md` | SUPPORTING | strong established principles; TO-BE v2 prevails on conflict; later line-by-line absorption can retire V4 |
+| `docs/operations/ENGINEERING_PLAYBOOK.md` | SUPPORTING | compatible with tool-neutral workflow; avoid duplicate authority |
+| `docs/product/NEXUS_OPERATIONAL_MAP_V1.md` | SUPPORTING | preserve valid operational flows; Master Plan v2 prevails |
+| `docs/product/NEXUS_ENROLLMENT_VERTICAL_VNEXT_CONSTITUTION.md` | SUPPORTING DOMAIN CONSTITUTION | Enrollment-specific detail cannot override platform TO-BE |
+| `docs/product/NEXUS_EXPERIENCE_GUIDANCE_MODEL_V1.md` | SUPPORTING | reconcile with Task-First/Context-First benchmark decisions |
+| Student 360 blueprint | PROTOTYPE/BLUEPRINT | design input only until canonical domains/read model exist |
+| Person Resolution/identity D01–D06 decisions | SUPPORTING | preserve substantive identity reasoning; accepted/current architecture prevails |
 
-No ADR is deleted until references are checked. Establish a unique ADR sequence during the archival pass.
+## 3. Resolved authority conflicts in this pass
 
-## 3. Historical mission material
+### Duplicate ADR-001
+Resolved. `ADR-001-institutional-context.md` remains the accepted ADR. The earlier 2026-08-09 identity/membership proposal is preserved as `ADR-000-institutional-identity-membership-proposal.md` with SUPERSEDED PROPOSAL status. The ambiguous duplicate `ADR-001-institutional-identity-membership.md` path was retired.
 
-The following are evidence of prior implementation and should not govern the new roadmap directly:
+### Codex-specific workflow authority
+Resolved. `docs/WORKFLOW_CODEX.md` was retired from the active tree after its durable rules were incorporated into `docs/operations/IMPLEMENTATION_WORKFLOW.md`. An archive marker exists under `docs/archive/tooling/` and full text remains in Git history.
 
-- `docs/MISSION_01_EXECUTION_PACK.md`
-- `docs/missions/MISSION_01_CLOSEOUT.md`
-- `docs/missions/MISSION_01_READINESS.md`
-- `docs/missions/MISSION_03_EXECUTION_PLAN.md`
-- `docs/missions/MISSION_03_PROGRESS_2026-08-11.md`
-- `docs/missions/MISSION_04_PERSISTENCE_VALIDATION.md`
-- `docs/missions/MISSION_05_REALTIME_ISOLATION.md`
-- `docs/missions/MISSION_06_AUDIT_OBSERVABILITY.md`
-- `docs/missions/MISSION_07_FOUNDATION_BASELINE.md`
-- `docs/missions/MISSION_08_EXECUTION_LOG.md`
-- `docs/missions/MISSION_08_MATRICULA_STUDENT_360.md`
+### Codex mission template
+Resolved. `docs/MISSION_CODEX_TEMPLATE.md` was retired and replaced by `docs/templates/MISSION_PACK_TEMPLATE.md`; archive marker retained.
 
-**Decision:** ARCHIVE after verifying no active workflow depends on the path. Their evidence remains valuable for audit/history.
+### Competing canonical-source hierarchy
+Resolved. `docs/product/NEXUS_CANONICAL_SOURCES.md` was retired because it still elevated old planning/architecture/Codex sources as canonical peers. Durable invariants and Drive-reference rules were preserved in the new hierarchy/archive marker.
 
-## 4. Product Mission 08A/08B documents
+### Master Planning v1 claiming canonical status
+Resolved. Active path retired; superseded marker placed under `docs/archive/planning/`. Master Plan v2 is authoritative.
 
-`docs/product/` contains the Student360 blueprint, multiple D01–D06 identity decisions, Person Resolution contract, ready-gate review and T4/T5/T6 micro-gate/evidence templates.
+### Project state
+Resolved. `PROJECT_STATE.md` no longer presents S03/#62 as the active priority; it records frozen #65, AUDIT-01, DOC-AUDIT-01/#66 and Foundation convergence as planned but not authorized.
 
-**Decision:**
+## 4. Historical mission material — next archival batch
 
-- preserve substantive identity decisions and Person Resolution contract as SUPPORTING/ADR material;
-- Student 360 blueprint remains PROTOTYPE/BLUEPRINT, not implemented product authority;
-- move completed micro-gates/evidence templates to archive after extracting any still-canonical rule;
-- do not let `MISSION_08*` naming imply they remain the active implementation roadmap.
+These remain historically valuable but must not stay mixed with active mission authority:
 
-## 5. Planning documents
+- `docs/MISSION_01_EXECUTION_PACK.md`;
+- `docs/missions/MISSION_01_CLOSEOUT.md`;
+- `docs/missions/MISSION_01_READINESS.md`;
+- `docs/missions/MISSION_03_EXECUTION_PLAN.md`;
+- `docs/missions/MISSION_03_PROGRESS_2026-08-11.md`;
+- `docs/missions/MISSION_04_PERSISTENCE_VALIDATION.md`;
+- `docs/missions/MISSION_05_REALTIME_ISOLATION.md`;
+- `docs/missions/MISSION_06_AUDIT_OBSERVABILITY.md`;
+- `docs/missions/MISSION_07_FOUNDATION_BASELINE.md`;
+- `docs/missions/MISSION_08_EXECUTION_LOG.md`;
+- `docs/missions/MISSION_08_MATRICULA_STUDENT_360.md`.
 
-| Path | Decision | Reason |
-|---|---|---|
-| `docs/product/NEXUS_MASTER_PLANNING_V1.md` | SUPERSEDE → ARCHIVE | valuable prior plan, but market/audit/roadmap updates now require v2 |
-| `docs/product/NEXUS_OPERATIONAL_MAP_V1.md` | SUPPORTING / REVIEW | retain operational flows that remain valid; reconcile against Master Plan v2 |
-| `docs/product/NEXUS_CANONICAL_SOURCES.md` | MERGE into `docs/README.md` then ARCHIVE | avoid competing source-of-truth hierarchies |
-| `docs/product/NEXUS_ENROLLMENT_VERTICAL_VNEXT_CONSTITUTION.md` | SUPPORTING | valuable vertical constitution; cannot override platform TO-BE |
-| `docs/product/NEXUS_EXPERIENCE_GUIDANCE_MODEL_V1.md` | SUPPORTING / UPDATE | reconcile with benchmark-derived Task-First/Context-First rules |
+Decision: move/archive only after checking repository references so links/evidence are not silently broken.
 
-## 6. Codex-specific workflow documents
+## 5. Product 08A/08B evidence
 
-| Path | Decision | Reason |
-|---|---|---|
-| `docs/WORKFLOW_CODEX.md` | SUPERSEDE / ARCHIVE after extraction | current project cannot depend on Codex availability; principles remain valid but workflow must be tool-neutral |
-| `docs/MISSION_CODEX_TEMPLATE.md` | SUPERSEDE | replaced by canonical Mission Pack format |
-| `docs/templates/CODEX_PROMPT_TEMPLATE.md` | ARCHIVE | historical/tool-specific helper |
-| `docs/operations/AGENT_TRAINING_AUTOMATION.md` | REVIEW / likely ARCHIVE | not part of immediate canonical implementation governance |
+Preserve substantive Person Resolution/identity decisions. Reclassify Student 360 as blueprint, not implemented capability. Move completed micro-gates/evidence templates to historical evidence after confirming no current doc links depend on their active path.
 
-## 7. Small execution artifacts
+## 6. Tooling/automation docs still requiring review
 
-Examples such as `docs/operations/S02_3_2_DOCUMENT_REQUIREMENTS_GATE.md` and `MISSION_08B1_T*_MICRO_GATE/EVIDENCE_TEMPLATE.md` should be moved to mission-specific historical evidence rather than remain mixed with canonical product/operations documentation.
+- `docs/templates/CODEX_PROMPT_TEMPLATE.md` → likely archive after reference check;
+- `docs/operations/AGENT_TRAINING_AUTOMATION.md` → review against current governance; likely historical/tooling unless an active workflow still consumes it.
 
-## 8. Readiness/status documents
+## 7. Readiness/status
 
-`docs/MVP_READINESS_SCORECARD.md` must be re-evaluated against AUDIT-01. Any old score that predates the new findings cannot be treated as current release readiness.
+`docs/MVP_READINESS_SCORECARD.md` cannot represent current pilot/release readiness until recalculated against AUDIT-01 P0/P1 findings and Foundation convergence. It must be explicitly marked historical/stale or replaced by a new scorecard; do not silently reuse the old score.
 
-## 9. Delete policy
+## 8. Delete policy
 
-At this stage DOC-AUDIT-01 authorizes **no destructive deletion of historically meaningful files**. First create the canonical set and archive map. Permanent deletion can occur in a second documentation PR only for exact duplicates, generated/transient artifacts or files proven to have no evidentiary value.
+This pass performed only **authority-retiring deletions from active paths after preserving the historical meaning in Git history/archive markers**. No substantive historical evidence was destroyed. Permanent deletion of full historical evidence remains restricted to exact duplicates, generated/transient artifacts or content proven to have no evidentiary value.
+
+## 9. Remaining DOC-AUDIT-01 closure criteria
+
+Before declaring documentation consolidation DONE:
+
+1. reference-check and archive historical Mission 01–08 files;
+2. classify/archive remaining 08B micro-gates/evidence templates;
+3. resolve Codex prompt/agent-training remnants;
+4. reassess `MVP_READINESS_SCORECARD.md`;
+5. reconcile `ARCHITECTURE_V4.md` and Definition gates for duplicate/tool-specific authority;
+6. verify internal links after moves;
+7. review PR #66 diff for accidental implementation/code changes — expected result: documentation only;
+8. keep PR draft until this register and canonical index match the actual tree.
