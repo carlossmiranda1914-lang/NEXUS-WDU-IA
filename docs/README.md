@@ -1,70 +1,69 @@
 # Nexus Edu IA — Documentation Index
 
-**Status:** canonical documentation entrypoint  
-**DOC-AUDIT-01:** documentation consolidation baseline  
-**Implementation:** frozen; this documentation does not authorize product code changes.
+**Status:** CANONICAL documentation entrypoint  
+**Implementation:** FROZEN. Documentation does not authorize product-code changes.
 
-## 1. Purpose
+## 1. Mandatory entrypoint
 
-This file is the mandatory entrypoint for anyone — human or agent — planning or implementing work in Nexus Edu IA. The repository must not be interpreted by whichever historical document happens to be found first.
+Anyone — human or agent — planning, reviewing or implementing Nexus work starts here. Never let an old mission, chat handoff, prototype, Codex prompt or legacy code path become authority merely because it was found first.
 
 ## 2. Authority hierarchy
 
-When sources conflict, stop implementation and resolve the conflict. Use this order:
+When sources conflict, stop and resolve the conflict explicitly. Authority order:
 
-1. approved product decision / current Master Plan;
-2. current TO-BE Architecture and approved architectural decisions;
-3. current implementation roadmap and active Mission Pack;
-4. security, tenancy and data-authority contracts;
-5. current factual audit / project state;
-6. active issue and PR evidence;
-7. current code as AS-IS evidence;
-8. archived missions, old execution logs and historical plans.
+1. **Current approved product direction:** `docs/product/NEXUS_MASTER_PLAN_V2.md` and explicit later product decisions.
+2. **Current architecture:** `docs/architecture/NEXUS_ARCHITECTURE_TO_BE_V2.md` plus accepted ADRs that do not conflict with it.
+3. **Current roadmap / active Mission Pack:** `docs/roadmap/IMPLEMENTATION_PLAN_VNEXT_V2.md` and `docs/roadmap/missions/`.
+4. **Security, tenancy, data and domain contracts** referenced by the active mission.
+5. **Current factual state/audit:** `docs/operations/PROJECT_STATE.md`, `docs/audit/AUDIT_01_TECHNICAL_BASELINE.md` and `LEGACY_REPLACEMENT_MAP.md`.
+6. **Active GitHub issue/PR evidence.**
+7. **Current code/schema/tests as AS-IS evidence.**
+8. **Supporting Drive/reference documents** when a canonical repository document points to them for normative detail.
+9. **Archived/superseded missions, plans, tool workflows and historical conversations.**
 
-Code is evidence of what exists, not automatic evidence of what should exist.
+Code proves what exists; it does not automatically define what should exist. A benchmark proves an observed pattern; it does not automatically authorize a Nexus feature.
 
-## 3. Current canonical set
+## 3. Canonical set
 
-| Need | Canonical source |
+| Need | Source |
 |---|---|
-| Product direction and market benchmark | `docs/product/NEXUS_MASTER_PLAN_V2.md` |
+| Product direction + market decisions | `docs/product/NEXUS_MASTER_PLAN_V2.md` |
 | Target architecture | `docs/architecture/NEXUS_ARCHITECTURE_TO_BE_V2.md` |
-| Architecture principles already established | `docs/ARCHITECTURE_V4.md` until fully absorbed by TO-BE V2 |
-| Technical audit / AS-IS baseline | `docs/audit/AUDIT_01_TECHNICAL_BASELINE.md` |
-| AS-IS → TO-BE legacy decisions | `docs/audit/LEGACY_REPLACEMENT_MAP.md` |
+| Accepted institutional-context ADR | `docs/architecture/ADR-001-institutional-context.md` |
+| Technical AS-IS audit | `docs/audit/AUDIT_01_TECHNICAL_BASELINE.md` |
+| Legacy replacement decisions | `docs/audit/LEGACY_REPLACEMENT_MAP.md` |
+| Documentation classification | `docs/audit/DOCUMENTATION_REGISTER.md` |
 | Implementation order | `docs/roadmap/IMPLEMENTATION_PLAN_VNEXT_V2.md` |
-| Active executable missions | `docs/roadmap/missions/` |
-| Ready / Done / evidence gates | `docs/DEFINITION_READY_DONE_EVIDENCE.md` |
-| Engineering workflow | `docs/operations/ENGINEERING_PLAYBOOK.md` plus active Mission Pack |
-| Current project state | `docs/operations/PROJECT_STATE.md` after reconciliation with audit baseline |
-| Historical material | `docs/archive/` after archival pass |
+| Prepared Foundation missions | `docs/roadmap/missions/FND-01.md` … `FND-06.md` |
+| Ready/Done/evidence gates | `docs/DEFINITION_READY_DONE_EVIDENCE.md` |
+| Engineering workflow | `docs/operations/IMPLEMENTATION_WORKFLOW.md` + `ENGINEERING_PLAYBOOK.md` |
+| Current factual project state | `docs/operations/PROJECT_STATE.md` |
+| Historical evidence | `docs/archive/` |
+
+`docs/ARCHITECTURE_V4.md` remains SUPPORTING during reconciliation; Architecture TO-BE v2 is primary. External Drive sources remain important references, but implementation authority is summarized/versioned in the repository so work does not depend on undocumented chat/tool availability.
 
 ## 4. Mandatory traceability
 
-No implementation mission is READY unless it can trace:
+No mission is READY unless it can trace:
 
-`market/operation evidence → ADOPT/ADAPT/REJECT decision → product requirement → architecture contract → AS-IS gap/finding → mission → tests/evidence → DONE`.
+`market/institutional evidence → ADOPT/ADAPT/KEEP/REJECT/INVESTIGATE → product requirement → architecture/domain authority → AS-IS finding/gap → mission scope → tests/evidence → DONE`.
 
-A benchmark observation never authorizes implementation by itself.
-
-## 5. Product rules derived from the market study
-
-The observed academic and financial systems are references for operational maturity, not templates to copy. Nexus adopts or adapts: persistent entity context; Student 360 as an authorized projection; explicit Professor × Turma × Disciplina × Ano Letivo assignment; finance as a deep bounded context integrated with the same platform; fee catalogue, obligations, payments, ledger/extracts; contextual and executive BI; dense tables when operationally appropriate.
-
-Nexus rejects: fragmented mandatory portals; repeated search for the same entity; cascades of menu → button panel → operation; long workflows inside modals; decorative dashboards without decisions; duplicated Student/Class/Course data between domains; fake success; mocks presented as operational capability.
-
-## 6. Documentation states
+## 5. Documentation states
 
 - **CANONICAL** — may govern implementation.
-- **SUPPORTING** — useful detail but cannot override canonical sources.
+- **SUPPORTING** — useful detail; cannot override canonical sources.
 - **HISTORICAL** — evidence of prior work only.
 - **SUPERSEDED** — replaced; must not guide new work.
-- **PROTOTYPE** — exploratory material; no implementation authority.
+- **PROTOTYPE** — exploratory; no operational authority.
 
-## 7. DOC-AUDIT-01 rule
+## 6. ADR rule
 
-Do not delete historical evidence merely because it is old. First classify it in `docs/audit/DOCUMENTATION_REGISTER.md`. Files that can mislead implementation should be archived or superseded. Permanent deletion is reserved for exact redundancy, generated/transient material, or content with no historical/operational value.
+ADR identifiers are unique. The accepted `ADR-001` is institutional context (2026-08-10). The earlier duplicate identity/membership proposal has been preserved as `ADR-000-institutional-identity-membership-proposal.md` with SUPERSEDED PROPOSAL status so its reasoning remains available without ambiguous authority.
+
+## 7. Archive/delete rule
+
+Classify before moving or deleting. Historical evidence is archived when it explains prior decisions or implementation. Permanent deletion is limited to exact redundancy, generated/transient artifacts or content proven to have no historical/operational value.
 
 ## 8. Current freeze
 
-The enrollment checkpoint and prior implementation work remain audit evidence. Documentation consolidation does not authorize continuing S04, merging the frozen implementation, starting a new module, or making opportunistic UX fixes. Implementation resumes only through an approved Mission Pack and the gates above.
+The frozen enrollment checkpoint and prior implementation remain AS-IS evidence. Do not continue S04, merge PR #65, start a new module or perform opportunistic UX/code cleanup. Implementation resumes only through an individually READY Mission Pack and explicit authorization.
