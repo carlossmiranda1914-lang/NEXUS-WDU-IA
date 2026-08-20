@@ -1,6 +1,6 @@
 # FND-01 — Schema Authority
 
-**State:** BLOCKED — EXTERNAL EVIDENCE ONLY. Internal code/architecture investigation and repository/document consistency audit are complete; implementation is not authorized.
+**State:** READY — awaiting explicit implementation authorization.
 
 ## Objective
 Make versioned PostgreSQL migrations the single schema-evolution authority and ensure unsafe initialization fails closed.
@@ -35,9 +35,7 @@ AUD-DB-001, AUD-DB-002. Supports `docs/architecture/NEXUS_ARCHITECTURE_TO_BE_V2.
 ## Canonical DoR evidence
 See `docs/roadmap/missions/FND-01_DOR_EVIDENCE.md`.
 
-## Internal investigation — CLOSED
-
-### Proven
+## Proven AS-IS
 1. `server.ts` awaits `initializeDatabase()` before announcing DB operational readiness.
 2. `src/db/init.ts` mutates persistent schema at runtime and can swallow initialization/DDL failures.
 3. `src/db/migrations/` is the ordered migration-history candidate, but does not currently produce the complete runtime-required schema by itself.
@@ -47,7 +45,8 @@ See `docs/roadmap/missions/FND-01_DOR_EVIDENCE.md`.
 7. `school_tasks` is operational and must not be treated as disposable legacy.
 8. `task_versions` is a real persistent dependency: it is declared in Drizzle and written/read by the School Tasks repository.
 9. The local in-memory path in `src/db/index.ts` is an explicit fallback/emulator, not a second PostgreSQL DDL authority.
-10. Development and CI/test schema paths are evidenced in-repository; staging and production migration paths are not.
+10. Development and CI/test schema paths are evidenced in-repository.
+11. Staging and Production are project-declared `NOT YET PROVISIONED` as of 2026-08-20.
 
 ## Schema transition decisions
 
@@ -76,6 +75,14 @@ FND-01 will converge to one complete migration engine exposed as the repository'
 8. be reused by development, CI/test, staging and production wrappers;
 9. make tranche-specific migration scripts delegates or historical/special-purpose tools rather than competing authorities.
 
+## Approved future shared-environment deployment contract
+
+Staging and Production are not yet provisioned. When either is created, its first approved deployment path must be:
+
+`read-only preflight → identify target DB → backup/change gate when data exists → nexus:migrate → ledger/checksum verification → schema validation → application start → health/readiness`
+
+No shared environment may rely on runtime business-schema self-healing or in-memory production persistence.
+
 ## Recovery rule
 
 Before corrective migration in a shared environment: identify target DB, run read-only schema fingerprint/preflight, compare actual schema to target, and use the environment's approved backup mechanism. Prefer additive/compensating forward migrations. Ambiguous data or destructive transformation = STOP and separate approved recovery/migration plan.
@@ -89,58 +96,17 @@ Implementation must begin with executable red tests/specs for:
 - missing required schema fails closed rather than self-healing silently;
 - restart does not mutate schema;
 - every persistent object consumed by the active application is migration-covered or explicitly deprecated;
-- local in-memory fallback cannot activate as production persistence.
-
-## Environment truth audit — CLOSED AS UNKNOWN
-
-Evidence checked before final DoR:
-
-- repository deployment/configuration/search surface;
-- GitHub CI/workflow evidence available in the repository;
-- `.env.example` environment contract;
-- canonical repository architecture/project-state documents;
-- connected Google Drive Nexus architecture/planning material, including the TO-BE document's deploy/environment guidance;
-- project notes supplied with the repository context.
-
-The evidence supports only these classifications:
-
-- **Development:** PROVEN — local `npm run dev` / server startup path exists and currently invokes runtime DB initialization.
-- **CI/Test:** PROVEN — PostgreSQL + migration/test setup path exists and is currently schema-authority fragmented.
-- **Staging:** UNKNOWN / NOT PROVEN.
-- **Production:** UNKNOWN / NOT PROVEN.
-
-The Drive TO-BE architecture defines target deploy/environment principles but does not prove a provisioned staging/production platform, database, migration command, start command, historical dependence on `initializeDatabase()`, or backup/restore owner. Repository search likewise does not prove those facts.
-
-`UNKNOWN` must not be reinterpreted as `NOT YET PROVISIONED` or `PROVISIONED` by Codex or by inference.
-
-## Remaining DoR blocker — external evidence only
-
-Before changing runtime/schema code, obtain one factual classification for each shared environment.
-
-### If PROVISIONED
-Record:
-- hosting/deployment target;
-- database target/class;
-- start/deploy command;
-- migration command/process, if any;
-- whether `initializeDatabase()` has historically created/repaired schema there;
-- backup/restore mechanism and owner;
-- whether deployment can execute migration explicitly before application traffic/start.
-
-### If NOT YET PROVISIONED
-Record that fact explicitly and approve the future contract:
-
-`read-only preflight → backup/change gate when data exists → nexus:migrate → ledger/checksum verification → schema validation → application start → health/readiness`
-
-Do not invent an environment dependency.
+- local in-memory fallback cannot activate as production persistence;
+- migration checksum mismatch is rejected;
+- clean migration target supports tenant-safe School Tasks + Task Versions persistence without test-only DDL.
 
 ## DoR decision
 
-**BLOCKED — EXTERNAL EVIDENCE ONLY.**
+**READY — awaiting explicit implementation authorization.**
 
-The code/architecture investigation, schema-transition policy, School Tasks/Task Versions contract, recovery model, regression contract, canonical-runner direction and documentation-consistency review are sufficiently specified. No further repository or Drive archaeology is required for DoR.
+Planning/readiness is closed. The mission is sufficiently specified to implement without inventing architecture, product scope, schema authority, environment behavior or acceptance criteria.
 
-Implementation remains unauthorized until staging and production are factually classified as `PROVISIONED` with the required migration/recovery facts or explicitly `NOT YET PROVISIONED` with the future deployment contract approved.
+READY does not authorize code automatically. Before the first edit, the implementation agent must re-verify the AS-IS against the chosen implementation baseline, run required preflight, confirm the Mission Pack is still current, produce the mandatory execution header from `docs/operations/CODEX_EXECUTION_ADAPTER.md`, and stop if new evidence contradicts any READY assumption.
 
 ## Acceptance / DONE
 - complete persistent schema needed by the supported application path is produced by versioned migrations;
@@ -153,8 +119,8 @@ Implementation remains unauthorized until staging and production are factually c
 - focused red→green startup/schema tests pass;
 - migration isolation, relevant PostgreSQL regressions, TypeScript and build pass;
 - CI invokes the canonical path and gates failures;
-- staging/production deployment contract is documented and consistent with the same migration authority;
+- future staging/production deployment contract remains consistent with the same migration authority;
 - evidence pack and `PROJECT_STATE.md` are updated truthfully.
 
 ## Stop rules
-Stop immediately if implementation discovers unmodeled production data, a deployed environment that relies on undocumented self-healing, a destructive conversion not covered by the recovery plan, a schema consumer absent from the reconciliation inventory, or a requirement to redesign an unrelated domain. Report evidence and return the mission to BLOCKED rather than widening scope.
+Stop immediately if implementation discovers unmodeled production/shared data, an environment that contradicts the `NOT YET PROVISIONED` declaration, a deployed path that relies on undocumented self-healing, a destructive conversion not covered by the recovery plan, a schema consumer absent from the reconciliation inventory, or a requirement to redesign an unrelated domain. Return the mission to `BLOCKED` rather than widening scope.
