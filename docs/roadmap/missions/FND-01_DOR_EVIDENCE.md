@@ -2,13 +2,13 @@
 
 **Mission:** FND-01 — Schema Authority  
 **Review date:** 2026-08-20  
-**Implementation status:** BLOCKED — EXTERNAL EVIDENCE ONLY  
+**Implementation status:** READY — awaiting explicit implementation authorization  
 **Frozen implementation reference:** `689d1dd8919a25e91911ae118c5aad9ff69c5862` / PR #65  
 **Comparison baseline:** `main`
 
 ## 1. Evidence rule
 
-This pack records facts needed to decide whether FND-01 may enter implementation. `PROVEN` means repository evidence supports the statement. `DECIDED` means canonical architecture/roadmap has enough evidence to choose a target. `UNKNOWN-EXTERNAL` means the repository cannot prove it and implementation must not guess.
+This pack records facts needed to decide whether FND-01 may enter implementation. `PROVEN` means repository evidence supports the statement. `DECIDED` means canonical architecture/roadmap has enough evidence to choose a target. `PROJECT-DECLARED` means the project owner has explicitly supplied the operational fact. No executor may replace any of these with inference.
 
 ## 2. Runtime schema authority — PROVEN
 
@@ -165,41 +165,61 @@ Editing an already-recorded migration must be detected as checksum mismatch and 
 ### T09 School Tasks migration contract
 Clean migration target supports tenant-safe task CRUD + version snapshot persistence without test-only bootstrap DDL.
 
-## 12. Environment evidence
+## 12. Environment truth — CLOSED
+
+Evidence search in repository, CI, configuration, connected Nexus Drive material and supplied project notes did not prove provisioned shared environments. On 2026-08-20, the project owner explicitly instructed the planning gate to be closed on the basis that the Nexus staging and production environments are **not yet provisioned**. This explicit project declaration closes the prior UNKNOWN-EXTERNAL state; it is not an inference from missing files.
 
 ### Development — PROVEN
 `npm run dev` starts `tsx server.ts`, which currently invokes runtime initialization/self-healing.
 
-### CI/test — PROVEN
+### CI/Test — PROVEN
 GitHub Actions uses PostgreSQL and `test:database:setup`; current schema authority is fragmented between numbered migrations and additional setup DDL.
 
-### Staging — UNKNOWN-EXTERNAL
-No repository deployment configuration or authoritative documentation proves hosting target, migration command, startup command or backup/recovery path.
+### Staging — PROJECT-DECLARED: NOT YET PROVISIONED
+No shared staging environment is part of the current implementation baseline.
 
-### Production — UNKNOWN-EXTERNAL
-Same status as staging. Do not assume an environment exists or how it is provisioned.
+### Production — PROJECT-DECLARED: NOT YET PROVISIONED
+No shared production environment is part of the current implementation baseline.
 
-## 13. Final DoR blocker
+If either environment is provisioned later, its first approved deployment contract must comply with §13 before application traffic is considered healthy.
 
-Obtain and record one of the following for both staging and production:
+## 13. Approved future deployment contract
 
-### Case A — environment exists
-- platform/target;
-- database target class;
-- current start/deploy command;
-- current migration/provisioning process;
-- evidence whether `initializeDatabase()` has historically repaired/created schema;
-- backup/restore mechanism and owner;
-- ability to run canonical migrations before traffic/start.
+For any future staging/production environment:
 
-### Case B — environment does not yet exist
-Record `NOT YET PROVISIONED` as fact and approve the future contract:
-`preflight → backup/change gate when data exists → nexus:migrate → schema validation → application start`.
+`read-only preflight → identify target DB → backup/change gate when data exists → nexus:migrate → migration-ledger/checksum verification → schema validation → application start → health/readiness`
 
-No implementation may invent Case A details.
+Mandatory rules:
+- no runtime business-schema self-healing;
+- no production/staging in-memory persistence fallback;
+- no application traffic after failed migration/schema validation;
+- explicit database ownership/credentials per environment;
+- documented backup/restore owner before destructive or reconciliation-sensitive migrations;
+- application rollback and database rollback remain separate compatibility decisions;
+- a newly provisioned environment is not considered operational until this contract is proven.
 
-## 14. Final DoR decision
+## 14. Final DoR review
 
-**BLOCKED — EXTERNAL EVIDENCE ONLY.**
+All FND-01 DoR blockers are now closed at planning level:
 
-Internal repository investigation is closed. The remaining blocker is not a code-design question; it is missing operational truth about shared environments. Once that fact is supplied or environments are explicitly declared not yet provisioned, FND-01 can undergo a short final DoR check rather than another broad audit.
+- objective/scope: PASS;
+- canonical product/architecture traceability: PASS;
+- AS-IS defect evidence: PASS;
+- runtime DDL inventory: PASS;
+- migration coverage/gap classification: PASS;
+- School Tasks/Task Versions contract: PASS;
+- legacy transition policy: PASS;
+- canonical migration runner contract: PASS;
+- recovery/rollback rules: PASS;
+- regression/evidence plan: PASS;
+- development/CI path: PASS;
+- staging/production truth: PASS via explicit project declaration `NOT YET PROVISIONED`;
+- future shared-environment deployment contract: APPROVED.
+
+## 15. Final DoR decision
+
+**READY — awaiting explicit implementation authorization.**
+
+READY means the mission is sufficiently specified to implement without inventing product, architecture, schema authority, environment behavior or acceptance criteria. READY does **not** authorize implementation automatically and does not authorize commit, push, merge or deployment.
+
+If implementation preflight discovers evidence that contradicts the project declaration (for example, a real shared environment or unmodeled database/data dependency), FND-01 immediately returns to `BLOCKED` and the executor must stop.
