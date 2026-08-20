@@ -48,17 +48,21 @@ If precedence does not resolve a contradiction, **STOP** and report the conflict
 
 ## 4. Mission state gate
 
-Only these states are allowed for implementation control:
+The canonical state model is defined by `docs/DEFINITION_READY_DONE_EVIDENCE.md`. Only these mission states are valid:
 
-- `PREPARATION` — investigation/documentation only;
-- `BLOCKED` — no implementation;
-- `READY` — implementation may begin only if explicitly authorized;
-- `IMPLEMENTING` — code changes are limited to Mission Pack scope;
-- `VALIDATING` — no scope expansion; prove gates/evidence;
-- `DONE` — all DoD/evidence satisfied;
-- `CANCELLED/SUPERSEDED` — no implementation.
+- `BACKLOG`;
+- `PREPARATION`;
+- `BLOCKED`;
+- `READY`;
+- `IMPLEMENTING`;
+- `VALIDATING`;
+- `DONE`;
+- `CANCELLED`;
+- `SUPERSEDED`.
 
-`READY WITH CONDITIONS` is allowed only when every condition is objective, documented, locally controllable and does not hide a security/data/deployment unknown. External unknowns remain `BLOCKED`.
+No alternate/conditional mission states are allowed. In particular, `READY WITH CONDITIONS`, `IN PROGRESS` and `PARTIAL-NOT-DONE` must not be used as mission states. If a required condition is unresolved, remain `PREPARATION` or `BLOCKED`.
+
+`READY` means DoR is satisfied; production-code editing still requires explicit implementation authorization. Commit, push, PR, merge and deploy remain separate authorization gates.
 
 ## 5. Mandatory preflight
 
@@ -206,7 +210,7 @@ Never weaken/remove a failing critical test merely to obtain green CI.
 
 The final mission evidence must state:
 
-- mission ID and final state;
+- mission ID and official final state;
 - baseline/head refs;
 - files/areas changed;
 - invariants implemented;
