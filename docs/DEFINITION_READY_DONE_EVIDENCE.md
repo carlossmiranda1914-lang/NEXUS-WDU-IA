@@ -5,13 +5,25 @@
 
 ## 1. Estados oficiais
 
-Uma Missão está em exatamente um estado: **BACKLOG, PREPARAÇÃO, READY, ANÁLISE, PLANEADA, IMPLEMENTAÇÃO, VALIDAÇÃO, BLOQUEADA ou DONE**.
+Uma Missão está em exatamente um destes estados:
 
-READY autoriza análise/execução apenas dentro do Mission Pack aprovado. DONE é um estado provado, não uma opinião.
+- `BACKLOG` — intenção registada, sem preparação suficiente;
+- `PREPARATION` — investigação, documentação, dependências e critérios em definição; sem implementação;
+- `BLOCKED` — existe impedimento explícito que impede avanço seguro;
+- `READY` — DoR aprovado; implementação só pode começar com autorização explícita;
+- `IMPLEMENTING` — código/artefactos da missão estão a ser alterados dentro do scope aprovado;
+- `VALIDATING` — implementação encerrada para expansão de scope; provas/DoD em execução;
+- `DONE` — DoD e evidências obrigatórias integralmente comprovadas;
+- `CANCELLED` — missão encerrada sem execução/conclusão por decisão explícita;
+- `SUPERSEDED` — substituída por decisão/plano posterior; não executar.
+
+Não existem estados oficiais `READY WITH CONDITIONS`, `IN PROGRESS`, `PARTIAL-NOT-DONE`, `ANÁLISE`, `PLANEADA` ou equivalentes. Análise e planeamento são atividades dentro de `PREPARATION`; resultado parcial mantém a missão em `IMPLEMENTING`, `VALIDATING` ou `BLOCKED`, conforme a evidência.
+
+`READY` nunca significa autorização implícita para commit, push, merge ou deploy. Esses atos mantêm gates próprios.
 
 ## 2. Definition of Ready — Missão
 
-Antes de READY, todos os itens aplicáveis devem estar explícitos:
+Antes de READY, todos os itens aplicáveis devem estar explícitos e resolvidos:
 
 ### Identidade, valor e âmbito
 - issue/identificador único;
@@ -48,10 +60,14 @@ Antes de READY, todos os itens aplicáveis devem estar explícitos:
 ### Segurança/dados
 Para autenticação, autorização, PII, financeiro, IA, documentos, uploads, realtime ou multi-instituição: origem server-side do contexto, mínimo de dados, cenários de acesso indevido, audit/log esperado e proibição de segredos/PII indevida em outputs.
 
+### Gate READY
+Todos os itens obrigatórios aplicáveis estão resolvidos por evidência. Uma dependência externa necessária, ambiente desconhecido, conflito canónico, ownership ambíguo ou condição de segurança/dados ainda não satisfeita mantém a missão em `BLOCKED` ou `PREPARATION`; não existe READY condicional.
+
 ## 3. Micro-gate de tarefa técnica
 
 Antes de editar:
 
+- missão em `READY` e implementação explicitamente autorizada;
 - passo aprovado e objetivo observável;
 - áreas esperadas e áreas proibidas;
 - contratos/invariantes que não podem mudar;
@@ -59,7 +75,7 @@ Antes de editar:
 - risco e rollback;
 - stop rule se a correção exigir ampliar produto, arquitetura, authority ou dados fora do âmbito.
 
-O executor — humano, agente ou ferramenta — deve parar em vez de ampliar silenciosamente a missão.
+Ao iniciar a primeira alteração de código/artefacto da missão, o estado passa de `READY` para `IMPLEMENTING`. O executor — humano, agente ou ferramenta — deve parar em vez de ampliar silenciosamente a missão.
 
 ## 4. Definition of Done
 
@@ -97,6 +113,9 @@ Diff completo revisto; sem ficheiros inexplicados/segredos/temporários; commits
 ### Risco residual
 P0 = 0. P1 = 0 para DONE, salvo exceção formal explicitamente aprovada e documentada. P2/P3 remanescentes têm owner/issue quando necessário.
 
+### Gate DONE
+Durante prova final, a missão está em `VALIDATING`. Qualquer AC obrigatório FAIL/BLOCKED/NOT RUN impede `DONE`; a missão retorna a `IMPLEMENTING` quando é necessária correção dentro do scope ou passa a `BLOCKED` quando existe impedimento externo/arquitetural.
+
 ## 5. Classes de evidência
 
 | Código | Evidência |
@@ -121,7 +140,7 @@ P0 = 0. P1 = 0 para DONE, salvo exceção formal explicitamente aprovada e docum
 
 Toda evidência responde: **o quê, como, onde, resultado e qual AC prova**.
 
-Estados: **PASS, FAIL, BLOCKED, NOT RUN, N/A**. BLOCKED/NOT RUN nunca são convertidos em PASS.
+Estados de evidência: **PASS, FAIL, BLOCKED, NOT RUN, N/A**. Estes são resultados de evidência, não estados de missão. BLOCKED/NOT RUN nunca são convertidos em PASS.
 
 ## 6. Matriz obrigatória
 
@@ -133,16 +152,18 @@ Nenhuma Missão é DONE com critério obrigatório FAIL/BLOCKED/NOT RUN.
 
 ## 7. Relatório mínimo de execução
 
-Registar: Missão/passo; branch/base; âmbito; ficheiros; comandos/ações; matriz AC→evidência; riscos P0–P3; alterações fora do plano; bloqueios; rollback quando relevante; próxima ação.
+Registar: Missão/passo; estado oficial; branch/base; âmbito; ficheiros; comandos/ações; matriz AC→evidência; riscos P0–P3; alterações fora do plano; bloqueios; rollback quando relevante; próxima ação autorizada.
 
 ## 8. Relação com outros documentos
 
+- `AGENTS.md` aplica estes estados e gates a qualquer coding agent;
 - `docs/README.md` define autoridade documental;
 - `docs/templates/MISSION_PACK_TEMPLATE.md` materializa este gate;
 - `docs/operations/IMPLEMENTATION_WORKFLOW.md` define o ciclo de execução;
 - `docs/operations/ENGINEERING_PLAYBOOK.md` detalha práticas;
+- `docs/operations/CODEX_EXECUTION_ADAPTER.md` traduz estes gates para Codex sem criar estados ou autoridade adicionais;
 - `docs/operations/AGENT_TRAINING_AUTOMATION.md` é SUPPORTING para qualificação/automação e não pode relaxar estes gates.
 
 ## 9. Regra constitucional
 
-Nenhuma ferramenta, agente, pressa de roadmap ou investimento anterior pode transformar evidência ausente em PASS, ampliar authority silenciosamente ou declarar DONE com um bloqueio crítico conhecido.
+Nenhuma ferramenta, agente, pressa de roadmap ou investimento anterior pode transformar evidência ausente em PASS, criar um estado alternativo para contornar um gate, ampliar authority silenciosamente ou declarar DONE com um bloqueio crítico conhecido.
