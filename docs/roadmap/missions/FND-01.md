@@ -1,6 +1,6 @@
 # FND-01 — Schema Authority
 
-**State:** BLOCKED — EXTERNAL EVIDENCE ONLY. Internal code/architecture investigation is complete; implementation is not authorized.
+**State:** BLOCKED — EXTERNAL EVIDENCE ONLY. Internal code/architecture investigation and repository/document consistency audit are complete; implementation is not authorized.
 
 ## Objective
 Make versioned PostgreSQL migrations the single schema-evolution authority and ensure unsafe initialization fails closed.
@@ -91,27 +91,56 @@ Implementation must begin with executable red tests/specs for:
 - every persistent object consumed by the active application is migration-covered or explicitly deprecated;
 - local in-memory fallback cannot activate as production persistence.
 
+## Environment truth audit — CLOSED AS UNKNOWN
+
+Evidence checked before final DoR:
+
+- repository deployment/configuration/search surface;
+- GitHub CI/workflow evidence available in the repository;
+- `.env.example` environment contract;
+- canonical repository architecture/project-state documents;
+- connected Google Drive Nexus architecture/planning material, including the TO-BE document's deploy/environment guidance;
+- project notes supplied with the repository context.
+
+The evidence supports only these classifications:
+
+- **Development:** PROVEN — local `npm run dev` / server startup path exists and currently invokes runtime DB initialization.
+- **CI/Test:** PROVEN — PostgreSQL + migration/test setup path exists and is currently schema-authority fragmented.
+- **Staging:** UNKNOWN / NOT PROVEN.
+- **Production:** UNKNOWN / NOT PROVEN.
+
+The Drive TO-BE architecture defines target deploy/environment principles but does not prove a provisioned staging/production platform, database, migration command, start command, historical dependence on `initializeDatabase()`, or backup/restore owner. Repository search likewise does not prove those facts.
+
+`UNKNOWN` must not be reinterpreted as `NOT YET PROVISIONED` or `PROVISIONED` by Codex or by inference.
+
 ## Remaining DoR blocker — external evidence only
 
-Repository evidence does **not** establish how staging and production are provisioned or what command/process applies migrations before application start.
+Before changing runtime/schema code, obtain one factual classification for each shared environment.
 
-Before changing runtime/schema code, obtain and record for each shared environment:
+### If PROVISIONED
+Record:
 - hosting/deployment target;
-- start command;
+- database target/class;
+- start/deploy command;
 - migration command/process, if any;
 - whether `initializeDatabase()` has historically created/repaired schema there;
 - backup/restore mechanism and owner;
-- whether a deployment can run migration as an explicit pre-start/change step.
+- whether deployment can execute migration explicitly before application traffic/start.
 
-If staging/production do not yet exist, record that fact explicitly and define the future deployment contract before implementation. Do not invent an environment dependency.
+### If NOT YET PROVISIONED
+Record that fact explicitly and approve the future contract:
+
+`read-only preflight → backup/change gate when data exists → nexus:migrate → ledger/checksum verification → schema validation → application start → health/readiness`
+
+Do not invent an environment dependency.
 
 ## DoR decision
 
 **BLOCKED — EXTERNAL EVIDENCE ONLY.**
 
-The code/architecture investigation, schema-transition policy, School Tasks/Task Versions contract, recovery model, regression contract and canonical-runner direction are sufficiently specified. No further repository archaeology is required for DoR.
+The code/architecture investigation, schema-transition policy, School Tasks/Task Versions contract, recovery model, regression contract, canonical-runner direction and documentation-consistency review are sufficiently specified. No further repository or Drive archaeology is required for DoR.
 
-Implementation remains unauthorized until the shared-environment migration path is confirmed or explicitly declared non-existent/not-yet-provisioned and the deployment contract is approved.
+Implementation remains unauthorized until staging and production are factually classified as `PROVISIONED` with the required migration/recovery facts or explicitly `NOT YET PROVISIONED` with the future deployment contract approved.
 
 ## Acceptance / DONE
 - complete persistent schema needed by the supported application path is produced by versioned migrations;
