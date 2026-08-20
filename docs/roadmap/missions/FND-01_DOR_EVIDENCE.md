@@ -1,26 +1,20 @@
 # FND-01 — DoR Evidence Pack
 
 **Mission:** FND-01 — Schema Authority  
-**Review date:** 2026-08-19  
-**Implementation status:** BLOCKED — evidence collection only  
+**Review date:** 2026-08-20  
+**Implementation status:** BLOCKED — EXTERNAL EVIDENCE ONLY  
 **Frozen implementation reference:** `689d1dd8919a25e91911ae118c5aad9ff69c5862` / PR #65  
 **Comparison baseline:** `main`
 
-## 1. Scope of this evidence pack
+## 1. Evidence rule
 
-This document closes the investigative portion of the FND-01 Definition of Ready without changing application/runtime code. It distinguishes proved facts, bounded inference and unresolved blockers.
+This pack records facts needed to decide whether FND-01 may enter implementation. `PROVEN` means repository evidence supports the statement. `DECIDED` means canonical architecture/roadmap has enough evidence to choose a target. `UNKNOWN-EXTERNAL` means the repository cannot prove it and implementation must not guess.
 
-## 2. Runtime DDL inventory
+## 2. Runtime schema authority — PROVEN
 
-### 2.1 Authoritative runtime caller
+`server.ts` imports and awaits `initializeDatabase()` before declaring the DB operationally ready. `src/db/init.ts` performs persistent runtime DDL and catches multiple errors, including a top-level failure path that logs rather than reliably failing startup. This establishes both competing schema authority and false-readiness risk.
 
-`server.ts` imports `initializeDatabase()` from `src/db/init.ts` and awaits it during `startServer()` before declaring the database ready for operational use.
-
-### 2.2 Runtime schema mutations in `src/db/init.ts`
-
-The frozen checkpoint and `main` both contain the same class of runtime schema authority:
-
-**CREATE TABLE IF NOT EXISTS** for legacy/operational tables:
+### Runtime-created tables
 - `users`
 - `students`
 - `teachers`
@@ -33,182 +27,179 @@ The frozen checkpoint and `main` both contain the same class of runtime schema a
 - `approvals`
 - `school_tasks`
 
-**ALTER TABLE / ADD COLUMN**:
-- `users.phone`
-- `users.department`
-- `users.status`
-- `users.last_access`
-- `school_tasks.is_deleted`
-- `school_tasks.deleted_at`
-- `school_tasks.deleted_by`
-- `school_tasks.started_at`
-- `school_tasks.first_response_at`
-- `school_tasks.sla_deadline`
-- `school_tasks.sla_status`
+### Runtime alterations
+`users`: phone, department, status, last_access.
 
-**ALTER COLUMN TYPE**:
-- `school_tasks.created_at`
-- `school_tasks.updated_at`
-- `school_tasks.completed_at`
-- `school_tasks.due_date`
-- `school_tasks.limit_date`
+`school_tasks`: soft-delete, SLA/response fields, temporal type conversions and operational indexes.
 
-**CREATE INDEX IF NOT EXISTS** for School Tasks:
-- department/status
-- status/department
-- assigned/status
-- created_at
-- completed_at
-- assigned_to
-- reference_id/reference_type
-- due_date
+## 3. Local fallback boundary — PROVEN
 
-### 2.3 Failure semantics
+`src/db/index.ts` contains an explicit in-memory emulator/fallback for local operation. It includes `school_tasks` and `task_versions` arrays but does not represent persistent PostgreSQL schema evolution. When persistent DB mode is configured, query failures are propagated. Therefore it is not classified as a competing persistent DDL authority.
 
-Several ALTER operations catch errors and continue. The top-level `initializeDatabase()` also catches any failure and only logs it rather than rethrowing. After the awaited call returns, `server.ts` logs that the database is ready for operational use. Therefore false-readiness is a proved behavior class, not a theoretical risk.
+## 4. Numbered migration chain — PROVEN
 
-### 2.4 Search boundary
+`src/db/migrations/` contains the ordered `NNNN_*.sql` chain. `scripts/verify-migrations-isolated.ts` discovers numbered files, sorts them lexically and applies each transactionally in a disposable PostgreSQL schema, failing non-zero on error.
 
-Repository code search shows the application runtime DDL authority centered in `src/db/init.ts`. Other DDL hits are primarily numbered SQL migrations, migration/application scripts, schema-contract verification, documentation or UI/example strings. Before implementation, the change branch must repeat this search and treat any newly discovered runtime DDL path as a blocker.
+This is strong verification infrastructure, but not yet the complete all-environment migration authority.
 
-## 3. Migration inventory and order
+## 5. CI/test fragmentation — PROVEN
 
-### 3.1 Canonical candidate
+The Secretariat CI starts PostgreSQL, runs preflight, executes `test:database:setup`, domain regressions, isolated migrations, TypeScript and production build.
 
-`src/db/migrations/` contains ordered `NNNN_*.sql` migrations. The frozen checkpoint extends the chain through the later Enrollment/document-policy migrations added by PR #65.
+The test DB setup applies numbered migrations and still provisions additional legacy/test schema. Therefore current CI proves that migrations execute, but does **not** prove that migrations alone produce the complete schema required by the active application.
 
-### 3.2 Mechanical order
+## 6. Runtime DDL ↔ migration coverage matrix
 
-`scripts/verify-migrations-isolated.ts` discovers files by `/^\d{4}_.+\.sql$/`, sorts them lexically, applies each in its own transaction in an isolated PostgreSQL schema, rolls back the failing migration and exits non-zero on error.
+| Runtime/required object | Numbered migration coverage | Classification | FND-01 treatment |
+|---|---|---|---|
+| `users` + runtime columns | not proven in numbered chain | UNCOVERED / TRANSITIONAL | compatibility migration; remains legacy authority only until FND-02/IAM replacement |
+| `students` | not proven | UNCOVERED / TRANSITIONAL | compatibility migration; never promote aggregate as vNext Student model |
+| `teachers` | not proven | UNCOVERED / TRANSITIONAL | compatibility migration pending Academic Core replacement |
+| `invoices` | not proven | UNCOVERED / TRANSITIONAL | compatibility migration pending Finance replacement |
+| `announcements` | not proven | UNCOVERED / TRANSITIONAL | compatibility migration pending Communication authority |
+| `chat_messages` | not proven | UNCOVERED / TRANSITIONAL | compatibility migration; tenant/concurrency repair belongs to later mission unless required for schema correctness |
+| `automations` | not proven | UNCOVERED / TRANSITIONAL/PROTOTYPE | minimal compatibility only while active callers remain |
+| `uploaded_documents` | not proven | UNCOVERED / TRANSITIONAL | compatibility migration; do not confuse with vNext document domain |
+| `operational_logs` | `0005_vnext_audit_observability.sql` | COVERED | remove redundant startup ownership after canonical runner is proven |
+| `approvals` | not proven | UNCOVERED / TRANSITIONAL | compatibility migration while callers remain |
+| `school_tasks` base + runtime upgrades | no complete numbered coverage proven | CRITICAL RECONCILIATION | explicit canonical reconciliation migration |
+| School Tasks indexes/types | no complete numbered coverage proven | CRITICAL RECONCILIATION | include only indexes/types justified by active repository/query contract |
+| `task_versions` | no numbered coverage proven | REQUIRED / MISSING | include in School Tasks reconciliation; it is actively read/written by repository |
 
-### 3.3 Existing scripts
+## 7. School Tasks / Task Versions contract — PROVEN ENOUGH FOR IMPLEMENTATION
 
-`package.json` exposes isolated verification and multiple tranche-specific migration commands. This proves migration discipline exists, but also proves execution authority is fragmented: enrollment, S02, S03 and audit-related scripts coexist rather than delegating to one documented all-environment runner.
+The tenant-safe repository imports both `schoolTasks` and `taskVersions`. It scopes Task reads/writes by tenant, writes `tenantId`, `schoolId` and `organizationId`, performs soft-delete/restore, records SLA-related state and creates version snapshots on create/update/delete/restore.
 
-### 3.4 Preflight
+Therefore a runtime-complete persistent schema for this module must include:
 
-`nexus-preflight.ts` verifies that the migration directory exists, that numbered migration files are ordered without ordinal gaps, and can inspect a configured PostgreSQL database read-only for critical schema requirements. It is a useful readiness primitive but is not itself the migration executor.
+### `school_tasks`
+- active business columns consumed by repository;
+- soft-delete fields;
+- SLA/start/response fields;
+- timestamp types compatible with repository values;
+- `tenant_id`, `school_id`, `organization_id`;
+- indexes required by real repository/query patterns;
+- explicit reconciliation/preflight for existing data before introducing stronger tenant constraints.
 
-## 4. Dependency map for runtime self-healing
+### `task_versions`
+- task id;
+- monotonically usable version number per task;
+- JSON snapshot;
+- actor and changed timestamp;
+- action;
+- request/correlation metadata;
+- IP/user-agent metadata where retained;
+- diff payload;
+- index/uniqueness decisions justified by repository behavior.
 
-### 4.1 Direct dependency
+Any existing data that cannot be mapped safely to tenant context must BLOCK a restrictive migration rather than receive invented ownership.
 
-`server.ts → initializeDatabase()` is the only proved direct application startup dependency found in repository search.
+## 8. Legacy transition policy — DECIDED
 
-### 4.2 Indirect operational dependency
+FND-01 is not allowed to solve legacy domain replacement. For still-consumed legacy schema that lacks numbered migration coverage, create explicit **compatibility migrations** whose purpose is to make migrations reproduce the current supported schema without pretending those tables are the future domain model.
 
-The runtime DDL provisions legacy tables used broadly by legacy endpoints/components and provisions/repairs `school_tasks` columns/indexes. Removing it without replacement can expose environments that were bootstrapped historically by startup rather than by migrations.
+`docs/audit/LEGACY_REPLACEMENT_MAP.md` remains authoritative for eventual retirement.
 
-### 4.3 High-risk dependency groups
+## 9. Canonical runner contract — DECIDED
 
-Until proven otherwise, assume these groups can depend on startup-created legacy schema:
+Target repository command: `nexus:migrate` (exact implementation file may vary).
 
-- legacy user/profile administration → `users`;
-- legacy student APIs/BI/AI → `students`;
-- teacher administration → `teachers`;
-- legacy finance → `invoices`;
-- communication → `announcements`, `chat_messages`;
-- legacy automation → `automations`;
-- general-document/OCR paths → `uploaded_documents`;
-- manual audit/log consumers → `operational_logs`;
-- approvals → `approvals`;
-- School Tasks compatibility → `school_tasks` and its indexes/type upgrades.
+Required behavior:
+1. discover only valid ordered `NNNN_*.sql` files;
+2. deterministic order;
+3. migration ledger;
+4. checksum persisted and verified for every applied migration;
+5. one transaction per migration unless a reviewed migration explicitly documents why not;
+6. pending-only application;
+7. non-zero failure on SQL error, checksum mismatch or invalid ordering;
+8. no rewriting/apparently reapplying historical migrations;
+9. reusable engine for dev, CI/test, staging and production;
+10. environment wrappers may add credentials, preflight, backup/change approval, but cannot change migration semantics/order.
 
-This is a dependency-risk map, not proof that every deployed environment lacks a corresponding migration. FND-01 implementation must inspect the actual migration coverage for each object before removing runtime DDL.
+Tranche-specific scripts must become delegates or explicitly historical/special-purpose; they cannot remain independent schema authorities.
 
-## 5. Recovery / rollback design
+## 10. Recovery contract — DECIDED
 
-FND-01 must not use destructive rollback as the default.
+Before migration against a shared DB:
+1. identify target environment/database;
+2. run read-only preflight/schema fingerprint;
+3. compare actual schema/data preconditions with migration target;
+4. confirm backup/restore mechanism for the environment;
+5. apply forward migration only when preconditions are satisfied.
 
-### 5.1 Before change
+Divergence classes:
+- ALIGNED → proceed;
+- MISSING ADDITIVE OBJECT → versioned forward migration;
+- TYPE/INDEX DRIFT → explicit reconciliation with preconditions;
+- AMBIGUOUS OWNERSHIP/DATA → BLOCK;
+- DESTRUCTIVE TRANSFORMATION → BLOCK and separate approved plan.
 
-1. Capture target database identity and schema fingerprint.
-2. Run read-only preflight and schema-contract inspection.
-3. Inventory required legacy tables/columns/indexes currently created by startup.
-4. Compare deployed schema with the complete migration target.
-5. Back up database using the environment's approved database backup mechanism before any corrective migration in staging/production.
-6. Do not infer that `CREATE TABLE IF NOT EXISTS` parity means schema parity; compare columns, types, constraints and indexes explicitly.
+Never re-enable hidden startup self-healing as rollback. Application rollback and database rollback are separate compatibility decisions.
 
-### 5.2 Divergent database classification
+## 11. Required regression suite — SPECIFIED
 
-- **Aligned:** migration target already satisfied → startup DDL can later be removed after tests.
-- **Missing additive object:** create a versioned forward migration.
-- **Type/index drift:** create an explicit reconciliation migration with preflight checks.
-- **Conflicting/ambiguous data:** BLOCK; produce reconciliation report before mutation.
-- **Destructive transformation required:** BLOCK; separate migration plan with backup/restore proof and explicit approval.
+### T01 Initialization failure propagation
+Demonstrate current defect with a failing mandatory schema/startup condition; future behavior must reject/fail startup.
 
-### 5.3 Roll-forward principle
+### T02 No false readiness
+A DB-init/schema validation failure must prevent operational-ready logging/listening.
 
-Once a versioned migration is applied to a shared environment, recovery should normally be a compensating forward migration rather than rewriting migration history or re-enabling hidden startup self-healing.
+### T03 Migration-only clean bootstrap
+A clean persistent target receives only the canonical migration chain and becomes runtime-complete for the supported application surface.
 
-### 5.4 Application rollback
+### T04 Missing schema fails closed
+Remove a required migrated object; startup validation must fail rather than create it.
 
-If application deployment must be rolled back, the previous application version may only be restored if it is compatible with the already-applied schema. Schema and application rollback are separate decisions.
+### T05 Restart is schema read-only
+Repeated startup after migration cannot create/alter/drop business schema.
 
-## 6. Pre-change regression test specification
+### T06 Runtime-complete coverage
+Every persistent table/column/index required by active authoritative paths is either migration-covered or explicitly deprecated/disabled.
 
-These tests are specifications only in this documentation phase. Executable tests become the first authorized implementation step if FND-01 later becomes READY.
+### T07 Local fallback isolation
+Persistent/production mode cannot silently degrade into in-memory institutional persistence.
 
-### T01 — initialization failure must propagate
+### T08 Migration checksum integrity
+Editing an already-recorded migration must be detected as checksum mismatch and fail.
 
-Arrange a configured PostgreSQL path where the first mandatory startup schema operation fails. Assert current behavior demonstrates the defect: `initializeDatabase()` resolves/logs rather than rejecting. After fix, assert rejection propagates.
+### T09 School Tasks migration contract
+Clean migration target supports tenant-safe task CRUD + version snapshot persistence without test-only bootstrap DDL.
 
-### T02 — server must not announce readiness after DB-init failure
+## 12. Environment evidence
 
-Inject/force an initialization failure before route serving/listen readiness. Assert the future server does not log/emit operational readiness and exits/fails startup.
+### Development — PROVEN
+`npm run dev` starts `tsx server.ts`, which currently invokes runtime initialization/self-healing.
 
-### T03 — clean database reaches target through ordered migrations only
+### CI/test — PROVEN
+GitHub Actions uses PostgreSQL and `test:database:setup`; current schema authority is fragmented between numbered migrations and additional setup DDL.
 
-Create isolated clean schema/database, apply canonical migration runner, verify schema contract, start application with runtime DDL disabled/removed, assert startup succeeds.
+### Staging — UNKNOWN-EXTERNAL
+No repository deployment configuration or authoritative documentation proves hosting target, migration command, startup command or backup/recovery path.
 
-### T04 — missing required schema fails closed
+### Production — UNKNOWN-EXTERNAL
+Same status as staging. Do not assume an environment exists or how it is provisioned.
 
-Start against a database missing a required migrated object. Assert startup/preflight fails explicitly rather than creating the object silently.
+## 13. Final DoR blocker
 
-### T05 — already migrated database is idempotently usable
+Obtain and record one of the following for both staging and production:
 
-Apply migrations, restart application repeatedly, assert no schema mutation is attempted at startup and application remains operational.
+### Case A — environment exists
+- platform/target;
+- database target class;
+- current start/deploy command;
+- current migration/provisioning process;
+- evidence whether `initializeDatabase()` has historically repaired/created schema;
+- backup/restore mechanism and owner;
+- ability to run canonical migrations before traffic/start.
 
-### T06 — legacy compatibility schema covered by migrations
+### Case B — environment does not yet exist
+Record `NOT YET PROVISIONED` as fact and approve the future contract:
+`preflight → backup/change gate when data exists → nexus:migrate → schema validation → application start`.
 
-For every table/column/index currently provisioned by `src/db/init.ts`, assert the canonical migration chain creates or intentionally deprecates it. Any uncovered object blocks removal of its startup DDL.
+No implementation may invent Case A details.
 
-### T07 — local in-memory fallback remains explicitly local-only
+## 14. Final DoR decision
 
-Assert explicit local fallback behavior remains separate from persistent DB schema migration authority and cannot activate in production.
+**BLOCKED — EXTERNAL EVIDENCE ONLY.**
 
-## 7. Target migration execution authority
-
-The mission should converge on one command/library responsible for applying the complete ordered migration chain. Environment wrappers may supply credentials/target DB, but must delegate to the same migration engine/order.
-
-Target contract:
-
-- development persistent DB → canonical runner;
-- CI/test DB → same runner against disposable/isolated target;
-- staging → same runner with preflight + backup/recovery gate;
-- production → same runner with preflight + backup/change approval;
-- tranche-specific scripts → remove, archive or rewrite as thin delegates when safe.
-
-The exact command/file name is an implementation choice; the authority model is not.
-
-## 8. DoR decision
-
-### Proven enough
-
-- problem exists;
-- direct startup call is identified;
-- runtime DDL surface in `src/db/init.ts` is catalogued;
-- ordered migration verification mechanism exists;
-- failure-test scenarios are specified;
-- recovery principles and divergence handling are specified.
-
-### Still blocking implementation authorization
-
-1. Migration coverage must be reconciled object-by-object against every legacy table/column/index currently created by startup, especially School Tasks.
-2. Actual environment/deployment usage of tranche-specific migration scripts versus startup self-healing is not proven from repository evidence alone.
-3. No executable red regression test has yet captured the false-readiness behavior; by policy this should be the first code-level step once authorization is granted.
-4. The canonical all-environment migration runner is a target contract, not an existing proved authority.
-
-**Decision: BLOCKED — narrowed blockers.**
-
-Do not remove `initializeDatabase()` DDL yet. The next safe activity is a schema-coverage reconciliation matrix comparing runtime-created objects against the frozen checkpoint migration chain, followed by environment migration-path confirmation. Only then repeat DoR.
+Internal repository investigation is closed. The remaining blocker is not a code-design question; it is missing operational truth about shared environments. Once that fact is supplied or environments are explicitly declared not yet provisioned, FND-01 can undergo a short final DoR check rather than another broad audit.
