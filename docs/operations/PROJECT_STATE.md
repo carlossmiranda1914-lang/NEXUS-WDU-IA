@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-Updated: 2026-08-19
+Updated: 2026-08-20
 
 This file records the current factual engineering state only. It is not a historical diary and must not present planned work as implemented.
 
@@ -19,9 +19,9 @@ This file records the current factual engineering state only. It is not a histor
 
 **Implementation is frozen.**
 
-The current program is documentation governance and planning after a deep repository audit:
+The current program is documentation governance, mission readiness and execution-control hardening after a deep repository audit:
 
-`market/real-system benchmark → canonical product/architecture sources → AUDIT-01 AS-IS diagnosis → legacy replacement map → vNext roadmap → Foundation Mission Packs → readiness review → only then implementation`.
+`market/real-system benchmark → canonical product/architecture sources → AUDIT-01 AS-IS diagnosis → legacy replacement map → vNext roadmap → Mission Pack → DoR → explicit authorization → implementation → evidence/DoD`.
 
 Do not continue S04, open opportunistic feature slices, perform UX cleanup unrelated to an approved mission, merge PR #65, or start a new domain merely because work already exists.
 
@@ -79,17 +79,43 @@ Use `docs/audit/AUDIT_01_TECHNICAL_BASELINE.md` and `docs/audit/LEGACY_REPLACEME
 
 Current primary repository sources in PR #66:
 
+- coding-agent contract: `AGENTS.md`;
 - documentation entrypoint: `docs/README.md`;
 - product/benchmark direction: `docs/product/NEXUS_MASTER_PLAN_V2.md`;
 - target architecture: `docs/architecture/NEXUS_ARCHITECTURE_TO_BE_V2.md`;
 - technical audit: `docs/audit/AUDIT_01_TECHNICAL_BASELINE.md`;
 - legacy migration map: `docs/audit/LEGACY_REPLACEMENT_MAP.md`;
 - roadmap: `docs/roadmap/IMPLEMENTATION_PLAN_VNEXT_V2.md`;
-- Foundation mission packs: `docs/roadmap/missions/FND-01.md` through `FND-06.md`.
+- Foundation mission packs: `docs/roadmap/missions/FND-01.md` through `FND-06.md`;
+- Codex-specific execution translation: `docs/operations/CODEX_EXECUTION_ADAPTER.md` (supporting; never overrides canonical sources).
 
 The market study is incorporated as product decisions, not as permission to copy the reference systems. Key directions include persistent entity context, Student 360 as an authorized projection, explicit Teacher × Class × Subject × AcademicYear assignment, deep but integrated Finance, contextual/executive BI, Task-First/Context-First UX, and rejection of fragmented portals, repeated searches and fake operational success.
 
-## 7. Next implementation tranche — not yet authorized
+## 7. FND-01 readiness result
+
+`FND-01 — Schema Authority` is the first planned implementation mission.
+
+Current state:
+
+**BLOCKED — EXTERNAL EVIDENCE ONLY.**
+
+Internal repository investigation is closed. It has established:
+
+- runtime persistent DDL/self-healing exists in `src/db/init.ts`;
+- numbered migrations do not currently produce the complete runtime-required schema;
+- CI/test setup adds schema beyond the numbered migrations;
+- legacy uncovered objects require explicitly transitional compatibility migrations rather than silent startup creation;
+- `school_tasks` + `task_versions` require a canonical reconciliation migration based on the tenant-safe repository contract;
+- one canonical migration engine/ledger/checksum model has been defined as target;
+- recovery and regression contracts are specified.
+
+Remaining blocker: repository evidence does not establish staging/production hosting, migration/start commands, historical dependency on startup self-healing or backup/restore mechanism. Those facts must be confirmed externally, or staging/production must be explicitly recorded as not yet provisioned and the future deployment contract approved.
+
+See:
+- `docs/roadmap/missions/FND-01.md`;
+- `docs/roadmap/missions/FND-01_DOR_EVIDENCE.md`.
+
+## 8. Next implementation tranche — not yet authorized
 
 The planned first tranche is **Foundation Authority Convergence**:
 
@@ -100,31 +126,41 @@ The planned first tranche is **Foundation Authority Convergence**:
 5. FND-05 — Audit Truth;
 6. FND-06 — CI vNext Gate.
 
-Each mission is currently documentation/planning material. Code may begin only after the individual Mission Pack passes Definition of Ready and explicit authorization.
+No later mission starts automatically after a previous mission. Each requires an independent DoR and explicit authorization.
 
-## 8. Documentation governance phase
+## 9. Coding-agent execution governance
 
-DOC-AUDIT-01 is consolidating repository documentation so historical mission logs, Codex-specific workflows, old plans and prototypes cannot silently override current canonical sources.
+Any coding agent, including Codex, must follow `AGENTS.md`. Codex additionally reads `docs/operations/CODEX_EXECUTION_ADAPTER.md`.
+
+The required execution chain is:
+
+`canonical reading → Mission state check → scope/invariants → AS-IS verification → preflight → test/evidence plan → minimal implementation → negative/regression gates → DoD evidence → factual state update`.
+
+Chat context is never implementation authority. A BLOCKED Mission Pack cannot be implemented by interpreting around the blocker.
+
+## 10. Documentation governance
+
+DOC-AUDIT-01 consolidated repository documentation so historical mission logs, old plans, Codex-specific historical workflows and prototypes cannot silently override current canonical sources.
 
 Rules:
 
-- classify before delete;
-- preserve historical evidence in archive when it still explains prior decisions/implementation;
-- resolve duplicate ADR identifiers;
-- remove tool-specific assumptions from durable engineering governance;
-- keep Google Drive useful for external/source artifacts, but keep the implementation-governing canonical summary in the repository;
-- update this state file whenever the active phase, baseline, canonical source set or critical verified risk changes.
+- classify before delete/archive;
+- preserve historical evidence when it explains prior decisions/implementation;
+- keep durable governance tool-neutral;
+- use Codex adapter only as an execution translation;
+- keep external/Drive sources useful for normative detail while retaining implementation-governing summaries in the repository;
+- update this state file whenever active phase, baseline, canonical source set, mission readiness or critical verified risk changes.
 
-## 9. Release/readiness statement
+## 11. Release/readiness statement
 
-Nexus is **not currently authorized for broad feature expansion or pilot-readiness claims** based on surface completeness. Readiness must be recalculated after the Foundation convergence gates close the relevant P0/P1 findings and CI proves the consolidated invariants.
+Nexus is **not currently authorized for broad feature expansion or pilot-readiness claims** based on surface completeness. Readiness must be recalculated after Foundation convergence gates close the relevant P0/P1 findings and CI proves the consolidated invariants.
 
-## 10. Update rule
+## 12. Update rule
 
 Update this file only when one of these materially changes:
 
 - official baseline/checkpoint or PR state;
-- active program/mission;
+- active program/mission or Mission Pack state;
 - canonical documentation set;
 - major implemented capability;
 - major verified architectural/product/security risk;
