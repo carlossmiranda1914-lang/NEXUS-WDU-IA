@@ -1,7 +1,7 @@
 # ADR-001 — Contexto institucional obrigatório
 
-**Estado:** aceite
-**Prioridade:** P0 / ARC-001 e ARC-005
+**Estado:** aceite  
+**Prioridade:** P0 / ARC-001 e ARC-005  
 **Data:** 2026-08-10
 
 ## Decisão
@@ -25,13 +25,17 @@ seleção explícita e valida-a contra as memberships existentes.
 - O papel `institution_admin` é temporariamente mapeado para `admin` apenas
   para compatibilidade dos endpoints legados durante a migração controlada.
 
-## Consequências e próximos passos
+## Consequências
 
-As tabelas legadas ainda não têm `institution_id` como chave estrangeira. Elas
-não devem receber novas capacidades interinstitucionais até serem migradas.
-A próxima missão aplica a mesma chave e filtros a Pessoas/Alunos, Documentos,
-Financeiro e Comunicação, com testes negativos de leitura e escrita entre duas
-instituições.
+As tabelas legadas ainda não têm isolamento institucional uniforme. Elas não
+devem receber novas capacidades interinstitucionais enquanto o respetivo
+caminho autoritativo não tiver tenant ownership explícito, filtros/constraints
+adequados e testes negativos cross-tenant.
+
+A ordem e o âmbito de qualquer migração posterior são definidos exclusivamente
+por `docs/roadmap/IMPLEMENTATION_PLAN_VNEXT_V2.md` e pelo Mission Pack ativo.
+Este ADR define o invariante de contexto institucional; não autoriza nem agenda
+uma missão futura específica.
 
 ## Rollback
 
