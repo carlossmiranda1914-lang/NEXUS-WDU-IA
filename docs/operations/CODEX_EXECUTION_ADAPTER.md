@@ -15,7 +15,7 @@ Codex may edit production code only when all are true:
 - repository preflight is not BLOCKED;
 - no canonical-source conflict is unresolved.
 
-Otherwise Codex remains in analysis/evidence mode.
+Otherwise Codex remains in analysis/evidence mode without changing the mission to a non-canonical state.
 
 ## 2. Mandatory first response before editing
 
@@ -23,7 +23,7 @@ Before the first code change, Codex must output a compact execution header:
 
 ```text
 MISSION: <ID>
-STATE: READY / BLOCKED
+STATE: <official mission state>
 BASELINE: <branch/SHA>
 OBJECTIVE: <one sentence>
 INVARIANTS: <3-8 bullets>
@@ -33,7 +33,7 @@ TEST/EVIDENCE PLAN: <ordered list>
 STOP CONDITIONS: <mission-specific conditions>
 ```
 
-If any field cannot be filled from canonical sources/repository evidence, do not edit.
+If the state is not `READY`, or any field cannot be filled from canonical sources/repository evidence, do not edit.
 
 ## 3. Required reading declaration
 
@@ -138,19 +138,19 @@ Do not narrate every command.
 Classify each discovery:
 
 - **BLOCKS CURRENT MISSION + IN SCOPE** → may fix with evidence;
-- **BLOCKS CURRENT MISSION + OUT OF SCOPE** → STOP and escalate;
+- **BLOCKS CURRENT MISSION + OUT OF SCOPE** → STOP and move the mission to `BLOCKED` if safe continuation is impossible;
 - **DOES NOT BLOCK** → record as finding/follow-up, do not fix;
-- **INVALIDATES MISSION ASSUMPTION** → STOP and return mission to planning/DoR.
+- **INVALIDATES MISSION ASSUMPTION** → STOP and return the mission to `PREPARATION` or `BLOCKED` according to the evidence.
 
 This prevents scope creep disguised as helpfulness.
 
 ## 13. Completion output
 
-Codex may say `DONE` only after the Mission Pack DoD is fully satisfied. Final report must use this structure:
+Codex may say `DONE` only after the Mission Pack DoD is fully satisfied. Final report must use an official mission state from `docs/DEFINITION_READY_DONE_EVIDENCE.md`:
 
 ```text
 MISSION: <ID>
-FINAL STATE: DONE / BLOCKED / PARTIAL-NOT-DONE
+FINAL STATE: DONE | VALIDATING | IMPLEMENTING | BLOCKED
 BASELINE → HEAD: <refs>
 
 IMPLEMENTED
@@ -160,7 +160,7 @@ INVARIANTS PROVEN
 - ...
 
 TESTS / EVIDENCE
-- <command/test>: PASS/FAIL
+- <command/test>: PASS/FAIL/BLOCKED/NOT RUN
 
 MIGRATION / DATA SAFETY
 - ...
@@ -181,7 +181,7 @@ NEXT AUTHORIZED ACTION
 - none unless explicitly defined by roadmap/mission state
 ```
 
-A partial result must not be renamed DONE.
+A partial result remains `IMPLEMENTING`, `VALIDATING` or `BLOCKED`; it must never be renamed DONE or assigned an invented state.
 
 ## 14. Commit/PR discipline
 
@@ -194,6 +194,7 @@ Commit messages should identify the Mission ID when practical. A PR must stay sc
 Codex must not:
 
 - continue a BLOCKED mission;
+- invent or use a non-canonical mission state to bypass a gate;
 - start the next mission automatically;
 - merge the frozen checkpoint merely because it contains useful work;
 - invent missing staging/production facts;
