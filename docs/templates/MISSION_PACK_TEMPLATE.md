@@ -1,6 +1,6 @@
 # Nexus Mission Pack — [ID] [Outcome]
 
-**State:** PREPARATION | READY | IN PROGRESS | BLOCKED | DONE  
+**State:** BACKLOG | PREPARATION | BLOCKED | READY | IMPLEMENTING | VALIDATING | DONE | CANCELLED | SUPERSEDED  
 **Owner:**  
 **Dependencies:**  
 **Baseline/ref:**
@@ -79,7 +79,7 @@ List discoveries that require stopping/escalating instead of expanding scope.
 
 ## 13. Definition of Ready
 
-READY only when canonical sources, dependencies, scope, authority, invariants, security/tenancy, migration impact, tests/evidence and stop rules are sufficiently resolved to implement without improvising architecture/product decisions.
+READY only when canonical sources, dependencies, scope, authority, invariants, security/tenancy, migration impact, tests/evidence and stop rules are sufficiently resolved to implement without improvising architecture/product decisions. A required external unknown or unresolved condition means PREPARATION/BLOCKED, not conditional READY.
 
 ## 14. Definition of Done
 
