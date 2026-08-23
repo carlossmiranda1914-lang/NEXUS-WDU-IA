@@ -1,161 +1,79 @@
-# Nexus Edu IA — MVP Readiness Scorecard
+# Nexus Edu IA — Readiness Baseline pós-AUDIT-01
 
-## 1. Objetivo
+**Atualizado:** 2026-08-19  
+**Estado:** BLOQUEADO PARA PILOTO / expansão funcional ampla.  
+**Base factual:** `docs/audit/AUDIT_01_TECHNICAL_BASELINE.md` + checkpoint congelado `689d1dd8919a25e91911ae118c5aad9ff69c5862`.
 
-Medir progresso do Nexus Edu IA sem confundir quantidade de ecrãs, documentação ou código escrito com prontidão real para piloto.
+## 1. Regra
 
-A pontuação é baseada em evidências e deve ser recalculada após gates relevantes.
-
-> **Percentagem sem evidência é estimativa. Score com evidência é gestão.**
-
----
+Readiness mede comportamento comprovado, não quantidade de ecrãs, documentação ou código. A AUDIT-01 invalida qualquer score anterior que dependesse de cobertura superficial ou missões históricas como prova de estado atual.
 
 ## 2. Escala
 
-Cada domínio recebe 0–5:
+- **0 — não definido/sem autoridade confiável**
+- **1 — definido/conceptual**
+- **2 — implementação parcial com lacunas materiais**
+- **3 — implementação relevante, validação/convergência incompleta**
+- **4 — validado no ambiente alvo, sem P0/P1 aberto no domínio**
+- **5 — pronto para piloto no âmbito, DoD e evidências completas**
 
-- **0 — Não definido**
-- **1 — Definido/conceptual**
-- **2 — Implementação parcial**
-- **3 — Implementado, validação incompleta**
-- **4 — Validado no ambiente alvo, riscos residuais controlados**
-- **5 — Pronto para piloto segundo DoD, com evidências completas**
+## 3. Baseline conservadora atual
 
-Não subir para 4 ou 5 apenas por inspeção visual ou afirmação do Codex.
+| Domínio | Peso | Nível | Contribuição | Evidência/limite principal |
+|---|---:|---:|---:|---|
+| Fundação técnica/reprodutibilidade | 15 | 2 | 6 | boa base vNext, mas schema authority/runtime DDL e readiness DB ainda competem |
+| Segurança/IAM/RBAC | 15 | 2 | 6 | Membership/contexto fortes no vNext; administração/legacy identity ainda compete |
+| Multi-instituição/isolamento | 10 | 2 | 4 | núcleo forte, cobertura desigual em legacy/AI/realtime/bridges |
+| PostgreSQL/persistência | 10 | 3 | 6 | migrations/constraints vNext fortes; autoridade de evolução ainda não convergiu |
+| Produto/fluxos essenciais | 15 | 2 | 6 | Enrollment tem profundidade; Finance/Academic Core e vários fluxos ainda não são canónicos completos |
+| UX multidispositivo/produto real | 10 | 2 | 4 | direção definida, mas frontend é inconsistente e existem mocks/simulações/client-only state |
+| Realtime/auditoria/observabilidade | 10 | 2 | 4 | padrões úteis existem; audit truth e cobertura transversal precisam convergir |
+| Qualidade/testes/CI | 10 | 2 | 4 | suites fortes localmente em partes; CI não protege uniformemente a fundação vNext |
+| IA segura/governada | 5 | 1 | 1 | direção arquitetural existe; ferramentas legacy têm riscos de tenant/autoridade |
+| **Total matemático** | **100** | — | **41/100** | produto em construção; não candidato a piloto |
 
----
+**Readiness oficial atual: 41/100 — BLOQUEADO.**
 
-## 3. Pesos do MVP
+Este número é uma baseline de gestão pós-auditoria, não certificação de produção. Deve cair ou subir quando novas evidências contradisserem ou comprovarem os níveis acima.
 
-| Domínio | Peso |
-|---|---:|
-| Fundação técnica e reproducibilidade | 15% |
-| Segurança, RBAC e autenticação | 15% |
-| Multi-instituição e isolamento | 10% |
-| Dados, PostgreSQL e persistência | 10% |
-| Produto e fluxos essenciais | 15% |
-| UX multidispositivo | 10% |
-| Tempo real, auditoria e observabilidade | 10% |
-| Qualidade, testes e CI | 10% |
-| IA segura e governada | 5% |
-| **Total** | **100%** |
+## 4. Tetos e bloqueios
 
----
+Mesmo que a média matemática suba:
 
-## 4. Fórmula
+- qualquer P0 estrutural aberto → máximo global 59/100;
+- tenant isolation não provado nos caminhos autoritativos → sem piloto multi-instituição;
+- IAM/admin authority concorrente → sem gestão institucional real considerada pronta;
+- schema authority/readiness insegura → sem declaração de fundação reprodutível;
+- Finance sem ledger/payment authority → Finance não conta como fluxo essencial pronto;
+- mock/simulação apresentada como operação → domínio de produto não pode atingir nível 4;
+- CI crítico não executado/FAIL → release BLOQUEADO;
+- IA com acesso cross-tenant ou direct-write inseguro → IA operacional BLOQUEADA.
 
-Para cada domínio:
+## 5. Ouro preservado — não confundir com readiness global
 
-`contribuição = peso × (nível / 5)`
+A AUDIT-01 reconhece valor elevado em Person/Identity/Membership, InstitutionalContext, Person Resolution, Academic Year, Enrollment intake/idempotency, registration/relationships, validation/state machine, atomic activation no checkpoint, document policy snapshots/files, constraints tenant-aware, process concurrency patterns e helpers tenant-safe.
 
-`MVP Readiness = soma das contribuições`
+Esses ativos justificam preservar e convergir, não reescrever tudo. Eles não anulam os riscos fora do núcleo.
 
-Exemplo: Segurança com peso 15 e nível 3 contribui 9 pontos.
+## 6. Condições para sair de 41/100
 
----
+A primeira recalibração formal ocorre após Foundation Authority Convergence:
 
-## 5. Regras de teto
+- FND-01 Schema Authority;
+- FND-02 Legacy Write Authority & Fences;
+- FND-03 Tenant Sweep;
+- FND-04 Product Truth Cleanup;
+- FND-05 Audit Truth;
+- FND-06 CI vNext Gate.
 
-Mesmo que a média matemática seja alta:
+Cada missão só altera o score com evidência executada. Documento ou código não testado, sozinho, não aumenta nível.
 
-- P0 aberto → **máximo global 59/100**;
-- isolamento multi-instituição não validado → **máximo 59/100 para piloto com várias instituições**;
-- persistência real não validada → **máximo 59/100 para dados reais**;
-- RBAC backend não validado → **máximo 59/100 para dados reais**;
-- CI/build crítico FAIL → estado **BLOQUEADO**, independentemente do score;
-- qualquer domínio crítico em nível 0 → não declarar pronto para piloto.
+## 7. Evidência mínima para nível 4/5
 
-O score não substitui gates.
+Nível 4 exige critérios funcionais, persistência, autorização/tenant, negativos, CI e validação aplicável sem P0/P1 no domínio. Nível 5 exige ainda DoD integral, evidências anexadas, operação/piloto definida e risco residual formalmente aceite.
 
----
+Estados de evidência: **PASS / FAIL / BLOCKED / NOT RUN / N/A**. BLOCKED e NOT RUN nunca contam como PASS.
 
-## 6. Scorecard atual — antes da MISSÃO 01
+## 8. Regra final
 
-O estado abaixo é deliberadamente conservador. Como a MISSÃO 01 ainda não produziu a fotografia técnica, vários níveis permanecem **NÃO MEDIDOS**.
-
-| Domínio | Peso | Nível comprovado | Estado | Evidência necessária para atualizar |
-|---|---:|---:|---|---|
-| Fundação técnica | 15 | — | NÃO MEDIDO | Missão 01 + Missão 07 |
-| Segurança/RBAC | 15 | — | NÃO MEDIDO | Missão 01 + Missão 02 |
-| Multi-instituição | 10 | — | NÃO MEDIDO | Missão 03 |
-| PostgreSQL/persistência | 10 | — | NÃO MEDIDO | Missão 04 |
-| Produto/fluxos essenciais | 15 | — | NÃO MEDIDO | inventário funcional + testes |
-| UX multidispositivo | 10 | — | NÃO MEDIDO | matriz desktop/tablet/mobile |
-| Tempo real/auditoria | 10 | — | NÃO MEDIDO | Missões 05–06 |
-| Qualidade/testes/CI | 10 | — | NÃO MEDIDO | Missão 01 + CI |
-| IA segura | 5 | — | NÃO MEDIDO | avaliação específica de IA |
-
-**Score oficial atual: NÃO CALCULADO.**
-
-Qualquer percentagem global usada antes da Missão 01 deve ser marcada como **estimativa de planeamento**, nunca como readiness comprovada.
-
----
-
-## 7. Evidência mínima por nível
-
-### Nível 1
-- requisitos/documentação identificados;
-- owner/objetivo conhecido.
-
-### Nível 2
-- código ou fluxo parcial identificado;
-- lacunas conhecidas;
-- sem prova suficiente de integração completa.
-
-### Nível 3
-- fluxo implementado;
-- testes/validações parciais;
-- riscos ou cenários ainda NOT RUN.
-
-### Nível 4
-- critérios funcionais passam;
-- testes relevantes passam;
-- segurança/persistência/multidispositivo aplicáveis validados;
-- sem P0/P1 do domínio.
-
-### Nível 5
-- DoD integral do domínio;
-- evidências anexadas;
-- CI/gates aplicáveis passam;
-- operação de piloto documentada;
-- risco residual aceite formalmente.
-
----
-
-## 8. Atualização obrigatória
-
-Recalcular o score após:
-
-- conclusão da Missão 01;
-- conclusão de cada Missão 02–07;
-- mudança arquitetural relevante;
-- novo módulo essencial entrar no MVP;
-- regressão crítica;
-- gate de piloto.
-
-Toda atualização deve indicar:
-
-- score anterior;
-- score novo;
-- evidências que justificam a mudança;
-- teto aplicável;
-- riscos que impedem avanço.
-
----
-
-## 9. Interpretação
-
-- **0–29** — descoberta/fundação inicial;
-- **30–49** — produto em construção, ainda instável;
-- **50–69** — MVP funcional em estabilização;
-- **70–84** — candidato a piloto controlado;
-- **85–94** — piloto tecnicamente forte;
-- **95–100** — readiness muito alta dentro do âmbito definido, sem significar ausência absoluta de risco.
-
-Estas bandas não anulam os tetos de segurança.
-
----
-
-## 10. Regra final
-
-> **O objetivo não é aumentar a percentagem. É aumentar a quantidade de comportamento importante que conseguimos provar.**
+> O objetivo não é elevar a percentagem. É aumentar a quantidade de comportamento crítico que conseguimos provar sem contradição de autoridade.

@@ -1,115 +1,193 @@
 # NEXUS Project State
 
-Updated: 2026-08-16
+Updated: 2026-08-20
 
-This file records the current factual engineering state only. It is not a historical diary and must not contain planned work presented as implemented.
+This file records the current factual engineering state only. It is not a historical diary and must not present planned work as implemented.
 
-## 1. Repository and working model
+## 1. Official repository baseline
 
 - Repository: `carlossmiranda1914-lang/NEXUS-WDU-IA`.
-- Canonical local checkout: `C:\Users\Administrador\NEXUS-WDU-IA-main`.
-- `main` contains the audited S01/S02 line, including Academic Year temporal closure and existing-student schema reconciliation.
-- Active S03 branch: `feature/secretariat-s03-process-persistence`.
-- Active S03 PR: `#62`, still draft and not approved for merge while user-acceptance findings remain open.
+- Comparison baseline: `main`.
+- Frozen implementation branch: `codex/enrollment-p0-foundation`.
+- Frozen checkpoint: `689d1dd8919a25e91911ae118c5aad9ff69c5862`.
+- Draft implementation checkpoint PR: `#65`.
+- PR #65 is an audit/checkpoint artifact and is not authorized for merge or deploy.
+- Documentation consolidation branch: `docs/nexus-canonical-consolidation`.
+- Documentation PR: `#66`.
 
-## 2. Secretariat vertical status
+## 2. Current phase
 
-### S01
-DONE and integrated in `main`.
+**Implementation remains frozen pending explicit implementation authorization.**
 
-### S02
-DONE and integrated in `main`, including New/Existing student intent, Person Resolution, idempotent intake, registration profile, document requirements/snapshots, lifecycle gates, Academic Year temporal closure and the PostgreSQL schema-drift regression for `people.birth_date` / SQLSTATE 42703.
+The planning/governance phase for Foundation is closed sufficiently to begin the controlled implementation flow once the documentation baseline is accepted and the active mission is explicitly authorized.
 
-### S03 engineering implementation
-Implemented on `feature/secretariat-s03-process-persistence` and exposed through PR #62:
-- persisted enrollment-process orchestration;
-- deterministic P01-P06 projection;
-- institution-scoped process API;
-- optimistic assignment/versioning;
-- atomic process creation during intake;
-- operational drawer integration;
-- focused S03 policy/contract/PostgreSQL tests;
-- migration 0016.
+Official flow:
 
-The branch quality gate is green for the existing CI matrix, but external audit found that the remote workflow run did not execute the new `test:secretariat-s03` command explicitly. CI coverage must be strengthened before merge.
+`market/real-system benchmark → canonical product/architecture sources → AUDIT-01 AS-IS diagnosis → legacy replacement map → vNext roadmap → Mission Pack → DoR → explicit authorization → implementation → evidence/DoD → factual state update`.
 
-## 3. Current active priority
+Do not continue S04, open opportunistic feature slices, perform unrelated UX cleanup, merge PR #65, or start a later Foundation/domain mission merely because work already exists.
 
-### S03 user-acceptance and release closure
+## 3. AUDIT-01 conclusion
 
-User validation on 2026-08-16 found concrete release blockers/improvements that must be resolved before PR #62 can merge:
+The repository contains two architectural generations:
 
-1. **Document/readiness consistency**
-   - A process can visually report `0/0` documents and state that the system does not assume a policy is configured, while P04 is shown as completed and P06 offers `Validar matrícula`.
-   - This is inconsistent with the S03 contract. `Ready for decision` must not be reachable when the document policy/readiness evidence shown to the user says the document configuration is absent or unresolved.
-   - Policy truth, document checklist messaging, process projection and transition gate must agree.
+- a legacy application with broad aggregates, client/localStorage state, simulations, direct/duplicated write paths and several weak domain boundaries;
+- a materially stronger vNext foundation around Person/Identity/Membership, InstitutionalContext, Academic Year, Enrollment, document policy/files, state machines, transactions, idempotency and database constraints.
 
-2. **Real document evidence is not implemented yet**
-   - Current document submission stores an `evidence_reference` string; it is not binary/file storage.
-   - Do not present this as physical document upload.
-   - Requirement configuration remains S04 and advanced/real storage remains S06 unless roadmap is explicitly reprioritized.
+The approved strategy is not full rewrite and not blind continuation. Preserve the strong vNext foundation, remove competing authority capability by capability, then build new domains on the consolidated platform.
 
-3. **Visual consistency / Nexus Aurora**
-   - S03 drawer uses the new green/Aurora direction, but the parent `Alunos & Matrículas` workspace still contains blue/indigo accents and inconsistent visual language.
-   - User validation also found typography/hierarchy and spacing inconsistencies in list rows, including text collisions/overflow in the enrollment list.
-   - Correction must use canonical design tokens and the official visual system, not ad-hoc replacement colors.
+Canonical findings: `docs/audit/AUDIT_01_TECHNICAL_BASELINE.md`.
 
-4. **Enrollment list layout**
-   - Rows must preserve stable vertical rhythm and separation of student name, status, next action, offer/year and updated date at desktop and responsive widths.
-   - No text collision or content escaping its row/card is acceptable.
+## 4. Gold foundation to preserve
 
-5. **Deletion semantics**
-   - Production enrollment/process records must not receive casual hard-delete behavior because audit/history are required.
-   - Existing lifecycle cancellation remains the production-safe operation.
-   - If local test-data cleanup is needed, implement a separately guarded `TEST_DATABASE_URL`-only purge tool or equivalent non-production capability; it must never target production silently.
+Current high-value foundations include:
 
-6. **CI**
-   - `Secretariat Quality Gate` must execute the S03 focused suite explicitly on the PR head before release.
+- Person / Identity / Membership;
+- InstitutionalContext and server-derived tenant authorization;
+- Person Resolution and restricted cross-institution match handling;
+- Academic Year lifecycle;
+- Enrollment intake idempotency/transaction boundaries;
+- Registration and GuardianRelationship foundation;
+- Enrollment validation gates and state machine;
+- atomic activation introduced in the frozen checkpoint;
+- document policy snapshots and publication/versioning;
+- physical enrollment-file storage contract;
+- composite tenant-integrity constraints in later migrations;
+- Enrollment Process projection/optimistic concurrency patterns;
+- authorized-students helper;
+- strongest tenant-safe Tasks/realtime/audit patterns.
 
-## 4. Release rule for PR #62
+These are preservation candidates, not proof that the whole platform is production-ready.
 
-Do not merge PR #62 until all of the following are true:
-- document policy/readiness inconsistency is corrected and regression-tested;
-- S03 focused tests execute explicitly in remote CI;
-- list/drawer visual defects raised in user acceptance are corrected and revalidated in desktop/tablet/mobile;
-- Nexus Aurora tokens/style are applied consistently to the touched Secretariat surface;
-- no unsafe production hard-delete is introduced;
-- user acceptance is repeated successfully;
-- external audit confirms PASS.
+## 5. Critical structural risks
 
-## 5. Academic-year work
+Current P0/P1 risks include, among others:
 
-Academic-year governance remains integrated and verified:
-- lifecycle `draft -> active -> closed`;
-- at most one active year per institution;
-- institution-scoped historical enrollment filtering;
-- historical reads do not change the active year;
-- active offers attached to draft academic years are not exposed for new enrollment.
+- migrations competing with runtime schema DDL/self-healing;
+- unsafe/false DB readiness semantics;
+- legacy identity/user administration competing with canonical Membership authority;
+- legacy write paths and duplicate route authority;
+- uneven tenant isolation outside the vNext core;
+- AI tools with legacy direct-write/tenant risks;
+- legacy finance without canonical ledger/payment authority;
+- product simulations/mocks presented as operational behavior;
+- audit presentation capable of diverging from factual evidence;
+- external Google authorization sharing the primary Nexus auth session;
+- uneven CI protection across the new foundation.
 
-## 6. Known operational risks
+Use `docs/audit/AUDIT_01_TECHNICAL_BASELINE.md` and `docs/audit/LEGACY_REPLACEMENT_MAP.md` for authoritative planning detail.
 
-- Server startup `DB-INIT` is not a substitute for migrations/preflight.
-- Operational migration tools must remain explicit-target and confirmation-gated.
-- Destructive Git operations are prohibited without verified recovery intent.
-- Hard deletion of real enrollment history is not an acceptable default operation.
-- Historical conversation handoffs may be stale relative to repository state.
+## 6. Canonical implementation sources
 
-## 7. Existing canonical documentation
+Current primary repository sources in PR #66:
 
-Do not duplicate these subjects without a clear reason:
-- Architecture: `docs/ARCHITECTURE_V4.md` and `docs/architecture/`
-- Definition of Ready/Done/Evidence: `docs/DEFINITION_READY_DONE_EVIDENCE.md`
-- Codex workflow: `docs/WORKFLOW_CODEX.md`
-- Product decisions and visual authority: `docs/product/`
-- Mission records: `docs/missions/`
+- coding-agent contract: `AGENTS.md`;
+- documentation entrypoint: `docs/README.md`;
+- product/benchmark direction: `docs/product/NEXUS_MASTER_PLAN_V2.md`;
+- target architecture: `docs/architecture/NEXUS_ARCHITECTURE_TO_BE_V2.md`;
+- technical audit: `docs/audit/AUDIT_01_TECHNICAL_BASELINE.md`;
+- legacy migration map: `docs/audit/LEGACY_REPLACEMENT_MAP.md`;
+- roadmap: `docs/roadmap/IMPLEMENTATION_PLAN_VNEXT_V2.md`;
+- Foundation mission packs: `docs/roadmap/missions/FND-01.md` through `FND-06.md`;
+- DoR/DoD/evidence: `docs/DEFINITION_READY_DONE_EVIDENCE.md`;
+- implementation workflow: `docs/operations/IMPLEMENTATION_WORKFLOW.md`;
+- engineering playbook: `docs/operations/ENGINEERING_PLAYBOOK.md`;
+- Codex-specific execution translation: `docs/operations/CODEX_EXECUTION_ADAPTER.md` (SUPPORTING; never overrides canonical sources).
 
-## 8. Update rule
+The market study is incorporated as product decisions, not as permission to copy reference systems. Key directions include persistent entity context, Student 360 as an authorized projection, explicit Teacher × Class × Subject × AcademicYear assignment, deep but integrated Finance, contextual/executive BI, Task-First/Context-First UX, and rejection of fragmented portals, repeated searches and fake operational success.
 
-Update this file only when one of these changes materially:
-- active priority;
-- release blocker status;
-- branch/release state;
+## 7. Environment truth
+
+The prior external-evidence blocker is closed by explicit project declaration on 2026-08-20:
+
+- Development — PROVEN;
+- CI/Test — PROVEN;
+- Staging — **NOT YET PROVISIONED**;
+- Production — **NOT YET PROVISIONED**.
+
+This is a project-state declaration, not an inference from missing deployment files.
+
+Any future staging/production environment must adopt this deployment contract before being considered healthy:
+
+`read-only preflight → identify target DB → backup/change gate when data exists → nexus:migrate → migration-ledger/checksum verification → schema validation → application start → health/readiness`.
+
+If later evidence shows a pre-existing shared environment, the affected database/schema mission returns immediately to `BLOCKED` until reconciled.
+
+## 8. FND-01 readiness result
+
+`FND-01 — Schema Authority` is the first implementation mission.
+
+Current state:
+
+**READY — awaiting explicit implementation authorization.**
+
+The final DoR has established:
+
+- runtime persistent DDL/self-healing exists in `src/db/init.ts`;
+- numbered migrations do not currently produce the complete runtime-required schema;
+- CI/test setup adds schema beyond the numbered migrations;
+- legacy uncovered objects require explicitly transitional compatibility migrations rather than silent startup creation;
+- `school_tasks` + `task_versions` require a canonical reconciliation migration based on the tenant-safe repository contract;
+- one canonical migration engine/ledger/checksum model is the target;
+- recovery and regression contracts are specified;
+- staging and production are not yet provisioned and their future deployment contract is fixed.
+
+READY does not mean code has started. The next gate is explicit authorization of FND-01 implementation on a dedicated implementation branch/baseline.
+
+See:
+- `docs/roadmap/missions/FND-01.md`;
+- `docs/roadmap/missions/FND-01_DOR_EVIDENCE.md`.
+
+## 9. Foundation execution order
+
+The controlled Foundation sequence is:
+
+1. FND-01 — Schema Authority — **READY / not yet authorized**;
+2. FND-02 — Legacy Write Authority & Fences — PREPARATION until predecessor DONE and independent DoR passes;
+3. FND-03 — Tenant Sweep — PREPARATION;
+4. FND-04 — Product Truth Cleanup — PREPARATION;
+5. FND-05 — Audit Truth — PREPARATION;
+6. FND-06 — CI vNext Gate — PREPARATION.
+
+No mission starts automatically after a previous mission. Each requires an independent DoR and explicit authorization.
+
+## 10. Coding-agent / Codex execution governance
+
+Any coding agent, including Codex, must follow `AGENTS.md`. Codex additionally reads `docs/operations/CODEX_EXECUTION_ADAPTER.md`.
+
+Required execution chain:
+
+`canonical reading → Mission state check → scope/invariants → AS-IS verification → preflight → failing/contract test where applicable → minimal implementation → focused tests → negative/security/tenant tests → regression → migration/static/build gates → evidence → DoD → factual state update`.
+
+Before the first FND-01 edit, Codex must output the mandatory execution header defined by the adapter and re-verify that no new evidence invalidates READY assumptions.
+
+Chat context is never implementation authority. A later mission cannot be pulled forward by convenience.
+
+## 11. Documentation governance
+
+DOC-AUDIT-01 and the consistency pass consolidated repository documentation so historical mission logs, old plans, tool-specific historical workflows and prototypes cannot silently override current canonical sources.
+
+Rules:
+
+- document only decisions/evidence/contracts that govern implementation;
+- preserve historical evidence when it explains prior decisions/implementation;
+- keep durable governance tool-neutral;
+- use Codex adapter only as an execution translation;
+- update this state file only when active phase, baseline, canonical sources, mission readiness or critical verified risk materially changes.
+
+## 12. Release/readiness statement
+
+Nexus is **not authorized for broad feature expansion or pilot-readiness claims**. FND-01 READY means only that its implementation contract is sufficiently defined. Product/platform readiness must be recalculated after Foundation convergence closes the relevant P0/P1 findings and CI proves the resulting invariants.
+
+## 13. Update rule
+
+Update this file only when one of these materially changes:
+
+- official baseline/checkpoint or PR state;
+- active program/mission or Mission Pack state;
+- canonical documentation set;
 - major implemented capability;
-- major verified architectural/product risk.
+- major verified architectural/product/security risk;
+- release/readiness state.
 
-Do not append day-by-day logs here. Use commits, PRs, issues and mission evidence for history.
+Use commits, PRs, mission evidence and archive documents for chronology rather than appending daily logs.
