@@ -9,6 +9,7 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "nexus:preflight": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx scripts/nexus-preflight.ts",
+    "nexus:migrate": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx scripts/nexus-migrate.ts --target=DATABASE_URL",
     "nexus:preflight:db": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx scripts/nexus-preflight.ts --require-db && node scripts/nexus-preflight-db.mjs --target=DATABASE_URL",
     "test:integrity": "tsx test-integrity.ts",
     "test:auth": "tsx test-auth-stabilization.ts",
