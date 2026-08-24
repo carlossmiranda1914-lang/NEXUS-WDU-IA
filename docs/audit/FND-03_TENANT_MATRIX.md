@@ -16,7 +16,7 @@
 | AUTO-01 | Transitional Automations/Approvals | HTTP/jobs → tables/logs | legacy role; workflow ownership incomplete | test direct B ID and retry batch scope | events/global notification must stay dropped | P1 FIX, CP6 |
 | SLA-01 | Transitional SLA worker | startup interval → `school_tasks.sla_status` | batch source/predicate needs trace; no client context | fixture A/B batch must prove no mixing | no room/cache authority | P1 FIX, CP6 |
 | AI-01 | Transitional enabled AI tools | `/api/chat` dispatcher → legacy reads/writes/logs | Firebase auth only; no per-tool InstitutionalContext policy | model/body tenant selection must be rejected/fenced | responses/logs must not disclose B | P0 FIX/FENCE, CP6 |
-| RT-01 | Canonical Tasks realtime | WebSocket upgrade → `SchoolTaskWebSocketManager` | UID → context; socket tenant fixed at connection | A cannot subscribe B; reconnect/membership suspension require integration proof | room `tenant-<institutionId>` | P0 PRESERVE, CP4 |
+| RT-01 | Canonical Tasks realtime | WebSocket upgrade → `SchoolTaskWebSocketManager` | token verification + InstitutionalContext before registration; socket tenant fixed at connection | foreign subscribe rejected; reconnect resolves a new context | room `tenant-<institutionId>`; no context broadcast rejected | P0 PRESERVE, CP4 PASS |
 | CACHE-01 | Canonical Tasks cache | `SchoolTaskCache` | caller supplies verified tenant | A/B same local key is isolated | key `tenant:<id>:<key>`; tenant invalidation | P1 PRESERVE, CP6 |
 | MIG-01 | Canonical migration infrastructure | runner/ledger | target DB only; no tenant business query | N/A for tenant entity access | no realtime/cache/storage | P2 PRESERVE, CP6 |
 

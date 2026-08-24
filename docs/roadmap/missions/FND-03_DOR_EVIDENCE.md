@@ -41,3 +41,7 @@ No production fix, schema/migration, RLS rollout, IAM redesign, Finance/Academic
 ## CP3 closure
 
 Finance and Communication HTTP endpoints are fail-closed pending canonical authority. Teacher legacy operations and request-access are fail-closed because no complete institutional ownership predicate is proven. Generic Documents are formally deferred to mandatory CP5: metadata and physical object ownership, direct-ID authorization, MIME/hash/size/path and download/export negatives must be proven together before any replacement/removal decision.
+
+## CP4 closure
+
+CP4 is PASS. WebSocket token verification and InstitutionalContext resolution occur before room registration; invalid identity closes before assignment. Foreign subscriptions are rejected, publication without institutional context emits no event, and reconnect removes the prior socket before a new authorized context is resolved. Multi-membership context is not merged: a client `SUBSCRIBE` cannot add a foreign or prior institution. The Task realtime bridge remains tenant-scoped. CP5 files/storage/reports is next; FND-03 is not DONE.
