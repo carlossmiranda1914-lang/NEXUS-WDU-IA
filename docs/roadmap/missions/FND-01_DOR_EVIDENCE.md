@@ -2,7 +2,7 @@
 
 **Mission:** FND-01 — Schema Authority  
 **Review date:** 2026-08-20  
-**Implementation status:** DONE — validated 2026-08-24  
+**Implementation status:** DONE — validated 2026-08-24
 **Frozen implementation reference:** `689d1dd8919a25e91911ae118c5aad9ff69c5862` / PR #65  
 **Comparison baseline:** `main`
 
