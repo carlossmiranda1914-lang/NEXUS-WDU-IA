@@ -1,8 +1,8 @@
 # FND-02 — DoR Evidence
 
-**Mission:** FND-02 — Legacy Write Authority & Fences  
-**State:** PREPARATION  
-**Baseline:** `main` / `80a0d1e30b264145393206e0e69242c0bb79b5ea`  
+**Mission:** FND-02 — Legacy Write Authority & Fences
+**State:** PREPARATION
+**Baseline:** `main` / `80a0d1e30b264145393206e0e69242c0bb79b5ea`
 **Preparation branch:** `codex/fnd-02-write-authority-dor`
 
 ## Scope and invariants

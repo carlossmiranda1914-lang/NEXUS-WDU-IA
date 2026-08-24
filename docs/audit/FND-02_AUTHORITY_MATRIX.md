@@ -1,7 +1,7 @@
 # FND-02 — P0/P1 Write Authority Matrix
 
-**Status:** PREPARATION evidence, AS-IS only (2026-08-24)  
-**Baseline:** `main` / `80a0d1e30b264145393206e0e69242c0bb79b5ea`  
+**Status:** PREPARATION evidence, AS-IS only (2026-08-24)
+**Baseline:** `main` / `80a0d1e30b264145393206e0e69242c0bb79b5ea`
 **Rule:** this is not implementation authority. A classification is based on the cited source path; `TRANSITIONAL` never means canonical.
 
 ## Discovery method and limits
