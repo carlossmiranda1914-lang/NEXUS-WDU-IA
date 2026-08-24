@@ -52,3 +52,11 @@ No discovered P0/P1 write remains unclassified; no AI tool has an unknown persis
 ## CP6 closure
 
 CP6 classifies all remaining P0/P1 writers as canonical or explicitly transitional. No remaining sole writer is removed: Teachers requires Academic Core; Finance requires ledger authority; Communication requires recipient/delivery authority; generic Documents requires its storage contract; Automations/Approvals require authorized workflow authority; and the SLA worker requires a modular scheduler. This closes AC05 and AC08 for FND-02 without inventing those domains.
+
+## CP7 validation record — BLOCKED
+
+Candidate `85af292` was frozen on `codex/fnd-02-write-authority`. The CP2–CP5 focused contracts pass through `npm run test:fnd02`; the Tasks PostgreSQL regression, canonical enrollment/document regressions, Person/Identity/Institutional Context regressions, FND-01 runtime-policy smoke, lint, build and `git diff --check` also pass. The expected rollback-injection errors printed by `test:fnd01:cp4:postgres` are asserted by that test and it exits successfully.
+
+The CP7 authority rescan found no new unknown writer, migration change, secret, temporary artifact, new domain or weakened canonical permission. It did find a causal completion blocker already named by the inventory: `SYS-01` (`POST /api/system/wipe-data`) can execute when `SYSTEM_WIPE_TOKEN` is configured, and `STU-01` (`POST`/`DELETE /api/students`) is still mounted and mutating. Both remain marked `FENCE`, not `TRANSITIONAL`, so claiming AC04 or a zero-reachable-fence result would be false. CP7 does not authorize inventing a Student/Enrollment replacement or an operational recovery policy, nor does it authorize silently relabelling those paths.
+
+**Decision:** `IMPLEMENTING — CP7 BLOCKED by reachable SYS-01 and STU-01 P0 fence candidates.` Resume only with an explicit, bounded decision for each path: a tested fail-closed fence with its canonical/recovery dependency, or an approved transitional contract that names owner, callers, limits and removal gate.

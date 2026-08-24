@@ -1,6 +1,6 @@
 # FND-02 — P0/P1 Write Authority Matrix
 
-**Status:** PREPARATION evidence, AS-IS only (2026-08-24)
+**Status:** IMPLEMENTING — CP7 validation record added 2026-08-24; the baseline rows remain the AS-IS inventory.
 **Baseline:** `main` / `80a0d1e30b264145393206e0e69242c0bb79b5ea`
 **Rule:** this is not implementation authority. A classification is based on the cited source path; `TRANSITIONAL` never means canonical.
 
@@ -72,3 +72,20 @@ AC01 is **closed for the 2026-08-24 baseline**: every discovered P0/P1 persisten
 | School Tasks SLA worker | PRESERVE TRANSITIONAL | startup interval only; `school_tasks.sla_status` | Not HTTP/AI callable and creates no task; modular scheduler contract required before removal. |
 | Operational logs | PRESERVE TRANSITIONAL | request/route handlers; `operational_logs` | Technical facts only; FND-05 audit-truth contract governs presentation. |
 | Migration runner | PRESERVE CANONICAL | FND-01 runner; migration ledger | Versioned migrations/checksums remain sole schema authority. |
+
+## CP7 authority rescan and acceptance matrix
+
+The 2026-08-24 rescan covered HTTP mutations, Drizzle/SQL mutations, browser storage, filesystem calls, AI tool branches, workers, WebSocket/external connector calls and scripts. Every discovered P0/P1 writer maps to an ID above; none is `UNKNOWN`. This section is the final authority status for the candidate, and intentionally does not erase the baseline detail above.
+
+| AC | Criterion | Evidence | Result | Reference |
+|---|---|---|---|---|
+| AC01 | P0/P1 inventory classified | rescan plus this matrix | PASS | all matrix IDs mapped; no `UNKNOWN` |
+| AC02 | no undocumented dual write | Task and AI duplicate paths fenced; remaining duplicates documented | PASS | `npm run test:fnd02`; TASK-02/TASK-03/IAM-01/STU-01 |
+| AC03 | canonical preservation | Tasks PostgreSQL; Enrollment/Person/Identity/Context/document regressions | PASS | `test:fnd01:cp4:postgres`; S02.3 document PostgreSQL; focused canonical tests |
+| AC04 | every fence unreachable/no mutation | CP2–CP5 pass, but SYS-01 and STU-01 remain mounted | **BLOCKED** | SYS-01 and STU-01 |
+| AC05 | transitional safety | explicit CP6 contracts | PASS | CP6 transition-contract table |
+| AC06 | Tasks convergence | only modular task mutations are mounted; SLA worker stays transitional | PASS | dispatch + legacy-write fence tests |
+| AC07 | IAM boundary | legacy `/api/users` C/U/D returns `503 CANONICAL_IAM_PROVISIONING_REQUIRED` | PASS | legacy-user fence test |
+| AC08 | no invented replacement | no new IAM/Finance/Academic/Documents/Communication domain | PASS | candidate diff audit |
+
+**CP7 stop condition:** FND-02 is not DONE while `SYS-01` and `STU-01` are both labelled `FENCE` and can still mutate. Their future decision must preserve or explicitly replace the sole required capability; no status-only reclassification is acceptable.

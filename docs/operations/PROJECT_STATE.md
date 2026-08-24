@@ -141,7 +141,7 @@ See:
 The controlled Foundation sequence is:
 
 1. FND-01 — Schema Authority — **DONE**;
-2. FND-02 — Legacy Write Authority & Fences — IMPLEMENTING — CP2 removes duplicate School Tasks HTTP mutation mounting; the legacy SLA background writer remains transitional pending a canonical scheduler decision;
+2. FND-02 — Legacy Write Authority & Fences — IMPLEMENTING — CP2–CP6 local evidence is complete, but CP7 validation is blocked: `POST /api/system/wipe-data` and legacy `POST`/`DELETE /api/students` remain reachable P0 paths classified as FENCE. The legacy SLA background writer remains transitional pending a canonical scheduler decision;
 3. FND-03 — Tenant Sweep — PREPARATION;
 4. FND-04 — Product Truth Cleanup — PREPARATION;
 5. FND-05 — Audit Truth — PREPARATION;
