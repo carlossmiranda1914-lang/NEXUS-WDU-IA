@@ -1576,6 +1576,7 @@ async function startServer() {
 
   // 4. Invoices / Payments API
   app.get('/api/invoices', requireAuth, authorizeRole(['admin', 'financial', 'parent', 'student']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_FINANCE_AUTHORITY_REQUIRED', error: 'A autoridade financeira institucional ainda não está disponível.' });
     try {
       const role = req.user?.dbRole;
       let records;
@@ -1612,6 +1613,7 @@ async function startServer() {
   });
 
   app.post('/api/invoices/pay', requireAuth, authorizeRole(['admin', 'financial', 'parent', 'student']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_FINANCE_AUTHORITY_REQUIRED', error: 'A autoridade financeira institucional ainda não está disponível.' });
     const { id } = req.body;
     if (!id) return res.status(400).json({ error: 'Falta parametrizar o ID da fatura.' });
 
@@ -1703,6 +1705,7 @@ async function startServer() {
 
   // A. Manual Invoice Creation
   app.post('/api/invoices', requireAuth, authorizeRole(['admin', 'financial']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_FINANCE_AUTHORITY_REQUIRED', error: 'A autoridade financeira institucional ainda não está disponível.' });
     try {
       const { studentId, studentName, amount, dueDate, category } = req.body;
       if (!studentId || !amount || !dueDate) {
@@ -1780,6 +1783,7 @@ async function startServer() {
 
   // B. Invoice Cancellation
   app.post('/api/invoices/cancel', requireAuth, authorizeRole(['admin', 'financial']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_FINANCE_AUTHORITY_REQUIRED', error: 'A autoridade financeira institucional ainda não está disponível.' });
     try {
       const { id } = req.body;
       if (!id) return res.status(400).json({ error: 'ID da fatura é obrigatório.' });
@@ -1855,6 +1859,7 @@ async function startServer() {
 
   // C. Bank Statement Reconciliation Upload
   app.post('/api/invoices/reconcile', requireAuth, authorizeRole(['admin', 'financial']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_FINANCE_AUTHORITY_REQUIRED', error: 'A autoridade financeira institucional ainda não está disponível.' });
     try {
       const { transactions } = req.body;
       if (!transactions || !Array.isArray(transactions)) {
@@ -2095,6 +2100,7 @@ async function startServer() {
 
   // 5. Announcements API
   app.get('/api/announcements', requireAuth, async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_COMMUNICATION_AUTHORITY_REQUIRED', error: 'A autoridade institucional de comunicação ainda não está disponível.' });
     try {
       const records = await db.select({
         id: announcements.id,
@@ -2115,6 +2121,7 @@ async function startServer() {
   });
 
   app.post('/api/announcements', requireAuth, authorizeRole(['admin', 'director', 'teacher']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_COMMUNICATION_AUTHORITY_REQUIRED', error: 'A autoridade institucional de comunicação ainda não está disponível.' });
     const { title, content, target } = req.body;
     if (!title || !content) return res.status(400).json({ error: 'Título e Conteúdo são de preenchimento obrigatório.' });
 
@@ -2167,6 +2174,7 @@ async function startServer() {
 
   // 6. Live Chat Messages API (Realtime simulation powered by Postgres)
   app.get('/api/chat-messages', requireAuth, async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_COMMUNICATION_AUTHORITY_REQUIRED', error: 'A autoridade institucional de comunicação ainda não está disponível.' });
     const { channel } = req.query;
     try {
       let query = db.select().from(chatMessages);
@@ -2181,6 +2189,7 @@ async function startServer() {
   });
 
   app.post('/api/chat-messages', requireAuth, async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_COMMUNICATION_AUTHORITY_REQUIRED', error: 'A autoridade institucional de comunicação ainda não está disponível.' });
     const { content, channel } = req.body;
     if (!content || !channel) return res.status(400).json({ error: 'Falta conteúdo ou canal.' });
 
