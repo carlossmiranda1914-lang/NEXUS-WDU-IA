@@ -121,18 +121,16 @@ Current state:
 
 **DONE — FND-01 Schema Authority validated on 2026-08-24.**
 
-The final DoR has established:
+FND-01 implementation established:
 
-- runtime persistent DDL/self-healing exists in `src/db/init.ts`;
-- numbered migrations do not currently produce the complete runtime-required schema;
-- CI/test setup adds schema beyond the numbered migrations;
-- legacy uncovered objects require explicitly transitional compatibility migrations rather than silent startup creation;
-- `school_tasks` + `task_versions` require a canonical reconciliation migration based on the tenant-safe repository contract;
-- one canonical migration engine/ledger/checksum model is the target;
-- recovery and regression contracts are specified;
+- runtime startup is validation-only and fails closed;
+- numbered migrations reproduce the supported schema, including transitional legacy compatibility;
+- test setup delegates to the canonical migration runner;
+- `school_tasks` + `task_versions` are covered by the tenant-safe reconciliation migration;
+- migration ordering, ledger/checksum, recovery and regression contracts are proven;
 - staging and production are not yet provisioned and their future deployment contract is fixed.
 
-READY does not mean code has started. The next gate is explicit authorization of FND-01 implementation on a dedicated implementation branch/baseline.
+No subsequent mission is authorized by this completion.
 
 See:
 - `docs/roadmap/missions/FND-01.md`;
@@ -142,7 +140,7 @@ See:
 
 The controlled Foundation sequence is:
 
-1. FND-01 — Schema Authority — **READY / not yet authorized**;
+1. FND-01 — Schema Authority — **DONE**;
 2. FND-02 — Legacy Write Authority & Fences — PREPARATION until predecessor DONE and independent DoR passes;
 3. FND-03 — Tenant Sweep — PREPARATION;
 4. FND-04 — Product Truth Cleanup — PREPARATION;
@@ -159,7 +157,7 @@ Required execution chain:
 
 `canonical reading → Mission state check → scope/invariants → AS-IS verification → preflight → failing/contract test where applicable → minimal implementation → focused tests → negative/security/tenant tests → regression → migration/static/build gates → evidence → DoD → factual state update`.
 
-Before the first FND-01 edit, Codex must output the mandatory execution header defined by the adapter and re-verify that no new evidence invalidates READY assumptions.
+Before any future mission edit, Codex must output the mandatory execution header defined by the adapter and re-verify its Mission Pack assumptions.
 
 Chat context is never implementation authority. A later mission cannot be pulled forward by convenience.
 
