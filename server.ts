@@ -794,6 +794,7 @@ async function startServer() {
 
   // 1a. Request Access API for pending users
   app.post('/api/profile/request-access', requireAuth, async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_TENANT_AUTHORITY_REQUIRED', error: 'O pedido de acesso institucional requer autoridade canónica.' });
     const { name, phone, role, department } = req.body;
     try {
       await db.update(users).set({
@@ -820,6 +821,7 @@ async function startServer() {
 
   // 1b. Change Current Role simulation (crucial for local testing in CRM/SIS admin contexts)
   app.post('/api/profile/role', requireAuth, async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_TENANT_AUTHORITY_REQUIRED', error: 'A alteração de papel requer autoridade IAM canónica.' });
     const { role } = req.body;
     if (!role) {
       console.warn('[AUTH] POST /api/profile/role: parâmetro role em falta.');
@@ -1375,6 +1377,7 @@ async function startServer() {
 
   // 3. Teachers API
   app.get('/api/teachers', requireAuth, authorizeRole(['admin', 'director', 'secretariat', 'teacher']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_TENANT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de docentes ainda não está disponível.' });
     try {
       const role = req.user?.dbRole;
       let records;
@@ -1412,6 +1415,7 @@ async function startServer() {
   });
 
   app.post('/api/teachers', requireAuth, authorizeRole(['admin', 'director', 'secretariat']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_TENANT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de docentes ainda não está disponível.' });
     try {
       const { name, email, phone, subjects, classes, status, schedule, productivityScore } = req.body;
       if (!name || !email) {
@@ -1475,6 +1479,7 @@ async function startServer() {
   });
 
   app.put('/api/teachers/:id', requireAuth, authorizeRole(['admin', 'director', 'secretariat']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_TENANT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de docentes ainda não está disponível.' });
     try {
       const { id } = req.params;
       const { name, email, phone, subjects, classes, status, schedule, productivityScore } = req.body;
@@ -1533,6 +1538,7 @@ async function startServer() {
   });
 
   app.delete('/api/teachers/:id', requireAuth, authorizeRole(['admin', 'director', 'secretariat']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_TENANT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de docentes ainda não está disponível.' });
     try {
       const { id } = req.params;
       const ownedTeacherIds = await resolveInstitutionOwnedResourceIds(
