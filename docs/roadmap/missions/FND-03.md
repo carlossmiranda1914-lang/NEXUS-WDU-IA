@@ -1,6 +1,25 @@
 # FND-03 — Tenant Sweep
 
-**State:** PREPARATION. Implementation is not authorized until FND-02 is DONE and this Mission Pack passes DoR.
+**State:** READY — awaiting explicit implementation authorization. FND-02 is integrated; this DoR closes the surviving-path matrix and deterministic tenant-sweep checkpoints.
+
+## DoR closure (2026-08-24)
+
+The authoritative tenant inventory is [FND-03_TENANT_MATRIX](../../audit/FND-03_TENANT_MATRIX.md). It excludes FND-02-fenced and browser-only paths, preserves canonical context/Enrollment/Documents/Tasks, and treats Teachers, Finance, Communication, generic Documents, Automations/Approvals, SLA, legacy profile bridges and enabled AI tools as explicit transitional surfaces.
+
+## Locked implementation checkpoints
+
+| CP | Objective and paths | Required RED/GREEN proof | Rollback / stop condition |
+|---|---|---|---|
+| CP0 | freeze/preflight and disposable A/B fixture | baseline, Membership/context fixture | stop on source/ownership drift |
+| CP1 | close matrix characterization | every P0/P1 row has trace and negative test | stop on unknown path |
+| CP2 | canonical HTTP/repository core: context, Enrollment, Documents, Tasks | A allow; B deny; client-ID distrust; repository predicate | revert scoped fix; stop on canonical regression |
+| CP3 | transitional legacy APIs: profile, Teachers, Finance, Communication | direct ID/header/body negatives and safe response/audit | stop when sole capability needs a future domain |
+| CP4 | realtime | upgrade/reconnect/room/membership-switch A/B proof | stop on missing server membership authority |
+| CP5 | files/storage/reports | metadata/file-ID/path/export A/B proof | stop on unproven storage owner |
+| CP6 | cache/background/AI/ownership bridges | key/batch/tool policy and no cross-tenant disclosure | stop on AI/domain-authority dependency |
+| CP7 | global validation/evidence | AC01–AC09, lint/build/CI-ready evidence | no DONE with any NOT RUN/unknown P0/P1 |
+
+No checkpoint authorizes a new domain, broad RLS, destructive migration, client-owned authority or UI-only remediation.
 
 ## Objective
 Prove that every remaining authoritative P0/P1 institutional-data path derives institution context server-side and cannot read, mutate, stream, cache or expose another tenant's data.
