@@ -141,7 +141,7 @@ See:
 The controlled Foundation sequence is:
 
 1. FND-01 — Schema Authority — **DONE**;
-2. FND-02 — Legacy Write Authority & Fences — READY — awaiting explicit implementation authorization;
+2. FND-02 — Legacy Write Authority & Fences — DONE — CP2–CP7 local evidence closes all ACs: system wipe and legacy student mutations fail closed before token/request/persistence handling; the legacy SLA background writer remains an explicit transitional authority pending a canonical scheduler decision. Publication remains separately authorized;
 3. FND-03 — Tenant Sweep — PREPARATION;
 4. FND-04 — Product Truth Cleanup — PREPARATION;
 5. FND-05 — Audit Truth — PREPARATION;

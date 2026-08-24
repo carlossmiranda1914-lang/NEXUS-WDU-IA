@@ -347,28 +347,12 @@ export default function DigitalSignatureSystem({
 
   // Archive Signed document
   const handleArchiveSignature = (sig: DigitalSignatureRequest) => {
-    const now = new Date();
-    const formattedDate = now.toISOString().split('T')[0];
-    
-    const updated: DigitalSignatureRequest = {
-      ...sig,
-      status: 'archived',
-      archivedAtDate: formattedDate
-    };
-    onUpdateSignature(updated);
-    
-    // Auto-Notify and log actions
-    alert(`O documento "${sig.title}" foi assinado e arquivado digitalmente. Comprovativo de compliance guardado no Centro Documental.`);
+    alert(`O arquivo de assinaturas institucionais não está disponível. "${sig.title}" não foi alterado.`);
   };
 
   // Handle manual trigger transition (Envias)
   const handleSendDraft = (sig: DigitalSignatureRequest) => {
-    const updated: DigitalSignatureRequest = {
-      ...sig,
-      status: 'sent'
-    };
-    onUpdateSignature(updated);
-    alert(`Pedido de Assinatura enviado com sucesso para ${sig.signerName} (${sig.signerEmail})!`);
+    alert(`O envio institucional de pedidos de assinatura não está disponível. Nenhum pedido foi enviado para ${sig.signerName}.`);
   };
 
   // Create signature request

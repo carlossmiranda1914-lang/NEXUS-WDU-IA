@@ -1,8 +1,8 @@
 # FND-02 — Legacy Write Authority & Fences
 
-**State:** READY — awaiting explicit implementation authorization.
+**State:** DONE — CP7 validation closes AC01–AC08 on local commit evidence; controlled publication remains a separate authorization.
 
-**Current DoR evidence:** `docs/roadmap/missions/FND-02_DOR_EVIDENCE.md` and `docs/audit/FND-02_AUTHORITY_MATRIX.md`. The 2026-08-24 CP1 characterization closes AI tool effects, document-target partitioning and overlapping School Tasks dispatch. READY is a DoR result only; it does not authorize fence implementation.
+**Current evidence:** `docs/roadmap/missions/FND-02_DOR_EVIDENCE.md` and `docs/audit/FND-02_AUTHORITY_MATRIX.md`. The 2026-08-24 CP1 characterization closes AI tool effects, document-target partitioning and overlapping School Tasks dispatch. CP2–CP7 are complete locally; no publication, merge or deployment is implied.
 
 ## Objective
 Produce a complete, evidence-backed map of persistent write authority for current P0/P1 capabilities and prevent legacy paths from competing with canonical vNext sources without deleting still-required operational behavior.

@@ -718,6 +718,11 @@ async function startServer() {
 
   // System Reset and Data Wipe API
   app.post('/api/system/wipe-data', requireAuth, authorizeRole(['admin']), async (req: AuthRequest, res) => {
+    return res.status(503).json({
+      code: 'SYSTEM_DATA_RESET_NOT_AVAILABLE',
+      error: 'A reposição destrutiva de dados não está disponível por esta API.',
+    });
+
     const { confirmationToken } = req.body;
     const WIPE_TOKEN = process.env.SYSTEM_WIPE_TOKEN;
 
@@ -895,6 +900,7 @@ async function startServer() {
   });
 
   app.post('/api/users', requireAuth, authorizeRole(['admin']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_IAM_PROVISIONING_REQUIRED', error: 'O provisionamento de utilizadores está temporariamente indisponível.' });
     try {
       const { email, name, role, phone, department, status } = req.body;
       if (!email || !name) {
@@ -939,6 +945,7 @@ async function startServer() {
   });
 
   app.put('/api/users/:id', requireAuth, authorizeRole(['admin']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_IAM_PROVISIONING_REQUIRED', error: 'A administração de utilizadores está temporariamente indisponível.' });
     try {
       const idNum = parseInt(req.params.id);
       const { email, name, role, phone, department, status } = req.body;
@@ -979,6 +986,7 @@ async function startServer() {
   });
 
   app.delete('/api/users/:id', requireAuth, authorizeRole(['admin']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_IAM_PROVISIONING_REQUIRED', error: 'A administração de utilizadores está temporariamente indisponível.' });
     try {
       const idNum = parseInt(req.params.id);
       const ownedUserIds = await resolveInstitutionOwnedResourceIds(
@@ -1084,6 +1092,11 @@ async function startServer() {
   });
 
   app.post('/api/students', requireAuth, authorizeRole(['admin', 'secretariat']), async (req: AuthRequest, res) => {
+    return res.status(503).json({
+      code: 'CANONICAL_ENROLLMENT_REQUIRED',
+      error: 'A criação ou alteração de estudantes requer o fluxo canónico de Matrículas.',
+    });
+
     try {
       const { id, name, class: sClass, guardiansName, guardiansContact, outstandingFees, documents, behaviorHistory, grades, paymentPlan, scholarship, discount, financialNotes } = req.body;
 
@@ -1317,6 +1330,11 @@ async function startServer() {
   });
 
   app.delete('/api/students/:id', requireAuth, authorizeRole(['admin', 'secretariat', 'director']), async (req: AuthRequest, res) => {
+    return res.status(503).json({
+      code: 'CANONICAL_STUDENT_LIFECYCLE_REQUIRED',
+      error: 'A eliminação de estudantes requer o ciclo de vida canónico do estudante.',
+    });
+
     try {
       const { id } = req.params;
       const ownedStudentIds = await resolveInstitutionOwnedResourceIds(
@@ -3495,7 +3513,16 @@ async function startServer() {
   registerSchoolTaskRoutes(app);
   registerEnrollmentRoutes(app);
 
-  // 8. New School Tasks Management API with severe validation and real-time synchronisation
+  // FND-02 CP2: legacy mutation bodies are retained temporarily for forensic
+  // rollback only, but are deliberately not mounted. The modular controller
+  // registered above is the sole HTTP mutation authority for School Tasks.
+  const unmountedLegacyTaskMutations = {
+    post: (..._args: unknown[]) => undefined,
+    put: (..._args: unknown[]) => undefined,
+    delete: (..._args: unknown[]) => undefined,
+  };
+
+  // 8. Legacy School Tasks reads retained pending their own explicit treatment.
   app.get('/api/school-tasks/metrics', requireAuth, authorizeTaskAction('view_metrics'), rateLimiter('analytics', 20), async (req: AuthRequest, res) => {
     try {
       const todayStr = new Date().toISOString().split('T')[0];
@@ -3817,7 +3844,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/school-tasks', requireAuth, authorizeTaskAction('create_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
+  unmountedLegacyTaskMutations.post('/api/school-tasks', requireAuth, authorizeTaskAction('create_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
     const body = req.body;
     const { id, title, description, status, dependencies } = body;
 
@@ -3967,7 +3994,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/school-tasks/:id', requireAuth, rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
+  unmountedLegacyTaskMutations.put('/api/school-tasks/:id', requireAuth, rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
     const { id } = req.params;
     const body = req.body;
     const { status, priority, title, description, dueDate, limitDate, assignedTo, department, dependencies, history, attachments } = body;
@@ -4237,7 +4264,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/school-tasks/:id', requireAuth, authorizeTaskAction('delete_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
+  unmountedLegacyTaskMutations.delete('/api/school-tasks/:id', requireAuth, authorizeTaskAction('delete_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
     const { id } = req.params;
     try {
       const existing = await db.select().from(schoolTasks).where(and(eq(schoolTasks.id, id), eq(schoolTasks.isDeleted, false)));
@@ -4307,7 +4334,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/school-tasks/:id/restore', requireAuth, authorizeTaskAction('restore_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
+  unmountedLegacyTaskMutations.post('/api/school-tasks/:id/restore', requireAuth, authorizeTaskAction('restore_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
     const { id } = req.params;
     try {
       const records = await db.select().from(schoolTasks).where(eq(schoolTasks.id, id));
@@ -4446,7 +4473,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/school-tasks/import-backup', requireAuth, rateLimiter('escrita', 10), async (req: AuthRequest, res) => {
+  unmountedLegacyTaskMutations.post('/api/school-tasks/import-backup', requireAuth, rateLimiter('escrita', 10), async (req: AuthRequest, res) => {
     const role = req.user?.dbRole;
     if (role !== 'admin' && role !== 'director') {
       try {
@@ -5182,7 +5209,6 @@ Apresente as respostas de forma elegante utilizando tabelas em Markdown, badges,
         generateDeclarationTool,
         detectSystemProblemsTool,
         createNotificationTool,
-        createTodoTaskTool,
         triggerWorkflowTool,
         modifyStudentDetailsTool
       ];
@@ -5213,7 +5239,9 @@ Apresente as respostas de forma elegante utilizando tabelas em Markdown, badges,
           let functionResponseData: any = {};
           
           try {
-            if (name === 'searchStudents') {
+            if (name === 'createTodoTask') {
+              functionResponseData = { error: 'A criação de tarefas por IA está desativada. Utilize o comando institucional de Tasks autorizado.' };
+            } else if (name === 'searchStudents') {
               let queryResult = await db.select().from(students);
               if (args.classFilter) {
                 queryResult = queryResult.filter(s => s.class.toLowerCase().includes(args.classFilter.toLowerCase()));
@@ -5397,7 +5425,7 @@ Apresente as respostas de forma elegante utilizando tabelas em Markdown, badges,
                 functionResponseData = { success: true, document: insertedDoc, studentName: st.name };
               }
 
-            } else if (name === 'createTodoTask') {
+            } else if (name === 'createTodoTask' && false) {
               const todayStr = new Date().toISOString().split('T')[0];
               const dueDateVal = args.dueDate || todayStr;
               const newId = `TSK-${Math.floor(2000 + Math.random() * 8000)}`;

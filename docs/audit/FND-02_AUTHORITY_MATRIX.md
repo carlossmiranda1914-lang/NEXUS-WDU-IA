@@ -1,6 +1,6 @@
 # FND-02 — P0/P1 Write Authority Matrix
 
-**Status:** PREPARATION evidence, AS-IS only (2026-08-24)
+**Status:** DONE — CP7 closure recorded 2026-08-24; the baseline rows remain the AS-IS inventory.
 **Baseline:** `main` / `80a0d1e30b264145393206e0e69242c0bb79b5ea`
 **Rule:** this is not implementation authority. A classification is based on the cited source path; `TRANSITIONAL` never means canonical.
 
@@ -36,7 +36,7 @@ The inventory was produced from route registration, controller/service/repositor
 | AI-01 | `/api/chat` read tools: `searchStudents`, `checkPayments`, `getStudentReport`, `locateDocuments`, `detectSystemProblems` → reads plus `operational_logs` | Gemini declarations/dispatcher in `server.ts` → direct Drizzle | Firebase `requireAuth`; no per-tool institutional context/policy | AIAssistant, AutomationsSection, direct API | **DUPLICATE audit write / READ-ONLY candidate**; P0 | Each read tool writes an operational log; no transaction, confirmation or tenant policy. Future fence must scope reads and ensure audit remains factual. |
 | AI-02 | `/api/chat` `createInvoice` → `invoices`, `students.outstandingFees`, logs, websocket attempt | dispatcher → direct Drizzle | Firebase only; no tenant command/role/confirmation | Same | **TRANSITIONAL** / PRESERVE-with-no-new-consumers; P0 | Multi-write not transactional; no proven human confirmation; audit log only. Do not fence the only observed invoice creation path before Finance Core exists. Future RED/GREEN are Finance-command prerequisites. |
 | AI-03 | `createCertificate`, `generateDeclaration`, `generateReport` → `uploaded_documents`, ownership, logs | dispatcher → direct Drizzle | Firebase only | Same | **TRANSITIONAL** / PRESERVE-with-no-new-consumers; P0 | See DOC-03; no physical storage/MIME/hash proof, no transaction/confirmation. No generic Document replacement exists, so denial/delegation is blocked pending that dependency. |
-| AI-04 | `createTodoTask` → `school_tasks`, logs, websocket attempt | dispatcher → direct Drizzle | Firebase only; no modular task authorization/tenant context | Same | **DUPLICATE** / FENCE or delegate; P0 | Bypasses TASK-01 service/repository snapshots. Future test: direct tool denied/no task/version row; delegated canonical command preserves tenant/audit/realtime. |
+| AI-04 | `createTodoTask` → `school_tasks`, logs, websocket attempt | dispatcher → direct Drizzle | Firebase only; no modular task authorization/tenant context | Same | **FENCED (CP3)** / READ-ONLY failure; P0 | Removed from model tool exposure and direct dispatcher invocation now fails closed before persistence. `tests/fnd02-ai-task-write-fence.test.ts` proves no reachable direct insert; future delegation requires canonical Task policy context. |
 | AI-05 | `createNotification` → `announcements`, logs; `triggerWorkflow` → `automations.executions`, logs; `modifyStudentDetails` → `students`, logs | dispatcher → direct Drizzle | Firebase only; no per-tool policy/tenant/confirmation | Same | **TRANSITIONAL** / PRESERVE-with-no-new-consumers; P0 | No transaction around business+audit effects. No corresponding canonical Communication/Automation/student-detail command is proven. Dependencies: those future domain commands. |
 | AI-06 | `/api/teacher-ai`, `/api/financial-ai`, `/api/predictive-insight` | `server.ts` handlers | Firebase `requireAuth`; static trace finds no tool dispatcher/direct DB mutation beyond AI generation/read context | TeacherAI, FinancialAI, dashboard, direct API | **PROTOTYPE/read-only analysis** / PRESERVE AS-IS, no new consumers; P1 | No persistent effect found in this baseline. Future characterization must fail if a write is introduced without command policy/audit/tenant proof. |
 | EXT-01 | Google Sheets create/update/delete spreadsheet and values | `GoogleSheetsCenter.tsx` direct Google API | Browser OAuth shares primary Firebase session | GoogleSheetsCenter | **PROTOTYPE / unsafe integration** / REPLACE-LATER; P0 | External writes bypass server policy/audit and may alter Nexus auth session. Dependency: connector/import command + separate OAuth. |
@@ -59,3 +59,33 @@ All `/api/chat` tools are enumerated above. The caller is the Gemini function-ca
 ## AC01 closure rule
 
 AC01 is **closed for the 2026-08-24 baseline**: every discovered P0/P1 persistent write has a classification and treatment. No path is labelled DEAD from reference absence alone. Future code additions must reopen this matrix entry before implementation.
+
+## CP6 transition contracts
+
+| Domain/writer | Decision | Temporary owner and callers | Limits / replacement and removal gate |
+|---|---|---|---|
+| Teachers legacy routes and JSON academic fields | PRESERVE TRANSITIONAL | legacy teacher UI/API; `teachers` | No new consumers; Academic Core + TeacherAssignment + authorization regressions required. |
+| Finance invoices, payment status and `outstandingFees` | PRESERVE TRANSITIONAL | FinancialPanel/API and legacy AI paths; `invoices`, `students` | No ledger claim or new consumer; Finance ledger, obligations, payments, allocations and reconciliation required. |
+| Chat and announcements | PRESERVE TRANSITIONAL | Communication UI/API; `chat_messages`, `announcements` | Record creation is not delivery proof; Communication domain, recipient authority and delivery facts required. |
+| Generic server documents | PRESERVE TRANSITIONAL | SchoolDocuments/API; `uploaded_documents` | Does not replace Enrollment Documents; general Document storage/domain contract required. |
+| Automations and approvals | PRESERVE TRANSITIONAL | legacy UI/API; `automations`, `approvals` | No workflow-engine claim or new consumer; authorized Workflow/Automation contract required. |
+| School Tasks SLA worker | PRESERVE TRANSITIONAL | startup interval only; `school_tasks.sla_status` | Not HTTP/AI callable and creates no task; modular scheduler contract required before removal. |
+| Operational logs | PRESERVE TRANSITIONAL | request/route handlers; `operational_logs` | Technical facts only; FND-05 audit-truth contract governs presentation. |
+| Migration runner | PRESERVE CANONICAL | FND-01 runner; migration ledger | Versioned migrations/checksums remain sole schema authority. |
+
+## CP7 authority rescan and acceptance matrix
+
+The 2026-08-24 rescan covered HTTP mutations, Drizzle/SQL mutations, browser storage, filesystem calls, AI tool branches, workers, WebSocket/external connector calls and scripts. Every discovered P0/P1 writer maps to an ID above; none is `UNKNOWN`. This section is the final authority status for the candidate, and intentionally does not erase the baseline detail above.
+
+| AC | Criterion | Evidence | Result | Reference |
+|---|---|---|---|---|
+| AC01 | P0/P1 inventory classified | rescan plus this matrix | PASS | all matrix IDs mapped; no `UNKNOWN` |
+| AC02 | no undocumented dual write | Task and AI duplicate paths fenced; remaining duplicates documented | PASS | `npm run test:fnd02`; TASK-02/TASK-03/IAM-01/STU-01 |
+| AC03 | canonical preservation | Tasks PostgreSQL; Enrollment/Person/Identity/Context/document regressions | PASS | `test:fnd01:cp4:postgres`; S02.3 document PostgreSQL; focused canonical tests |
+| AC04 | every fence unreachable/no mutation | all focused fence contracts, including system/student direct-endpoint contract | PASS | `npm run test:fnd02` |
+| AC05 | transitional safety | explicit CP6 contracts | PASS | CP6 transition-contract table |
+| AC06 | Tasks convergence | only modular task mutations are mounted; SLA worker stays transitional | PASS | dispatch + legacy-write fence tests |
+| AC07 | IAM boundary | legacy `/api/users` C/U/D returns `503 CANONICAL_IAM_PROVISIONING_REQUIRED` | PASS | legacy-user fence test |
+| AC08 | no invented replacement | no new IAM/Finance/Academic/Documents/Communication domain | PASS | candidate diff audit |
+
+**CP7 closure:** `SYS-01` now returns `503 SYSTEM_DATA_RESET_NOT_AVAILABLE` before token/audit/destructive handling; `STU-01` create and delete now return their approved `503` canonical-lifecycle codes before request data, tenant/entity checks or persistence. The affected paths remain `FENCE`, but are no longer reachable mutation authorities. The protected disposable reset workflow is not this HTTP API.
