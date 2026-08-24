@@ -48,3 +48,7 @@ No discovered P0/P1 write remains unclassified; no AI tool has an unknown persis
 ## DoR decision
 
 **READY — awaiting explicit implementation authorization.** CP1 closes the inventory/authority decision required for DoR. Implementation remains prohibited until separately authorized; the first implementation slice is CP2 (School Tasks duplicate-authority fence) only after its stated replacement/delegation decision is explicitly authorized.
+
+## CP6 closure
+
+CP6 classifies all remaining P0/P1 writers as canonical or explicitly transitional. No remaining sole writer is removed: Teachers requires Academic Core; Finance requires ledger authority; Communication requires recipient/delivery authority; generic Documents requires its storage contract; Automations/Approvals require authorized workflow authority; and the SLA worker requires a modular scheduler. This closes AC05 and AC08 for FND-02 without inventing those domains.

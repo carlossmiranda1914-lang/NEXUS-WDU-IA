@@ -59,3 +59,16 @@ All `/api/chat` tools are enumerated above. The caller is the Gemini function-ca
 ## AC01 closure rule
 
 AC01 is **closed for the 2026-08-24 baseline**: every discovered P0/P1 persistent write has a classification and treatment. No path is labelled DEAD from reference absence alone. Future code additions must reopen this matrix entry before implementation.
+
+## CP6 transition contracts
+
+| Domain/writer | Decision | Temporary owner and callers | Limits / replacement and removal gate |
+|---|---|---|---|
+| Teachers legacy routes and JSON academic fields | PRESERVE TRANSITIONAL | legacy teacher UI/API; `teachers` | No new consumers; Academic Core + TeacherAssignment + authorization regressions required. |
+| Finance invoices, payment status and `outstandingFees` | PRESERVE TRANSITIONAL | FinancialPanel/API and legacy AI paths; `invoices`, `students` | No ledger claim or new consumer; Finance ledger, obligations, payments, allocations and reconciliation required. |
+| Chat and announcements | PRESERVE TRANSITIONAL | Communication UI/API; `chat_messages`, `announcements` | Record creation is not delivery proof; Communication domain, recipient authority and delivery facts required. |
+| Generic server documents | PRESERVE TRANSITIONAL | SchoolDocuments/API; `uploaded_documents` | Does not replace Enrollment Documents; general Document storage/domain contract required. |
+| Automations and approvals | PRESERVE TRANSITIONAL | legacy UI/API; `automations`, `approvals` | No workflow-engine claim or new consumer; authorized Workflow/Automation contract required. |
+| School Tasks SLA worker | PRESERVE TRANSITIONAL | startup interval only; `school_tasks.sla_status` | Not HTTP/AI callable and creates no task; modular scheduler contract required before removal. |
+| Operational logs | PRESERVE TRANSITIONAL | request/route handlers; `operational_logs` | Technical facts only; FND-05 audit-truth contract governs presentation. |
+| Migration runner | PRESERVE CANONICAL | FND-01 runner; migration ledger | Versioned migrations/checksums remain sole schema authority. |
