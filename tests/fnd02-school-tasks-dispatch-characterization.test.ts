@@ -69,6 +69,10 @@ try {
   assert.deepEqual(calls[1], { kind: 'update', id: 'foreign-task-id', tenantId: 'school-a' });
   assert.deepEqual(legacyCalls, [], 'direct overlapping API calls remain captured by modular routes');
 
+  // Node's fetch may retain a keep-alive socket after the final request. This is
+  // a disposable characterization server, so close that socket before awaiting
+  // the listener teardown.
+  server.closeAllConnections();
   await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   console.log('FND-02 School Tasks dispatch characterization: PASS (modular handler wins; tenant context reaches service; duplicate legacy handler is not dispatched).');
 } finally {
