@@ -718,6 +718,11 @@ async function startServer() {
 
   // System Reset and Data Wipe API
   app.post('/api/system/wipe-data', requireAuth, authorizeRole(['admin']), async (req: AuthRequest, res) => {
+    return res.status(503).json({
+      code: 'SYSTEM_DATA_RESET_NOT_AVAILABLE',
+      error: 'A reposição destrutiva de dados não está disponível por esta API.',
+    });
+
     const { confirmationToken } = req.body;
     const WIPE_TOKEN = process.env.SYSTEM_WIPE_TOKEN;
 
@@ -1087,6 +1092,11 @@ async function startServer() {
   });
 
   app.post('/api/students', requireAuth, authorizeRole(['admin', 'secretariat']), async (req: AuthRequest, res) => {
+    return res.status(503).json({
+      code: 'CANONICAL_ENROLLMENT_REQUIRED',
+      error: 'A criação ou alteração de estudantes requer o fluxo canónico de Matrículas.',
+    });
+
     try {
       const { id, name, class: sClass, guardiansName, guardiansContact, outstandingFees, documents, behaviorHistory, grades, paymentPlan, scholarship, discount, financialNotes } = req.body;
 
@@ -1320,6 +1330,11 @@ async function startServer() {
   });
 
   app.delete('/api/students/:id', requireAuth, authorizeRole(['admin', 'secretariat', 'director']), async (req: AuthRequest, res) => {
+    return res.status(503).json({
+      code: 'CANONICAL_STUDENT_LIFECYCLE_REQUIRED',
+      error: 'A eliminação de estudantes requer o ciclo de vida canónico do estudante.',
+    });
+
     try {
       const { id } = req.params;
       const ownedStudentIds = await resolveInstitutionOwnedResourceIds(
