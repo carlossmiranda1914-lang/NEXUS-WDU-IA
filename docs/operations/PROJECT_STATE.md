@@ -141,7 +141,7 @@ See:
 The controlled Foundation sequence is:
 
 1. FND-01 — Schema Authority — **DONE**;
-2. FND-02 — Legacy Write Authority & Fences — PREPARATION until predecessor DONE and independent DoR passes;
+2. FND-02 — Legacy Write Authority & Fences — READY — awaiting explicit implementation authorization;
 3. FND-03 — Tenant Sweep — PREPARATION;
 4. FND-04 — Product Truth Cleanup — PREPARATION;
 5. FND-05 — Audit Truth — PREPARATION;
