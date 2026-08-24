@@ -108,19 +108,12 @@ export class SchoolTaskRepository {
       updatedAt: taskData.updatedAt || new Date(),
     };
 
-    const results = await db.insert(schoolTasks).values(insertData).returning();
-    const createdTask = (results && results[0]) || insertData;
-
-    // Create the initial Version Snapshot (v1)
-    if (createdTask) {
-      try {
-        await this.createVersionSnapshot(createdTask, 'CREATE', changedBy, 1, null, metadata);
-      } catch (e) {
-        console.warn('Could not create version snapshot:', e);
-      }
-    }
-
-    return createdTask;
+    return db.transaction(async (tx) => {
+      const results = await tx.insert(schoolTasks).values(insertData).returning();
+      const createdTask = (results && results[0]) || insertData;
+      await this.createVersionSnapshot(createdTask, 'CREATE', changedBy, 1, null, metadata, tx);
+      return createdTask;
+    });
   }
 
   /**
@@ -137,34 +130,25 @@ export class SchoolTaskRepository {
       updatedAt: new Date(),
     };
 
-    const results = await db
-      .update(schoolTasks)
-      .set(updatedFields)
-      .where(and(eq(schoolTasks.id, id), eq(schoolTasks.tenantId, tenantId)))
-      .returning();
+    return db.transaction(async (tx) => {
+      const results = await tx
+        .update(schoolTasks)
+        .set(updatedFields)
+        .where(and(eq(schoolTasks.id, id), eq(schoolTasks.tenantId, tenantId)))
+        .returning();
+      const updatedTask = results[0];
+      if (!updatedTask) return updatedTask;
 
-    const updatedTask = results[0];
-
-    if (updatedTask) {
-      // Determine next version number
-      const latestVersion = await this.getLatestVersionNumber(id);
-      const nextVersion = latestVersion + 1;
-
-      // Calculate Diff
+      const latestVersion = await this.getLatestVersionNumber(id, tx);
       const diff: any = {};
       for (const key of Object.keys(updates)) {
         if (JSON.stringify(existing[key]) !== JSON.stringify(updatedTask[key])) {
-          diff[key] = {
-            before: existing[key],
-            after: updatedTask[key]
-          };
+          diff[key] = { before: existing[key], after: updatedTask[key] };
         }
       }
-
-      await this.createVersionSnapshot(updatedTask, 'UPDATE', changedBy, nextVersion, diff, metadata);
-    }
-
-    return updatedTask;
+      await this.createVersionSnapshot(updatedTask, 'UPDATE', changedBy, latestVersion + 1, diff, metadata, tx);
+      return updatedTask;
+    });
   }
 
   /**
@@ -174,24 +158,23 @@ export class SchoolTaskRepository {
     const existing = await this.findById(id, tenantId);
     if (!existing) return false;
 
-    const results = await db
-      .update(schoolTasks)
-      .set({
-        isDeleted: true,
-        deletedAt: new Date(),
-        deletedBy: deletedBy,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(schoolTasks.id, id), eq(schoolTasks.tenantId, tenantId)))
-      .returning();
-
-    const deletedTask = results[0];
-    if (deletedTask) {
-      const latest = await this.getLatestVersionNumber(id);
-      await this.createVersionSnapshot(deletedTask, 'DELETE', deletedBy, latest + 1, { isDeleted: { before: false, after: true } }, metadata);
+    return db.transaction(async (tx) => {
+      const results = await tx
+        .update(schoolTasks)
+        .set({
+          isDeleted: true,
+          deletedAt: new Date(),
+          deletedBy,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(schoolTasks.id, id), eq(schoolTasks.tenantId, tenantId)))
+        .returning();
+      const deletedTask = results[0];
+      if (!deletedTask) return false;
+      const latest = await this.getLatestVersionNumber(id, tx);
+      await this.createVersionSnapshot(deletedTask, 'DELETE', deletedBy, latest + 1, { isDeleted: { before: false, after: true } }, metadata, tx);
       return true;
-    }
-    return false;
+    });
   }
 
   /**
@@ -372,7 +355,8 @@ export class SchoolTaskRepository {
     changedBy: string,
     version: number,
     diff: any | null,
-    metadata?: { requestId?: string; correlationId?: string; ipAddress?: string; userAgent?: string }
+    metadata?: { requestId?: string; correlationId?: string; ipAddress?: string; userAgent?: string },
+    executor: any = db,
   ): Promise<void> {
     const snapshotObj = { ...task };
 
@@ -391,14 +375,14 @@ export class SchoolTaskRepository {
     };
 
     // Save in database
-    await db.insert(taskVersions).values(versionData);
+    await executor.insert(taskVersions).values(versionData);
   }
 
   /**
    * Find the highest recorded version number for a task
    */
-  static async getLatestVersionNumber(taskId: string): Promise<number> {
-    const results = await db
+  static async getLatestVersionNumber(taskId: string, executor: any = db): Promise<number> {
+    const results = await executor
       .select({ version: taskVersions.version })
       .from(taskVersions)
       .where(eq(taskVersions.taskId, taskId))

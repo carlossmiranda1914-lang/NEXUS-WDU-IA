@@ -17,7 +17,7 @@ const schema = `nexus_s03_${Date.now()}_${randomUUID().replaceAll('-', '').slice
 const schemaId = `"${schema}"`;
 const bootstrap = new Pool({ connectionString });
 await bootstrap.query(`CREATE SCHEMA ${schemaId}`);
-let pool = new Pool({ connectionString, options: `-c search_path=${schema},public`, max: 6 });
+let pool = new Pool({ connectionString, options: `-c search_path=${schema}`, max: 6 });
 const migrationsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations');
 let assertions = 0;
 function assert(condition: unknown, message: string): asserts condition { assertions += 1; if (!condition) throw new Error(message); }
@@ -33,7 +33,7 @@ const contextB: InstitutionalContext = { personId: ids.actorB, personName: 'Secr
 try {
   const migrations = (await readdir(migrationsDir)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
   for (const filename of migrations) await pool.query(await readFile(path.join(migrationsDir, filename), 'utf8'));
-  assert(migrations.length === 16, 'S03 clean schema must contain exactly 16 ordered migrations.');
+  assert(migrations.length === 18, 'S03 clean schema must contain exactly 18 ordered migrations.');
 
   await pool.query("INSERT INTO institutions (id,name,slug,status) VALUES ($1,'Escola A','escola-a','active'),($2,'Escola B','escola-b','active')", [ids.institutionA, ids.institutionB]);
   await pool.query("INSERT INTO people (id,name) VALUES ($1,'Secretaria A'),($2,'Secretaria B'),($3,'Responsável A'),($4,'Pessoa B')", [ids.actorA, ids.actorB, ids.assigneeA, ids.outsiderB]);

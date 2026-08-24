@@ -5,9 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { createTestDatabasePool } from '../src/db/test-database.ts';
 
-dotenv.config();
-
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(currentDirectory, '../.env.test.local'), override: true, quiet: true });
 const migrationsDirectory = path.resolve(currentDirectory, '../src/db/migrations');
 
 function quoteIdentifier(value: string): string {
@@ -24,7 +23,7 @@ async function verifyMigrationsIsolated(): Promise<void> {
 
   try {
     await client.query(`CREATE SCHEMA ${schemaIdentifier}`);
-    await client.query(`SET search_path TO ${schemaIdentifier}, public`);
+    await client.query(`SET search_path TO ${schemaIdentifier}`);
 
     const migrationFiles = (await readdir(migrationsDirectory))
       .filter((name) => /^\d{4}_.+\.sql$/.test(name))
@@ -115,10 +114,45 @@ async function verifyMigrationsIsolated(): Promise<void> {
       throw new Error('Expected nullable decided_by_person_id audit column.');
     }
 
+    const legacyCompatibilityTables = [
+      'users', 'students', 'teachers', 'invoices', 'announcements',
+      'chat_messages', 'automations', 'uploaded_documents', 'approvals',
+    ];
+    const legacyTables = await client.query<{ table_name: string }>(
+      `SELECT table_name
+         FROM information_schema.tables
+        WHERE table_schema = $1
+          AND table_name = ANY($2::text[])`,
+      [schemaName, legacyCompatibilityTables],
+    );
+    if (legacyTables.rowCount !== legacyCompatibilityTables.length) {
+      throw new Error('Expected all active legacy compatibility tables after migration-only bootstrap.');
+    }
+    const requiredLegacyColumns: Record<string, string[]> = {
+      users: ['uid', 'email', 'status', 'last_access'],
+      students: ['class', 'attendance_rate', 'average_grade', 'outstanding_fees', 'documents', 'behavior_history', 'grades'],
+      teachers: ['email', 'subjects', 'classes', 'schedule', 'documents'],
+      invoices: ['student_id', 'student_name', 'amount', 'due_date', 'category'],
+      announcements: ['author', 'role', 'date', 'target'],
+      chat_messages: ['sender', 'role', 'content', 'timestamp', 'channel'],
+      automations: ['trigger', 'action', 'active', 'type', 'executions'],
+      uploaded_documents: ['name', 'type', 'extracted_details', 'status'],
+      approvals: ['flow_type', 'requester_role', 'created_at_date', 'history'],
+    };
+    for (const [table, columns] of Object.entries(requiredLegacyColumns)) {
+      const found = await client.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = $2 AND column_name = ANY($3::text[])`,
+        [schemaName, table, columns],
+      );
+      if (found.rowCount !== columns.length) throw new Error(`Expected active consumer columns for legacy ${table}.`);
+    }
+
     console.log(`[MIGRATION-VERIFY] PASS: ${migrationFiles.length} migrations applied in isolated schema.`);
     console.log('[MIGRATION-VERIFY] PASS: people.birth_date is DATE NULL.');
     console.log('[MIGRATION-VERIFY] PASS: enrollment_intake_commands idempotency constraints are present.');
     console.log('[MIGRATION-VERIFY] PASS: identity_resolution_decisions authority/audit constraints are present.');
+    console.log('[MIGRATION-VERIFY] PASS: CP3 active legacy compatibility tables are migration-owned.');
   } finally {
     try {
       await client.query('RESET search_path');

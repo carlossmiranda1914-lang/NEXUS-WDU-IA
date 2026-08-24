@@ -2,13 +2,17 @@
 
 **Mission:** FND-01 — Schema Authority  
 **Review date:** 2026-08-20  
-**Implementation status:** READY — awaiting explicit implementation authorization  
+**Implementation status:** DONE — validated 2026-08-24
 **Frozen implementation reference:** `689d1dd8919a25e91911ae118c5aad9ff69c5862` / PR #65  
 **Comparison baseline:** `main`
 
 ## 1. Evidence rule
 
 This pack records facts needed to decide whether FND-01 may enter implementation. `PROVEN` means repository evidence supports the statement. `DECIDED` means canonical architecture/roadmap has enough evidence to choose a target. `PROJECT-DECLARED` means the project owner has explicitly supplied the operational fact. No executor may replace any of these with inference.
+
+## Execution evidence — 2026-08-24
+
+CP0–CP6 completed on the approved local FND-01 branch. The focused PostgreSQL suite proved migration ordering, ledger/checksum behavior, migration-only clean bootstrap, tenant-isolated School Tasks persistence, snapshot rollback, fail-closed ownership reconciliation, validation-only startup, and production memory-fallback denial. The approved disposable target was reset as a whole and rebuilt by the canonical migration runner after contamination was detected; no ownership was invented and no selective business-row cleanup was performed.
 
 ## 2. Runtime schema authority — PROVEN
 

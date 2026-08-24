@@ -8,6 +8,15 @@ const { Pool } = pg;
 const databaseRuntimePolicy = resolveDatabaseRuntimePolicy();
 export const { isPersistentDatabaseConfigured, isInMemoryFallbackAllowed } = databaseRuntimePolicy;
 
+function resolveSqlOptions(): string | undefined {
+  const options = process.env.SQL_OPTIONS?.trim();
+  if (!options) return undefined;
+  if (!/^-c search_path=[A-Za-z_][A-Za-z0-9_]*(?:,public)?$/.test(options)) {
+    throw new Error('SQL_OPTIONS only permits an explicit PostgreSQL search_path connection option.');
+  }
+  return options;
+}
+
 export const createPool = () => {
   const databaseUrl = process.env.DATABASE_URL?.trim();
   if (databaseUrl) {
@@ -19,9 +28,13 @@ export const createPool = () => {
 
   return new Pool({
     host: process.env.SQL_HOST,
+    port: process.env.SQL_PORT ? Number(process.env.SQL_PORT) : undefined,
     user: process.env.SQL_USER || process.env.SQL_ADMIN_USER,
     password: process.env.SQL_PASSWORD || process.env.SQL_ADMIN_PASSWORD,
     database: process.env.SQL_DB_NAME,
+    // An explicit, validated search path is only used by isolated PostgreSQL tests.
+    // When absent, the production default search path is unchanged.
+    options: resolveSqlOptions(),
     connectionTimeoutMillis: 5000, // Quick timeout detection to switch instantly to local memory mode
   });
 };
