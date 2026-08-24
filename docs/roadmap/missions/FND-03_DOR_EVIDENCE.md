@@ -49,3 +49,7 @@ CP4 is PASS. WebSocket token verification and InstitutionalContext resolution oc
 ## CP5 closure
 
 CP5 is PASS. Generic Documents are fenced with `CANONICAL_DOCUMENT_AUTHORITY_REQUIRED` before database metadata, physical storage, audit-success or events because joint DB/object ownership is unproven. Direct document/file/path/client tenant IDs therefore have no authority. The only mounted export in scope is canonical School Tasks export, protected by `multiTenantMiddleware`; the legacy duplicate route is not mounted. Enrollment Documents remain canonical and are preserved by their PostgreSQL regression. CP6 is next; FND-03 is not DONE.
+
+## CP6 closure
+
+CP6 is PASS. Task cache remains institution-prefixed. The SLA worker returns before SQL with `CANONICAL_BACKGROUND_AUTHORITY_REQUIRED`; reachable `/api/chat` returns `CANONICAL_AI_AUTHORITY_REQUIRED` before context-data query, tool execution, audit/event or external effect. Ownership bridge contracts remain covered. Reactivation requires canonical institution-scoped scheduler/AI authority. CP7 is next.
