@@ -3495,7 +3495,16 @@ async function startServer() {
   registerSchoolTaskRoutes(app);
   registerEnrollmentRoutes(app);
 
-  // 8. New School Tasks Management API with severe validation and real-time synchronisation
+  // FND-02 CP2: legacy mutation bodies are retained temporarily for forensic
+  // rollback only, but are deliberately not mounted. The modular controller
+  // registered above is the sole HTTP mutation authority for School Tasks.
+  const unmountedLegacyTaskMutations = {
+    post: (..._args: unknown[]) => undefined,
+    put: (..._args: unknown[]) => undefined,
+    delete: (..._args: unknown[]) => undefined,
+  };
+
+  // 8. Legacy School Tasks reads retained pending their own explicit treatment.
   app.get('/api/school-tasks/metrics', requireAuth, authorizeTaskAction('view_metrics'), rateLimiter('analytics', 20), async (req: AuthRequest, res) => {
     try {
       const todayStr = new Date().toISOString().split('T')[0];
@@ -3817,7 +3826,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/school-tasks', requireAuth, authorizeTaskAction('create_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
+  unmountedLegacyTaskMutations.post('/api/school-tasks', requireAuth, authorizeTaskAction('create_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
     const body = req.body;
     const { id, title, description, status, dependencies } = body;
 
@@ -3967,7 +3976,7 @@ async function startServer() {
     }
   });
 
-  app.put('/api/school-tasks/:id', requireAuth, rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
+  unmountedLegacyTaskMutations.put('/api/school-tasks/:id', requireAuth, rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
     const { id } = req.params;
     const body = req.body;
     const { status, priority, title, description, dueDate, limitDate, assignedTo, department, dependencies, history, attachments } = body;
@@ -4237,7 +4246,7 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/school-tasks/:id', requireAuth, authorizeTaskAction('delete_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
+  unmountedLegacyTaskMutations.delete('/api/school-tasks/:id', requireAuth, authorizeTaskAction('delete_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
     const { id } = req.params;
     try {
       const existing = await db.select().from(schoolTasks).where(and(eq(schoolTasks.id, id), eq(schoolTasks.isDeleted, false)));
@@ -4307,7 +4316,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/school-tasks/:id/restore', requireAuth, authorizeTaskAction('restore_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
+  unmountedLegacyTaskMutations.post('/api/school-tasks/:id/restore', requireAuth, authorizeTaskAction('restore_task'), rateLimiter('escrita', 30), async (req: AuthRequest, res) => {
     const { id } = req.params;
     try {
       const records = await db.select().from(schoolTasks).where(eq(schoolTasks.id, id));
@@ -4446,7 +4455,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/school-tasks/import-backup', requireAuth, rateLimiter('escrita', 10), async (req: AuthRequest, res) => {
+  unmountedLegacyTaskMutations.post('/api/school-tasks/import-backup', requireAuth, rateLimiter('escrita', 10), async (req: AuthRequest, res) => {
     const role = req.user?.dbRole;
     if (role !== 'admin' && role !== 'director') {
       try {
