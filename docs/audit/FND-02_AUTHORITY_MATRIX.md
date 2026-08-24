@@ -1,6 +1,6 @@
 # FND-02 — P0/P1 Write Authority Matrix
 
-**Status:** IMPLEMENTING — CP7 validation record added 2026-08-24; the baseline rows remain the AS-IS inventory.
+**Status:** DONE — CP7 closure recorded 2026-08-24; the baseline rows remain the AS-IS inventory.
 **Baseline:** `main` / `80a0d1e30b264145393206e0e69242c0bb79b5ea`
 **Rule:** this is not implementation authority. A classification is based on the cited source path; `TRANSITIONAL` never means canonical.
 
@@ -82,10 +82,10 @@ The 2026-08-24 rescan covered HTTP mutations, Drizzle/SQL mutations, browser sto
 | AC01 | P0/P1 inventory classified | rescan plus this matrix | PASS | all matrix IDs mapped; no `UNKNOWN` |
 | AC02 | no undocumented dual write | Task and AI duplicate paths fenced; remaining duplicates documented | PASS | `npm run test:fnd02`; TASK-02/TASK-03/IAM-01/STU-01 |
 | AC03 | canonical preservation | Tasks PostgreSQL; Enrollment/Person/Identity/Context/document regressions | PASS | `test:fnd01:cp4:postgres`; S02.3 document PostgreSQL; focused canonical tests |
-| AC04 | every fence unreachable/no mutation | CP2–CP5 pass, but SYS-01 and STU-01 remain mounted | **BLOCKED** | SYS-01 and STU-01 |
+| AC04 | every fence unreachable/no mutation | all focused fence contracts, including system/student direct-endpoint contract | PASS | `npm run test:fnd02` |
 | AC05 | transitional safety | explicit CP6 contracts | PASS | CP6 transition-contract table |
 | AC06 | Tasks convergence | only modular task mutations are mounted; SLA worker stays transitional | PASS | dispatch + legacy-write fence tests |
 | AC07 | IAM boundary | legacy `/api/users` C/U/D returns `503 CANONICAL_IAM_PROVISIONING_REQUIRED` | PASS | legacy-user fence test |
 | AC08 | no invented replacement | no new IAM/Finance/Academic/Documents/Communication domain | PASS | candidate diff audit |
 
-**CP7 stop condition:** FND-02 is not DONE while `SYS-01` and `STU-01` are both labelled `FENCE` and can still mutate. Their future decision must preserve or explicitly replace the sole required capability; no status-only reclassification is acceptable.
+**CP7 closure:** `SYS-01` now returns `503 SYSTEM_DATA_RESET_NOT_AVAILABLE` before token/audit/destructive handling; `STU-01` create and delete now return their approved `503` canonical-lifecycle codes before request data, tenant/entity checks or persistence. The affected paths remain `FENCE`, but are no longer reachable mutation authorities. The protected disposable reset workflow is not this HTTP API.
