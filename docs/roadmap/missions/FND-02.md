@@ -2,6 +2,8 @@
 
 **State:** PREPARATION. Implementation is not authorized until FND-01 is DONE and this Mission Pack passes DoR.
 
+**Current DoR evidence:** `docs/roadmap/missions/FND-02_DOR_EVIDENCE.md` and `docs/audit/FND-02_AUTHORITY_MATRIX.md`. The 2026-08-24 preparation pass confirms FND-01 is DONE but leaves FND-02 in PREPARATION: AI tool effects, document-target partitioning and effective legacy School Tasks dispatch require characterization evidence before AC01 can be closed.
+
 ## Objective
 Produce a complete, evidence-backed map of persistent write authority for current P0/P1 capabilities and prevent legacy paths from competing with canonical vNext sources without deleting still-required operational behavior.
 
