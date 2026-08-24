@@ -2350,6 +2350,7 @@ async function startServer() {
 
   // 8. Documents Storage & Intelligent OCR API
   app.get('/api/documents', requireAuth, async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_DOCUMENT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de documentos ainda não está disponível.' });
     try {
       const role = req.user?.dbRole;
       let records = await db.select().from(uploadedDocuments).orderBy(uploadedDocuments.id);
@@ -2412,6 +2413,7 @@ async function startServer() {
   });
 
   app.post('/api/documents', requireAuth, authorizeRole(['admin', 'director', 'secretariat', 'financial']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_DOCUMENT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de documentos ainda não está disponível.' });
     const { name, base64, size } = req.body;
     if (!name) return res.status(400).json({ error: 'Falta o nome do ficheiro.' });
 
@@ -2720,6 +2722,7 @@ async function startServer() {
 
   // Delete uploaded document
   app.delete('/api/documents/:id', requireAuth, authorizeRole(['admin', 'director', 'secretariat']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_DOCUMENT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de documentos ainda não está disponível.' });
     const id = parseInt(req.params.id);
     if (!id || isNaN(id)) return res.status(400).json({ error: 'Falta parametrizar ID numérico.' });
 
