@@ -45,3 +45,7 @@ Finance and Communication HTTP endpoints are fail-closed pending canonical autho
 ## CP4 closure
 
 CP4 is PASS. WebSocket token verification and InstitutionalContext resolution occur before room registration; invalid identity closes before assignment. Foreign subscriptions are rejected, publication without institutional context emits no event, and reconnect removes the prior socket before a new authorized context is resolved. Multi-membership context is not merged: a client `SUBSCRIBE` cannot add a foreign or prior institution. The Task realtime bridge remains tenant-scoped. CP5 files/storage/reports is next; FND-03 is not DONE.
+
+## CP5 closure
+
+CP5 is PASS. Generic Documents are fenced with `CANONICAL_DOCUMENT_AUTHORITY_REQUIRED` before database metadata, physical storage, audit-success or events because joint DB/object ownership is unproven. Direct document/file/path/client tenant IDs therefore have no authority. The only mounted export in scope is canonical School Tasks export, protected by `multiTenantMiddleware`; the legacy duplicate route is not mounted. Enrollment Documents remain canonical and are preserved by their PostgreSQL regression. CP6 is next; FND-03 is not DONE.
