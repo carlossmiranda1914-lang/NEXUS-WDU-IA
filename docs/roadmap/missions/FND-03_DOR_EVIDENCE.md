@@ -53,3 +53,7 @@ CP5 is PASS. Generic Documents are fenced with `CANONICAL_DOCUMENT_AUTHORITY_REQ
 ## CP6 closure
 
 CP6 is PASS. Task cache remains institution-prefixed. The SLA worker returns before SQL with `CANONICAL_BACKGROUND_AUTHORITY_REQUIRED`; reachable `/api/chat` returns `CANONICAL_AI_AUTHORITY_REQUIRED` before context-data query, tool execution, audit/event or external effect. Ownership bridge contracts remain covered. Reactivation requires canonical institution-scoped scheduler/AI authority. CP7 is next.
+
+## CP7 final closure
+
+FND-03 is DONE. AC01–AC09 PASS: matrix inventory; server-derived context and client-ID distrust; repository/bridge scope; transitional HTTP fences; realtime and cache isolation; document/export treatment; background/SLA and AI fences; canonical same-tenant preservation and no-mutation denials. Evidence: `npm run test:fnd03`, InstitutionalContext/ownership/realtime contracts, Enrollment Documents PostgreSQL, lint, build and `git diff --check`.
