@@ -1,6 +1,14 @@
 # FND-01 — Schema Authority
 
-**State:** READY — awaiting explicit implementation authorization.
+**State:** DONE — validated 2026-08-24.
+
+## Implementation evidence — 2026-08-24
+
+- CP0–CP6 passed on `codex/fnd-01-schema-authority` through `dd6a762`.
+- Migrations `0017` and `0018` complete the legacy compatibility and tenant-safe School Tasks reconciliation contract.
+- Runtime startup is validation-only; schema mutation is owned by the canonical runner.
+- PostgreSQL evidence covers checksum/ledger rollback, migration-only bootstrap, tenant-scoped School Tasks snapshots, fail-closed ambiguous ownership, startup validation, and in-memory fallback boundary.
+- The disposable test target was reset only after its identity/safety gate passed, then rebuilt through migrations `0001`–`0018`.
 
 ## Objective
 Make versioned PostgreSQL migrations the single schema-evolution authority and ensure unsafe initialization fails closed.

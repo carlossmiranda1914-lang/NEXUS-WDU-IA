@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-Updated: 2026-08-20
+Updated: 2026-08-24
 
 This file records the current factual engineering state only. It is not a historical diary and must not present planned work as implemented.
 
@@ -119,7 +119,7 @@ If later evidence shows a pre-existing shared environment, the affected database
 
 Current state:
 
-**READY — awaiting explicit implementation authorization.**
+**DONE — FND-01 Schema Authority validated on 2026-08-24.**
 
 The final DoR has established:
 
