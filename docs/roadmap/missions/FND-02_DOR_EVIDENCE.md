@@ -1,7 +1,7 @@
 # FND-02 — DoR Evidence
 
 **Mission:** FND-02 — Legacy Write Authority & Fences
-**State:** PREPARATION
+**State:** READY — awaiting explicit implementation authorization.
 **Baseline:** `main` / `80a0d1e30b264145393206e0e69242c0bb79b5ea`
 **Preparation branch:** `codex/fnd-02-write-authority-dor`
 
@@ -24,8 +24,8 @@ The preserved invariants are server-derived institutional context, Person/Identi
 |---|---|---|---|---|
 | CP0 | Freeze baseline and run preflight | Production change | clean branch, origin alignment; stop on baseline drift | FND-01 DONE |
 | CP1 | Close inventory and caller graph for every P0/P1 row | Fences | route-stack traces, AI tool enumeration, document partition; stop on unclassified write | CP0 |
-| CP2 | Fence P0 AI direct-write tools by denial/delegation only after command policy exists | New AI capability | RED direct API/tool no-mutation, canonical regression, tenant/role/ID tests, rollback | CP1 |
-| CP3 | Resolve duplicate School Tasks route authority | Task feature redesign | exact dispatch trace, modular API regression, direct legacy endpoint no-mutation, realtime/audit proof, rollback | CP1 |
+| CP2 | Resolve duplicate School Tasks route authority | Task feature redesign | exact dispatch trace, modular API regression, direct legacy endpoint no-mutation, realtime/audit proof, rollback | CP1 |
+| CP3 | Fence only AI task writes that can delegate to TASK-01; retain other AI writes as transitional | New AI/Finance/Document capability | RED direct tool no-mutation, canonical task regression, tenant/role/ID tests; stop if any tool lacks a replacement | CP2 |
 | CP4 | Fence IAM legacy administration only when transitional onboarding contract is approved | IAM implementation | unusable-user/divergence characterization, direct API and role escalation negative tests | CP1 |
 | CP5 | Classify/fence product-truth local/external persistence claims | Domain replacement work | UI/API no-false-success proof; stop if only operational writer | CP1 |
 | CP6 | Finance, Communication, Documents, Teachers, Automations, Approvals decisions | Finance/Academic/etc. implementation | each is transitional or replacement-proven; stop on sole operational writer | CP1 |
@@ -35,10 +35,16 @@ The preserved invariants are server-derived institutional context, Person/Identi
 
 Every implementable fence must supply: a RED characterization of the pre-fence write; direct API denial; role, cross-tenant and manipulated-ID negatives; database row-count/fingerprint no-mutation evidence; a canonical-path regression; UI truth/error evidence; rollback verification; lint/build and CI inclusion. UI concealment alone is not evidence.
 
+## CP1 closure evidence
+
+- **AI:** all function declarations and dispatcher branches were traced. Read tools write `operational_logs`; write tools directly mutate legacy tables, without per-tool institutional authorization, transaction or human confirmation. The three other AI endpoints have no persistent write effect in the static baseline.
+- **Documents:** Enrollment Document is canonical metadata/state evidence only; it has server tenant policy and transactions but no binary storage/MIME/hash/size model. Generic documents are the only operational generic writer and remain transitional; local/browser and Google paths are prototypes.
+- **Tasks:** `npx tsx tests/fnd02-school-tasks-dispatch-characterization.test.ts`: PASS. A real Express app/router registered the real modular routes before duplicate handlers. Overlapping POST/PUT requests reached the modular service; a cross-tenant header was blocked pre-service; a manipulated task ID carried the caller tenant; duplicate handlers received no request.
+
 ## Red-team result
 
-Critical answers remain open: AI handler side effects are not fully enumerated; generic documents have not been partitioned into canonical versus transitional targets; and static registration order does not prove all legacy School Task routes are unreachable. These are factual gaps, not implementation failures, and prevent AC01/AC02/AC04 from closing.
+No discovered P0/P1 write remains unclassified; no AI tool has an unknown persistent effect; each document path has an owner/treatment or explicit transitional dependency; effective Task dispatch is characterized for the overlapping mutation paths. No planned fence removes a sole operational generic-document, teacher, finance, communication, automation or approval writer. Future fences are constrained to denial/delegation/read-only only where their canonical/treatment contract is proved.
 
 ## DoR decision
 
-**PREPARATION.** The mission cannot be READY while P0 paths remain incompletely classified. The next authorized action is read-only/characterization evidence that closes CP1; it is not fence implementation.
+**READY — awaiting explicit implementation authorization.** CP1 closes the inventory/authority decision required for DoR. Implementation remains prohibited until separately authorized; the first implementation slice is CP2 (School Tasks duplicate-authority fence) only after its stated replacement/delegation decision is explicitly authorized.
