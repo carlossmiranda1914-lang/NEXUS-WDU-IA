@@ -1,7 +1,7 @@
 # FND-03 — Tenant Sweep DoR Evidence
 
-**Mission:** FND-03 — Tenant Sweep  
-**State:** READY — awaiting explicit implementation authorization.  
+**Mission:** FND-03 — Tenant Sweep
+**State:** READY — awaiting explicit implementation authorization.
 **Baseline:** `main` / `d84dd0a486f61e5830bab81578197f0593b1283c`.
 
 ## Readiness decision
