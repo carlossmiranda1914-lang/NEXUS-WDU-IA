@@ -5191,7 +5191,6 @@ Apresente as respostas de forma elegante utilizando tabelas em Markdown, badges,
         generateDeclarationTool,
         detectSystemProblemsTool,
         createNotificationTool,
-        createTodoTaskTool,
         triggerWorkflowTool,
         modifyStudentDetailsTool
       ];
@@ -5222,7 +5221,9 @@ Apresente as respostas de forma elegante utilizando tabelas em Markdown, badges,
           let functionResponseData: any = {};
           
           try {
-            if (name === 'searchStudents') {
+            if (name === 'createTodoTask') {
+              functionResponseData = { error: 'A criação de tarefas por IA está desativada. Utilize o comando institucional de Tasks autorizado.' };
+            } else if (name === 'searchStudents') {
               let queryResult = await db.select().from(students);
               if (args.classFilter) {
                 queryResult = queryResult.filter(s => s.class.toLowerCase().includes(args.classFilter.toLowerCase()));
@@ -5406,7 +5407,7 @@ Apresente as respostas de forma elegante utilizando tabelas em Markdown, badges,
                 functionResponseData = { success: true, document: insertedDoc, studentName: st.name };
               }
 
-            } else if (name === 'createTodoTask') {
+            } else if (name === 'createTodoTask' && false) {
               const todayStr = new Date().toISOString().split('T')[0];
               const dueDateVal = args.dueDate || todayStr;
               const newId = `TSK-${Math.floor(2000 + Math.random() * 8000)}`;
