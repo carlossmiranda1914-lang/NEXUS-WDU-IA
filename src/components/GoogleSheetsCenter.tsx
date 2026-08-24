@@ -574,32 +574,8 @@ export default function GoogleSheetsCenter({
   // Perform import of parsed students into state
   const handleImportStudents = () => {
     if (importPreviewStudents.length === 0) return;
-
-    setIsImporting(true);
-    try {
-      const confirmImport = window.confirm(`Tem a certeza que deseja importar ${importPreviewStudents.length} alunos para a base de dados escolar?`);
-      if (!confirmImport) {
-        setIsImporting(false);
-        return;
-      }
-
-      setStudents(prev => {
-        // Prevent importing exact duplicates by name
-        const filteredNew = importPreviewStudents.filter(
-          newSt => !prev.some(oldSt => oldSt.name.toLowerCase() === newSt.name?.toLowerCase())
-        ) as Student[];
-
-        return [...filteredNew, ...prev];
-      });
-
-      setImportSuccessMessage(`Sucesso! Foram importados e inscritos ${importPreviewStudents.length} novos alunos no Nexus Edu AI.`);
-      setImportPreviewStudents([]);
-      setAnalyzedData(null);
-    } catch (err: any) {
-      setImportError(err?.message || "Erro ao sincronizar alunos.");
-    } finally {
-      setIsImporting(false);
-    }
+    setImportSuccessMessage(null);
+    setImportError('A importação institucional não está disponível. A pré-visualização não altera dados do Nexus.');
   };
 
   const filteredSheets = sheetsList.filter(file => 
