@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const source = fs.readFileSync('server.ts', 'utf8');
+const sla = source.slice(source.indexOf('async function autoUpdateSlaStatuses'), source.indexOf('async function autoUpdateSlaStatuses') + 500);
+assert.match(sla, /CANONICAL_BACKGROUND_AUTHORITY_REQUIRED/);
+assert.ok(sla.indexOf('CANONICAL_BACKGROUND_AUTHORITY_REQUIRED') < sla.indexOf('db.execute'));
+const ai = source.slice(source.indexOf("app.post('/api/chat'"), source.indexOf("app.post('/api/chat'") + 1200);
+assert.match(ai, /CANONICAL_AI_AUTHORITY_REQUIRED/);
+assert.ok(ai.indexOf('CANONICAL_AI_AUTHORITY_REQUIRED') < ai.indexOf('db.select'));
+console.log('FND-03 CP6 AI and background authority fences: PASS.');

@@ -3231,6 +3231,10 @@ async function startServer() {
   // 13. Todo Tasks System API Routes
   // Helper to auto update SLA statuses using an optimized single DB update
   async function autoUpdateSlaStatuses() {
+    // Transitional worker has no institution-scoped work unit; fail closed until
+    // a canonical scheduler owns tenant selection.
+    console.warn('[SLA-AUTO-UPDATE] CANONICAL_BACKGROUND_AUTHORITY_REQUIRED');
+    return;
     try {
       await db.execute(sql`
         UPDATE school_tasks
@@ -4956,6 +4960,7 @@ async function startServer() {
 
   // 10. API: AI Administrative Copilot Route (UPDATED WITH LIVE POSTGRES CONTEXT DATA RAG AND REAL-TIME AGENTIC TOOL CALLING)
   app.post('/api/chat', requireAuth, async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_AI_AUTHORITY_REQUIRED', error: 'A autoridade institucional de IA ainda não está disponível.' });
     const { prompt } = req.body;
 
     if (!prompt) {
