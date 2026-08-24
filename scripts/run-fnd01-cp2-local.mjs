@@ -11,21 +11,24 @@ if (!existsSync(envPath)) {
 
 dotenv.config({ path: envPath, override: true });
 
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const npmCommand = process.platform === 'win32' ? process.execPath : 'npm';
+const npmPrefixArguments = process.platform === 'win32'
+  ? [process.env.npm_execpath || path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')]
+  : [];
 const steps = [
   ['run', 'nexus:preflight:db:test:safety'],
   ['run', 'test:fnd01:cp2:postgres'],
 ];
 
 for (const args of steps) {
-  const result = spawnSync(npmCommand, args, {
+  const result = spawnSync(npmCommand, [...npmPrefixArguments, ...args], {
     stdio: 'inherit',
     env: process.env,
     shell: false,
   });
 
   if (result.error) {
-    console.error(`[FND-01-CP2] Failed to start ${npmCommand} ${args.join(' ')}: ${result.error.message}`);
+    console.error(`[FND-01-CP2] Failed to start npm ${args.join(' ')}: ${result.error.message}`);
     process.exit(1);
   }
 
