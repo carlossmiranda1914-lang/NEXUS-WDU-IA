@@ -895,6 +895,7 @@ async function startServer() {
   });
 
   app.post('/api/users', requireAuth, authorizeRole(['admin']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_IAM_PROVISIONING_REQUIRED', error: 'O provisionamento de utilizadores está temporariamente indisponível.' });
     try {
       const { email, name, role, phone, department, status } = req.body;
       if (!email || !name) {
@@ -939,6 +940,7 @@ async function startServer() {
   });
 
   app.put('/api/users/:id', requireAuth, authorizeRole(['admin']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_IAM_PROVISIONING_REQUIRED', error: 'A administração de utilizadores está temporariamente indisponível.' });
     try {
       const idNum = parseInt(req.params.id);
       const { email, name, role, phone, department, status } = req.body;
@@ -979,6 +981,7 @@ async function startServer() {
   });
 
   app.delete('/api/users/:id', requireAuth, authorizeRole(['admin']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_IAM_PROVISIONING_REQUIRED', error: 'A administração de utilizadores está temporariamente indisponível.' });
     try {
       const idNum = parseInt(req.params.id);
       const ownedUserIds = await resolveInstitutionOwnedResourceIds(
