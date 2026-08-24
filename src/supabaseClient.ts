@@ -432,12 +432,8 @@ export const SUPABASE_SQL_SCHEMA = `-- CLOUD SQL POSTGRESQL SCHEMA (Drizzle ORM 
 `;
 
 // Simulated bulk seed - returns instant success
-export async function seedSupabaseDatabase(data?: any): Promise<{ success: boolean; log: string }> {
-  console.log("Seeding Database called with current data arrays", data);
-  return {
-    success: true,
-    log: "Banco de Dados Cloud SQL sincronizado de forma instantânea na pauta local do servidor!"
-  };
+export async function seedSupabaseDatabase(_data?: any): Promise<{ success: false; log: string }> {
+  return { success: false, log: 'A sincronização institucional não está disponível neste ambiente.' };
 }
 
 export async function getLiveTasks(): Promise<SchoolTask[]> {
