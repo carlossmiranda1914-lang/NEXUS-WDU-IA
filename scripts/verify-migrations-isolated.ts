@@ -23,7 +23,7 @@ async function verifyMigrationsIsolated(): Promise<void> {
 
   try {
     await client.query(`CREATE SCHEMA ${schemaIdentifier}`);
-    await client.query(`SET search_path TO ${schemaIdentifier}, public`);
+    await client.query(`SET search_path TO ${schemaIdentifier}`);
 
     const migrationFiles = (await readdir(migrationsDirectory))
       .filter((name) => /^\d{4}_.+\.sql$/.test(name))

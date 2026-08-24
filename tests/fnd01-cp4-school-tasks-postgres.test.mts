@@ -25,7 +25,7 @@ process.env.SQL_PORT = parsedUrl.port || '5432';
 process.env.SQL_USER = decodeURIComponent(parsedUrl.username);
 process.env.SQL_PASSWORD = decodeURIComponent(parsedUrl.password);
 process.env.SQL_DB_NAME = decodeURIComponent(parsedUrl.pathname.slice(1));
-process.env.SQL_OPTIONS = `-c search_path=${schema},public`;
+process.env.SQL_OPTIONS = `-c search_path=${schema}`;
 
 const adminPool = new pg.Pool({ connectionString: testUrl, connectionTimeoutMillis: 7000 });
 const migrationsDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations');
@@ -77,7 +77,7 @@ try {
   const admin = await adminPool.connect();
   try {
     await admin.query(`CREATE SCHEMA ${schemaIdentifier}`);
-    await admin.query(`SET search_path TO ${schemaIdentifier}, public`);
+    await admin.query(`SET search_path TO ${schemaIdentifier}`);
     const applied = await runMigrations(admin, await discoverMigrations(migrationsDirectory));
     await assert(applied.length === 18, `Expected migrations 0001–0018; applied ${applied.length}.`);
   } finally {

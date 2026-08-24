@@ -1,5 +1,9 @@
 import pg from 'pg';
 import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env.test.local'), override: true, quiet: true });
 
 const REQUIRED_CONFIRMATION = 'NEXUS_TEST_DATABASE';
 const EXPECTED_TARGET = Object.freeze({
