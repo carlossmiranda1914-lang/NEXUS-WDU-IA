@@ -37,3 +37,7 @@ FIN-01, COM-01, GDOC-01 and AI-01 are P0 transitional remediation candidates. Th
 ## Explicit exclusions
 
 No production fix, schema/migration, RLS rollout, IAM redesign, Finance/Academic/Documents/Communication redesign, push, PR, merge or deployment is authorized by this DoR.
+
+## CP3 closure
+
+Finance and Communication HTTP endpoints are fail-closed pending canonical authority. Teacher legacy operations and request-access are fail-closed because no complete institutional ownership predicate is proven. Generic Documents are formally deferred to mandatory CP5: metadata and physical object ownership, direct-ID authorization, MIME/hash/size/path and download/export negatives must be proven together before any replacement/removal decision.
