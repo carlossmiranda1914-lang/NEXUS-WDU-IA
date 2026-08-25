@@ -2686,12 +2686,9 @@ export default function App() {
                   )}
 
                   {activeTab === 'financials' && (
-                    <FinancialPanel 
-                      invoices={visibleInvoices}
-                      students={students}
-                      onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
-                      onAddInvoice={handleAddInvoice}
-                      globalSearchTerm={globalSearchQuery}
+                    <FactualUnavailablePanel
+                      title="Operações financeiras indisponíveis"
+                      detail="Não existe autoridade institucional para faturação, exportação, sincronização, entrega por email ou reconciliação neste ambiente. Nenhuma fatura, exportação ou comunicação externa foi criada."
                     />
                   )}
 
@@ -2744,11 +2741,9 @@ export default function App() {
                   )}
 
                   {activeTab === 'sheets' && (
-                    <GoogleSheetsCenter 
-                      students={students}
-                      setStudents={setStudents}
-                      invoices={invoices}
-                      theme={theme}
+                    <FactualUnavailablePanel
+                      title="Integração Google Sheets indisponível"
+                      detail="Não existe comando Nexus autorizado para importar, exportar ou sincronizar dados com Google Sheets. Nenhum conector externo foi chamado e nenhum registo institucional foi alterado."
                     />
                   )}
 
