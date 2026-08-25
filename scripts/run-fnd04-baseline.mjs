@@ -9,6 +9,7 @@ const DEFAULT_TEST_FILES = [
   'tests/fnd04-mutation-readback-truth.test.ts',
   'tests/fnd04-dashboard-browser-truth.test.ts',
   'tests/fnd04-file-external-effect-truth.test.ts',
+  'tests/fnd04-authorization-refresh-truth.test.ts',
   'tests/institutional-context.test.ts',
   'tests/person-resolution.test.ts',
   'tests/person-resolution-access.test.ts',
