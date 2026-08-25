@@ -39,7 +39,7 @@ import {
   Network
 } from 'lucide-react';
 import { SchoolTask, TaskPriority, TaskState, UserRole, TaskHistoryEvent, TaskAttachment } from '../types';
-import { supabaseConfigured, upsertLiveTask, deleteLiveTask, getDeletedLiveTasks, restoreLiveTask, getDependencyImpact, getHeaders } from '../supabaseClient';
+import { supabaseConfigured, createLiveTaskAndReadBack, updateLiveTaskAndReadBack, upsertLiveTask, deleteLiveTask, getDeletedLiveTasks, restoreLiveTask, getDependencyImpact, getLiveTaskById, getHeaders } from '../supabaseClient';
 import TasksOperationalDashboard from './TasksOperationalDashboard';
 
 interface TasksCenterProps {
@@ -55,6 +55,7 @@ const DEPARTMENTS = ['Secretaria', 'Financeiro', 'Professor', 'Direção', 'Admi
 
 export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }: TasksCenterProps) {
   const isLight = theme === 'light';
+  const [isTaskMutationPending, setIsTaskMutationPending] = useState(false);
 
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
@@ -105,18 +106,23 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
   };
 
   const handleRestoreTask = async (id: string) => {
+    if (isTaskMutationPending) return;
+    setIsTaskMutationPending(true);
     try {
       const result = await restoreLiveTask(id);
       if (result.success) {
+        const restored = await getLiveTaskById(id);
         setTasks(prev => {
           if (prev.some(t => t.id === id)) return prev;
-          return [...prev, result.task];
+          return [...prev, restored];
         });
         setArchivedTasksList(prev => prev.filter(t => t.id !== id));
         alert('Tarefa restaurada com sucesso!');
       }
     } catch (err: any) {
       alert(`Erro ao restaurar tarefa: ${err.message}`);
+    } finally {
+      setIsTaskMutationPending(false);
     }
   };
 
@@ -369,9 +375,9 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
   }, [tasks, searchTerm, filterDept, filterPriority, filterStatus, filterAssigned, filterDeadline, filterUrgentOnly, currentUserName, activeOperationalTab, currentDept]);
 
   // Action helper: Update task fields and history log
-  const updateTask = (id: string, updates: Partial<SchoolTask>, historyAction?: string) => {
+  const updateTask = async (id: string, updates: Partial<SchoolTask>, historyAction?: string) => {
     const currentTask = tasks.find(t => t.id === id);
-    if (!currentTask) return;
+    if (!currentTask || isTaskMutationPending) return;
 
     // Check for blocking dependencies before changing status to active/completed states (Erro 2)
     if (updates.status && ['Em Curso', 'Concluída', 'Aguardando Aprovação'].includes(updates.status)) {
@@ -416,24 +422,22 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
       updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
     };
 
-    setTasks(prev => prev.map(t => t.id === id ? updated : t));
-
-    if (selectedTask?.id === id) {
-      setSelectedTask(updated);
-    }
-
-    if (supabaseConfigured) {
-      upsertLiveTask(updated).catch(err => {
-        console.error("Error updating task on Postgres:", err);
-        alert(`Erro ao atualizar a tarefa: ${err.message}`);
-      });
+    setIsTaskMutationPending(true);
+    try {
+      const authoritativeTask = await updateLiveTaskAndReadBack(id, updated);
+      setTasks(prev => prev.map(t => t.id === id ? authoritativeTask : t));
+      if (selectedTask?.id === id) setSelectedTask(authoritativeTask);
+    } catch (err: any) {
+      alert(`Erro ao atualizar a tarefa: ${err.message}`);
+    } finally {
+      setIsTaskMutationPending(false);
     }
   };
 
   // Action: Create Task manually
-  const handleCreateTask = (e: React.FormEvent) => {
+  const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim() || isTaskMutationPending) return;
 
     const newTaskID = `TSK-${Math.floor(100 + Math.random() * 899)}`;
     const newTask: SchoolTask = {
@@ -461,14 +465,16 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
       updatedAt: new Date().toISOString().replace('T', ' ').substring(0, 16)
     };
 
-    setTasks(prev => [newTask, ...prev]);
-    setIsCreateModalOpen(false);
-
-    if (supabaseConfigured) {
-      upsertLiveTask(newTask).catch(err => {
-        console.error("Error creating task on Postgres:", err);
-        alert(`Erro ao criar a tarefa: ${err.message}`);
-      });
+    setIsTaskMutationPending(true);
+    try {
+      const authoritativeTask = await createLiveTaskAndReadBack(newTask);
+      setTasks(prev => [authoritativeTask, ...prev]);
+      setIsCreateModalOpen(false);
+    } catch (err: any) {
+      alert(`Erro ao criar a tarefa: ${err.message}`);
+      return;
+    } finally {
+      setIsTaskMutationPending(false);
     }
 
     // Reset Form
@@ -482,24 +488,22 @@ export default function TasksCenter({ tasks, setTasks, currentUserRole, theme }:
 
   // Action: Delete Task
   const handleDeleteTask = async (id: string) => {
-    if (confirm('Tem a certeza que deseja eliminar esta tarefa operacional permanentemente?')) {
+    if (!isTaskMutationPending && confirm('Tem a certeza que deseja eliminar esta tarefa operacional permanentemente?')) {
       const taskToRestore = tasks.find(t => t.id === id);
       const previousTasks = [...tasks];
-
-      // Optimistically remove from state
-      setTasks(prev => prev.filter(t => t.id !== id));
-      setSelectedTask(null);
-
-      if (supabaseConfigured) {
-        try {
-          await deleteLiveTask(id);
-        } catch (err: any) {
-          console.error("Error deleting task on Postgres:", err);
-          // Restore previous state since deletion failed
-          setTasks(previousTasks);
-          if (taskToRestore) setSelectedTask(taskToRestore);
-          alert(`Erro ao eliminar a tarefa:\n${err.message}`);
-        }
+      setIsTaskMutationPending(true);
+      try {
+        await deleteLiveTask(id);
+        const archived = await getDeletedLiveTasks();
+        if (!archived.some(task => task.id === id)) throw new Error('A tarefa não foi confirmada no arquivo institucional.');
+        setTasks(prev => prev.filter(t => t.id !== id));
+        setSelectedTask(null);
+      } catch (err: any) {
+        setTasks(previousTasks);
+        if (taskToRestore) setSelectedTask(taskToRestore);
+        alert(`Erro ao eliminar a tarefa:\n${err.message}`);
+      } finally {
+        setIsTaskMutationPending(false);
       }
     }
   };

@@ -2831,14 +2831,9 @@ export default function App() {
                   )}
 
                   {activeTab === 'communications' && (
-                    <CommunicationCenter 
-                      announcements={announcements}
-                      messages={messages}
-                      currentUserRole={currentUserRole}
-                      onAddAnnouncement={handleAddAnnouncement}
-                      onAddMessage={handleAddMessage}
-                      notificationPresets={notificationPresets}
-                      onUpdateNotificationPresets={handleUpdateNotificationPresets}
+                    <FactualUnavailablePanel
+                      title="Comunicações institucionais indisponíveis"
+                      detail="Este espaço não possui comando institucional autorizado nem confirmação de entrega, agendamento ou leitura. Nenhuma mensagem foi enviada, agendada ou registada como entregue."
                     />
                   )}
 
