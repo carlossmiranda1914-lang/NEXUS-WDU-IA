@@ -13,27 +13,30 @@ assert.ok(chatRoute.indexOf('CANONICAL_AI_AUTHORITY_REQUIRED') < chatRoute.index
 assert.ok(chatRoute.indexOf('CANONICAL_AI_AUTHORITY_REQUIRED') < server.indexOf('generateContentWithRetry', chatRouteStart), 'the AI fence must precede an external AI call');
 
 const assistantFetches = assistant.match(/fetch\('\/api\/chat'/g) ?? [];
-assert.equal(assistantFetches.length, 1, 'the operational copilot has one reachable chat caller');
+assert.equal(assistantFetches.length, 0, 'the Copilot must not request the fenced route');
 assert.match(assistant, /const handleSendMessage = async/);
-assert.match(assistant, /body: JSON\.stringify\(\{ prompt: text \}\)/, 'the client only supplies a prompt');
-assert.match(assistant, /headers: await getHeaders\(\)/, 'the request uses identity headers, not a client tenant field');
-assert.doesNotMatch(assistant, /body: JSON\.stringify\(\{[^}]*institution/i, 'the copilot request cannot select an institution in its body');
-assert.match(assistant, /if \(!response\.ok\) \{\s*throw new Error\('Falha no servidor'\)/);
-assert.match(assistant, /apresento-lhe uma resposta direta do meu motor analítico local/, 'the 503 catch currently displays a simulated analytical response');
-assert.match(assistant, /finally \{\s*setIsLoading\(false\)/, 'the copilot loading state ends after the fenced request');
+assert.match(assistant, /AI_UNAVAILABLE_MESSAGE/);
+assert.doesNotMatch(assistant, /setIsLoading\(true\)/, 'the Copilot must not start loading for an unavailable operation');
+assert.doesNotMatch(assistant, /motor analítico local/, 'the Copilot must not insert a fictional analytical result');
+assert.doesNotMatch(assistant, /GEMINI_API_KEY/, 'the unavailable UX must not expose secret configuration language');
 
 const automationFetches = automations.match(/fetch\('\/api\/chat'/g) ?? [];
-assert.equal(automationFetches.length, 4, 'four simulation actions issue best-effort chat log calls');
+assert.equal(automationFetches.length, 4, 'legacy request code remains unreachable and is guarded by the factual UI boundary');
 for (const handler of [
   'handleExecuteAbsenceSimulation',
   'handleExecutePaymentSimulation',
   'handleExecuteMatriculaSimulation',
   'handleExecuteOcrSimulation',
 ]) {
-  assert.match(automations, new RegExp(`const ${handler} =`), `${handler} must remain explicitly characterized`);
+  const start = automations.indexOf(`const ${handler} =`);
+  assert.ok(start >= 0, `${handler} must remain explicitly characterized`);
+  const body = automations.slice(start, start + 500);
+  assert.match(body, /setUnavailableMessage\(/, `${handler} must display an unavailable state`);
+  assert.ok(body.indexOf('return;') < body.indexOf('setIsSimulatingRun'), `${handler} must return before local simulation state changes`);
+  assert.doesNotMatch(body, /fetch\('\/api\/chat'/, `${handler} must not reach a request before its early return`);
 }
-assert.match(automations, /fetch\('\/api\/chat',[\s\S]{0,300}\.catch\(/, 'simulation chat failures are currently ignored');
-assert.match(automations, /status: 'success'/, 'simulation state can display success independently of the fenced chat request');
-assert.doesNotMatch(automations, /JSON\.stringify\(\{[^}]*institution/i, 'simulation chat bodies cannot select an institution');
+assert.match(automations, /role="status"/, 'the unavailable state must be exposed accessibly');
+assert.match(automations, /useState<AutomationLog\[\]>\(\[\]\)/, 'there must be no pre-seeded operational success log');
+assert.match(automations, /useState<SimulatedNotification \| null>\(null\)/, 'there must be no pre-seeded delivery preview');
 
-console.log('FND-04 PT-23 AI presentation characterization: PASS (five mounted callers reach the fail-closed route; current client presentation remains misleading and is locked for CP2 correction).');
+console.log('FND-04 PT-23 AI presentation characterization: PASS (the backend remains fail-closed and all five UI callers now stop before request, simulation, success preview or institutional state change).');
