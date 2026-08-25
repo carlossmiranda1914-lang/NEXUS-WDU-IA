@@ -157,3 +157,11 @@ Generic Documents and signatures remain unavailable behind their existing fences
 The RED defect was client role simulation: it changed presentation role before the backend's fenced `/api/profile/role` rejected it. CP6 removes that local transition and request. The App begins non-privileged until authenticated `/api/profile` resolves the server-derived context; logout, suspended profile and profile/context failure clear institutional presentation data, tasks, notifications, status and role without clearing device-local theme.
 
 Backend authority remains unchanged: `requireAuth` resolves identity → active Membership → InstitutionalContext and fails closed for absent, ambiguous or foreign membership; `multiTenantMiddleware` rejects client institution mismatch. The CP6 contract plus InstitutionalContext, tenant, Tasks read-back and fence regressions pass. CP7 is next; FND-04 is not DONE.
+
+## CP7 aggregate validation and evidence closure — PASS
+
+The final matrix review closes all 27 claims with a classification, mounted caller/command, authority, persistence/external-effect or no-effect proof, implemented treatment, executable evidence and rollback/removal gate. No claim is `UNKNOWN`. The CP7 AC matrix in `docs/audit/FND-04_PRODUCT_TRUTH_MATRIX.md` maps AC01–AC10 to the relevant production authority boundary, focused contract, checkpoint and commit.
+
+CP7 is documentation-only. It reuses the CP6 post-production validation: `npm run test:fnd04` PASS with 26 selected contracts, lint PASS, build PASS and `git diff --check` PASS. CP7 additionally confirms a clean current diff, no secret pattern introduced by the FND-04 diff, no temporary artifact and a bounded final commit scope. FND-04 is DONE; the Foundation is not. The next authorized action is FND-05 DoR/decision.
+
+Residual risk is explicit, not closed: tracked credential-bearing development configuration and Firebase browser configuration predate FND-04 and were not modified by it. FND-06 must remove the tracked credential-bearing configuration, rotate potentially active credentials, validate Firebase restrictions/rules and add CI secret detection.

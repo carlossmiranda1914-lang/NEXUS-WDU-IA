@@ -1,6 +1,6 @@
 # FND-04 — Product Truth Matrix
 
-**Status:** DoR complete — READY for explicitly authorised implementation.
+**Status:** DONE — CP0–CP7 PASS; the bounded 27-claim Product Truth contract is closed.
 **Baseline:** `944e2bc7df9ebe54a3a22d83f08c05159a05f50c` (FND-01 through FND-03 DONE).
 **Method:** visible claim → effective caller → command/API → authority/effect → factual read-back → decision. Static references alone do not establish a path as dead.
 
@@ -48,9 +48,9 @@ This is the bounded P0/P1 inventory of user-visible operational claims surviving
 | FALSE_AVAILABILITY | 7 | Backend is fenced/unavailable but the UI can still present an actionable capability. |
 | STALE_OR_LOCAL_ONLY | 2 | Browser/client aggregation is not institutional authority. |
 | PROTOTYPE | 4 | Retain only with unmistakable prototype isolation. |
-| UNKNOWN | 0 | No P0/P1 row remains unclassified. CP1 characterizes PT-23 presentation before deciding its UI treatment. |
+| UNKNOWN | 0 | No P0/P1 row remains unclassified or factually unresolved. |
 
-No row is classified dead solely from a static reference. CP1 executed a focused mounted-caller/fence characterization for PT-23. No PT-23 caller can cause a persistent institutional authority effect, but all five require CP2 presentation correction because their current UI can imply one.
+No row is classified dead solely from a static reference. CP1 executed a focused mounted-caller/fence characterization for PT-23. CP2 removed the operational presentation of all five callers; no caller can cause a persistent institutional authority effect or present one as completed.
 
 ## PT-23 CP1 caller matrix
 
@@ -125,6 +125,25 @@ CP5 distinguishes metadata evidence from physical file bytes: the current Enroll
 | PT-27 | Theme is device-local preference only | Theme remains tenant-neutral and is not cleared with institutional presentation state | Future preference contract if institutionalized |
 
 `requireAuth` resolves InstitutionalContext from Firebase identity plus active Membership, returns factual 403/409 outcomes for missing/ambiguous/foreign membership, and `multiTenantMiddleware` rejects a requested institution that differs from the resolved context. CP6 does not make frontend visibility a security control.
+
+## CP7 aggregate validation and evidence closure — PASS
+
+The table above is the final review of PT-01–PT-27: every row retains its factual classification, visible claim, effective caller/command, authority, effect or no-effect proof, treatment, executable evidence and removal gate. There are 27 represented claims and zero `UNKNOWN`; classification records the original risk category, not an unresolved product assertion. No `FALSE_SUCCESS`, `FALSE_AVAILABILITY` or `STALE_OR_LOCAL_ONLY` row remains operationally presented as institutional truth, and no retained prototype is mounted as institutional authority.
+
+| Acceptance criterion | Claims / production authority boundary | Focused evidence | Checkpoint / commit |
+|---|---|---|---|
+| AC01 — inventory | PT-01–PT-27 in this matrix | matrix rescan; `scripts/run-fnd04-baseline.mjs` selection | CP0–CP7; `aacb11b`–`0c53f3e` |
+| AC02 — no false success | PT-01, PT-03, PT-04–PT-25 where fenced/unavailable | `tests/fnd04-mutation-readback-truth.test.ts`, `tests/fnd04-factual-unavailable-ui.test.ts` | CP2/CP3; `4b482cd`, `f6e1607`, `458187d`, `1eb74e2` |
+| AC03 — persistence truth | PT-17, PT-20, PT-21, PT-26, PT-27; `src/App.tsx` | `tests/fnd04-dashboard-browser-truth.test.ts`, `tests/fnd04-authorization-refresh-truth.test.ts` | CP4/CP6; `5e65559`, `4585eff`, `e777d4c` |
+| AC04 — evidence truth | PT-02, PT-08–PT-10; enrollment-document controller/checklist and unavailable routes | `tests/fnd04-file-external-effect-truth.test.ts` | CP5; `b03333d`, `a550426` |
+| AC05 — prototype isolation | PT-11, PT-16, PT-19, PT-23, PT-26; `src/App.tsx`, AI/automation components | `tests/fnd04-factual-unavailable-ui.test.ts`, `tests/fnd04-ai-presentation-characterization.test.ts` | CP1/CP2; `193b162`, `f6e1607` |
+| AC06 — search and KPI truth | PT-13, PT-20, PT-21; `src/App.tsx` factual-unavailable boundary | dashboard/browser contract | CP4; `5e65559`, `4585eff` |
+| AC07 — integration truth | PT-14, PT-18, PT-19, PT-22, PT-23 | file/external-effect and factual-unavailable contracts | CP2/CP5; `f6e1607`, `a550426` |
+| AC08 — scope discipline | PT-01–PT-27, canonical path preservation and deferred dependencies | final diff/scope review; canonical regressions in `test:fnd04` | CP0–CP7 |
+| AC09 — authority truth | PT-01, PT-03, PT-05, PT-07, PT-15, PT-20, PT-22, PT-24, PT-27; `src/middleware/auth.ts`, `src/middleware/multi-tenant.ts`, `server.ts` | `tests/fnd04-authorization-refresh-truth.test.ts`, institutional/tenant contracts | CP6; `b80d9ff`, `e777d4c` |
+| AC10 — closure quality | aggregate runner and CP0–CP6 scope | CP6 recorded `test:fnd04` (26 contracts), lint, build and diff PASS; CP7 documentation-only diff/secret/temporary/scope gates PASS | CP6/CP7; `0c53f3e` |
+
+Canonical paths remain preserved: Firebase identity → Person → Membership → InstitutionalContext, Enrollment/StudentProfile, Enrollment Documents metadata/state, modular School Tasks with authoritative read-back, tenant isolation, migration authority and FND-02/FND-03 fences. Enrollment Documents remains a metadata reference/state contract, not physical Nexus document storage. Dashboard/Search await authorized projections; IAM/capability, external connectors and physical storage remain future dependencies. The tracked credential-bearing development configuration and Firebase browser configuration predate FND-04 and were neither introduced nor modified here. FND-06 must remove tracked credential-bearing configuration, rotate potentially active credentials, validate Firebase restrictions/rules and add CI secret detection.
 
 ## Implementation invariants
 

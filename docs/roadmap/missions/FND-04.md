@@ -1,6 +1,6 @@
 # FND-04 — Product Truth Cleanup
 
-**State:** IMPLEMENTING — CP0 PASS. FND-03 is DONE and the DoR evidence is recorded at baseline `944e2bc7df9ebe54a3a22d83f08c05159a05f50c`.
+**State:** DONE — CP0–CP7 PASS. FND-03 is DONE and the Product Truth evidence is closed from baseline `944e2bc7df9ebe54a3a22d83f08c05159a05f50c`.
 
 ## Objective
 Ensure that every user-visible P0/P1 operational capability truthfully represents its real persistence, integration, authority and execution state; mocks, simulations, hardcoded institutional data and client-only state must never present themselves as completed institutional operations.
@@ -59,6 +59,8 @@ Before changing a surface:
 - **AC06 Search truth:** search/results presented as institutional facts are backed by real authorized sources or explicitly marked non-operational.
 - **AC07 Integration truth:** simulated sync/connectivity cannot be presented as a completed external integration.
 - **AC08 Scope discipline:** desired but non-operational capabilities are deferred to a proper future mission rather than implemented opportunistically.
+- **AC09 Authority truth:** UI role, availability, error and refresh never override backend authorization, InstitutionalContext or FND-02/FND-03 fences.
+- **AC10 Closure quality:** evidence is repeatable, rollback/removal gates are recorded, and static/build/CI checks pass.
 
 ## Required tests / evidence
 - focused tests for critical failure-to-success transitions;
@@ -117,8 +119,14 @@ Enrollment Documents retains only its proven metadata evidence path: authorized 
 
 Client role simulation no longer changes presentation role or calls the fenced role API. Before the backend profile/context resolves, UI is non-privileged; logout, suspension and context/profile failure clear institutional presentation state while preserving device-local theme. Backend Membership/InstitutionalContext and tenant middleware remain the authorization authority, and fenced actions remain unavailable after a presentation role change. CP7 is next; FND-04 remains IMPLEMENTING.
 
+## CP7 aggregate validation and evidence closure — PASS
+
+All PT-01–PT-27 rows were reviewed once against their mounted caller, effective authority, effect/read-back or no-effect proof and reactivation/removal gate. There are zero `UNKNOWN` rows. FND-04 closes AC01–AC10: unavailable screens do not mount their operational handlers; local/browser state does not present institutional truth; role simulation cannot grant authority; Dashboard/Search await authorized projections; Enrollment Documents is metadata/state only rather than physical storage; and canonical Enrollment, Enrollment Documents and modular Tasks remain preserved.
+
+CP6 is the final executable production checkpoint: `npm run test:fnd04` passed 26 contracts, lint/build/diff passed. CP7 changes documentation only, so it reuses those executable results and records a clean diff, FND-04-diff secret scan, temporary-artifact scan and final scope review. Tracked credential-bearing development configuration and Firebase browser configuration predate FND-04 and remain an explicit FND-06 gate: remove tracked credential-bearing configuration, rotate potentially active credentials, validate Firebase restrictions/rules and add CI secret detection. FND-05 DoR/decision is the next authorized action.
+
 ## DONE
-FND-04 is DONE only when AC01–AC08 are PASS, no known P0/P1 operational surface claims success or institutional evidence without a real backing fact, and every retained prototype/demo is visibly and architecturally separated from production authority.
+FND-04 is DONE: AC01–AC10 pass, no known P0/P1 operational surface claims success or institutional evidence without a real backing fact, and every retained prototype/demo is visibly and architecturally separated from production authority. This does not mark the complete Foundation DONE.
 
 ## Stop rules
 Stop and return to BLOCKED/PREPARATION if:
