@@ -34,3 +34,7 @@ Future RED/GREEN evidence covers committed success, rejection and rollback, acto
 ## CP1 complete audit surface characterization — PASS
 
 `tests/fnd05-audit-surface-characterization.test.ts` maps AT-01–AT-12 to their actual source boundaries without invoking server runtime or persistent services. It asserts only present AS-IS facts: event insertion markers, task history tenant parameter, realtime refresh-without-task-data, route-pattern-only request details, server-side task context, fences, unavailable presentation, auth denial source and legacy log endpoint. The matrix records unproven rollback, durable rejection audit, scoped `/api/logs`, retention, role/redaction, correlation and connector/AI guarantees as CP2–CP6 work. CP2 is next.
+
+## CP2 actor and institutional context — PASS
+
+`tests/fnd05-audit-actor-attribution.test.ts` proves that canonical Enrollment Documents, lifecycle and process event emitters use `context.personId`/`context.institutionId`, while `requireAuth` derives context from Firebase UID and active Membership and fails closed for foreign/ambiguous selection. It also proves client document inputs contain no attribution fields. This focused contract does not claim system/unauthenticated actor semantics or CP3 outcome behavior. CP3 is next.

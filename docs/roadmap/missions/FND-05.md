@@ -84,6 +84,10 @@ The bounded inventory and executable CP0–CP7 plan are in `docs/audit/FND-05_AU
 
 All AT-01–AT-12 surfaces now have an effective producer/consumer classification and one CP2–CP6 owner. The focused AS-IS contract verifies source markers for Enrollment events, Tasks history, realtime refresh, observability privacy boundary, institutional context, fenced producers, unavailable prototype presentation and legacy audit retrieval. CP2 is next; no audit behavior was corrected.
 
+## CP2 actor and institutional context — PASS
+
+The canonical Enrollment event producers attribute actor and institution exclusively from resolved server InstitutionalContext. Firebase UID resolves through active Membership; selected multi-membership context supplies role/institution; client actor, person, tenant and institution fields are absent from document audit inputs and cannot override attribution. Missing or foreign Membership fails closed. No new actor model or audit persistence was introduced. CP3 is next.
+
 ## Stop rules
 Stop and return to BLOCKED/PREPARATION if:
 - the real actor cannot be determined from the authoritative command path;
