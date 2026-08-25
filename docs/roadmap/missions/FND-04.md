@@ -109,6 +109,10 @@ Canonical School Tasks now display a result only after its command succeeds and 
 
 The Dashboard and GlobalSearch had no authorized server projection with a defined calculation, freshness and Membership-derived tenant scope. They are now factual unavailable before their client aggregation/indexing runs; no unsupported zero, metric, trend, sync state, result count or direct-ID result is shown. Operational `nexus_*` browser keys are neither restored nor written and existing values are left untouched; the device-local theme preference is preserved. CP5 is next; FND-04 remains IMPLEMENTING.
 
+## CP5 files, imports, exports and external effects — PASS
+
+Enrollment Documents retains only its proven metadata evidence path: authorized reference/status transitions plus scoped read-back. It does not claim physical upload, object storage or download. Generic Documents, signatures, Finance external effects and Google Sheets import/export are unavailable before their legacy handlers mount, so no file, connector request, delivery or local import result is fabricated. CP6 is next; FND-04 remains IMPLEMENTING.
+
 ## DONE
 FND-04 is DONE only when AC01–AC08 are PASS, no known P0/P1 operational surface claims success or institutional evidence without a real backing fact, and every retained prototype/demo is visibly and architecturally separated from production authority.
 

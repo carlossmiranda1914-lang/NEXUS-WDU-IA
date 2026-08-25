@@ -145,3 +145,9 @@ The mounted Communications surface had no authorized send/schedule/delivery comm
 RED found that the mounted Dashboard and GlobalSearch composed browser-held/partial props and presentation projections without an authorized tenant-scoped KPI or search source. CP4 makes both factual unavailable at the mounted App boundary, so no fabricated zero, number, trend, search count, direct-ID result or stale tenant result is rendered. It intentionally creates no KPI/search endpoint or projection.
 
 `nexus_*` operational browser keys are no longer read, written or cleared. Existing browser data is preserved but cannot become a verified institutional record on reload; `nexus_theme` remains a tenant-neutral device preference. The focused contract proves these boundaries plus CP2/CP3 regressions. FND-06 must remove tracked literal development credential/configuration, rotate it if potentially active, validate Firebase key restrictions/rules and add CI secret detection. CP5 is next; FND-04 is not DONE.
+
+## CP5 files, imports, exports and external effects — PASS
+
+The canonical Enrollment Documents path was characterized as metadata/policy only: InstitutionalContext scopes each list/transition, document ownership is checked through enrollment/institution predicates, transitions are audited and the UI rereads the checklist. It has no multipart parser, physical object store, byte retrieval or download authority. The UI already states this accurately: an evidence reference is not a file sent to or stored by Nexus.
+
+Generic Documents and signatures remain unavailable behind their existing fences. Financial export/sync/email and Google Sheets import/export are now unavailable before their legacy external/client handlers mount, so they cannot create local success, call an external service or alter a Nexus record. CP5 introduces no storage, signature, Finance or Google connector domain. CP6 is next; FND-04 is not DONE.

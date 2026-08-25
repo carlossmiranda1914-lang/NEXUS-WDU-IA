@@ -103,6 +103,18 @@ CP2 does not alter the FND-02/FND-03 backend fences, canonical Enrollment/Studen
 
 The CP4 UI has no loading/zero/empty ambiguity because unsupported projections are unavailable rather than rendered. A future canonical projection must return server-scoped data and explicitly distinguish loading, error, empty and zero before any dashboard/search display is reintroduced.
 
+## CP5 files, imports, exports and external effects — PASS
+
+| Claim | Surface / action | Actual authority and effect | CP5 treatment / proof | Dependency / rollback |
+|---|---|---|---|---|
+| PT-02 | Enrollment checklist records a submitted evidence reference | Server-derived InstitutionalContext, enrollment/document institution predicates, metadata transaction, audit event and scoped list read-back. There is no multipart upload, object storage or authorized byte download in this contract | UI explicitly states that evidence reference is not a Nexus file upload/storage. Metadata state remains usable and is reread after transition; no physical archival/download claim is made | Physical storage/download provider contract; revert wording only, not metadata/policy authority |
+| PT-08, PT-09 | Generic document create/upload/download/export | FND-03 generic routes return `CANONICAL_DOCUMENT_AUTHORITY_REQUIRED` before storage/metadata mutation; generic component is not mounted | Factual unavailable panel remains dominant; no DataURL, path or local preview is institutional archival | General Document storage/authorization domain |
+| PT-10 | Signature archive/send/certificate | No signature/provider/archive/delivery authority; legacy component is not mounted | Factual unavailable panel; no signed, archived or sent result | Signature/evidence/provider domain |
+| PT-14 | Financial export, sync or email delivery | No canonical Finance/connector/delivery authority | Financial screen is factual unavailable before legacy export/sync handlers mount | Finance Core reporting/export and connector contract |
+| PT-19 | Google Sheets import/export/synchronization | No Nexus-owned connector, tenant audit, import command or Nexus read-back | Google Sheets screen is factual unavailable before OAuth/Google handlers mount; no request or local append occurs | Separate OAuth plus tenant-audited connector/import command |
+
+CP5 distinguishes metadata evidence from physical file bytes: the current Enrollment Documents contract has only scoped metadata/read-back and must never be described as a physical upload, archive or download. No PostgreSQL/storage test ran because CP5 did not alter a persisted path and the approved disposable database target is not configured.
+
 ## Implementation invariants
 
 - Backend authorization, InstitutionalContext and FND-02/FND-03 fences stay authoritative.
