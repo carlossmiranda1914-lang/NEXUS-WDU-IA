@@ -1,6 +1,6 @@
 # FND-06 — CI vNext Gate
 
-**State:** PREPARATION. Implementation is not authorized until FND-05 is DONE and this Mission Pack passes DoR.
+**State:** READY. FND-05 is DONE; implementation still requires separate explicit authorization.
 
 ## Objective
 Make remote CI enforce the actual foundation invariants that all later Nexus domains depend on, with identifiable failures and no documented PASS for suites that did not run.
@@ -81,3 +81,7 @@ Stop and return to BLOCKED/PREPARATION if:
 - making CI green would require weakening/removing a critical regression;
 - CI requires production/shared data or unsafe secrets;
 - the blocker belongs to an unfinished FND-01–05 implementation rather than CI configuration.
+
+## Definition of Ready
+
+`docs/audit/FND-06_CI_GATE_MATRIX.md` records current enforced, partial and local-only Foundation gates. `docs/roadmap/missions/FND-06_DOR_EVIDENCE.md` locks CP0–CP7, isolated PostgreSQL CI, secret/configuration remediation, stable required-check evidence and rollback. No workflow/settings/credential change occurred in preparation.
