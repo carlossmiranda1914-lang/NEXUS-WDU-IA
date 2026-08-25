@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 
 const DEFAULT_TEST_FILES = [
   'tests/fnd04-baseline-runner.test.mjs',
+  'tests/fnd04-ai-presentation-characterization.test.ts',
   'tests/institutional-context.test.ts',
   'tests/person-resolution.test.ts',
   'tests/person-resolution-access.test.ts',
