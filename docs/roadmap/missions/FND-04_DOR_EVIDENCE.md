@@ -110,3 +110,18 @@ The aggregate validates its selected test list before starting, runs each with t
 **Known build warnings:** existing chunk-size warning for the main bundle; two existing `direct-eval` warnings in `server.ts` lines 98–99. Neither is changed by CP0.
 
 **Next action:** CP1 characterizes PT-23 read-only AI presentation and confirms the affected product-truth caller chains. FND-04 is not DONE.
+
+## CP1 PT-23 AI presentation characterization — PASS
+
+`tests/fnd04-ai-presentation-characterization.test.ts` characterizes five mounted `/api/chat` callers and the effective fence without invoking an external AI service. It proves the route returns `503 CANONICAL_AI_AUTHORITY_REQUIRED` before `db.select` or `generateContentWithRetry`; no tool, institutional query/mutation, audit-success/event or external effect is reachable. It also proves prompt-only bodies and Firebase identity headers: client-supplied tenant/institution/context does not select server authority.
+
+The current UI outcome is a CP2 defect, not a backend authority defect. `AIAssistant` ends loading but inserts fictional analytical findings after the 503; retry repeats the request. Four `AutomationsSection` simulations create local success logs/previews before firing an ignored best-effort request. They can therefore present delivery, OCR archive, access provisioning or institutional intelligence without an effect. CP2 must replace those operational claims with a factual unavailable state or visibly isolated prototype and must preserve the FND-03 fence.
+
+**Executed results:**
+
+- `node --import tsx tests/fnd04-ai-presentation-characterization.test.ts`: PASS;
+- `npm run test:fnd04`: PASS (21 selected contracts);
+- `npm run lint`: PASS;
+- `git diff --check`: PASS.
+
+No external AI service, database, persistent institutional record or temporary artifact was used. CP2 is next; FND-04 is not DONE.

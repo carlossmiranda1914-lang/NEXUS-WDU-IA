@@ -93,6 +93,10 @@ The DoR is executable because the product-truth matrix enumerates the bounded P0
 
 The selected non-PostgreSQL contracts preserve InstitutionalContext, Person resolution/access, Enrollment intake/API/UI flow, Enrollment Document service/policy, modular Tasks route authority, relevant FND-02 visible fences, FND-03 transitional/document/AI-background tenant fences and institution-resource ownership. They use synthetic fixtures only and perform no database reset, DDL or persistent institutional mutation. CP1 is next; no Product Truth UI, API or persistence change was made in CP0.
 
+## CP1 AI presentation characterization — PASS
+
+PT-23 is now closed as a factual `FALSE_SUCCESS` presentation finding. Five mounted callers reach the same FND-03 `/api/chat` 503 fence: the Copilot send/quick-action handler and four Automation simulation handlers. The fence occurs before institutional queries, tool execution, audit/event and external AI work. The current client behavior is not safe presentation: the Copilot inserts a fictional local analytical response after the 503, while Automation simulations create success logs/previews and ignore the rejected request. CP2 is locked to disable/hide the operational entries with a factual unavailable state; it must not reactivate AI or create an AI Gateway.
+
 ## DONE
 FND-04 is DONE only when AC01–AC08 are PASS, no known P0/P1 operational surface claims success or institutional evidence without a real backing fact, and every retained prototype/demo is visibly and architecturally separated from production authority.
 
