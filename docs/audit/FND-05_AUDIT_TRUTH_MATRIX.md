@@ -42,3 +42,7 @@ The existing disposable School Tasks CP4 contract proves create/update/delete/re
 ## CP5 retrieval, privacy and redaction — PASS
 
 AT-11 `/api/logs` lacked proven institutional audit-reader authority, tenant/read policy, bounded pagination and allowlisted response contract. It now returns `503 CANONICAL_AUDIT_AUTHORITY_REQUIRED` before query. AT-03/AT-05 canonical parent-resource histories remain their own scoped contracts; no generic audit reader replaces them. Historical data, retention, integrity and export claims remain untouched dependencies.
+
+## CP6 transitional producers — PASS
+
+AT-06 sends a tenant-scoped refresh reference only and is not durable audit. AT-07 emits final HTTP status plus route pattern without body/query payload. AT-08/09 fences remain pre-effect; AT-10 stays unavailable prototype presentation; AT-12 AI/background/connectors remain fenced without model, SQL, external or success-audit effect. Future replacement requires canonical system/connector authority and privacy contract.

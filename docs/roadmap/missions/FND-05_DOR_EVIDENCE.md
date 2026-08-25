@@ -50,3 +50,7 @@ With the same approved dotenv selection, `fnd01-cp4-school-tasks-postgres.test.m
 ## CP5 tenant-scoped retrieval, privacy and redaction — PASS
 
 `/api/logs` is fail-closed before database selection because its legacy reader-role, ownership, pagination and allowlisted projection contract was not proven. `tests/fnd05-audit-retrieval-privacy.test.ts` proves authentication remains present and the stable 503 fence precedes query. No historical row was changed; retention/export/redaction policy remains a dependency. CP6 is next.
+
+## CP6 transitional and asynchronous producers — PASS
+
+`tests/fnd05-transitional-audit-boundary.test.ts` proves the background and AI authority fences, route-pattern-only observability boundary and refresh-only realtime bridge. Existing FND-03/FND-04 fences retain no-effect treatment for AI, background and external connectors. No durable audit, system-actor, connector or external-effect claim is created. CP7 is next.

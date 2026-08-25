@@ -100,6 +100,10 @@ The existing School Tasks disposable PostgreSQL contract proves factual committe
 
 The legacy `/api/logs` reader lacked a proven canonical audit-reader authority and safe projection contract. It is now fenced before any query with `CANONICAL_AUDIT_AUTHORITY_REQUIRED`; no data is rewritten and no replacement client audit view exists. Canonical Enrollment/Documents/Tasks history paths remain preserved. CP6 is next.
 
+## CP6 transitional and asynchronous producers — PASS
+
+Realtime remains a tenant-scoped refresh channel, not durable audit history. Request observability records final status and route pattern rather than body/query payloads. Background/SLA and AI remain fenced before effect with their canonical unavailable codes; no connector, prompt, response, external delivery or institutional success evidence is introduced. CP7 is next.
+
 ## Stop rules
 Stop and return to BLOCKED/PREPARATION if:
 - the real actor cannot be determined from the authoritative command path;
