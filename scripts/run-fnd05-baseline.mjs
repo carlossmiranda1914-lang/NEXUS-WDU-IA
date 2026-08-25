@@ -7,6 +7,7 @@ const DEFAULT_TEST_FILES = [
   'tests/fnd05-audit-surface-characterization.test.ts',
   'tests/fnd05-audit-actor-attribution.test.ts',
   'tests/fnd05-audit-retrieval-privacy.test.ts',
+  'tests/fnd05-transitional-audit-boundary.test.ts',
   'tests/request-audit.test.ts',
   'tests/institutional-context.test.ts',
   'tests/realtime-bridge.test.ts',
