@@ -60,41 +60,15 @@ export default function AutomationsSection({ flows, onToggleFlow, onSimulateFlow
   }, []);
 
   // Detailed Log History
-  const [logs, setLogs] = useState<AutomationLog[]>([
-    { 
-      id: 'L-101', 
-      time: '09:30:15', 
-      flowTitle: 'Alerta Automático de Ausência Diária', 
-      trigger: 'Ausência do Aluno Registada', 
-      status: 'success', 
-      detail: 'Falta do aluno Bruno Medeiros captada pelo módulo da secretaria. WhatsApp emitido para a Encarregada (Sandra Medeiros: +351 912 345 678). Link de justificação anexado.',
-      elapsedMs: 340,
-      timeSavedMins: 15
-    },
-    { 
-      id: 'L-102', 
-      time: '10:00:22', 
-      flowTitle: 'Cobrança Preventiva de Tuition', 
-      trigger: 'Fatura Overdue Detetada', 
-      status: 'success', 
-      detail: 'Varredura automática localizou 3 faturas overdue. Notificações de cobrança e circulares geradas e enviadas por E-mail customizado.',
-      elapsedMs: 512,
-      timeSavedMins: 30
-    }
-  ]);
+  const [logs, setLogs] = useState<AutomationLog[]>([]);
 
   // Simulated Notification popup showcase state
-  const [activeNotification, setActiveNotification] = useState<SimulatedNotification | null>({
-    type: 'whatsapp',
-    recipient: 'Sandra Medeiros (+351 912 345 678)',
-    title: 'Aviso de Ausência: Bruno Medeiros',
-    body: 'Bom dia Sra. Sandra Medeiros. Informamos que o seu educando Bruno Medeiros não se encontra registado na chamada de presença letiva de hoje (15/06). Por favor responda carregando no link ou envie justificação em https://nexus.edu/j/FL401.',
-    timestamp: '09:30',
-  });
+  const [activeNotification, setActiveNotification] = useState<SimulatedNotification | null>(null);
 
   // State handles for the 4 interactive scenario simulators
   const [simulatorTab, setSimulatorTab] = useState<'absence' | 'payment' | 'matricula' | 'ocr'>('absence');
   const [isSimulatingRun, setIsSimulatingRun] = useState(false);
+  const [unavailableMessage, setUnavailableMessage] = useState<string | null>(null);
 
   // Absence simulator options
   const [absenceStudentId, setAbsenceStudentId] = useState('');
@@ -139,6 +113,8 @@ export default function AutomationsSection({ flows, onToggleFlow, onSimulateFlow
 
   // Simulation execution handlers
   const handleExecuteAbsenceSimulation = () => {
+    setUnavailableMessage('O envio automático de avisos está indisponível. Nenhuma mensagem foi enviada nem foram alterados dados.');
+    return;
     const student = studentsList.find(s => s.id === absenceStudentId);
     if (!student) return;
 
@@ -188,6 +164,8 @@ export default function AutomationsSection({ flows, onToggleFlow, onSimulateFlow
   };
 
   const handleExecutePaymentSimulation = () => {
+    setUnavailableMessage('A automação de cobrança está indisponível. Nenhum aviso foi enviado nem foram alterados dados.');
+    return;
     const invoice = invoicesList.find(i => i.id === paymentInvoiceId);
     if (!invoice) return;
 
@@ -240,6 +218,8 @@ export default function AutomationsSection({ flows, onToggleFlow, onSimulateFlow
   };
 
   const handleExecuteMatriculaSimulation = () => {
+    setUnavailableMessage('O provisionamento de acessos está indisponível. Nenhuma conta, credencial ou matrícula foi criada.');
+    return;
     if (!newMatriculaName.trim()) return;
 
     setIsSimulatingRun(true);
@@ -299,6 +279,8 @@ export default function AutomationsSection({ flows, onToggleFlow, onSimulateFlow
   };
 
   const handleExecuteOcrSimulation = () => {
+    setUnavailableMessage('O processamento OCR e arquivo institucional estão indisponíveis. Nenhum ficheiro foi enviado, analisado ou arquivado.');
+    return;
     const student = studentsList.find(s => s.id === ocrDocStudentId);
     if (!student) return;
 
@@ -414,6 +396,11 @@ export default function AutomationsSection({ flows, onToggleFlow, onSimulateFlow
 
   return (
     <div id="nexus_automations_engine" className="space-y-8 animate-fadeIn text-zinc-300">
+      {unavailableMessage && (
+        <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          {unavailableMessage}
+        </div>
+      )}
       
       {/* 1. Header & Live Indicator Telemetry */}
       <section className="flex flex-col lg:flex-row justify-between lg:items-end border-b border-zinc-800 pb-6 gap-6">

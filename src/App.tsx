@@ -70,6 +70,15 @@ const FinancialPanel = lazy(() => import('./components/FinancialPanel'));
 const CommunicationCenter = lazy(() => import('./components/CommunicationCenter'));
 const SystemConfig = lazy(() => import('./components/SystemConfig'));
 const AIAssistant = lazy(() => import('./components/AIAssistant'));
+
+function FactualUnavailablePanel({ title, detail }: { title: string; detail: string }) {
+  return (
+    <section role="status" className="mx-auto max-w-2xl rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6 text-zinc-100">
+      <h2 className="text-lg font-semibold text-amber-200">{title}</h2>
+      <p className="mt-2 text-sm text-zinc-300">{detail}</p>
+    </section>
+  );
+}
 const TeacherAI = lazy(() => import('./components/TeacherAI'));
 const SchoolDocuments = lazy(() => import('./components/SchoolDocuments'));
 const WorkflowsCentral = lazy(() => import('./components/WorkflowsCentral'));
@@ -2764,14 +2773,9 @@ export default function App() {
                   <>
                     {activeTab === 'dashboard' && (
                     currentUserRole === 'parent' ? (
-                      <ParentPortal 
-                        students={students}
-                        invoices={invoices}
-                        announcements={announcements}
-                        messages={messages}
-                        onUpdateStudent={handleUpdateStudent}
-                        onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
-                        theme={theme}
+                      <FactualUnavailablePanel
+                        title="Portal de encarregados indisponível"
+                        detail="Este portal ainda não possui uma ligação institucional autorizada aos registos, mensagens ou documentos. Nenhum dado foi submetido ou alterado."
                       />
                     ) : (
                       <Dashboard 
@@ -2801,16 +2805,9 @@ export default function App() {
                   {activeTab === 'teachers' && (
                     <>
                       {teachersSubTab === 'list' && (
-                        <TeachersList 
-                          teachers={teachers}
-                          currentUserRole={currentUserRole}
-                          onAddTeacher={handleAddTeacher}
-                          onUpdateTeacher={handleUpdateTeacher}
-                          onDeleteTeacher={handleDeleteTeacher}
-                          onSelectTeacherForChat={(tchName) => {
-                            setActiveTab('communications');
-                          }}
-                          globalSearchTerm={globalSearchQuery}
+                        <FactualUnavailablePanel
+                          title="Administração de docentes indisponível"
+                          detail="A gestão legada de docentes não está ligada a uma autoridade institucional autorizada. Nenhum registo foi criado, atualizado ou eliminado."
                         />
                       )}
                       
@@ -2846,23 +2843,16 @@ export default function App() {
                   )}
 
                   {activeTab === 'documents' && (
-                    <SchoolDocuments 
-                      documents={schoolDocs}
-                      onAddDocument={handleAddSchoolDocs}
-                      onUpdateDocument={handleUpdateSchoolDocs}
-                      onDeleteDocument={handleDeleteSchoolDocs}
-                      currentUserRole={currentUserRole}
+                    <FactualUnavailablePanel
+                      title="Arquivo documental genérico indisponível"
+                      detail="Este arquivo não possui uma autoridade institucional conjunta para metadata e armazenamento. Nenhum documento foi criado, alterado, descarregado ou eliminado. Os Documentos de Matrícula canónicos permanecem no fluxo de Matrículas."
                     />
                   )}
 
                   {activeTab === 'workflows' && (
-                    <WorkflowsCentral 
-                      students={visibleStudents}
-                      invoices={visibleInvoices}
-                      onAddStudent={handleAddStudent}
-                      onUpdateStudent={handleUpdateStudent}
-                      onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
-                      currentUserRole={currentUserRole}
+                    <FactualUnavailablePanel
+                      title="Automação e fluxos indisponíveis"
+                      detail="Os fluxos apresentados não estão ligados a uma autoridade institucional de execução. Nenhuma mensagem foi enviada, conta criada, pagamento alterado ou processo iniciado."
                     />
                   )}
 
@@ -2878,17 +2868,9 @@ export default function App() {
                   )}
 
                   {activeTab === 'signatures' && (
-                    <DigitalSignatureSystem
-                      currentUserRole={currentUserRole}
-                      currentUserName={firebaseUser?.displayName || firebaseUser?.email || 'Administrador'}
-                      currentUserEmail={firebaseUser?.email || 'admin@nexus.edu.pt'}
-                      students={visibleStudents}
-                      invoices={visibleInvoices}
-                      schoolDocuments={schoolDocs}
-                      signatures={signatures}
-                      onAddSignature={handleAddSignature}
-                      onUpdateSignature={handleUpdateSignature}
-                      onDeleteSignature={handleDeleteSignature}
+                    <FactualUnavailablePanel
+                      title="Assinaturas digitais indisponíveis"
+                      detail="Não existe uma autoridade institucional de assinatura, arquivo ou envio neste ambiente. Nenhuma assinatura, certificado ou pedido foi emitido."
                     />
                   )}
 

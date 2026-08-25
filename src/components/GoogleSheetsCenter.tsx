@@ -30,7 +30,7 @@ export default function GoogleSheetsCenter({
 }: GoogleSheetsCenterProps) {
   // Auth State
   const [googleUser, setGoogleUser] = useState<any>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(getCachedAccessToken());
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -580,6 +580,13 @@ export default function GoogleSheetsCenter({
 
   const filteredSheets = sheetsList.filter(file => 
     file.name.toLowerCase().includes(sheetsSearch.toLowerCase())
+  );
+
+  return (
+    <section id="google-sheets-center" role="status" className="w-full rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6 text-slate-100">
+      <h1 className="text-lg font-semibold">Integração Google Sheets indisponível</h1>
+      <p className="mt-2 text-sm text-slate-300">A exportação, importação e sincronização com Google Sheets não estão ligadas a uma autoridade institucional autorizada. Nenhum dado foi enviado, importado ou alterado.</p>
+    </section>
   );
 
   return (

@@ -14,12 +14,14 @@ interface AIAssistantProps {
   onRefreshData?: () => void;
 }
 
+const AI_UNAVAILABLE_MESSAGE = 'Funcionalidade temporariamente indisponível. O assistente institucional ainda não está ligado a uma autoridade de IA autorizada.';
+
 export default function AIAssistant({ students, teachers, invoices, onRefreshData }: AIAssistantProps) {
   const [messages, setMessages] = useState<{ id: string; role: 'user' | 'assistant'; content: string; timestamp?: string }[]>([
     {
       id: 'welcome-message',
       role: 'assistant',
-      content: 'Olá! Sou o **Nexus Copilot**, o seu funcionário digital inteligente integrado. \n\nTenho acesso para consulta em tempo real à **base de dados central**, aos **documentos escolares processados digitalmente** e aos **fluxos de processos automáticos**. \n\nDiferente de um assistente decorativo comum, eu consigo efetuar ações operacionais reais: pesquisar alunos com risco académico, auditar e conciliar pagamentos pendentes, catalogar documentos e até disparar processos de comunicação automática. \n\nO que gostaria de delegar à minha responsabilidade hoje?',
+      content: AI_UNAVAILABLE_MESSAGE,
       timestamp: new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -43,47 +45,10 @@ export default function AIAssistant({ students, teachers, invoices, onRefreshDat
     }
 
     const currentTimestamp = new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
-    setMessages(prev => [...prev, { id: `user-msg-${Date.now()}`, role: 'user', content: text, timestamp: currentTimestamp }]);
-    setIsLoading(true);
-
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: await getHeaders(),
-        body: JSON.stringify({ prompt: text })
-      });
-
-      if (!response.ok) {
-        throw new Error('Falha no servidor');
-      }
-
-      const data = await response.json();
-      setMessages(prev => [...prev, { 
-        id: `assistant-msg-${Date.now()}`,
-        role: 'assistant', 
-        content: data.reply,
-        timestamp: new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
-      }]);
-      
-      // Auto-trigger parent data refresh to keep frontend perfectly in sync with the agent's real DB writes!
-      if (onRefreshData) {
-        onRefreshData();
-      }
-
-    } catch (error) {
-      console.error('Error generating response:', error);
-      setMessages(prev => [
-        ...prev,
-        {
-          id: `assistant-err-${Date.now()}`,
-          role: 'assistant',
-          content: 'Desculpe, ocorreu uma perturbação temporária ao contactar o meu motor central de inteligência. Contudo, como sou um agente híbrido integrado, apresento-lhe uma resposta direta do meu motor analítico local:\n\n* **Aviso**: Chave `GEMINI_API_KEY` deve estar preenchida nos Secrets para pleno funcionamento.\n* **Faturas em atraso**: Identificadas faturas pendentes na base de dados local para alunos do 8º Ano.\n* **Auditoria concluída**: Sistema de dados está ativo e operável.',
-          timestamp: new Date().toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
-        }
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
+    setMessages(prev => [...prev,
+      { id: `user-msg-${Date.now()}`, role: 'user', content: text, timestamp: currentTimestamp },
+      { id: `assistant-unavailable-${Date.now()}`, role: 'assistant', content: AI_UNAVAILABLE_MESSAGE, timestamp: currentTimestamp },
+    ]);
   };
 
   const parseMarkdown = (text: string) => {
@@ -198,12 +163,12 @@ export default function AIAssistant({ students, teachers, invoices, onRefreshDat
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-semibold text-zinc-100">Agente Operacional Nexus</h1>
-              <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-mono font-medium">
-                SOU AGENTE REAL
+              <h1 className="text-sm font-semibold text-zinc-100">Assistente Nexus</h1>
+              <span className="inline-flex items-center gap-1 text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded font-mono font-medium">
+                INDISPONÍVEL
               </span>
             </div>
-            <p className="text-xs text-zinc-400">Funcionário Digital Inteligente da Escola • Conetado à Base de Dados Central</p>
+            <p className="text-xs text-zinc-400">Sem consulta, análise ou ações institucionais neste ambiente.</p>
           </div>
         </div>
 
