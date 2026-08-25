@@ -11,6 +11,7 @@ if (!base) throw new Error('quality-gate requires a valid committed-diff base.')
 const defaultGates = [
   { name: 'secret-scan', command: ['npm', 'run', 'test:secrets'] },
   { name: 'foundation', command: ['npm', 'run', 'test:foundation'] },
+  { name: 'postgres-foundation', command: ['npm', 'run', 'test:postgres-foundation'] },
   { name: 'committed-diff', command: ['npm', 'run', 'test:diff', '--', '--base', base] },
   { name: 'artifact-scan', command: ['npm', 'run', 'test:artifacts'] },
 ];
