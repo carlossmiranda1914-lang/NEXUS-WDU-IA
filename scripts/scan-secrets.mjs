@@ -17,6 +17,7 @@ const disposablePostgres = (file, value) => { try { const url = new URL(value); 
 for (const file of files) {
   const absolute = resolve(root, file);
   if (!absolute.startsWith(`${root}\\`) || !existsSync(absolute)) continue;
+  if (file === 'tests/secret-scanner.test.mjs') continue;
   const text = readFileSync(absolute, 'utf8');
   const add = rule => findings.push({ file: relative(root, absolute).replaceAll('\\', '/'), rule });
   if (/^\.env(?:$|\.)/i.test(file) && !/^\.env(?:\.test\.local)?\.example$/i.test(file)) add('tracked-env-file');

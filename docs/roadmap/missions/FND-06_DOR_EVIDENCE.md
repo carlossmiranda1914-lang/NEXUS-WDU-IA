@@ -1,6 +1,6 @@
 # FND-06 — Definition of Ready Evidence
 
-**State:** IMPLEMENTING — CP0/CP1 PASS. Preparation, CP0 and CP1 changed no workflow, secret, repository setting or production source.
+**State:** IMPLEMENTING — CP0/CP1 PASS; CP2 repository remediation PASS, external rotation BLOCKED. No history rewrite, external credential action, repository setting or production source change occurred.
 
 ## Locked checkpoints
 
@@ -25,3 +25,9 @@ Stop if a critical local-only invariant cannot become a deterministic remote gat
 ## CP1 evidence — PASS
 
 The executable CP1 characterization parses the package manifest, FND runner paths and current workflow. It proves the existing FND-01 aggregate absence, FND-02–FND-05 non-invocation, missing `main`, absent diff/secret gates, PostgreSQL presence and the excluded path classes. The canonical CG-01–CG-12 matrix assigns every non-enforced item to exactly one CP2–CP6 owner, with synthetic controlled-failure, rollback and remote completion evidence plans. CP2 is next; no workflow, credential, PostgreSQL CI or repository-setting change occurred.
+
+## CP2 evidence — repository remediation PASS; external rotation BLOCKED
+
+Tracked credential-bearing development example values were replaced with placeholders, while local secret files remain ignored. `npm run test:secrets` proves URL, private-key, tracked-env, clean, public Firebase and disposable PostgreSQL cases without echoing a synthetic sentinel, then scans tracked/staged files. The existing `quality-gate` invokes it with no additional permissions or secret environment. No private-key/service-account marker was found in the inspected current tree; Firebase client configuration remains classified as public browser configuration pending external restrictions/rules/IAM validation.
+
+Current-tree removal cannot erase any historical exposure. Rotation is blocked pending authorised external provider owners for potentially active database, connector/API and SMTP categories; required action is provider-side rotation/revocation, replacement in approved local/CI secret storage, and verification without disclosing values. History rewrite remains prohibited without separate authorization. CP3 can proceed independently after this blocker is recorded.

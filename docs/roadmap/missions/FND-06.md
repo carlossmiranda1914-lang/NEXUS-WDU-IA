@@ -1,6 +1,6 @@
 # FND-06 — CI vNext Gate
 
-**State:** IMPLEMENTING — CP0/CP1 PASS. FND-05 is DONE; workflow/settings changes still require separate explicit authorization.
+**State:** IMPLEMENTING — CP0/CP1 PASS; CP2 repository remediation PASS, external rotation BLOCKED. FND-05 is DONE.
 
 ## Objective
 Make remote CI enforce the actual foundation invariants that all later Nexus domains depend on, with identifiable failures and no documented PASS for suites that did not run.
@@ -84,4 +84,4 @@ Stop and return to BLOCKED/PREPARATION if:
 
 ## Definition of Ready
 
-`docs/audit/FND-06_CI_GATE_MATRIX.md` records complete current gate coverage, bypass paths, CP2–CP6 ownership, controlled-failure and remote-evidence plans. `docs/roadmap/missions/FND-06_DOR_EVIDENCE.md` locks CP0–CP7, isolated PostgreSQL CI, secret/configuration remediation, stable required-check evidence and rollback. CP0/CP1 established deterministic read-only characterization; no workflow/settings/credential change occurred.
+`docs/audit/FND-06_CI_GATE_MATRIX.md` records complete current gate coverage, bypass paths, CP2–CP6 ownership, controlled-failure and remote-evidence plans. CP2 removed tracked credential-bearing example values, added `test:secrets` to the existing quality gate and recorded a required external rotation decision. CP0/CP1 established deterministic read-only characterization; no history rewrite or external credential action occurred.
