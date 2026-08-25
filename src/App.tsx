@@ -403,37 +403,17 @@ export default function App() {
     }
   }, [theme]);
 
-  // Dynamic granular permissions state
-  const [rolePermissions, setRolePermissions] = useState<Record<UserRole, string[]>>(() => {
-    const saved = localStorage.getItem('nexus_role_permissions');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if ((parsed.admin && parsed.admin.includes('teacher_ai')) || (parsed.parent && parsed.parent.length > 1)) {
-          localStorage.setItem('nexus_role_permissions', JSON.stringify(DEFAULT_PERMISSIONS));
-          return DEFAULT_PERMISSIONS;
-        }
-        return parsed;
-      } catch (e) {
-        return DEFAULT_PERMISSIONS;
-      }
-    }
-    return DEFAULT_PERMISSIONS;
-  });
+  // Browser-held role controls are presentation only; authority stays server-side.
+  const [rolePermissions, setRolePermissions] = useState<Record<UserRole, string[]>>(DEFAULT_PERMISSIONS);
 
   const handleUpdatePermissions = (updated: Record<UserRole, string[]>) => {
     setRolePermissions(updated);
-    localStorage.setItem('nexus_role_permissions', JSON.stringify(updated));
   };
 
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    const saved = localStorage.getItem('nexus_audit_logs');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   const handleClearAuditLogs = () => {
     setAuditLogs([]);
-    localStorage.removeItem('nexus_audit_logs');
   };
 
   const logAuditEvent = (
@@ -466,7 +446,6 @@ export default function App() {
 
     setAuditLogs(prev => {
       const updated = [newLog, ...prev].slice(0, 80);
-      localStorage.setItem('nexus_audit_logs', JSON.stringify(updated));
       return updated;
     });
   };
@@ -554,14 +533,10 @@ export default function App() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
 
   // Real-time dynamic states
-  const [notificationPresets, setNotificationPresets] = useState<NotificationPreset[]>(() => {
-    const saved = localStorage.getItem('nexus_notification_presets');
-    return saved ? JSON.parse(saved) : defaultNotificationPresets;
-  });
+  const [notificationPresets, setNotificationPresets] = useState<NotificationPreset[]>(defaultNotificationPresets);
 
   const handleUpdateNotificationPresets = (updated: NotificationPreset[]) => {
     setNotificationPresets(updated);
-    localStorage.setItem('nexus_notification_presets', JSON.stringify(updated));
   };
 
   const [realtimeNotifications, setRealtimeNotifications] = useState<Array<{ id: string; title: string; message: string; type: 'success' | 'info' | 'warning' | 'alert'; timestamp: string }>>([]);
@@ -580,69 +555,13 @@ export default function App() {
 
   const [tasks, setTasks] = useState<SchoolTask[]>([]);
 
-  // Sync state engine to localstorage for instant persistence
-  useEffect(() => {
-    localStorage.setItem('nexus_approvals', JSON.stringify(approvals));
-  }, [approvals]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_students', JSON.stringify(students));
-  }, [students]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_teachers', JSON.stringify(teachers));
-  }, [teachers]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_invoices', JSON.stringify(invoices));
-  }, [invoices]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_announcements', JSON.stringify(announcements));
-  }, [announcements]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_messages', JSON.stringify(messages));
-  }, [messages]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_automations', JSON.stringify(automationFlows));
-  }, [automationFlows]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_school_docs', JSON.stringify(schoolDocs));
-  }, [schoolDocs]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_signatures', JSON.stringify(signatures));
-  }, [signatures]);
-
-  // Redefinição limpa de primeiro carregamento para destruir qualquer sessão simulada/teste anterior
-  useEffect(() => {
-    const isWiped = localStorage.getItem('nexus_system_reset_v4');
-    if (!isWiped) {
-      console.log('[SYSTEM-WIPE] Clean boot detected: clearing and signing out any active sessions...');
-      signOut(auth).then(() => {
-        localStorage.clear();
-        localStorage.setItem('nexus_system_reset_v4', 'true');
-        window.location.reload();
-      }).catch((e) => {
-        console.error(e);
-        localStorage.clear();
-        localStorage.setItem('nexus_system_reset_v4', 'true');
-      });
-    }
-  }, []);
-
   const handleWipeSystemSessions = async () => {
-    console.log('[SYSTEM-WIPE] Manual wipe triggered. Clearing sessions & local cache...');
+    console.log('[SYSTEM-WIPE] Session sign-out requested. Browser data is not deleted.');
     try {
       await signOut(auth);
     } catch (err) {
       console.error(err);
     }
-    localStorage.clear();
-    localStorage.setItem('nexus_system_reset_v4', 'true');
     window.location.reload();
   };
 
@@ -2481,24 +2400,7 @@ export default function App() {
 
         {/* FUZZY GLOBAL SEARCH BAR */}
         <div className="hidden lg:flex flex-1 max-w-sm mx-8">
-          <GlobalSearch
-            students={students}
-            teachers={teachers}
-            invoices={invoices}
-            announcements={announcements}
-            messages={messages}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            theme={theme}
-            onUpdateStudent={(id, updatedFields) => {
-              const std = students.find(s => s.id === id);
-              if (std) {
-                const updatedStd = { ...std, ...updatedFields };
-                setStudents(prev => prev.map(s => s.id === id ? updatedStd : s));
-                upsertLiveStudent(updatedStd);
-              }
-            }}
-          />
+          <span role="status" className="text-xs text-zinc-500">Pesquisa institucional indisponível sem projeção autorizada.</span>
         </div>
 
         {/* Minimalist Profile & Controls */}
@@ -2625,24 +2527,7 @@ export default function App() {
                 {/* Mobile Fuzzy Search Input */}
                 <div className="px-2.5 mb-2 relative">
                   <span className={`text-[10px] font-mono ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-500'} uppercase tracking-widest block mb-2`}>Procurar Global</span>
-                  <GlobalSearch
-                    students={students}
-                    teachers={teachers}
-                    invoices={invoices}
-                    announcements={announcements}
-                    messages={messages}
-                    activeTab={activeTab}
-                    setActiveTab={setActiveTab}
-                    theme={theme}
-                    onUpdateStudent={(id, updatedFields) => {
-                      const std = students.find(s => s.id === id);
-                      if (std) {
-                        const updatedStd = { ...std, ...updatedFields };
-                        setStudents(prev => prev.map(s => s.id === id ? updatedStd : s));
-                        upsertLiveStudent(updatedStd);
-                      }
-                    }}
-                  />
+                  <span role="status" className="text-xs text-zinc-500">Pesquisa institucional indisponível sem projeção autorizada.</span>
                 </div>
 
                 <div className="space-y-4">
@@ -2771,31 +2656,11 @@ export default function App() {
                   </div>
                 }>
                   <>
-                    {activeTab === 'dashboard' && (
-                    currentUserRole === 'parent' ? (
-                      <FactualUnavailablePanel
-                        title="Portal de encarregados indisponível"
-                        detail="Este portal ainda não possui uma ligação institucional autorizada aos registos, mensagens ou documentos. Nenhum dado foi submetido ou alterado."
-                      />
-                    ) : (
-                      <Dashboard 
-                        students={visibleStudents} 
-                        teachers={teachers} 
-                        invoices={visibleInvoices} 
-                        announcements={announcements}
-                        setCurrentTab={setActiveTab}
-                        onQuickAction={(type) => {
-                          if (type === 'add-student') {
-                            setActiveTab('students');
-                          }
-                        }}
-                        approvals={approvals}
-                        signatures={signatures}
-                        schoolDocs={schoolDocs}
-                        currentUserRole={currentUserRole}
-                        theme={theme}
-                      />
-                    )
+                  {activeTab === 'dashboard' && (
+                    <FactualUnavailablePanel
+                      title="Indicadores institucionais indisponíveis"
+                      detail="Este cockpit reúne dados de browser e projeções sem fonte, cálculo, frescura e âmbito institucional autorizados. Nenhum KPI, tendência, conformidade ou estado de sincronização é apresentado como facto institucional. Portal de encarregados indisponível sem ligação institucional autorizada aos respetivos registos."
+                    />
                   )}
                   
                   {activeTab === 'students' && (
