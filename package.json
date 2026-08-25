@@ -21,6 +21,7 @@
     "test:fnd03": "tsx tests/fnd03-transitional-api-tenant-fence.test.ts && tsx tests/fnd03-teacher-profile-tenant-fence.test.ts && tsx tests/fnd03-websocket-connection-characterization.test.ts && tsx tests/fnd03-document-storage-fence.test.ts && tsx tests/fnd03-cp6-authority-fence.test.ts && tsx tests/institutional-context.test.ts && tsx tests/multi-tenant.test.ts && tsx tests/institution-resource-ownership.test.ts",
     "test:fnd04": "node scripts/run-fnd04-baseline.mjs",
     "test:fnd05": "node scripts/run-fnd05-baseline.mjs",
+    "test:fnd06": "node scripts/run-fnd06-baseline.mjs",
     "nexus:preflight:db": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx scripts/nexus-preflight.ts --require-db && node scripts/nexus-preflight-db.mjs --target=DATABASE_URL",
     "test:integrity": "tsx test-integrity.ts",
     "test:auth": "tsx test-auth-stabilization.ts",
