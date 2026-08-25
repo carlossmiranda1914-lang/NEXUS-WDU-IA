@@ -35,3 +35,7 @@ Current-tree removal cannot erase any historical exposure. Rotation is blocked p
 ## CP3 evidence — PASS
 
 `test:foundation` proves manifest/script/file validation, deterministic ordering, first-failure stop, missing script/file handling, child failure propagation and timeout handling. Its non-PostgreSQL scope is FND-01 migration runner/runtime policy, FND-02 through FND-06; PostgreSQL CI coverage remains CP4. `test:diff` requires an authoritative valid base and rejects committed whitespace; `test:artifacts` rejects tracked local env, temporary/log/dump, recovery and editor/system artifacts by path/rule only. Controlled synthetic failures and clean fixtures pass. The stable `quality-gate` invokes the aggregate, diff and artifact gates with full checkout history; CP5 retains broad trigger redesign. CP4 is next.
+
+## CP4 Definition of Ready
+
+The authorised base is `26443b9`. CP4 uses only canonical `0001`–`0018` migrations, PostgreSQL 16 created per CI job, an identifiable CI-only role/database, `TEST_DATABASE_CONFIRMATION`, per-process timeout and job-service disposal. The aggregate must bootstrap from migrations, prove ledger/checksum rollback, tenant isolation, School Tasks history/snapshots, Enrollment/StudentProfile, Enrollment Documents and applicable process reconciliation. It must never load `.env.test.local`, use production/staging/Supabase credentials, or run locally without explicit `TEST_DATABASE_LOCAL_AUTHORIZED=true`.

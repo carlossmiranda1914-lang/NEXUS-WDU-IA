@@ -1,9 +1,4 @@
 import pg from 'pg';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
-import dotenv from 'dotenv';
-
-dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env.test.local'), override: true, quiet: true });
 
 const REQUIRED_CONFIRMATION = 'NEXUS_TEST_DATABASE';
 const EXPECTED_TARGET = Object.freeze({
@@ -36,7 +31,10 @@ export function readApprovedTestTarget(environment = process.env) {
     database: decodeURIComponent(url.pathname.replace(/^\//, '')),
   };
 
-  for (const [key, expectedValue] of Object.entries(EXPECTED_TARGET)) {
+  const expectedTarget = environment.CI === 'true'
+    ? { user: 'nexus_ci_runner', host: '127.0.0.1', port: '5432', database: 'nexus_ci_fnd06' }
+    : EXPECTED_TARGET;
+  for (const [key, expectedValue] of Object.entries(expectedTarget)) {
     if (target[key] !== expectedValue) {
       throw new Error(`TEST_DATABASE_URL does not target the approved disposable database (${key}).`);
     }

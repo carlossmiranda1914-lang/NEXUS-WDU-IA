@@ -26,6 +26,7 @@
     "test:foundation": "node scripts/run-foundation.mjs",
     "test:diff": "node scripts/check-committed-diff.mjs",
     "test:artifacts": "node scripts/check-artifacts.mjs",
+    "test:postgres-foundation": "node scripts/run-postgres-foundation.mjs",
     "quality-gate": "node scripts/run-quality-gate.mjs",
     "nexus:preflight:db": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx scripts/nexus-preflight.ts --require-db && node scripts/nexus-preflight-db.mjs --target=DATABASE_URL",
     "test:integrity": "tsx test-integrity.ts",
