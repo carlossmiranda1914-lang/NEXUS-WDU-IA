@@ -101,6 +101,10 @@ PT-23 is now closed as a factual `FALSE_SUCCESS` presentation finding. Five moun
 
 CP2 removes false operational availability at the client boundary without changing backend authority. The Copilot now makes no `/api/chat` request and gives a factual unavailable response without loading or fabricated analysis. Automation simulation handlers return before any request, timer, local execution increment, success log or notification preview. Generic Documents, legacy configuration/reset/user controls, signature, workflow, parent portal, Google Sheets and legacy teacher administration are replaced by accessible factual unavailable panels. Canonical Enrollment/StudentProfile, Enrollment Documents, Academic Year and modular Tasks remain outside these treatments. CP3 is next.
 
+## CP3 mutation success and authoritative read-back — PASS
+
+Canonical School Tasks now display a result only after its command succeeds and a tenant-scoped authoritative read confirms it. Create uses POST→GET, update PUT→GET, archive confirms the deleted scoped read, and restore confirms the active scoped read; pending mutation state prevents double-submit. Command failures retain the prior visual state and show factual error feedback. The non-authoritative Communications surface is unavailable in the mounted shell because no command/read-back can establish send, scheduling or delivery. Canonical Enrollment and Enrollment Documents regressions remain green. CP4 is next; FND-04 remains IMPLEMENTING.
+
 ## DONE
 FND-04 is DONE only when AC01–AC08 are PASS, no known P0/P1 operational surface claims success or institutional evidence without a real backing fact, and every retained prototype/demo is visibly and architecturally separated from production authority.
 

@@ -81,6 +81,17 @@ All request bodies carry a prompt only; the client supplies neither an instituti
 
 CP2 does not alter the FND-02/FND-03 backend fences, canonical Enrollment/StudentProfile, Enrollment Documents, Academic Year or modular School Tasks. All unavailable panels use product language rather than internal codes and announce their state with `role="status"`.
 
+## CP3 mutation success and authoritative read-back — PASS
+
+| Claim | User action / authority | RED defect | CP3 treatment and GREEN proof | Rollback / gate |
+|---|---|---|---|---|
+| PT-01 | Canonical Enrollment remains bounded to its existing server command and read model | No CP3 mutation path was changed | Enrollment/StudentProfile intake and UI contracts remain in `test:fnd04` | Preserve the existing Enrollment authority; no second Matricula intake is introduced |
+| PT-03 | TasksCenter → modular `/api/school-tasks` controller → tenant-derived `SchoolTaskService`/repository | Create/update displayed local state before the command completed; update used POST and errors could retain a fictional task | Create uses POST then `GET /:id`; update uses PUT then `GET /:id`; archive confirms the scoped deleted read; restore confirms the active scoped read. UI commits only the returned read-back and blocks concurrent task mutations. `fnd04-mutation-readback-truth` and preserved tenant/fence contracts pass | Revert only the client truth change; retain modular controller, service, repository and FND-02/03 fences |
+| PT-09 | Generic Documents remains unavailable before its legacy component mounts | No executable generic document mutation remains in the mounted shell | CP2 unavailable contract remains in `test:fnd04`; no invented file command or local fallback | General Document/signature authority |
+| PT-12 | MatriculaPortal is not mounted as an operational intake; canonical Enrollment is retained | The isolated legacy component fabricated ID/success text without an authoritative command | No operational route was reactivated; Enrollment contracts are the read-back regression | Authorized product decision for any portal consumer |
+| PT-15 | Communications screen has no proven canonical send/schedule/delivery command | Browser history/toast presented sent or scheduled delivery without authoritative effect/read-back | Mounted shell now presents factual unavailable state before `CommunicationCenter` can run; no message is sent, scheduled or marked delivered. `fnd04-mutation-readback-truth` proves route isolation | Communication command, recipient policy and delivery/read authority |
+| PT-25 | Legacy migration is not mounted operationally | Legacy presentation could claim migration completion | CP2 factual unavailable treatment remains; no migration/reconciliation command was created | Approved migration/reconciliation plan |
+
 ## Implementation invariants
 
 - Backend authorization, InstitutionalContext and FND-02/FND-03 fences stay authoritative.

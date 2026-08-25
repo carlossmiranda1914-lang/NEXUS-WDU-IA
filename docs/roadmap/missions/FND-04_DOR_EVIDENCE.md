@@ -133,3 +133,9 @@ The CP2 interaction contract proves that user actions on the Copilot and each AI
 The implementation deliberately does not expose `CANONICAL_AI_AUTHORITY_REQUIRED` as primary product copy. It uses concise Portuguese unavailable text and preserves the server fence unchanged. Generic Document, signature, workflow, parent, Google and teacher legacy entry points are no longer mounted as operational screens; their panels state that no data was sent, changed, archived, signed or provisioned. Canonical Enrollment Documents remain accessible through Enrollment.
 
 **CP2 validation:** focused AI/factual-unavailability contracts, `npm run test:fnd04`, lint, build and `git diff --check` must all pass after the final UI change. CP3 is next. FND-04 is not DONE.
+
+## CP3 mutation success and authoritative read-back — PASS
+
+RED showed that canonical TasksCenter creation and update first changed browser state, used a POST-shaped update and could retain that state after a rejected command. The focused CP3 contract now requires command success followed by the tenant-scoped canonical read: create is `POST /api/school-tasks` then `GET /api/school-tasks/:id`; update is `PUT /api/school-tasks/:id` then the same GET; archive is confirmed in the canonical deleted list; restore is confirmed through the active scoped GET. A pending guard prevents concurrent task mutation, and failure leaves the rendered task state unchanged.
+
+The mounted Communications surface had no authorized send/schedule/delivery command or read-back. It is therefore factual unavailable before its legacy browser-history component mounts. Matricula, Generic Documents and legacy migration remain unmounted/unavailable; no replacement domain was created. CP3 focused evidence, `npm run test:fnd04`, lint, build and diff checks pass. CP4 is next; FND-04 is not DONE.
