@@ -377,7 +377,8 @@ export default function App() {
   const [loginStep, setLoginStep] = useState<number>(1);
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [currentUserRole, setCurrentUserRole] = useState<UserRole>('admin');
+  // Until the backend resolves an active Membership, the client has no institutional authority.
+  const [currentUserRole, setCurrentUserRole] = useState<UserRole>('student');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
@@ -476,29 +477,8 @@ export default function App() {
   }, [activeTab, currentUserRole, rolePermissions]);
 
   const handleSimulationRoleChange = async (newRole: UserRole) => {
-    setCurrentUserRole(newRole);
-    logAuditEvent(newRole, activeTab, 'ALLOWED', 'LOGIN', `O utilizador iniciou sessão ou trocou com sucesso para o perfil de ${newRole.toUpperCase()}.`);
-    
-    if (firebaseUser) {
-      try {
-        const token = await firebaseUser.getIdToken();
-        const res = await fetch('/api/profile/role', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ role: newRole })
-        });
-        if (res.ok) {
-          console.log(`[AUTH] Profile role updated successfully in PostgreSQL to: ${newRole}`);
-        } else {
-          console.warn('[AUTH] Warning: Failed to update simulated role in PostgreSQL.');
-        }
-      } catch (err) {
-        console.warn('[AUTH] Warning: Error synchronizing simulated role with backend:', err);
-      }
-    }
+    void newRole;
+    setLoginError('A alteração de papel não está disponível. As permissões resultam da associação institucional ativa.');
   };
 
   // Core School State Engine (React hydrated from local mock db)
@@ -555,6 +535,12 @@ export default function App() {
 
   const [tasks, setTasks] = useState<SchoolTask[]>([]);
 
+  const clearInstitutionalPresentation = () => {
+    setStudents([]); setTeachers([]); setInvoices([]); setAnnouncements([]); setMessages([]);
+    setAutomationFlows([]); setSchoolDocs([]); setApprovals([]); setSignatures([]); setTasks([]);
+    setRealtimeNotifications([]); setCurrentUserRole('student'); setCurrentUserStatus('inactive');
+  };
+
   const handleWipeSystemSessions = async () => {
     console.log('[SYSTEM-WIPE] Session sign-out requested. Browser data is not deleted.');
     try {
@@ -585,6 +571,7 @@ export default function App() {
               console.warn('[AUTH-PG] Account is suspended, signing out.');
               await signOut(auth);
               setFirebaseUser(null);
+              clearInstitutionalPresentation();
               setLoginError('A sua conta está temporariamente suspensa pelo administrador pedagógico.');
             } else {
               setCurrentUserRole(profile.role);
@@ -595,15 +582,18 @@ export default function App() {
             // If the profile fetch fails (e.g. user deleted from PostgreSQL), we must sign out to remain synchronized!
             await signOut(auth);
             setFirebaseUser(null);
+            clearInstitutionalPresentation();
           }
         } catch (e) {
           console.error('[AUTH-PG] Error loading profile from Postgres:', e);
           await signOut(auth);
           setFirebaseUser(null);
+          clearInstitutionalPresentation();
         }
       } else {
         console.log('[AUTH-CLIENT] onAuthStateChanged detected signed out state.');
         setFirebaseUser(null);
+        clearInstitutionalPresentation();
       }
       setAuthLoading(false);
     });
@@ -1065,6 +1055,7 @@ export default function App() {
     try {
       await signOut(auth);
       setFirebaseUser(null);
+      clearInstitutionalPresentation();
       setLoginStep(1);
     } catch (err) {
       console.error("Error signing out:", err);
