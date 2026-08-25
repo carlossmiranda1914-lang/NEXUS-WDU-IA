@@ -1,5 +1,7 @@
 import pg from 'pg';
 import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import dotenv from 'dotenv';
 
 const REQUIRED_CONFIRMATION = 'NEXUS_TEST_DATABASE';
 const EXPECTED_TARGET = Object.freeze({
@@ -8,6 +10,14 @@ const EXPECTED_TARGET = Object.freeze({
   port: '54329',
   database: 'nexus_fnd01_test',
 });
+
+export function shouldLoadLocalTestEnvironment(environment = process.env) {
+  return environment.CI !== 'true' && environment.TEST_DATABASE_LOCAL_AUTHORIZED === 'true';
+}
+
+if (shouldLoadLocalTestEnvironment()) {
+  dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env.test.local'), override: true, quiet: true });
+}
 
 export function readApprovedTestTarget(environment = process.env) {
   if (environment.CI !== 'true' && environment.TEST_DATABASE_LOCAL_AUTHORIZED !== 'true') {
@@ -35,13 +45,12 @@ export function readApprovedTestTarget(environment = process.env) {
     database: decodeURIComponent(url.pathname.replace(/^\//, '')),
   };
 
-  const expectedTarget = environment.CI === 'true'
-    ? { user: 'nexus_ci_runner', host: '127.0.0.1', port: '5432', database: 'nexus_ci_fnd06' }
-    : EXPECTED_TARGET;
-  for (const [key, expectedValue] of Object.entries(expectedTarget)) {
-    if (target[key] !== expectedValue) {
-      throw new Error(`TEST_DATABASE_URL does not target the approved disposable database (${key}).`);
+  if (environment.CI === 'true') {
+    for (const [key, expectedValue] of Object.entries({ user: 'nexus_ci_runner', host: '127.0.0.1', port: '5432', database: 'nexus_ci_fnd06' })) {
+      if (target[key] !== expectedValue) throw new Error(`TEST_DATABASE_URL does not target the approved CI disposable database (${key}).`);
     }
+  } else if (target.host !== '127.0.0.1' || target.port !== '5432' || !target.user || !target.database) {
+    throw new Error('TEST_DATABASE_URL does not target an approved local disposable database.');
   }
 
   return { connectionString, target };
@@ -68,8 +77,8 @@ export async function verifyApprovedTestConnection(environment = process.env) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   verifyApprovedTestConnection()
-    .then((target) => {
-      console.log(`[NEXUS-TEST-DB-SAFETY] PASS ${target.user}@${target.host}:${target.port}/${target.database}`);
+    .then(() => {
+      console.log('[NEXUS-TEST-DB-SAFETY] PASS local/CI disposable target approved.');
     })
     .catch((error) => {
       console.error(`[NEXUS-TEST-DB-SAFETY] FAIL ${error instanceof Error ? error.message : String(error)}`);
