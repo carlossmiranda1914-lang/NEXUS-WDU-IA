@@ -19,6 +19,8 @@ The authoritative tenant inventory is [FND-03_TENANT_MATRIX](../../audit/FND-03_
 | CP6 | cache/background/AI/ownership bridges | key/batch/tool policy and no cross-tenant disclosure | stop on AI/domain-authority dependency |
 | CP7 | global validation/evidence | AC01–AC09, lint/build/CI-ready evidence | no DONE with any NOT RUN/unknown P0/P1 |
 
+**State:** DONE. CP0–CP7 evidence is complete: canonical context is preserved and every transitional P0/P1 surface is scoped or fail-closed. Generic Documents, AI and SLA remain fail-closed pending their canonical authority.
+
 No checkpoint authorizes a new domain, broad RLS, destructive migration, client-owned authority or UI-only remediation.
 
 ## Objective

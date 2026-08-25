@@ -794,6 +794,7 @@ async function startServer() {
 
   // 1a. Request Access API for pending users
   app.post('/api/profile/request-access', requireAuth, async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_TENANT_AUTHORITY_REQUIRED', error: 'O pedido de acesso institucional requer autoridade canónica.' });
     const { name, phone, role, department } = req.body;
     try {
       await db.update(users).set({
@@ -820,6 +821,7 @@ async function startServer() {
 
   // 1b. Change Current Role simulation (crucial for local testing in CRM/SIS admin contexts)
   app.post('/api/profile/role', requireAuth, async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_TENANT_AUTHORITY_REQUIRED', error: 'A alteração de papel requer autoridade IAM canónica.' });
     const { role } = req.body;
     if (!role) {
       console.warn('[AUTH] POST /api/profile/role: parâmetro role em falta.');
@@ -1375,6 +1377,7 @@ async function startServer() {
 
   // 3. Teachers API
   app.get('/api/teachers', requireAuth, authorizeRole(['admin', 'director', 'secretariat', 'teacher']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_TENANT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de docentes ainda não está disponível.' });
     try {
       const role = req.user?.dbRole;
       let records;
@@ -1412,6 +1415,7 @@ async function startServer() {
   });
 
   app.post('/api/teachers', requireAuth, authorizeRole(['admin', 'director', 'secretariat']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_TENANT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de docentes ainda não está disponível.' });
     try {
       const { name, email, phone, subjects, classes, status, schedule, productivityScore } = req.body;
       if (!name || !email) {
@@ -1475,6 +1479,7 @@ async function startServer() {
   });
 
   app.put('/api/teachers/:id', requireAuth, authorizeRole(['admin', 'director', 'secretariat']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_TENANT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de docentes ainda não está disponível.' });
     try {
       const { id } = req.params;
       const { name, email, phone, subjects, classes, status, schedule, productivityScore } = req.body;
@@ -1533,6 +1538,7 @@ async function startServer() {
   });
 
   app.delete('/api/teachers/:id', requireAuth, authorizeRole(['admin', 'director', 'secretariat']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_TENANT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de docentes ainda não está disponível.' });
     try {
       const { id } = req.params;
       const ownedTeacherIds = await resolveInstitutionOwnedResourceIds(
@@ -1576,6 +1582,7 @@ async function startServer() {
 
   // 4. Invoices / Payments API
   app.get('/api/invoices', requireAuth, authorizeRole(['admin', 'financial', 'parent', 'student']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_FINANCE_AUTHORITY_REQUIRED', error: 'A autoridade financeira institucional ainda não está disponível.' });
     try {
       const role = req.user?.dbRole;
       let records;
@@ -1612,6 +1619,7 @@ async function startServer() {
   });
 
   app.post('/api/invoices/pay', requireAuth, authorizeRole(['admin', 'financial', 'parent', 'student']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_FINANCE_AUTHORITY_REQUIRED', error: 'A autoridade financeira institucional ainda não está disponível.' });
     const { id } = req.body;
     if (!id) return res.status(400).json({ error: 'Falta parametrizar o ID da fatura.' });
 
@@ -1703,6 +1711,7 @@ async function startServer() {
 
   // A. Manual Invoice Creation
   app.post('/api/invoices', requireAuth, authorizeRole(['admin', 'financial']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_FINANCE_AUTHORITY_REQUIRED', error: 'A autoridade financeira institucional ainda não está disponível.' });
     try {
       const { studentId, studentName, amount, dueDate, category } = req.body;
       if (!studentId || !amount || !dueDate) {
@@ -1780,6 +1789,7 @@ async function startServer() {
 
   // B. Invoice Cancellation
   app.post('/api/invoices/cancel', requireAuth, authorizeRole(['admin', 'financial']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_FINANCE_AUTHORITY_REQUIRED', error: 'A autoridade financeira institucional ainda não está disponível.' });
     try {
       const { id } = req.body;
       if (!id) return res.status(400).json({ error: 'ID da fatura é obrigatório.' });
@@ -1855,6 +1865,7 @@ async function startServer() {
 
   // C. Bank Statement Reconciliation Upload
   app.post('/api/invoices/reconcile', requireAuth, authorizeRole(['admin', 'financial']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_FINANCE_AUTHORITY_REQUIRED', error: 'A autoridade financeira institucional ainda não está disponível.' });
     try {
       const { transactions } = req.body;
       if (!transactions || !Array.isArray(transactions)) {
@@ -2095,6 +2106,7 @@ async function startServer() {
 
   // 5. Announcements API
   app.get('/api/announcements', requireAuth, async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_COMMUNICATION_AUTHORITY_REQUIRED', error: 'A autoridade institucional de comunicação ainda não está disponível.' });
     try {
       const records = await db.select({
         id: announcements.id,
@@ -2115,6 +2127,7 @@ async function startServer() {
   });
 
   app.post('/api/announcements', requireAuth, authorizeRole(['admin', 'director', 'teacher']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_COMMUNICATION_AUTHORITY_REQUIRED', error: 'A autoridade institucional de comunicação ainda não está disponível.' });
     const { title, content, target } = req.body;
     if (!title || !content) return res.status(400).json({ error: 'Título e Conteúdo são de preenchimento obrigatório.' });
 
@@ -2167,6 +2180,7 @@ async function startServer() {
 
   // 6. Live Chat Messages API (Realtime simulation powered by Postgres)
   app.get('/api/chat-messages', requireAuth, async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_COMMUNICATION_AUTHORITY_REQUIRED', error: 'A autoridade institucional de comunicação ainda não está disponível.' });
     const { channel } = req.query;
     try {
       let query = db.select().from(chatMessages);
@@ -2181,6 +2195,7 @@ async function startServer() {
   });
 
   app.post('/api/chat-messages', requireAuth, async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_COMMUNICATION_AUTHORITY_REQUIRED', error: 'A autoridade institucional de comunicação ainda não está disponível.' });
     const { content, channel } = req.body;
     if (!content || !channel) return res.status(400).json({ error: 'Falta conteúdo ou canal.' });
 
@@ -2335,6 +2350,7 @@ async function startServer() {
 
   // 8. Documents Storage & Intelligent OCR API
   app.get('/api/documents', requireAuth, async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_DOCUMENT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de documentos ainda não está disponível.' });
     try {
       const role = req.user?.dbRole;
       let records = await db.select().from(uploadedDocuments).orderBy(uploadedDocuments.id);
@@ -2397,6 +2413,7 @@ async function startServer() {
   });
 
   app.post('/api/documents', requireAuth, authorizeRole(['admin', 'director', 'secretariat', 'financial']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_DOCUMENT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de documentos ainda não está disponível.' });
     const { name, base64, size } = req.body;
     if (!name) return res.status(400).json({ error: 'Falta o nome do ficheiro.' });
 
@@ -2705,6 +2722,7 @@ async function startServer() {
 
   // Delete uploaded document
   app.delete('/api/documents/:id', requireAuth, authorizeRole(['admin', 'director', 'secretariat']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_DOCUMENT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de documentos ainda não está disponível.' });
     const id = parseInt(req.params.id);
     if (!id || isNaN(id)) return res.status(400).json({ error: 'Falta parametrizar ID numérico.' });
 
@@ -3213,6 +3231,10 @@ async function startServer() {
   // 13. Todo Tasks System API Routes
   // Helper to auto update SLA statuses using an optimized single DB update
   async function autoUpdateSlaStatuses() {
+    // Transitional worker has no institution-scoped work unit; fail closed until
+    // a canonical scheduler owns tenant selection.
+    console.warn('[SLA-AUTO-UPDATE] CANONICAL_BACKGROUND_AUTHORITY_REQUIRED');
+    return;
     try {
       await db.execute(sql`
         UPDATE school_tasks
@@ -4938,6 +4960,7 @@ async function startServer() {
 
   // 10. API: AI Administrative Copilot Route (UPDATED WITH LIVE POSTGRES CONTEXT DATA RAG AND REAL-TIME AGENTIC TOOL CALLING)
   app.post('/api/chat', requireAuth, async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_AI_AUTHORITY_REQUIRED', error: 'A autoridade institucional de IA ainda não está disponível.' });
     const { prompt } = req.body;
 
     if (!prompt) {

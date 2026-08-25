@@ -37,3 +37,23 @@ FIN-01, COM-01, GDOC-01 and AI-01 are P0 transitional remediation candidates. Th
 ## Explicit exclusions
 
 No production fix, schema/migration, RLS rollout, IAM redesign, Finance/Academic/Documents/Communication redesign, push, PR, merge or deployment is authorized by this DoR.
+
+## CP3 closure
+
+Finance and Communication HTTP endpoints are fail-closed pending canonical authority. Teacher legacy operations and request-access are fail-closed because no complete institutional ownership predicate is proven. Generic Documents are formally deferred to mandatory CP5: metadata and physical object ownership, direct-ID authorization, MIME/hash/size/path and download/export negatives must be proven together before any replacement/removal decision.
+
+## CP4 closure
+
+CP4 is PASS. WebSocket token verification and InstitutionalContext resolution occur before room registration; invalid identity closes before assignment. Foreign subscriptions are rejected, publication without institutional context emits no event, and reconnect removes the prior socket before a new authorized context is resolved. Multi-membership context is not merged: a client `SUBSCRIBE` cannot add a foreign or prior institution. The Task realtime bridge remains tenant-scoped. CP5 files/storage/reports is next; FND-03 is not DONE.
+
+## CP5 closure
+
+CP5 is PASS. Generic Documents are fenced with `CANONICAL_DOCUMENT_AUTHORITY_REQUIRED` before database metadata, physical storage, audit-success or events because joint DB/object ownership is unproven. Direct document/file/path/client tenant IDs therefore have no authority. The only mounted export in scope is canonical School Tasks export, protected by `multiTenantMiddleware`; the legacy duplicate route is not mounted. Enrollment Documents remain canonical and are preserved by their PostgreSQL regression. CP6 is next; FND-03 is not DONE.
+
+## CP6 closure
+
+CP6 is PASS. Task cache remains institution-prefixed. The SLA worker returns before SQL with `CANONICAL_BACKGROUND_AUTHORITY_REQUIRED`; reachable `/api/chat` returns `CANONICAL_AI_AUTHORITY_REQUIRED` before context-data query, tool execution, audit/event or external effect. Ownership bridge contracts remain covered. Reactivation requires canonical institution-scoped scheduler/AI authority. CP7 is next.
+
+## CP7 final closure
+
+FND-03 is DONE. AC01–AC09 PASS: matrix inventory; server-derived context and client-ID distrust; repository/bridge scope; transitional HTTP fences; realtime and cache isolation; document/export treatment; background/SLA and AI fences; canonical same-tenant preservation and no-mutation denials. Evidence: `npm run test:fnd03`, InstitutionalContext/ownership/realtime contracts, Enrollment Documents PostgreSQL, lint, build and `git diff --check`.
