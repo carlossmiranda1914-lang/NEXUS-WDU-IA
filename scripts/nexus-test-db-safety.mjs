@@ -17,6 +17,13 @@ export function shouldLoadLocalTestEnvironment(environment = process.env) {
 
 if (shouldLoadLocalTestEnvironment()) {
   dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env.test.local'), override: true, quiet: true });
+  if (process.env.TEST_DATABASE_URL) {
+    const localUrl = new URL(process.env.TEST_DATABASE_URL);
+    if (localUrl.hostname === 'localhost' && (localUrl.port || '5432') === '54329') {
+      localUrl.hostname = '127.0.0.1';
+      process.env.TEST_DATABASE_URL = localUrl.toString();
+    }
+  }
 }
 
 export function readApprovedTestTarget(environment = process.env) {
