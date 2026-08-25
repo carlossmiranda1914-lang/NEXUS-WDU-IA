@@ -1,0 +1,52 @@
+# FND-05 — Audit Truth Matrix
+
+**State:** DONE — CP0–CP7 PASS. **Baseline:** `66f582ee624f93df5e98907d5da14ec59a0710b3`.
+
+This bounded P0/P1 inventory follows `command → server authorization → effect/transaction → emission → persistence → tenant-scoped reader`. `UNKNOWN` is zero only because every surviving surface has a deterministic factual treatment; classifications describe AS-IS, not a compliance claim.
+
+| ID | Domain/action and producer → reader | Actor / institution / target | Outcome, timing, persistence and scope | Privacy / current evidence | Classification and FND-05 treatment | CP / test / gate |
+|---|---|---|---|---|---|---|
+| AT-01 | Enrollment intake; `enrollment-intake.ts` → enrollment process/history | server command actor; InstitutionalContext; application | effect and `enrollment_events` are transaction-bound | metadata minimization must be characterized; intake/Postgres contracts | CANONICAL_FACTUAL; preserve, prove actor/outcome/retry | CP2–4; intake + S03 Postgres |
+| AT-02 | Enrollment lifecycle; controller → enrollment events/history | authenticated Membership; institution/application predicate | status transition then event in authoritative path | no request-body actor; existing backend contract | CANONICAL_FACTUAL; prove failure/rollback has no success event | CP2–3; S02.2 contract |
+| AT-03 | Enrollment Documents add/transition → checklist | server actor/context; enrollment-owned document | metadata/event in scoped path, no file-byte claim | evidence reference may be personal data; exclude bytes/tokens | CANONICAL_FACTUAL; redaction/minimization and read proof | CP2–5; document service/Postgres |
+| AT-04 | Enrollment registration/process reconciliation → process history | command or explicit system/reconciliation actor; institution/application | events and snapshots after factual version/state changes | distinguish system from human; no invented reconciliation | TRANSITIONAL_FACTUAL; characterize correlation/snapshot/retry | CP3–4; S03 Postgres |
+| AT-05 | Modular School Tasks mutation/version history | `requireAuth` context; task institution ownership | repository version after mutation; scoped retrieval | history/attachments must be minimized | CANONICAL_FACTUAL; prove before/after, retry and tenant reader | CP2–5; FND01 task + tenant contracts |
+| AT-06 | Task realtime event bus → websocket refresh | service actor/context; tenant/task | post-service async refresh, not durable audit | refresh payload must not disclose task data | TRANSITIONAL_FACTUAL; retain as notification, never audit receipt | CP6; realtime/websocket isolation |
+| AT-07 | Request observability middleware → operational log | authenticated request context where available; route pattern | mutation/failed request outcome from HTTP status; persistence failure is non-blocking | route only, never body/query; retention unproven | TRANSITIONAL_FACTUAL; characterize actor/tenant/persistence or fence presentation | CP2,5; request-audit |
+| AT-08 | Legacy administrative/system/finance/communications/documents paths | legacy payload/client aggregates | many writes are FND-02/03 fenced or FND-04 unavailable | local/demo audit wording is not evidence | FALSE_SUCCESS_AUDIT; keep unavailable, no audit claim | CP1,3,6; FND02/03/04 contracts |
+| AT-09 | Rejected/unauthorized operations | auth/tenant middleware → response/observability | denial must be blocked/failure, never success | no foreign-resource existence disclosure | MISSING_REQUIRED_AUDIT; decide required durable denial evidence per critical command | CP3,5; auth/tenant negative tests |
+| AT-10 | Dashboard/SystemConfig/Workflow/AI audit/history UI | browser samples or legacy handlers | FND-04 unavailable/unmounted before operational use | may contain simulated personal/operational data | PROTOTYPE; remain isolated; no raw-event presentation | CP1,6; FND04 factual UI |
+| AT-11 | Generic `/api/logs` and legacy audit retrieval | legacy authorization/context | reader/predicate and retention require direct characterization | access role/export/redaction unproven | UNSCOPED; CP5 must prove tenant predicate or fence it | CP5; focused API test |
+| AT-12 | AI/background/SLA/connectors | fenced or background producer | no canonical external outcome/audit authority | prompts, credentials and personal data excluded | OVEREXPOSED; no payload logging; preserve FND-03/04 fences | CP5–6; AI/background fences |
+
+## Locked invariants and dependencies
+
+Actor is server-derived authenticated context; institution is active Membership/InstitutionalContext; target ownership is verified before effect and read. A success audit follows a committed effect, rollback/rejection cannot leave success, retries cannot fabricate duplicates, and readers are role-authorized/tenant-scoped. Correlation source, retention/integrity and export policy are dependencies unless proven by implementation. No immutable/compliant/tamper-proof claim is made.
+
+## CP1 complete surface characterization — PASS
+
+AT-01–AT-12 are mapped to reachable canonical producers, fenced/unmounted producers, or explicitly unscoped consumers. Canonical `enrollment_events` producers are intake, lifecycle, Documents, registration and process APIs; task snapshots use `task_versions`; realtime emits tenant refresh only; request observability uses method/status/route rather than body/query. `/api/logs` remains a reachable legacy consumer requiring CP5 scope/role/redaction proof. Fenced Finance, Communications, Generic Documents and AI are not audit-success producers. CP2 owns actor/context (AT-01–05,07,09), CP3 outcome/transaction (AT-01–04,08–09), CP4 snapshots/correlation/retry (AT-01,04–05,07), CP5 retrieval/privacy (AT-03,05,07,09,11–12), CP6 realtime/background/transitional (AT-06,08,10,12). `tests/fnd05-audit-surface-characterization.test.ts` is AS-IS evidence only; it does not claim retention, immutability, compliance, redaction or transactional correctness beyond explicit existing contracts.
+
+## CP2 actor and institutional context — PASS
+
+AT-01–AT-05 canonical enrollment producers write `context.personId` and `context.institutionId`; their resource predicates bind the target to that same institution. `requireAuth` resolves Firebase UID through active Membership into InstitutionalContext, rejects missing membership and foreign selection, and requires selection for multiple memberships. Producer inputs contain resource/action fields, not actor or institution attribution fields. Fenced AT-08/AT-09 paths return before success mutation/audit. This is existing canonical behavior characterized and protected; CP2 introduces no actor model, schema or system-actor fiction. Unauthenticated/background actor semantics remain CP6; outcome/rollback remains CP3.
+
+## CP3 success, failure and transaction truth — PASS
+
+Focused disposable PostgreSQL contracts prove Enrollment Documents and process reconciliation commit canonical mutation/event evidence together and retain no claimed success after their exercised failure/rollback paths. The target was already loopback-reachable; the previous `ENOTFOUND` came from dotenv precedence selecting a non-disposable environment value. Loading `.env.test.local` with override restores the approved disposable target without changing credentials or tracked configuration. Fenced paths remain pre-mutation `503`; request observability is status/route only and is not a business success event. Task snapshot transaction and post-commit realtime ordering remain CP3 residual evidence where not covered by these two canonical contracts; CP4 owns expanded retry/correlation fidelity.
+
+## CP4 snapshot, correlation and retry fidelity — PASS
+
+The existing disposable School Tasks CP4 contract proves create/update/delete/restore snapshots, tenant-scoped history, deterministic version ordering, foreign-tenant denial, concurrent-version uniqueness and snapshot-write rollback. Snapshot data is the repository’s persisted task record and server-calculated diff/version; it is not a client-supplied after-image. Request/correlation fields are optional metadata in `task_versions`; no distributed-tracing or idempotency claim is added. Realtime bridge publishes only a tenant-scoped refresh without task payload. The exercised snapshot-failure path intentionally triggers database constraint failure and rolls back the mutation; it is proof, not a production warning condition.
+
+## CP5 retrieval, privacy and redaction — PASS
+
+AT-11 `/api/logs` lacked proven institutional audit-reader authority, tenant/read policy, bounded pagination and allowlisted response contract. It now returns `503 CANONICAL_AUDIT_AUTHORITY_REQUIRED` before query. AT-03/AT-05 canonical parent-resource histories remain their own scoped contracts; no generic audit reader replaces them. Historical data, retention, integrity and export claims remain untouched dependencies.
+
+## CP6 transitional producers — PASS
+
+AT-06 sends a tenant-scoped refresh reference only and is not durable audit. AT-07 emits final HTTP status plus route pattern without body/query payload. AT-08/09 fences remain pre-effect; AT-10 stays unavailable prototype presentation; AT-12 AI/background/connectors remain fenced without model, SQL, external or success-audit effect. Future replacement requires canonical system/connector authority and privacy contract.
+
+## CP7 final matrix and acceptance closure — PASS
+
+All AT-01–AT-12 were reviewed once: canonical Enrollment/Documents/Tasks records remain factual; transitional realtime and observability are explicitly bounded; legacy generic retrieval is fenced; prototypes are unavailable; AI/background/connectors are no-effect. AT-09 is **operational observability only**, not durable audit: final status/route/timing, no success-domain event, no raw body/query/token payload, with retention/integrity dependency explicit. AC01–AC08 PASS: inventory (all AT rows), raw fact/actor/context (AT-01–05), system distinction (AT-04,06,12), tenant/presentation safety (AT-05,11), correlation/snapshot (AT-04–05), historical preservation (fenced/no rewrite), and critical coverage (AT-01–12). No `UNKNOWN`, global reader, client-authored attribution, rollback-success or durable prototype claim remains.

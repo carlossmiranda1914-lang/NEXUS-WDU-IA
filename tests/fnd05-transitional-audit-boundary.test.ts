@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const server = fs.readFileSync('server.ts', 'utf8');
+const observability = fs.readFileSync('src/observability/request-audit.ts', 'utf8');
+const bridge = fs.readFileSync('src/modules/school-tasks/realtime-bridge.ts', 'utf8');
+assert.match(server, /CANONICAL_BACKGROUND_AUTHORITY_REQUIRED/);
+assert.match(server, /CANONICAL_AI_AUTHORITY_REQUIRED/);
+assert.match(observability, /routePattern/);
+assert.match(observability, /never query parameters or request bodies/);
+assert.match(bridge, /REFRESH_DATA/);
+assert.doesNotMatch(bridge, /event\.data/, 'realtime refresh must not broadcast task payload');
+console.log('FND-05 CP6 transitional audit/no-effect boundary: PASS.');

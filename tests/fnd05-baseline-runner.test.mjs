@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+const run = (...args) => spawnSync(process.execPath, ['scripts/run-fnd05-baseline.mjs', ...args], { encoding: 'utf8', timeout: 10_000 });
+const pass = run('--test-file', 'tests/fixtures/fnd05-runner-pass.test.mjs');
+assert.equal(pass.status, 0, pass.stderr);
+const fail = run('--test-file', 'tests/fixtures/fnd05-runner-fail.test.mjs');
+assert.notEqual(fail.status, 0); assert.match(fail.stderr, /fnd05-runner-fail/); assert.doesNotMatch(fail.stdout, /aggregate: PASS/);
+const missing = run('--test-file', 'tests/fixtures/fnd05-runner-missing.test.mjs');
+assert.notEqual(missing.status, 0); assert.match(missing.stderr, /missing or unreadable/);
+const hang = run('--test-file', 'tests/fixtures/fnd05-runner-hang.test.mjs', '--timeout-ms', '40');
+assert.notEqual(hang.status, 0); assert.match(hang.stderr, /timeout/);
+console.log('FND-05 deterministic runner fixtures: PASS.');

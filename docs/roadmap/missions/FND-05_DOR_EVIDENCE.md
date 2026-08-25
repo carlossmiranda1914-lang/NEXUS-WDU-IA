@@ -1,0 +1,60 @@
+# FND-05 — Definition of Ready Evidence
+
+**State:** READY. Preparation only: no production, schema or historical-data change was made.
+
+## Checkpoints
+
+| CP | Objective / surfaces | RED evidence and allowed treatment | PASS gate / stop |
+|---|---|---|---|
+| CP0 | deterministic audit harness | fixture proves event ordering and no-success-on-error | focused tests run without production credentials |
+| CP1 | complete AT-01–AT-12 producer/consumer matrix | caller-to-reader trace; fence false/prototype paths | no critical UNKNOWN |
+| CP2 | actor, Membership and institution | tampered actor/institution and missing membership | server-derived actor/context or factual fence |
+| CP3 | success, failure and transaction truth | failed/rolled-back/rejected action must not write success | committed effect precedes factual outcome |
+| CP4 | snapshots, before/after, correlation | stale/retry/snapshot mismatch | factual minimized snapshot and explicit correlation source |
+| CP5 | scoped reads, privacy and redaction | cross-tenant read and sensitive-field probe | role/tenant denial, no secret/token/password/payload duplication |
+| CP6 | background, realtime, integrations and transitional producers | async event/connector cannot claim durable audit | system/reconciliation distinction or fence/isolate |
+| CP7 | aggregate evidence closure | AC matrix, scope/rollback review | focused tests, applicable lint/build/CI, clean diff |
+
+## Acceptance evidence
+
+AC01–AC08 in the Mission Pack remain canonical. Completion additionally requires: zero critical UNKNOWN; server-derived actor/institution; transaction-aligned outcomes; factual/minimized snapshots; tenant-scoped authorized reads; no sensitive leakage; accurate rejection/failure evidence; canonical path preservation; deterministic tests; lint/build/CI and rollback evidence. AT-01–AT-12 map each requirement to producer, reader and checkpoint.
+
+## Privacy and secret boundary
+
+Audit payloads exclude passwords, tokens, credential-bearing URLs, request bodies, unnecessary personal data and duplicated connector payloads. Retention, immutability, export restrictions and compliance status are dependencies until authoritative code/decision exists. Keep the FND-06 mandatory gate for the pre-existing tracked credential-bearing development configuration, rotation if active, Firebase restrictions/rules and CI secret detection; do not expose or rotate values here.
+
+## Test plan and stop conditions
+
+Future RED/GREEN evidence covers committed success, rejection and rollback, actor/institution tampering, cross-tenant denial, sensitive-field absence, snapshot/version fidelity, retry behavior, authorized history reads and canonical regressions. Stop if a P0 producer/consumer cannot be traced, retention/compliance needs an unapproved decision, runtime contradicts authority, or a correct audit contract requires schema/domain redesign.
+
+## CP0 deterministic audit baseline — PASS
+
+`scripts/run-fnd05-baseline.mjs` is derived from the established FND-04 runner pattern: local TSX CLI, `shell: false`, explicit readable-file validation, ordered child execution, 60-second timeout, first-failure exit propagation and no external service dependency. `tests/fnd05-baseline-runner.test.mjs` proves pass, failure, missing-file and timeout behavior with synthetic fixtures. `npm run test:fnd05` passes the runner self-test plus request-audit, InstitutionalContext, realtime bridge, Enrollment lifecycle/Documents/process contracts, and FND-02/FND-03 fences. No PostgreSQL contract is selected because CP0 proves harness behavior and existing static/unit evidence only; no persistent institutional data is mutated. Test fixtures and output contain no credentials, request bodies or unnecessary personal data. CP1 is next.
+
+## CP1 complete audit surface characterization — PASS
+
+`tests/fnd05-audit-surface-characterization.test.ts` maps AT-01–AT-12 to their actual source boundaries without invoking server runtime or persistent services. It asserts only present AS-IS facts: event insertion markers, task history tenant parameter, realtime refresh-without-task-data, route-pattern-only request details, server-side task context, fences, unavailable presentation, auth denial source and legacy log endpoint. The matrix records unproven rollback, durable rejection audit, scoped `/api/logs`, retention, role/redaction, correlation and connector/AI guarantees as CP2–CP6 work. CP2 is next.
+
+## CP2 actor and institutional context — PASS
+
+`tests/fnd05-audit-actor-attribution.test.ts` proves that canonical Enrollment Documents, lifecycle and process event emitters use `context.personId`/`context.institutionId`, while `requireAuth` derives context from Firebase UID and active Membership and fails closed for foreign/ambiguous selection. It also proves client document inputs contain no attribution fields. This focused contract does not claim system/unauthenticated actor semantics or CP3 outcome behavior. CP3 is next.
+
+## CP3 success, failure and transaction truth — PASS
+
+After a loopback TCP probe and disposable safety gate, `secretariat-s02-3-document-postgres.test.ts` (11 assertions) and `secretariat-s03-process-postgres.test.ts` (19 assertions) passed with `.env.test.local` selected through dotenv override. The earlier hostname failure was caused by a pre-existing non-disposable environment value winning dotenv precedence; no file, credential, database, migration or service was changed. These tests use isolated schemas and clean their test-created records. They are evidence for the exercised Enrollment Documents/process transaction paths only; they do not invent durable rejection audit, outbox, retention or global realtime guarantees.
+
+## CP4 snapshot, correlation and retry fidelity — PASS
+
+With the same approved dotenv selection, `fnd01-cp4-school-tasks-postgres.test.mts` passed and exercised committed create/update/delete/restore snapshots, scoped read-back, foreign denial, concurrency and failure rollback; `realtime-bridge.test.ts` proves refresh-only tenant routing. No production or schema change was required. CP5 is next.
+
+## CP5 tenant-scoped retrieval, privacy and redaction — PASS
+
+`/api/logs` is fail-closed before database selection because its legacy reader-role, ownership, pagination and allowlisted projection contract was not proven. `tests/fnd05-audit-retrieval-privacy.test.ts` proves authentication remains present and the stable 503 fence precedes query. No historical row was changed; retention/export/redaction policy remains a dependency. CP6 is next.
+
+## CP6 transitional and asynchronous producers — PASS
+
+`tests/fnd05-transitional-audit-boundary.test.ts` proves the background and AI authority fences, route-pattern-only observability boundary and refresh-only realtime bridge. Existing FND-03/FND-04 fences retain no-effect treatment for AI, background and external connectors. No durable audit, system-actor, connector or external-effect claim is created. CP7 is next.
+
+## CP7 aggregate validation and evidence closure — PASS
+
+AT-09 resolves to the existing operational-observability boundary: request middleware records final HTTP status, route pattern and duration after the response outcome, while `request-audit.ts` excludes query/body data. It neither creates nor claims durable security/domain audit. AC01–AC08 map to AT-01–AT-12, CP0–CP6 contracts and the matrix’s authority/dependency gates. CP7 changes documentation only and reuses final executable results: `test:fnd05`, lint, build after the `/api/logs` fence, and focused CP6 contracts PASS.

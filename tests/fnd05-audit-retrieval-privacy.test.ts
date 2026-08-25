@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const server = fs.readFileSync('server.ts', 'utf8');
+const start = server.indexOf("app.get('/api/logs'");
+const route = server.slice(start, start + 700);
+assert.match(route, /requireAuth/);
+assert.match(route, /CANONICAL_AUDIT_AUTHORITY_REQUIRED/);
+assert.match(route, /return res\.status\(503\)/);
+assert.ok(route.indexOf('CANONICAL_AUDIT_AUTHORITY_REQUIRED') < route.indexOf('db.select'), 'legacy audit retrieval must fence before query');
+console.log('FND-05 CP5 legacy audit retrieval fence/privacy contract: PASS.');
