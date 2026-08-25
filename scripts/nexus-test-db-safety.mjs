@@ -49,7 +49,7 @@ export function readApprovedTestTarget(environment = process.env) {
     for (const [key, expectedValue] of Object.entries({ user: 'nexus_ci_runner', host: '127.0.0.1', port: '5432', database: 'nexus_ci_fnd06' })) {
       if (target[key] !== expectedValue) throw new Error(`TEST_DATABASE_URL does not target the approved CI disposable database (${key}).`);
     }
-  } else if (target.host !== '127.0.0.1' || target.port !== '5432' || !target.user || !target.database) {
+  } else if (target.host !== '127.0.0.1' || target.port !== '54329' || !target.user || !target.database) {
     throw new Error('TEST_DATABASE_URL does not target an approved local disposable database.');
   }
 
