@@ -1,6 +1,6 @@
 # FND-04 — Product Truth Cleanup
 
-**State:** READY — awaiting explicit implementation authorization. FND-03 is DONE and the DoR evidence is recorded at baseline `944e2bc7df9ebe54a3a22d83f08c05159a05f50c`.
+**State:** IMPLEMENTING — CP0 PASS. FND-03 is DONE and the DoR evidence is recorded at baseline `944e2bc7df9ebe54a3a22d83f08c05159a05f50c`.
 
 ## Objective
 Ensure that every user-visible P0/P1 operational capability truthfully represents its real persistence, integration, authority and execution state; mocks, simulations, hardcoded institutional data and client-only state must never present themselves as completed institutional operations.
@@ -86,6 +86,12 @@ Before changing a surface:
 ## Definition of Ready evidence
 
 The DoR is executable because the product-truth matrix enumerates the bounded P0/P1 claims, every P0 has a deterministic permitted treatment, and PT-23 has a scoped CP1 presentation characterization—not an unbounded discovery task. No production code changed during DoR preparation. Detailed sources, future RED/GREEN contracts, dependencies, rollback and stop rules are in `docs/roadmap/missions/FND-04_DOR_EVIDENCE.md`.
+
+## CP0 baseline and harness — PASS
+
+`npm run test:fnd04` is the deterministic, Windows-safe baseline aggregate. `scripts/run-fnd04-baseline.mjs` validates every selected file before execution, invokes the local TSX CLI without `npm.cmd`/shell spawning, stops at the first non-zero child result, applies a 60-second child timeout and propagates the exact failing file/status. `tests/fnd04-baseline-runner.test.mjs` proves pass, non-zero propagation and missing-file failure with disposable fixtures.
+
+The selected non-PostgreSQL contracts preserve InstitutionalContext, Person resolution/access, Enrollment intake/API/UI flow, Enrollment Document service/policy, modular Tasks route authority, relevant FND-02 visible fences, FND-03 transitional/document/AI-background tenant fences and institution-resource ownership. They use synthetic fixtures only and perform no database reset, DDL or persistent institutional mutation. CP1 is next; no Product Truth UI, API or persistence change was made in CP0.
 
 ## DONE
 FND-04 is DONE only when AC01–AC08 are PASS, no known P0/P1 operational surface claims success or institutional evidence without a real backing fact, and every retained prototype/demo is visibly and architecturally separated from production authority.

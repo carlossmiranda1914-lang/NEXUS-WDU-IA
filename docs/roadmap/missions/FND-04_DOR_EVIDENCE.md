@@ -80,3 +80,33 @@ Fixture, import, TypeScript, test and build faults are implementation defects to
 - [x] canonical preservation scope, rollback and removal dependencies are explicit;
 - [x] no production implementation occurred;
 - [x] no missing external contract was referenced by the repository.
+
+## CP0 baseline and harness — PASS
+
+**Command:** `npm run test:fnd04`.
+
+**Inventory and matrix relationship:**
+
+| Baseline contract | Claims preserved |
+|---|---|
+| InstitutionalContext, multi-tenant and institution-resource ownership | PT-01–PT-03 and every later treatment must retain server-derived institution, membership and foreign-resource denial. |
+| Person resolution/access; Enrollment intake/API/UI | PT-01 canonical Enrollment/StudentProfile flow. |
+| Enrollment Document service/policy | PT-02 canonical policy and metadata behavior. |
+| School Tasks single mounted mutation authority | PT-03 canonical modular Tasks, PT-04 duplicate legacy presentation boundary. |
+| FND-02 system/student, browser, generic-document and Google fences | PT-05–PT-10 and PT-18–PT-19 unavailable/prototype truth. |
+| FND-03 transitional API, teacher/profile, generic-document and AI/background fences | PT-08, PT-13, PT-15, PT-22 and PT-24 stay bounded by their existing authority decisions. |
+
+The aggregate validates its selected test list before starting, runs each with the repository-local TSX CLI and `shell: false`, stops on the first failed child, reports its path/status, and exits non-zero. Its runner contract uses disposable pass/fail/missing-file fixtures to prove success, non-zero propagation and failure of an absent test. The per-child timeout is 60 seconds; no server, socket, timer or child is retained by the runner.
+
+**Fixture/database boundary:** synthetic deterministic identities and institutional IDs only; no credentials, production target, Docker/WSL/PowerShell dependency, DDL, reset or PostgreSQL mutation. PostgreSQL regressions are intentionally excluded from CP0 because the selected contracts are non-PostgreSQL and no Product Truth production path changed.
+
+**Executed results:**
+
+- `npm run test:fnd04`: PASS — all 20 selected contracts; runner self-contract PASS.
+- `npm run lint`: PASS.
+- `npm run build`: PASS.
+- `git diff --check`: PASS.
+
+**Known build warnings:** existing chunk-size warning for the main bundle; two existing `direct-eval` warnings in `server.ts` lines 98–99. Neither is changed by CP0.
+
+**Next action:** CP1 characterizes PT-23 read-only AI presentation and confirms the affected product-truth caller chains. FND-04 is not DONE.

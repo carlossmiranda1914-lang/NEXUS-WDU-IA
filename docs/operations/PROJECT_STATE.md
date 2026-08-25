@@ -143,7 +143,7 @@ The controlled Foundation sequence is:
 1. FND-01 — Schema Authority — **DONE**;
 2. FND-02 — Legacy Write Authority & Fences — DONE — integrated through PR #69 / merge `d84dd0a`; system wipe and legacy student mutations fail closed before token/request/persistence handling; the legacy SLA background writer remains an explicit transitional authority pending a canonical scheduler decision;
 3. FND-03 — Tenant Sweep — DONE — CP0–CP7 tenant isolation evidence is complete; transitional Generic Documents, AI and SLA remain fail-closed pending canonical authority;
-4. FND-04 — Product Truth Cleanup — READY — DoR completed at baseline `944e2bc`; implementation awaits explicit authorization and is limited to making visible P0/P1 claims factual without creating future replacement domains;
+4. FND-04 — Product Truth Cleanup — IMPLEMENTING — CP0 baseline/harness PASS at `aacb11b`; visible P0/P1 truth work remains limited to factual presentation and must not create future replacement domains. CP1 is next;
 5. FND-05 — Audit Truth — PREPARATION;
 6. FND-06 — CI vNext Gate — PREPARATION.
 
