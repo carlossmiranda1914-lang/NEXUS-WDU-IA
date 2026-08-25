@@ -14,7 +14,7 @@
 | CG-08 | lint/build | named TypeScript/Production build CI steps | ENFORCED | preserve warnings, CP5 policy |
 | CG-09 | diff/temporary artifacts | no named CI step | MISSING | CP5 deterministic gate |
 | CG-10 | secret/configuration detection | no authoritative secret scanner; tracked development credential risk | UNSAFE | CP2 remediation and scanner |
-| CG-11 | PR quality gate | `quality-gate`, PR/main triggers, concurrency, 20-min timeout | ENFORCED | CP6 settings/check characterization |
+| CG-11 | PR quality gate | `quality-gate` PR path-filter trigger, concurrency, 20-min timeout; no main trigger | PARTIAL | CP5/CP6 broaden trigger and characterize settings |
 | CG-12 | Supabase Preview | skipped non-mandatory external preview | SKIPPED | never substitute for quality-gate |
 
 CI PostgreSQL design: Ubuntu PostgreSQL 16 service, dedicated disposable `nexus_test`, loopback URL generated only in job environment, migration-led bootstrap, isolated schemas/fixtures and cleanup. Never load local `.env.test.local` or production/staging credentials. Logs must redact connection strings and `.env*` values.
