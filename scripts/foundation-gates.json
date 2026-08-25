@@ -1,0 +1,12 @@
+{
+  "totalTimeoutMs": 600000,
+  "gates": [
+    { "name": "fnd01-migration-runner", "file": "tests/migration-runner.test.ts", "command": ["node", "--import", "tsx", "tests/migration-runner.test.ts"], "timeoutMs": 60000 },
+    { "name": "fnd01-runtime-policy", "file": "tests/fnd01-cp5-runtime-policy.test.ts", "command": ["npm", "run", "test:fnd01:cp5:policy"], "timeoutMs": 60000 },
+    { "name": "fnd02", "script": "test:fnd02", "command": ["npm", "run", "test:fnd02"], "timeoutMs": 120000 },
+    { "name": "fnd03", "script": "test:fnd03", "command": ["npm", "run", "test:fnd03"], "timeoutMs": 120000 },
+    { "name": "fnd04", "script": "test:fnd04", "command": ["npm", "run", "test:fnd04"], "timeoutMs": 120000 },
+    { "name": "fnd05", "script": "test:fnd05", "command": ["npm", "run", "test:fnd05"], "timeoutMs": 120000 },
+    { "name": "fnd06", "script": "test:fnd06", "command": ["npm", "run", "test:fnd06"], "timeoutMs": 60000 }
+  ]
+}
