@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { fileURLToPath } from 'node:url';
 
 const REQUIRED_CONFIRMATION = 'NEXUS_TEST_DATABASE';
 const EXPECTED_TARGET = Object.freeze({
@@ -9,6 +10,9 @@ const EXPECTED_TARGET = Object.freeze({
 });
 
 export function readApprovedTestTarget(environment = process.env) {
+  if (environment.CI !== 'true' && environment.TEST_DATABASE_LOCAL_AUTHORIZED !== 'true') {
+    throw new Error('Local PostgreSQL tests require TEST_DATABASE_LOCAL_AUTHORIZED=true.');
+  }
   const connectionString = environment.TEST_DATABASE_URL?.trim();
   if (!connectionString) {
     throw new Error('TEST_DATABASE_URL is required.');
