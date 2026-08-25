@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
+import { verifyApprovedTestConnection } from './nexus-test-db-safety.mjs';
 
+await verifyApprovedTestConnection();
 if (process.env.CI !== 'true' && process.env.TEST_DATABASE_LOCAL_AUTHORIZED !== 'true') throw new Error('CP4 local PostgreSQL execution requires TEST_DATABASE_LOCAL_AUTHORIZED=true.');
 if (!process.env.TEST_DATABASE_URL || process.env.TEST_DATABASE_URL === process.env.DATABASE_URL || process.env.TEST_DATABASE_CONFIRMATION !== 'NEXUS_TEST_DATABASE') throw new Error('CP4 requires an explicit isolated TEST_DATABASE_URL.');
 const gates = [
