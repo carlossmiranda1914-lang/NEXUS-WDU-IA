@@ -92,6 +92,17 @@ CP2 does not alter the FND-02/FND-03 backend fences, canonical Enrollment/Studen
 | PT-15 | Communications screen has no proven canonical send/schedule/delivery command | Browser history/toast presented sent or scheduled delivery without authoritative effect/read-back | Mounted shell now presents factual unavailable state before `CommunicationCenter` can run; no message is sent, scheduled or marked delivered. `fnd04-mutation-readback-truth` proves route isolation | Communication command, recipient policy and delivery/read authority |
 | PT-25 | Legacy migration is not mounted operationally | Legacy presentation could claim migration completion | CP2 factual unavailable treatment remains; no migration/reconciliation command was created | Approved migration/reconciliation plan |
 
+## CP4 dashboard, KPI, search and browser-state truth — PASS
+
+| Claim | Screen / source | RED defect | CP4 factual treatment / freshness and tenant proof | Dependency |
+|---|---|---|---|---|
+| PT-13, PT-21 | Mounted Dashboard aggregated props, browser state and unsupported Finance/academic/signature projections | KPI cards, trends, compliance and sync language could render values without a canonical projection, including local/partial or empty-as-zero data | Dashboard is unavailable before the component mounts. It presents neither number, zero, chart nor freshness claim; therefore no prior tenant result can survive a context switch | Authorized KPI/read projection per domain |
+| PT-20 | Mounted GlobalSearch indexed client arrays of students, finance, documents, messages and demo-derived details | Results/counts could imply complete institutional search and expose stale/view-local data | Desktop and mobile search entries are factual unavailable before `GlobalSearch` mounts. No client institution filter, direct-ID lookup, result count or stale selection is used | Server-side authorized search projection |
+| PT-17 | `nexus_*` operational keys in `App` | Browser permissions, audit, notifications and entity arrays could be restored or described as institutional state | Operational keys are no longer read, written or cleared. Existing browser data is left untouched and never read as a record. Theme remains the sole tenant-neutral device preference | Each represented canonical domain; FND-06 browser-state review |
+| PT-26 | Unmounted Gamification browser XP keys | Browser XP could look durable | Remains excluded from operational navigation and institutional authority; no CP4 migration or persistence is created | Future academic/gamification domain |
+
+The CP4 UI has no loading/zero/empty ambiguity because unsupported projections are unavailable rather than rendered. A future canonical projection must return server-scoped data and explicitly distinguish loading, error, empty and zero before any dashboard/search display is reintroduced.
+
 ## Implementation invariants
 
 - Backend authorization, InstitutionalContext and FND-02/FND-03 fences stay authoritative.

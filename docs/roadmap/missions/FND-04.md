@@ -105,6 +105,10 @@ CP2 removes false operational availability at the client boundary without changi
 
 Canonical School Tasks now display a result only after its command succeeds and a tenant-scoped authoritative read confirms it. Create uses POST→GET, update PUT→GET, archive confirms the deleted scoped read, and restore confirms the active scoped read; pending mutation state prevents double-submit. Command failures retain the prior visual state and show factual error feedback. The non-authoritative Communications surface is unavailable in the mounted shell because no command/read-back can establish send, scheduling or delivery. Canonical Enrollment and Enrollment Documents regressions remain green. CP4 is next; FND-04 remains IMPLEMENTING.
 
+## CP4 dashboard, KPI, search and browser-state truth — PASS
+
+The Dashboard and GlobalSearch had no authorized server projection with a defined calculation, freshness and Membership-derived tenant scope. They are now factual unavailable before their client aggregation/indexing runs; no unsupported zero, metric, trend, sync state, result count or direct-ID result is shown. Operational `nexus_*` browser keys are neither restored nor written and existing values are left untouched; the device-local theme preference is preserved. CP5 is next; FND-04 remains IMPLEMENTING.
+
 ## DONE
 FND-04 is DONE only when AC01–AC08 are PASS, no known P0/P1 operational surface claims success or institutional evidence without a real backing fact, and every retained prototype/demo is visibly and architecturally separated from production authority.
 
