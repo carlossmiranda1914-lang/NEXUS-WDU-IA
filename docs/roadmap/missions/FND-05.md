@@ -92,6 +92,10 @@ The canonical Enrollment event producers attribute actor and institution exclusi
 
 Existing canonical Enrollment Documents and process PostgreSQL contracts pass against the approved disposable target. They prove committed mutation/event behavior and their exercised failure/rollback paths without schema or production changes. The reachability incident was dotenv precedence, not hostname, credentials, migrations or CP3 logic; `.env.test.local` is loopback, ignored, and used with explicit dotenv override for the focused contracts. CP4 is next.
 
+## CP4 snapshot, correlation and retry fidelity — PASS
+
+The existing School Tasks disposable PostgreSQL contract proves factual committed snapshots/version history, rollback on snapshot failure, tenant isolation and concurrent version uniqueness. Realtime emits only a tenant-scoped refresh payload. Correlation/request fields are optional existing metadata; no new tracing or idempotency contract is claimed. CP5 is next.
+
 ## Stop rules
 Stop and return to BLOCKED/PREPARATION if:
 - the real actor cannot be determined from the authoritative command path;
