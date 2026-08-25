@@ -88,6 +88,10 @@ All AT-01–AT-12 surfaces now have an effective producer/consumer classificatio
 
 The canonical Enrollment event producers attribute actor and institution exclusively from resolved server InstitutionalContext. Firebase UID resolves through active Membership; selected multi-membership context supplies role/institution; client actor, person, tenant and institution fields are absent from document audit inputs and cannot override attribution. Missing or foreign Membership fails closed. No new actor model or audit persistence was introduced. CP3 is next.
 
+## CP3 success, failure and transaction truth — PASS
+
+Existing canonical Enrollment Documents and process PostgreSQL contracts pass against the approved disposable target. They prove committed mutation/event behavior and their exercised failure/rollback paths without schema or production changes. The reachability incident was dotenv precedence, not hostname, credentials, migrations or CP3 logic; `.env.test.local` is loopback, ignored, and used with explicit dotenv override for the focused contracts. CP4 is next.
+
 ## Stop rules
 Stop and return to BLOCKED/PREPARATION if:
 - the real actor cannot be determined from the authoritative command path;

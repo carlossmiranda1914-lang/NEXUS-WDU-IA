@@ -38,3 +38,7 @@ Future RED/GREEN evidence covers committed success, rejection and rollback, acto
 ## CP2 actor and institutional context — PASS
 
 `tests/fnd05-audit-actor-attribution.test.ts` proves that canonical Enrollment Documents, lifecycle and process event emitters use `context.personId`/`context.institutionId`, while `requireAuth` derives context from Firebase UID and active Membership and fails closed for foreign/ambiguous selection. It also proves client document inputs contain no attribution fields. This focused contract does not claim system/unauthenticated actor semantics or CP3 outcome behavior. CP3 is next.
+
+## CP3 success, failure and transaction truth — PASS
+
+After a loopback TCP probe and disposable safety gate, `secretariat-s02-3-document-postgres.test.ts` (11 assertions) and `secretariat-s03-process-postgres.test.ts` (19 assertions) passed with `.env.test.local` selected through dotenv override. The earlier hostname failure was caused by a pre-existing non-disposable environment value winning dotenv precedence; no file, credential, database, migration or service was changed. These tests use isolated schemas and clean their test-created records. They are evidence for the exercised Enrollment Documents/process transaction paths only; they do not invent durable rejection audit, outbox, retention or global realtime guarantees.
