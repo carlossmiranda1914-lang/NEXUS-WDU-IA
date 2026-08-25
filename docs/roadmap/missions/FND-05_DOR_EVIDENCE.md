@@ -26,3 +26,7 @@ Audit payloads exclude passwords, tokens, credential-bearing URLs, request bodie
 ## Test plan and stop conditions
 
 Future RED/GREEN evidence covers committed success, rejection and rollback, actor/institution tampering, cross-tenant denial, sensitive-field absence, snapshot/version fidelity, retry behavior, authorized history reads and canonical regressions. Stop if a P0 producer/consumer cannot be traced, retention/compliance needs an unapproved decision, runtime contradicts authority, or a correct audit contract requires schema/domain redesign.
+
+## CP0 deterministic audit baseline — PASS
+
+`scripts/run-fnd05-baseline.mjs` is derived from the established FND-04 runner pattern: local TSX CLI, `shell: false`, explicit readable-file validation, ordered child execution, 60-second timeout, first-failure exit propagation and no external service dependency. `tests/fnd05-baseline-runner.test.mjs` proves pass, failure, missing-file and timeout behavior with synthetic fixtures. `npm run test:fnd05` passes the runner self-test plus request-audit, InstitutionalContext, realtime bridge, Enrollment lifecycle/Documents/process contracts, and FND-02/FND-03 fences. No PostgreSQL contract is selected because CP0 proves harness behavior and existing static/unit evidence only; no persistent institutional data is mutated. Test fixtures and output contain no credentials, request bodies or unnecessary personal data. CP1 is next.
