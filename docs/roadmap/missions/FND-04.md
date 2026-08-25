@@ -1,6 +1,6 @@
 # FND-04 — Product Truth Cleanup
 
-**State:** PREPARATION. Implementation is not authorized until FND-03 is DONE and this Mission Pack passes DoR.
+**State:** READY — awaiting explicit implementation authorization. FND-03 is DONE and the DoR evidence is recorded at baseline `944e2bc7df9ebe54a3a22d83f08c05159a05f50c`.
 
 ## Objective
 Ensure that every user-visible P0/P1 operational capability truthfully represents its real persistence, integration, authority and execution state; mocks, simulations, hardcoded institutional data and client-only state must never present themselves as completed institutional operations.
@@ -33,7 +33,7 @@ Inventory user-visible claims involving:
 - hardcoded/sample institutional data;
 - localStorage/client-only state presented as durable institutional state.
 
-Each surface is classified `REAL`, `PROTOTYPE`, `DEMO`, `BROKEN`, or `UNKNOWN`, with its actual backing source and permitted treatment.
+Each surface is classified `CANONICAL_REAL`, `TRANSITIONAL_REAL`, `FALSE_SUCCESS`, `FALSE_AVAILABILITY`, `STALE_OR_LOCAL_ONLY`, `PROTOTYPE`, or `UNKNOWN`, with its actual backing source and permitted treatment. The executable inventory is `docs/audit/FND-04_PRODUCT_TRUTH_MATRIX.md`.
 
 ## OUT
 - building real replacements for every prototype;
@@ -69,6 +69,23 @@ Before changing a surface:
 - existing functional/tenant regressions for affected real capabilities;
 - TypeScript/build and applicable CI gates;
 - truth inventory with AC-to-evidence references.
+
+## Locked implementation checkpoints
+
+| Checkpoint | Objective and exact surfaces | RED evidence → permitted treatment | Required regressions / PASS evidence | Stop condition |
+|---|---|---|---|---|
+| CP0 | Establish the product-truth harness and fixture rules for changed UI claims. | A direct action proves the visible success/availability assertion and its API/command/result; no production GREEN before the RED contract. | Focused client/API characterization can run without production credentials; the harness distinguishes browser state from server read-back. | The existing client test boundary cannot invoke the mounted action without a new test architecture decision. |
+| CP1 | Characterize PT-23 AI-analysis source/outcome presentation and verify matrix caller chains. | Trace mounted caller → endpoint/result/source/error. | PT-23 remains visibly prototype/read-only unless a factual source contract proves otherwise; no new P0/P1 UNKNOWN. | Product contract contradicts its runtime provider/source. |
+| CP2 | Make fenced, unavailable, prototype and local-only actions factual: PT-04–PT-08, PT-10–PT-11, PT-16–PT-19, PT-22 and PT-24–PT-26. | RED proves a fenced/unavailable/prototype path can still look successful/actionable. Correct claim, disable/hide, label/isolate or fail factual. | No false green state after 503/unavailable; no local-only operation is presented as institutional; canonical entries remain reachable. | Removing a claim withdraws an essential capability without an approved factual fallback. |
+| CP3 | Correct mutation success and read-back truth: PT-01, PT-03, PT-09, PT-12, PT-15 and PT-25. | RED proves an optimistic/simulated message precedes an authoritative read-back. Connect only to canonical command, correct the claim, or fail factual. | Direct action, command result, reload/read-back, denial/no-mutation and canonical regression. | The canonical product flow cannot represent the requested action without an unapproved domain decision. |
+| CP4 | Correct dashboard, KPI, search and browser-state presentation: PT-13, PT-17, PT-20, PT-21 and PT-26. | RED identifies a displayed institutional value without source/calculation/freshness/authorization. Label, remove, scope or connect to proven source. | Same-tenant factual source; stale/local data cannot appear as institutional fact; no cross-tenant leak. | A product KPI needs a new canonical read model/metric definition. |
+| CP5 | Correct uploads, downloads, imports, exports and external effects: PT-02, PT-08–PT-10, PT-14 and PT-19. | RED proves a claimed file/integration/delivery effect lacks physical/effective authority. Fail factual, disable or preserve only proven canonical behavior. | Actual effect or factual failure, no unauthorized mutation/file, Enrollment Documents regression. | A required physical storage or external provider authority is absent. |
+| CP6 | Align role/authorization/errors/refresh: PT-01, PT-03, PT-05–PT-07, PT-15, PT-20, PT-22, PT-24 and PT-27. | RED proves frontend role/status/success contradicts backend authority or stale result. Treat backend as authority and refresh factual state. | Invalid role/context and 503/error paths; canonical Identity/Membership/InstitutionalContext and Tasks/Enrollment regressions. | Factual state requires an IAM or domain authority that cannot be represented without expanding scope. |
+| CP7 | Aggregate validation and evidence closure. | Re-run only affected focused evidence and complete AC matrix. | Every AC maps to concrete code/test/read-back evidence; lint/build/diff/CI gate; rollback/removal gates documented. | Any P0 claim remains unknown or lacks a deterministic treatment. |
+
+## Definition of Ready evidence
+
+The DoR is executable because the product-truth matrix enumerates the bounded P0/P1 claims, every P0 has a deterministic permitted treatment, and PT-23 has a scoped CP1 presentation characterization—not an unbounded discovery task. No production code changed during DoR preparation. Detailed sources, future RED/GREEN contracts, dependencies, rollback and stop rules are in `docs/roadmap/missions/FND-04_DOR_EVIDENCE.md`.
 
 ## DONE
 FND-04 is DONE only when AC01–AC08 are PASS, no known P0/P1 operational surface claims success or institutional evidence without a real backing fact, and every retained prototype/demo is visibly and architecturally separated from production authority.

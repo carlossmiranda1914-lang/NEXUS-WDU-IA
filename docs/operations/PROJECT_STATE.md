@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-Updated: 2026-08-24
+Updated: 2026-08-25
 
 This file records the current factual engineering state only. It is not a historical diary and must not present planned work as implemented.
 
@@ -142,8 +142,8 @@ The controlled Foundation sequence is:
 
 1. FND-01 — Schema Authority — **DONE**;
 2. FND-02 — Legacy Write Authority & Fences — DONE — integrated through PR #69 / merge `d84dd0a`; system wipe and legacy student mutations fail closed before token/request/persistence handling; the legacy SLA background writer remains an explicit transitional authority pending a canonical scheduler decision;
-3. FND-03 — Tenant Sweep — DONE — CP0–CP7 tenant isolation evidence is complete; transitional Generic Documents, AI and SLA remain fail-closed pending canonical authority; FND-04 DoR preparation is next;
-4. FND-04 — Product Truth Cleanup — PREPARATION;
+3. FND-03 — Tenant Sweep — DONE — CP0–CP7 tenant isolation evidence is complete; transitional Generic Documents, AI and SLA remain fail-closed pending canonical authority;
+4. FND-04 — Product Truth Cleanup — READY — DoR completed at baseline `944e2bc`; implementation awaits explicit authorization and is limited to making visible P0/P1 claims factual without creating future replacement domains;
 5. FND-05 — Audit Truth — PREPARATION;
 6. FND-06 — CI vNext Gate — PREPARATION.
 
