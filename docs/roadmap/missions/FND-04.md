@@ -113,6 +113,10 @@ The Dashboard and GlobalSearch had no authorized server projection with a define
 
 Enrollment Documents retains only its proven metadata evidence path: authorized reference/status transitions plus scoped read-back. It does not claim physical upload, object storage or download. Generic Documents, signatures, Finance external effects and Google Sheets import/export are unavailable before their legacy handlers mount, so no file, connector request, delivery or local import result is fabricated. CP6 is next; FND-04 remains IMPLEMENTING.
 
+## CP6 authorization, error and refresh alignment — PASS
+
+Client role simulation no longer changes presentation role or calls the fenced role API. Before the backend profile/context resolves, UI is non-privileged; logout, suspension and context/profile failure clear institutional presentation state while preserving device-local theme. Backend Membership/InstitutionalContext and tenant middleware remain the authorization authority, and fenced actions remain unavailable after a presentation role change. CP7 is next; FND-04 remains IMPLEMENTING.
+
 ## DONE
 FND-04 is DONE only when AC01–AC08 are PASS, no known P0/P1 operational surface claims success or institutional evidence without a real backing fact, and every retained prototype/demo is visibly and architecturally separated from production authority.
 

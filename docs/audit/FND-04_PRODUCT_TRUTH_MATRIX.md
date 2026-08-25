@@ -115,6 +115,17 @@ The CP4 UI has no loading/zero/empty ambiguity because unsupported projections a
 
 CP5 distinguishes metadata evidence from physical file bytes: the current Enrollment Documents contract has only scoped metadata/read-back and must never be described as a physical upload, archive or download. No PostgreSQL/storage test ran because CP5 did not alter a persisted path and the approved disposable database target is not configured.
 
+## CP6 authorization, error and refresh alignment — PASS
+
+| Claim | Authority / prior defect | CP6 treatment and evidence | Dependency |
+|---|---|---|---|
+| PT-01, PT-03 | Enrollment and modular Tasks already derive Membership context server-side; UI began with a privileged role and could retain presentation data after logout/context failure | App starts fail-closed, uses `/api/profile` only after Firebase authentication, and clears institutional entities/tasks/notifications and role on logout, suspension or profile failure. Tasks retains CP3 command/read-back behavior | Canonical Enrollment and School Tasks contracts |
+| PT-05, PT-07, PT-17 | Browser role simulator could change UI role before its fenced profile-role API rejected the request | Simulator no longer changes role or calls the fenced route; it reports factual unavailability. Browser-held role never becomes authority | IAM provisioning contract |
+| PT-15, PT-20, PT-22, PT-24 | Communications/search/AI/teacher legacy paths have no authority that a role change can grant | Existing unavailable route treatment stays dominant; FND-02/FND-03 fences remain direct API controls | Respective canonical domains |
+| PT-27 | Theme is device-local preference only | Theme remains tenant-neutral and is not cleared with institutional presentation state | Future preference contract if institutionalized |
+
+`requireAuth` resolves InstitutionalContext from Firebase identity plus active Membership, returns factual 403/409 outcomes for missing/ambiguous/foreign membership, and `multiTenantMiddleware` rejects a requested institution that differs from the resolved context. CP6 does not make frontend visibility a security control.
+
 ## Implementation invariants
 
 - Backend authorization, InstitutionalContext and FND-02/FND-03 fences stay authoritative.
