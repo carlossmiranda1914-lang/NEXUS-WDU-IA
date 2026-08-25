@@ -1,6 +1,6 @@
 # FND-06 — Definition of Ready Evidence
 
-**State:** IMPLEMENTING — CP0/CP1 PASS; CP2 repository remediation PASS, external rotation BLOCKED. No history rewrite, external credential action, repository setting or production source change occurred.
+**State:** IMPLEMENTING — CP0–CP3 repository gates PASS; CP2 external rotation BLOCKED. No history rewrite, external credential action, repository setting or production source change occurred.
 
 ## Locked checkpoints
 
@@ -31,3 +31,7 @@ The executable CP1 characterization parses the package manifest, FND runner path
 Tracked credential-bearing development example values were replaced with placeholders, while local secret files remain ignored. `npm run test:secrets` proves URL, private-key, tracked-env, clean, public Firebase and disposable PostgreSQL cases without echoing a synthetic sentinel, then scans tracked/staged files. The existing `quality-gate` invokes it with no additional permissions or secret environment. No private-key/service-account marker was found in the inspected current tree; Firebase client configuration remains classified as public browser configuration pending external restrictions/rules/IAM validation.
 
 Current-tree removal cannot erase any historical exposure. Rotation is blocked pending authorised external provider owners for potentially active database, connector/API and SMTP categories; required action is provider-side rotation/revocation, replacement in approved local/CI secret storage, and verification without disclosing values. History rewrite remains prohibited without separate authorization. CP3 can proceed independently after this blocker is recorded.
+
+## CP3 evidence — PASS
+
+`test:foundation` proves manifest/script/file validation, deterministic ordering, first-failure stop, missing script/file handling, child failure propagation and timeout handling. Its non-PostgreSQL scope is FND-01 migration runner/runtime policy, FND-02 through FND-06; PostgreSQL CI coverage remains CP4. `test:diff` requires an authoritative valid base and rejects committed whitespace; `test:artifacts` rejects tracked local env, temporary/log/dump, recovery and editor/system artifacts by path/rule only. Controlled synthetic failures and clean fixtures pass. The stable `quality-gate` invokes the aggregate, diff and artifact gates with full checkout history; CP5 retains broad trigger redesign. CP4 is next.
