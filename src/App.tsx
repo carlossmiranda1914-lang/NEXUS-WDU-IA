@@ -70,6 +70,15 @@ const FinancialPanel = lazy(() => import('./components/FinancialPanel'));
 const CommunicationCenter = lazy(() => import('./components/CommunicationCenter'));
 const SystemConfig = lazy(() => import('./components/SystemConfig'));
 const AIAssistant = lazy(() => import('./components/AIAssistant'));
+
+function FactualUnavailablePanel({ title, detail }: { title: string; detail: string }) {
+  return (
+    <section role="status" className="mx-auto max-w-2xl rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6 text-zinc-100">
+      <h2 className="text-lg font-semibold text-amber-200">{title}</h2>
+      <p className="mt-2 text-sm text-zinc-300">{detail}</p>
+    </section>
+  );
+}
 const TeacherAI = lazy(() => import('./components/TeacherAI'));
 const SchoolDocuments = lazy(() => import('./components/SchoolDocuments'));
 const WorkflowsCentral = lazy(() => import('./components/WorkflowsCentral'));
@@ -368,7 +377,8 @@ export default function App() {
   const [loginStep, setLoginStep] = useState<number>(1);
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
-  const [currentUserRole, setCurrentUserRole] = useState<UserRole>('admin');
+  // Until the backend resolves an active Membership, the client has no institutional authority.
+  const [currentUserRole, setCurrentUserRole] = useState<UserRole>('student');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
@@ -394,37 +404,17 @@ export default function App() {
     }
   }, [theme]);
 
-  // Dynamic granular permissions state
-  const [rolePermissions, setRolePermissions] = useState<Record<UserRole, string[]>>(() => {
-    const saved = localStorage.getItem('nexus_role_permissions');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if ((parsed.admin && parsed.admin.includes('teacher_ai')) || (parsed.parent && parsed.parent.length > 1)) {
-          localStorage.setItem('nexus_role_permissions', JSON.stringify(DEFAULT_PERMISSIONS));
-          return DEFAULT_PERMISSIONS;
-        }
-        return parsed;
-      } catch (e) {
-        return DEFAULT_PERMISSIONS;
-      }
-    }
-    return DEFAULT_PERMISSIONS;
-  });
+  // Browser-held role controls are presentation only; authority stays server-side.
+  const [rolePermissions, setRolePermissions] = useState<Record<UserRole, string[]>>(DEFAULT_PERMISSIONS);
 
   const handleUpdatePermissions = (updated: Record<UserRole, string[]>) => {
     setRolePermissions(updated);
-    localStorage.setItem('nexus_role_permissions', JSON.stringify(updated));
   };
 
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    const saved = localStorage.getItem('nexus_audit_logs');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   const handleClearAuditLogs = () => {
     setAuditLogs([]);
-    localStorage.removeItem('nexus_audit_logs');
   };
 
   const logAuditEvent = (
@@ -457,7 +447,6 @@ export default function App() {
 
     setAuditLogs(prev => {
       const updated = [newLog, ...prev].slice(0, 80);
-      localStorage.setItem('nexus_audit_logs', JSON.stringify(updated));
       return updated;
     });
   };
@@ -488,29 +477,8 @@ export default function App() {
   }, [activeTab, currentUserRole, rolePermissions]);
 
   const handleSimulationRoleChange = async (newRole: UserRole) => {
-    setCurrentUserRole(newRole);
-    logAuditEvent(newRole, activeTab, 'ALLOWED', 'LOGIN', `O utilizador iniciou sessão ou trocou com sucesso para o perfil de ${newRole.toUpperCase()}.`);
-    
-    if (firebaseUser) {
-      try {
-        const token = await firebaseUser.getIdToken();
-        const res = await fetch('/api/profile/role', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ role: newRole })
-        });
-        if (res.ok) {
-          console.log(`[AUTH] Profile role updated successfully in PostgreSQL to: ${newRole}`);
-        } else {
-          console.warn('[AUTH] Warning: Failed to update simulated role in PostgreSQL.');
-        }
-      } catch (err) {
-        console.warn('[AUTH] Warning: Error synchronizing simulated role with backend:', err);
-      }
-    }
+    void newRole;
+    setLoginError('A alteração de papel não está disponível. As permissões resultam da associação institucional ativa.');
   };
 
   // Core School State Engine (React hydrated from local mock db)
@@ -545,14 +513,10 @@ export default function App() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
 
   // Real-time dynamic states
-  const [notificationPresets, setNotificationPresets] = useState<NotificationPreset[]>(() => {
-    const saved = localStorage.getItem('nexus_notification_presets');
-    return saved ? JSON.parse(saved) : defaultNotificationPresets;
-  });
+  const [notificationPresets, setNotificationPresets] = useState<NotificationPreset[]>(defaultNotificationPresets);
 
   const handleUpdateNotificationPresets = (updated: NotificationPreset[]) => {
     setNotificationPresets(updated);
-    localStorage.setItem('nexus_notification_presets', JSON.stringify(updated));
   };
 
   const [realtimeNotifications, setRealtimeNotifications] = useState<Array<{ id: string; title: string; message: string; type: 'success' | 'info' | 'warning' | 'alert'; timestamp: string }>>([]);
@@ -571,69 +535,19 @@ export default function App() {
 
   const [tasks, setTasks] = useState<SchoolTask[]>([]);
 
-  // Sync state engine to localstorage for instant persistence
-  useEffect(() => {
-    localStorage.setItem('nexus_approvals', JSON.stringify(approvals));
-  }, [approvals]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_students', JSON.stringify(students));
-  }, [students]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_teachers', JSON.stringify(teachers));
-  }, [teachers]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_invoices', JSON.stringify(invoices));
-  }, [invoices]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_announcements', JSON.stringify(announcements));
-  }, [announcements]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_messages', JSON.stringify(messages));
-  }, [messages]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_automations', JSON.stringify(automationFlows));
-  }, [automationFlows]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_school_docs', JSON.stringify(schoolDocs));
-  }, [schoolDocs]);
-
-  useEffect(() => {
-    localStorage.setItem('nexus_signatures', JSON.stringify(signatures));
-  }, [signatures]);
-
-  // Redefinição limpa de primeiro carregamento para destruir qualquer sessão simulada/teste anterior
-  useEffect(() => {
-    const isWiped = localStorage.getItem('nexus_system_reset_v4');
-    if (!isWiped) {
-      console.log('[SYSTEM-WIPE] Clean boot detected: clearing and signing out any active sessions...');
-      signOut(auth).then(() => {
-        localStorage.clear();
-        localStorage.setItem('nexus_system_reset_v4', 'true');
-        window.location.reload();
-      }).catch((e) => {
-        console.error(e);
-        localStorage.clear();
-        localStorage.setItem('nexus_system_reset_v4', 'true');
-      });
-    }
-  }, []);
+  const clearInstitutionalPresentation = () => {
+    setStudents([]); setTeachers([]); setInvoices([]); setAnnouncements([]); setMessages([]);
+    setAutomationFlows([]); setSchoolDocs([]); setApprovals([]); setSignatures([]); setTasks([]);
+    setRealtimeNotifications([]); setCurrentUserRole('student'); setCurrentUserStatus('inactive');
+  };
 
   const handleWipeSystemSessions = async () => {
-    console.log('[SYSTEM-WIPE] Manual wipe triggered. Clearing sessions & local cache...');
+    console.log('[SYSTEM-WIPE] Session sign-out requested. Browser data is not deleted.');
     try {
       await signOut(auth);
     } catch (err) {
       console.error(err);
     }
-    localStorage.clear();
-    localStorage.setItem('nexus_system_reset_v4', 'true');
     window.location.reload();
   };
 
@@ -657,6 +571,7 @@ export default function App() {
               console.warn('[AUTH-PG] Account is suspended, signing out.');
               await signOut(auth);
               setFirebaseUser(null);
+              clearInstitutionalPresentation();
               setLoginError('A sua conta está temporariamente suspensa pelo administrador pedagógico.');
             } else {
               setCurrentUserRole(profile.role);
@@ -667,15 +582,18 @@ export default function App() {
             // If the profile fetch fails (e.g. user deleted from PostgreSQL), we must sign out to remain synchronized!
             await signOut(auth);
             setFirebaseUser(null);
+            clearInstitutionalPresentation();
           }
         } catch (e) {
           console.error('[AUTH-PG] Error loading profile from Postgres:', e);
           await signOut(auth);
           setFirebaseUser(null);
+          clearInstitutionalPresentation();
         }
       } else {
         console.log('[AUTH-CLIENT] onAuthStateChanged detected signed out state.');
         setFirebaseUser(null);
+        clearInstitutionalPresentation();
       }
       setAuthLoading(false);
     });
@@ -1137,6 +1055,7 @@ export default function App() {
     try {
       await signOut(auth);
       setFirebaseUser(null);
+      clearInstitutionalPresentation();
       setLoginStep(1);
     } catch (err) {
       console.error("Error signing out:", err);
@@ -2472,24 +2391,7 @@ export default function App() {
 
         {/* FUZZY GLOBAL SEARCH BAR */}
         <div className="hidden lg:flex flex-1 max-w-sm mx-8">
-          <GlobalSearch
-            students={students}
-            teachers={teachers}
-            invoices={invoices}
-            announcements={announcements}
-            messages={messages}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
-            theme={theme}
-            onUpdateStudent={(id, updatedFields) => {
-              const std = students.find(s => s.id === id);
-              if (std) {
-                const updatedStd = { ...std, ...updatedFields };
-                setStudents(prev => prev.map(s => s.id === id ? updatedStd : s));
-                upsertLiveStudent(updatedStd);
-              }
-            }}
-          />
+          <span role="status" className="text-xs text-zinc-500">Pesquisa institucional indisponível sem projeção autorizada.</span>
         </div>
 
         {/* Minimalist Profile & Controls */}
@@ -2616,24 +2518,7 @@ export default function App() {
                 {/* Mobile Fuzzy Search Input */}
                 <div className="px-2.5 mb-2 relative">
                   <span className={`text-[10px] font-mono ${theme === 'light' ? 'text-zinc-500' : 'text-zinc-500'} uppercase tracking-widest block mb-2`}>Procurar Global</span>
-                  <GlobalSearch
-                    students={students}
-                    teachers={teachers}
-                    invoices={invoices}
-                    announcements={announcements}
-                    messages={messages}
-                    activeTab={activeTab}
-                    setActiveTab={setActiveTab}
-                    theme={theme}
-                    onUpdateStudent={(id, updatedFields) => {
-                      const std = students.find(s => s.id === id);
-                      if (std) {
-                        const updatedStd = { ...std, ...updatedFields };
-                        setStudents(prev => prev.map(s => s.id === id ? updatedStd : s));
-                        upsertLiveStudent(updatedStd);
-                      }
-                    }}
-                  />
+                  <span role="status" className="text-xs text-zinc-500">Pesquisa institucional indisponível sem projeção autorizada.</span>
                 </div>
 
                 <div className="space-y-4">
@@ -2762,36 +2647,11 @@ export default function App() {
                   </div>
                 }>
                   <>
-                    {activeTab === 'dashboard' && (
-                    currentUserRole === 'parent' ? (
-                      <ParentPortal 
-                        students={students}
-                        invoices={invoices}
-                        announcements={announcements}
-                        messages={messages}
-                        onUpdateStudent={handleUpdateStudent}
-                        onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
-                        theme={theme}
-                      />
-                    ) : (
-                      <Dashboard 
-                        students={visibleStudents} 
-                        teachers={teachers} 
-                        invoices={visibleInvoices} 
-                        announcements={announcements}
-                        setCurrentTab={setActiveTab}
-                        onQuickAction={(type) => {
-                          if (type === 'add-student') {
-                            setActiveTab('students');
-                          }
-                        }}
-                        approvals={approvals}
-                        signatures={signatures}
-                        schoolDocs={schoolDocs}
-                        currentUserRole={currentUserRole}
-                        theme={theme}
-                      />
-                    )
+                  {activeTab === 'dashboard' && (
+                    <FactualUnavailablePanel
+                      title="Indicadores institucionais indisponíveis"
+                      detail="Este cockpit reúne dados de browser e projeções sem fonte, cálculo, frescura e âmbito institucional autorizados. Nenhum KPI, tendência, conformidade ou estado de sincronização é apresentado como facto institucional. Portal de encarregados indisponível sem ligação institucional autorizada aos respetivos registos."
+                    />
                   )}
                   
                   {activeTab === 'students' && (
@@ -2801,16 +2661,9 @@ export default function App() {
                   {activeTab === 'teachers' && (
                     <>
                       {teachersSubTab === 'list' && (
-                        <TeachersList 
-                          teachers={teachers}
-                          currentUserRole={currentUserRole}
-                          onAddTeacher={handleAddTeacher}
-                          onUpdateTeacher={handleUpdateTeacher}
-                          onDeleteTeacher={handleDeleteTeacher}
-                          onSelectTeacherForChat={(tchName) => {
-                            setActiveTab('communications');
-                          }}
-                          globalSearchTerm={globalSearchQuery}
+                        <FactualUnavailablePanel
+                          title="Administração de docentes indisponível"
+                          detail="A gestão legada de docentes não está ligada a uma autoridade institucional autorizada. Nenhum registo foi criado, atualizado ou eliminado."
                         />
                       )}
                       
@@ -2824,45 +2677,30 @@ export default function App() {
                   )}
 
                   {activeTab === 'financials' && (
-                    <FinancialPanel 
-                      invoices={visibleInvoices}
-                      students={students}
-                      onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
-                      onAddInvoice={handleAddInvoice}
-                      globalSearchTerm={globalSearchQuery}
+                    <FactualUnavailablePanel
+                      title="Operações financeiras indisponíveis"
+                      detail="Não existe autoridade institucional para faturação, exportação, sincronização, entrega por email ou reconciliação neste ambiente. Nenhuma fatura, exportação ou comunicação externa foi criada."
                     />
                   )}
 
                   {activeTab === 'communications' && (
-                    <CommunicationCenter 
-                      announcements={announcements}
-                      messages={messages}
-                      currentUserRole={currentUserRole}
-                      onAddAnnouncement={handleAddAnnouncement}
-                      onAddMessage={handleAddMessage}
-                      notificationPresets={notificationPresets}
-                      onUpdateNotificationPresets={handleUpdateNotificationPresets}
+                    <FactualUnavailablePanel
+                      title="Comunicações institucionais indisponíveis"
+                      detail="Este espaço não possui comando institucional autorizado nem confirmação de entrega, agendamento ou leitura. Nenhuma mensagem foi enviada, agendada ou registada como entregue."
                     />
                   )}
 
                   {activeTab === 'documents' && (
-                    <SchoolDocuments 
-                      documents={schoolDocs}
-                      onAddDocument={handleAddSchoolDocs}
-                      onUpdateDocument={handleUpdateSchoolDocs}
-                      onDeleteDocument={handleDeleteSchoolDocs}
-                      currentUserRole={currentUserRole}
+                    <FactualUnavailablePanel
+                      title="Arquivo documental genérico indisponível"
+                      detail="Este arquivo não possui uma autoridade institucional conjunta para metadata e armazenamento. Nenhum documento foi criado, alterado, descarregado ou eliminado. Os Documentos de Matrícula canónicos permanecem no fluxo de Matrículas."
                     />
                   )}
 
                   {activeTab === 'workflows' && (
-                    <WorkflowsCentral 
-                      students={visibleStudents}
-                      invoices={visibleInvoices}
-                      onAddStudent={handleAddStudent}
-                      onUpdateStudent={handleUpdateStudent}
-                      onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
-                      currentUserRole={currentUserRole}
+                    <FactualUnavailablePanel
+                      title="Automação e fluxos indisponíveis"
+                      detail="Os fluxos apresentados não estão ligados a uma autoridade institucional de execução. Nenhuma mensagem foi enviada, conta criada, pagamento alterado ou processo iniciado."
                     />
                   )}
 
@@ -2878,17 +2716,9 @@ export default function App() {
                   )}
 
                   {activeTab === 'signatures' && (
-                    <DigitalSignatureSystem
-                      currentUserRole={currentUserRole}
-                      currentUserName={firebaseUser?.displayName || firebaseUser?.email || 'Administrador'}
-                      currentUserEmail={firebaseUser?.email || 'admin@nexus.edu.pt'}
-                      students={visibleStudents}
-                      invoices={visibleInvoices}
-                      schoolDocuments={schoolDocs}
-                      signatures={signatures}
-                      onAddSignature={handleAddSignature}
-                      onUpdateSignature={handleUpdateSignature}
-                      onDeleteSignature={handleDeleteSignature}
+                    <FactualUnavailablePanel
+                      title="Assinaturas digitais indisponíveis"
+                      detail="Não existe uma autoridade institucional de assinatura, arquivo ou envio neste ambiente. Nenhuma assinatura, certificado ou pedido foi emitido."
                     />
                   )}
 
@@ -2902,11 +2732,9 @@ export default function App() {
                   )}
 
                   {activeTab === 'sheets' && (
-                    <GoogleSheetsCenter 
-                      students={students}
-                      setStudents={setStudents}
-                      invoices={invoices}
-                      theme={theme}
+                    <FactualUnavailablePanel
+                      title="Integração Google Sheets indisponível"
+                      detail="Não existe comando Nexus autorizado para importar, exportar ou sincronizar dados com Google Sheets. Nenhum conector externo foi chamado e nenhum registo institucional foi alterado."
                     />
                   )}
 

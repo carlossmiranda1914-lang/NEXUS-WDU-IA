@@ -456,29 +456,41 @@ export async function getLiveTasks(): Promise<SchoolTask[]> {
   }
 }
 
-export async function upsertLiveTask(task: SchoolTask): Promise<SchoolTask> {
-  try {
-    const headers = await getHeaders();
-    const res = await fetch('/api/school-tasks', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(task)
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      console.warn('Falha ao gravar tarefa escolar:', res.status, errData);
-      return task;
-    }
-    const contentType = res.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      const data = await res.json();
-      return data || task;
-    }
-    return task;
-  } catch (err) {
-    console.warn('Erro em upsertLiveTask:', err);
-    return task;
+async function taskResponseOrThrow(res: Response, fallback: string): Promise<any> {
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || fallback);
   }
+  return res.json();
+}
+
+export async function getLiveTaskById(id: string): Promise<SchoolTask> {
+  const headers = await getHeaders();
+  const res = await fetch(`/api/school-tasks/${encodeURIComponent(id)}`, { headers });
+  return taskResponseOrThrow(res, 'Falha ao confirmar a tarefa na fonte institucional.');
+}
+
+export async function createLiveTaskAndReadBack(task: SchoolTask): Promise<SchoolTask> {
+  const headers = await getHeaders();
+  const res = await fetch('/api/school-tasks', { method: 'POST', headers, body: JSON.stringify(task) });
+  const created = await taskResponseOrThrow(res, 'Falha ao criar a tarefa escolar.');
+  if (!created?.id) throw new Error('A criação não devolveu uma identificação institucional.');
+  return await getLiveTaskById(created.id);
+}
+
+export async function updateLiveTaskAndReadBack(id: string, updates: Partial<SchoolTask>): Promise<SchoolTask> {
+  const headers = await getHeaders();
+  const res = await fetch(`/api/school-tasks/${encodeURIComponent(id)}`, {
+    method: 'PUT', headers, body: JSON.stringify(updates)
+  });
+  await taskResponseOrThrow(res, 'Falha ao atualizar a tarefa escolar.');
+  return await getLiveTaskById(id);
+}
+
+// Transitional callers must still wait for this authoritative read-back. New task
+// interactions use the explicit create/update functions above.
+export async function upsertLiveTask(task: SchoolTask): Promise<SchoolTask> {
+  return await createLiveTaskAndReadBack(task);
 }
 
 export async function deleteLiveTask(id: string): Promise<{ success: boolean }> {

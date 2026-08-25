@@ -8,9 +8,15 @@ type View = 'settings' | 'academic-year';
 export default function SystemConfig(props: Props) {
   const canManageAcademicYear = props.currentRole === 'admin' || props.currentRole === 'director';
   const [view, setView] = useState<View>('settings');
+  const unavailable = (
+    <section role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5 text-sm text-zinc-200">
+      <h2 className="font-semibold text-amber-200">Configurações operacionais indisponíveis</h2>
+      <p className="mt-2">A administração legada de utilizadores, permissões, sincronização e reposição de dados não está ligada a uma autoridade institucional autorizada. Nenhuma alteração foi aplicada.</p>
+    </section>
+  );
 
   if (!canManageAcademicYear) {
-    return <SystemConfigLegacy {...props} />;
+    return unavailable;
   }
 
   return (
@@ -39,7 +45,7 @@ export default function SystemConfig(props: Props) {
       {view === 'academic-year' ? (
         <AcademicYearManagement currentRole={props.currentRole} firebaseUser={props.firebaseUser} />
       ) : (
-        <SystemConfigLegacy {...props} />
+        unavailable
       )}
     </div>
   );
