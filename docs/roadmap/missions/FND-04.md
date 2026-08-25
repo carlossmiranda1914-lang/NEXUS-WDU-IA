@@ -97,6 +97,10 @@ The selected non-PostgreSQL contracts preserve InstitutionalContext, Person reso
 
 PT-23 is now closed as a factual `FALSE_SUCCESS` presentation finding. Five mounted callers reach the same FND-03 `/api/chat` 503 fence: the Copilot send/quick-action handler and four Automation simulation handlers. The fence occurs before institutional queries, tool execution, audit/event and external AI work. The current client behavior is not safe presentation: the Copilot inserts a fictional local analytical response after the 503, while Automation simulations create success logs/previews and ignore the rejected request. CP2 is locked to disable/hide the operational entries with a factual unavailable state; it must not reactivate AI or create an AI Gateway.
 
+## CP2 factual availability — PASS
+
+CP2 removes false operational availability at the client boundary without changing backend authority. The Copilot now makes no `/api/chat` request and gives a factual unavailable response without loading or fabricated analysis. Automation simulation handlers return before any request, timer, local execution increment, success log or notification preview. Generic Documents, legacy configuration/reset/user controls, signature, workflow, parent portal, Google Sheets and legacy teacher administration are replaced by accessible factual unavailable panels. Canonical Enrollment/StudentProfile, Enrollment Documents, Academic Year and modular Tasks remain outside these treatments. CP3 is next.
+
 ## DONE
 FND-04 is DONE only when AC01–AC08 are PASS, no known P0/P1 operational surface claims success or institutional evidence without a real backing fact, and every retained prototype/demo is visibly and architecturally separated from production authority.
 

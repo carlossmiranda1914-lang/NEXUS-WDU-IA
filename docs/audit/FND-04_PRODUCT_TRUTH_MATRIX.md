@@ -64,6 +64,23 @@ No row is classified dead solely from a static reference. CP1 executed a focused
 
 All request bodies carry a prompt only; the client supplies neither an institution nor tenant selector. This does not grant authority: server-side FND-03 fails closed before any query, tool execution, audit-success/event or external AI request.
 
+## CP2 factual availability — PASS
+
+| CP2 rows | Previous presentation | Implemented factual treatment | No-effect evidence / future gate |
+|---|---|---|---|
+| PT-04, PT-06, PT-25 | Legacy Task/Student/migration code could be confused with active operations | Operational student entry remains the canonical Enrollment workspace; modular Tasks remains available; no legacy create/delete/migration entry is mounted in the operational shell | Existing FND-02 route fences and canonical Enrollment/Tasks regressions; future read migration/reconciliation gate |
+| PT-05, PT-07, PT-17 | Legacy configuration exposed role, sync and reset controls | `SystemConfig` replaces legacy settings with an accessible unavailable panel while retaining canonical Academic Year navigation | No legacy config child mounts; FND-02 system/user fences remain unchanged |
+| PT-08, PT-09 | Generic Documents offered archive/upload/download/edit/signature success | Generic Documents screen now reports unavailable before the component mounts; canonical Enrollment Documents remain in Enrollment | No generic UI handler can run; FND-03 storage fence and Enrollment Documents regressions |
+| PT-10 | Signature/certificate/archive/send UI looked operational | Signature screen now reports unavailable before the legacy component mounts | No signature component handler runs; future signature/provider authority |
+| PT-11 | Parent portal suggested live records/messages | Parent dashboard now reports unavailable before prototype portal mounts | No parent prototype action can mutate state; authorized parent portal dependency |
+| PT-16 | Workflow simulation offered execution/delivery/provisioning | Workflow screen now reports unavailable before simulation mounts | No simulation handler runs; Workflow/Automation authority dependency |
+| PT-18, PT-19 | Supabase/Google connector UI could claim configured sync/import/export | Google Sheets screen reports unavailable and starts with no cached access token | No connector action is mounted; separate OAuth/tenant-audited connector dependency |
+| PT-22, PT-23 | Copilot and Automation simulation offered institutional intelligence/effects | Copilot provides only factual unavailable responses; all four simulation handlers return before request, timer, state mutation, log or preview | `fnd04-ai-presentation-characterization` and factual UI contract; canonical AI Gateway dependency |
+| PT-24 | Legacy teacher management offered writes | Teacher administration screen reports unavailable before legacy list mounts | No legacy teacher handler runs; Academic Core/TeacherAssignment dependency |
+| PT-26 | Browser gamification remains a non-operational prototype | No operational navigation treatment was needed: it is not a mounted P0/P1 institutional action; it stays excluded from authority and must be labelled if exposed later | Future academic/gamification authority gate |
+
+CP2 does not alter the FND-02/FND-03 backend fences, canonical Enrollment/StudentProfile, Enrollment Documents, Academic Year or modular School Tasks. All unavailable panels use product language rather than internal codes and announce their state with `role="status"`.
+
 ## Implementation invariants
 
 - Backend authorization, InstitutionalContext and FND-02/FND-03 fences stay authoritative.

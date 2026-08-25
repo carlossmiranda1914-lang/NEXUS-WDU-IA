@@ -125,3 +125,11 @@ The current UI outcome is a CP2 defect, not a backend authority defect. `AIAssis
 - `git diff --check`: PASS.
 
 No external AI service, database, persistent institutional record or temporary artifact was used. CP2 is next; FND-04 is not DONE.
+
+## CP2 factual availability — PASS
+
+The CP2 interaction contract proves that user actions on the Copilot and each AI Automation simulation show a factual unavailable state before any network request, timer, local success log, notification preview or institutional-state mutation. It also proves the removed fictional Copilot fallback, accessible `role="status"` state, no seeded execution/delivery fixtures, factual Google integration treatment, legacy configuration treatment and preserved Academic Year navigation.
+
+The implementation deliberately does not expose `CANONICAL_AI_AUTHORITY_REQUIRED` as primary product copy. It uses concise Portuguese unavailable text and preserves the server fence unchanged. Generic Document, signature, workflow, parent, Google and teacher legacy entry points are no longer mounted as operational screens; their panels state that no data was sent, changed, archived, signed or provisioned. Canonical Enrollment Documents remain accessible through Enrollment.
+
+**CP2 validation:** focused AI/factual-unavailability contracts, `npm run test:fnd04`, lint, build and `git diff --check` must all pass after the final UI change. CP3 is next. FND-04 is not DONE.
