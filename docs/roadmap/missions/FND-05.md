@@ -96,6 +96,10 @@ Existing canonical Enrollment Documents and process PostgreSQL contracts pass ag
 
 The existing School Tasks disposable PostgreSQL contract proves factual committed snapshots/version history, rollback on snapshot failure, tenant isolation and concurrent version uniqueness. Realtime emits only a tenant-scoped refresh payload. Correlation/request fields are optional existing metadata; no new tracing or idempotency contract is claimed. CP5 is next.
 
+## CP5 tenant-scoped retrieval, privacy and redaction — PASS
+
+The legacy `/api/logs` reader lacked a proven canonical audit-reader authority and safe projection contract. It is now fenced before any query with `CANONICAL_AUDIT_AUTHORITY_REQUIRED`; no data is rewritten and no replacement client audit view exists. Canonical Enrollment/Documents/Tasks history paths remain preserved. CP6 is next.
+
 ## Stop rules
 Stop and return to BLOCKED/PREPARATION if:
 - the real actor cannot be determined from the authoritative command path;

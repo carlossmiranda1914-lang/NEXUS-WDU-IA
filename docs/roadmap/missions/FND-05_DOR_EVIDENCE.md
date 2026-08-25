@@ -46,3 +46,7 @@ After a loopback TCP probe and disposable safety gate, `secretariat-s02-3-docume
 ## CP4 snapshot, correlation and retry fidelity — PASS
 
 With the same approved dotenv selection, `fnd01-cp4-school-tasks-postgres.test.mts` passed and exercised committed create/update/delete/restore snapshots, scoped read-back, foreign denial, concurrency and failure rollback; `realtime-bridge.test.ts` proves refresh-only tenant routing. No production or schema change was required. CP5 is next.
+
+## CP5 tenant-scoped retrieval, privacy and redaction — PASS
+
+`/api/logs` is fail-closed before database selection because its legacy reader-role, ownership, pagination and allowlisted projection contract was not proven. `tests/fnd05-audit-retrieval-privacy.test.ts` proves authentication remains present and the stable 503 fence precedes query. No historical row was changed; retention/export/redaction policy remains a dependency. CP6 is next.

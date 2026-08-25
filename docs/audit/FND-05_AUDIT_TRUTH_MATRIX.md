@@ -38,3 +38,7 @@ Focused disposable PostgreSQL contracts prove Enrollment Documents and process r
 ## CP4 snapshot, correlation and retry fidelity — PASS
 
 The existing disposable School Tasks CP4 contract proves create/update/delete/restore snapshots, tenant-scoped history, deterministic version ordering, foreign-tenant denial, concurrent-version uniqueness and snapshot-write rollback. Snapshot data is the repository’s persisted task record and server-calculated diff/version; it is not a client-supplied after-image. Request/correlation fields are optional metadata in `task_versions`; no distributed-tracing or idempotency claim is added. Realtime bridge publishes only a tenant-scoped refresh without task payload. The exercised snapshot-failure path intentionally triggers database constraint failure and rolls back the mutation; it is proof, not a production warning condition.
+
+## CP5 retrieval, privacy and redaction — PASS
+
+AT-11 `/api/logs` lacked proven institutional audit-reader authority, tenant/read policy, bounded pagination and allowlisted response contract. It now returns `503 CANONICAL_AUDIT_AUTHORITY_REQUIRED` before query. AT-03/AT-05 canonical parent-resource histories remain their own scoped contracts; no generic audit reader replaces them. Historical data, retention, integrity and export claims remain untouched dependencies.
