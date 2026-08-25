@@ -54,3 +54,7 @@ With the same approved dotenv selection, `fnd01-cp4-school-tasks-postgres.test.m
 ## CP6 transitional and asynchronous producers — PASS
 
 `tests/fnd05-transitional-audit-boundary.test.ts` proves the background and AI authority fences, route-pattern-only observability boundary and refresh-only realtime bridge. Existing FND-03/FND-04 fences retain no-effect treatment for AI, background and external connectors. No durable audit, system-actor, connector or external-effect claim is created. CP7 is next.
+
+## CP7 aggregate validation and evidence closure — PASS
+
+AT-09 resolves to the existing operational-observability boundary: request middleware records final HTTP status, route pattern and duration after the response outcome, while `request-audit.ts` excludes query/body data. It neither creates nor claims durable security/domain audit. AC01–AC08 map to AT-01–AT-12, CP0–CP6 contracts and the matrix’s authority/dependency gates. CP7 changes documentation only and reuses final executable results: `test:fnd05`, lint, build after the `/api/logs` fence, and focused CP6 contracts PASS.

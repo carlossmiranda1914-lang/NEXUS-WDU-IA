@@ -1,6 +1,6 @@
 # FND-05 — Audit Truth
 
-**State:** READY. FND-04 is DONE; this DoR authorizes only separately approved implementation.
+**State:** DONE. CP0–CP7 PASS.
 
 ## Objective
 Make audit evidence factual, actor-correct, tenant-scoped and correlation-aware, while clearly distinguishing human commands, system actions and derived reconciliation without rewriting history or inventing business facts.
@@ -103,6 +103,10 @@ The legacy `/api/logs` reader lacked a proven canonical audit-reader authority a
 ## CP6 transitional and asynchronous producers — PASS
 
 Realtime remains a tenant-scoped refresh channel, not durable audit history. Request observability records final status and route pattern rather than body/query payloads. Background/SLA and AI remain fenced before effect with their canonical unavailable codes; no connector, prompt, response, external delivery or institutional success evidence is introduced. CP7 is next.
+
+## CP7 aggregate validation and evidence closure — PASS
+
+AT-01–AT-12 are closed with canonical, bounded transitional, fenced/no-effect or isolated-prototype treatment. AT-09 is explicitly operational observability: final status, route pattern and timing are factual; it is not durable institutional audit, retention/integrity/compliance evidence or a success-domain event. AC01–AC08 pass with the CP0–CP6 contracts recorded in the audit matrix. FND-05 is DONE; Foundation is not DONE. FND-06 DoR/decision is next.
 
 ## Stop rules
 Stop and return to BLOCKED/PREPARATION if:

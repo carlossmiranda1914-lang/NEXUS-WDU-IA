@@ -1,6 +1,6 @@
 # FND-05 — Audit Truth Matrix
 
-**State:** READY for separately authorised implementation. **Baseline:** `66f582ee624f93df5e98907d5da14ec59a0710b3`.
+**State:** DONE — CP0–CP7 PASS. **Baseline:** `66f582ee624f93df5e98907d5da14ec59a0710b3`.
 
 This bounded P0/P1 inventory follows `command → server authorization → effect/transaction → emission → persistence → tenant-scoped reader`. `UNKNOWN` is zero only because every surviving surface has a deterministic factual treatment; classifications describe AS-IS, not a compliance claim.
 
@@ -46,3 +46,7 @@ AT-11 `/api/logs` lacked proven institutional audit-reader authority, tenant/rea
 ## CP6 transitional producers — PASS
 
 AT-06 sends a tenant-scoped refresh reference only and is not durable audit. AT-07 emits final HTTP status plus route pattern without body/query payload. AT-08/09 fences remain pre-effect; AT-10 stays unavailable prototype presentation; AT-12 AI/background/connectors remain fenced without model, SQL, external or success-audit effect. Future replacement requires canonical system/connector authority and privacy contract.
+
+## CP7 final matrix and acceptance closure — PASS
+
+All AT-01–AT-12 were reviewed once: canonical Enrollment/Documents/Tasks records remain factual; transitional realtime and observability are explicitly bounded; legacy generic retrieval is fenced; prototypes are unavailable; AI/background/connectors are no-effect. AT-09 is **operational observability only**, not durable audit: final status/route/timing, no success-domain event, no raw body/query/token payload, with retention/integrity dependency explicit. AC01–AC08 PASS: inventory (all AT rows), raw fact/actor/context (AT-01–05), system distinction (AT-04,06,12), tenant/presentation safety (AT-05,11), correlation/snapshot (AT-04–05), historical preservation (fenced/no rewrite), and critical coverage (AT-01–12). No `UNKNOWN`, global reader, client-authored attribution, rollback-success or durable prototype claim remains.
