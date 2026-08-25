@@ -4594,6 +4594,7 @@ async function startServer() {
 
   // 9. Operational Audit Logs API (Admin dashboard helper) - FULLY TRANSLATED FOR BUSINESS PERSPECTIVES WITH LEVEL RATINGS
   app.get('/api/logs', requireAuth, authorizeRole(['admin', 'director']), async (req: AuthRequest, res) => {
+    return res.status(503).json({ code: 'CANONICAL_AUDIT_AUTHORITY_REQUIRED', error: 'A consulta de auditoria institucional está temporariamente indisponível.' });
     try {
       const institutionId = req.institutionalContext?.institutionId;
       if (!institutionId) return res.status(403).json({ error: 'Contexto institucional obrigatÃ³rio.' });
