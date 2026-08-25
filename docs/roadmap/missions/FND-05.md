@@ -80,6 +80,10 @@ The bounded inventory and executable CP0–CP7 plan are in `docs/audit/FND-05_AU
 
 `npm run test:fnd05` runs a Windows-safe, non-mutating aggregate in fixed order. It validates each selected file, stops at the first child failure, propagates abnormal exits, enforces a 60-second child timeout and identifies the failed file. Synthetic pass/fail/missing/hanging fixtures prove these properties without identities, credentials, PostgreSQL, DDL or connectors. The baseline selects only existing non-PostgreSQL contracts: request observability, InstitutionalContext, task realtime isolation, Enrollment lifecycle/Documents/process contracts and FND-02/FND-03 no-mutation fences. CP1 matrix characterization is next; FND-05 remains IMPLEMENTING.
 
+## CP1 complete audit surface characterization — PASS
+
+All AT-01–AT-12 surfaces now have an effective producer/consumer classification and one CP2–CP6 owner. The focused AS-IS contract verifies source markers for Enrollment events, Tasks history, realtime refresh, observability privacy boundary, institutional context, fenced producers, unavailable prototype presentation and legacy audit retrieval. CP2 is next; no audit behavior was corrected.
+
 ## Stop rules
 Stop and return to BLOCKED/PREPARATION if:
 - the real actor cannot be determined from the authoritative command path;
