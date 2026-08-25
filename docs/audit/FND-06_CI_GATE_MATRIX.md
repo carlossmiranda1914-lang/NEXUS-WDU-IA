@@ -37,7 +37,7 @@ Current PR filters include `src/modules/enrollments/**`, `src/components/Enrollm
 
 `npm run test:foundation` validates its JSON manifest, required scripts/files, runs FND-01 non-PostgreSQL migration/policy contracts, FND-02, FND-03, FND-04, FND-05 and FND-06 in that stable order, stops at the first failure and enforces individual and total timeouts. PostgreSQL migration/bootstrap and School Tasks history/snapshot coverage remain explicitly deferred to CP4.
 
-`npm run test:diff -- --base <base>` requires a resolvable ancestor and checks `<base>...HEAD`; the workflow uses the authoritative PR base SHA and full checkout history. It fails rather than falling back to an empty comparison. `npm run test:artifacts` checks tracked/staged filenames only for local env files, logs/temp/dumps, recovery helpers and editor/system artifacts; it reports path/rule only and never deletes. CP3 adds exact workflow paths for its scripts/tests where possible; the remaining generic source, server, scripts, tests and documentation bypass boundary is CP5.
+`npm run test:diff -- --base <base>` requires a resolvable ancestor and checks `<base>...HEAD`; the workflow uses the authoritative PR base SHA (or the event's previous SHA for its existing push triggers) and full checkout history. It fails rather than falling back to an empty comparison. `npm run test:artifacts` checks tracked/staged filenames only for local env files, logs/temp/dumps, recovery helpers and editor/system artifacts; it reports path/rule only and never deletes. CP3 adds exact workflow paths for its scripts/tests where possible; the remaining generic source, server, scripts, tests and documentation bypass boundary is CP5.
 
 ## Remote completion evidence (CP6/CP7)
 
