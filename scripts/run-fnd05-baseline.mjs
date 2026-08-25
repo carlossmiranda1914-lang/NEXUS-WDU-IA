@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 
 const DEFAULT_TEST_FILES = [
   'tests/fnd05-baseline-runner.test.mjs',
+  'tests/fnd05-audit-surface-characterization.test.ts',
   'tests/request-audit.test.ts',
   'tests/institutional-context.test.ts',
   'tests/realtime-bridge.test.ts',
