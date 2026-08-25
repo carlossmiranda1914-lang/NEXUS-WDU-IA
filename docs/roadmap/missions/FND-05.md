@@ -1,6 +1,6 @@
 # FND-05 — Audit Truth
 
-**State:** PREPARATION. Implementation is not authorized until FND-04 is DONE and this Mission Pack passes DoR.
+**State:** READY. FND-04 is DONE; this DoR authorizes only separately approved implementation.
 
 ## Objective
 Make audit evidence factual, actor-correct, tenant-scoped and correlation-aware, while clearly distinguishing human commands, system actions and derived reconciliation without rewriting history or inventing business facts.
@@ -71,6 +71,10 @@ Before editing an audit path:
 
 ## DONE
 FND-05 is DONE only when AC01–AC08 are PASS, critical surviving writes have explicit factual audit behavior, system actions are distinguishable from human commands, and no known presentation layer can manufacture business events not present in raw evidence.
+
+## Definition of Ready
+
+The bounded inventory and executable CP0–CP7 plan are in `docs/audit/FND-05_AUDIT_TRUTH_MATRIX.md` and `docs/roadmap/missions/FND-05_DOR_EVIDENCE.md`. AT-01–AT-12 classify every surviving P0/P1 producer and consumer with actor, institution, target, outcome, timing, persistence, reader, privacy and removal gate. No critical `UNKNOWN` remains. This does not authorize production changes, a schema/migration, historical rewriting, retention/compliance claims or FND-06 secret work.
 
 ## Stop rules
 Stop and return to BLOCKED/PREPARATION if:
