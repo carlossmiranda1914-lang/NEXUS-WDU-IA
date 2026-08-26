@@ -14,7 +14,7 @@ for (const script of ['test:fnd02', 'test:fnd03', 'test:fnd04', 'test:fnd05', 't
 assert.ok(!manifest.scripts['test:fnd01'], 'CP1 must expose the current missing FND-01 aggregate');
 for (const absentInvocation of ['npm run test:fnd02', 'npm run test:fnd03', 'npm run test:fnd04', 'npm run test:fnd05', 'npm run test:fnd06', 'git diff --check', 'gitleaks']) assert.ok(!workflow.includes(absentInvocation), `CP1 AS-IS gap changed: ${absentInvocation}`);
 for (const presentInvocation of ['npm run test:migrations:isolated', 'npm run lint', 'npm run build', 'postgres:16', 'quality-gate']) assert.ok(workflow.includes(presentInvocation), `workflow fact missing: ${presentInvocation}`);
-assert.ok(!workflow.includes('- main'), 'quality-gate does not run on main');
-for (const filter of ['src/modules/enrollments/**', 'tests/**enrollment**', 'tests/**secretariat**', 'src/db/migrations/**', 'scripts/verify-migrations-isolated.ts', 'scripts/nexus-preflight.ts', 'package.json', 'package-lock.json', '.github/workflows/secretariat-ci.yml']) assert.ok(workflow.includes(filter), `expected path filter missing: ${filter}`);
-for (const excluded of ['src/**', 'server.ts', 'scripts/**', 'tests/**', '.github/workflows/**', 'docs/**']) assert.ok(!workflow.includes(`- '${excluded}'`) && !workflow.includes(`- ${excluded}`), `CP1 path-filter exclusion changed: ${excluded}`);
-console.log('FND-06 CP1 Foundation coverage and workflow gap characterization: PASS.');
+assert.match(workflow, /^\s*push:\s*$/m, 'CP5 requires every push to be covered');
+assert.match(workflow, /^\s*pull_request:\s*$/m, 'CP5 requires every pull request to be covered');
+assert.doesNotMatch(workflow, /^\s+(?:branches|paths|paths-ignore):/m, 'CP5 must not retain a branch or path-filter bypass');
+console.log('FND-06 CP1 Foundation coverage and CP5 workflow policy characterization: PASS.');
