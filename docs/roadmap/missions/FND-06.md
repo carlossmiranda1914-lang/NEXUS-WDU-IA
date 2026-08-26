@@ -1,6 +1,6 @@
 # FND-06 — CI vNext Gate
 
-**State:** IMPLEMENTING — CP0–CP3 repository gates PASS; CP2 external rotation remains BLOCKED. FND-05 is DONE.
+**State:** DONE — CP0–CP7 PASS. The Foundation exit evidence is integrated in `main` through merge `e63054b81bc77a4cb438606ef584cbd4bb878f78`; FND-01–FND-05 are DONE.
 
 ## Objective
 Make remote CI enforce the actual foundation invariants that all later Nexus domains depend on, with identifiable failures and no documented PASS for suites that did not run.
@@ -74,6 +74,8 @@ The CI workflow itself is proved by:
 ## DONE
 FND-06 is DONE only when AC01–AC10 are PASS, every required Foundation invariant has a real remote gate, critical failures block integration, and no required suite is represented as passing when skipped or not executed.
 
+**Closeout:** AC01–AC10 are PASS through CP0–CP7 evidence in `FND-06_DOR_EVIDENCE.md`. The mission did not rewrite history, change repository settings, alter production sources or handle credential values. The residual advanced-`main` branch-protection limitation remains a governance follow-up, not an unclosed FND-06 acceptance criterion.
+
 ## Stop rules
 Stop and return to BLOCKED/PREPARATION if:
 - a required Foundation invariant has no executable test contract yet;
@@ -84,4 +86,4 @@ Stop and return to BLOCKED/PREPARATION if:
 
 ## Definition of Ready
 
-`docs/audit/FND-06_CI_GATE_MATRIX.md` records complete current gate coverage, bypass paths, CP2–CP6 ownership, controlled-failure and remote-evidence plans. CP3 added a deterministic non-PostgreSQL Foundation aggregate plus committed-diff and artifact gates to the existing quality gate. CP2 external rotation remains separately blocked; no history rewrite or external credential action occurred.
+`docs/audit/FND-06_CI_GATE_MATRIX.md` records complete current gate coverage, bypass paths, CP2–CP6 ownership, controlled-failure and remote-evidence plans. CP3 added a deterministic non-PostgreSQL Foundation aggregate plus committed-diff and artifact gates to the existing quality gate. The earlier CP2 external-rotation blocker was reconciled by the CP7 external IAM/restrictions evidence; no history rewrite or credential-value handling occurred in this mission.
