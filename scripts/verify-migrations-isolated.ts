@@ -1,4 +1,3 @@
-import dotenv from 'dotenv';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,7 +5,6 @@ import { randomUUID } from 'node:crypto';
 import { createTestDatabasePool } from '../src/db/test-database.ts';
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(currentDirectory, '../.env.test.local'), override: true, quiet: true });
 const migrationsDirectory = path.resolve(currentDirectory, '../src/db/migrations');
 
 function quoteIdentifier(value: string): string {

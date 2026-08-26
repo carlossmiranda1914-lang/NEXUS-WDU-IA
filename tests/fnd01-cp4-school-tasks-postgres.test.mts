@@ -1,12 +1,9 @@
-import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import pg from 'pg';
 import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
 import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
-
-dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env.test.local'), override: true });
 
 const quoteIdentifier = (value: string) => `"${value.replaceAll('"', '""')}"`;
 const target = await verifyApprovedTestConnection();

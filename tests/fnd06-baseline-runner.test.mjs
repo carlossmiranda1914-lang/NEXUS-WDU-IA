@@ -1,0 +1,3 @@
+import assert from 'node:assert/strict'; import { spawnSync } from 'node:child_process';
+const run=(file,...extra)=>spawnSync(process.execPath,['scripts/run-fnd06-baseline.mjs','--test-file',file,...extra],{encoding:'utf8',timeout:3000});
+assert.equal(run('tests/fixtures/fnd06-runner-pass.test.mjs').status,0); assert.notEqual(run('tests/fixtures/fnd06-runner-fail.test.mjs').status,0); assert.notEqual(run('tests/fixtures/fnd06-runner-missing.test.mjs').status,0); assert.notEqual(run('tests/fixtures/fnd06-runner-hang.test.mjs','--timeout-ms','30').status,0); console.log('FND-06 runner failure propagation: PASS.');

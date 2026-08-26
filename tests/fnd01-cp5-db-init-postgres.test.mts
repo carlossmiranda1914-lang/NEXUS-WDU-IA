@@ -1,4 +1,3 @@
-import dotenv from 'dotenv';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -6,7 +5,6 @@ import pg from 'pg';
 import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
 import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 
-dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env.test.local'), override: true, quiet: true });
 const target = await verifyApprovedTestConnection();
 const testUrl = process.env.TEST_DATABASE_URL!;
 const parsed = new URL(testUrl);

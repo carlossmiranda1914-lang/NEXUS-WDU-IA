@@ -1,6 +1,6 @@
 # FND-06 — CI vNext Gate
 
-**State:** PREPARATION. Implementation is not authorized until FND-05 is DONE and this Mission Pack passes DoR.
+**State:** IMPLEMENTING — CP0–CP3 repository gates PASS; CP2 external rotation remains BLOCKED. FND-05 is DONE.
 
 ## Objective
 Make remote CI enforce the actual foundation invariants that all later Nexus domains depend on, with identifiable failures and no documented PASS for suites that did not run.
@@ -81,3 +81,7 @@ Stop and return to BLOCKED/PREPARATION if:
 - making CI green would require weakening/removing a critical regression;
 - CI requires production/shared data or unsafe secrets;
 - the blocker belongs to an unfinished FND-01–05 implementation rather than CI configuration.
+
+## Definition of Ready
+
+`docs/audit/FND-06_CI_GATE_MATRIX.md` records complete current gate coverage, bypass paths, CP2–CP6 ownership, controlled-failure and remote-evidence plans. CP3 added a deterministic non-PostgreSQL Foundation aggregate plus committed-diff and artifact gates to the existing quality gate. CP2 external rotation remains separately blocked; no history rewrite or external credential action occurred.
