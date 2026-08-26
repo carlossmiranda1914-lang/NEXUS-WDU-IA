@@ -1,6 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
+
+export function isWithinRoot(root, absolute) {
+  const entry = relative(root, absolute);
+  return Boolean(entry) && !entry.startsWith('..') && !isAbsolute(entry);
+}
 
 const rootIndex = process.argv.indexOf('--root');
 const root = resolve(rootIndex >= 0 ? process.argv[rootIndex + 1] : '.');
@@ -16,7 +21,7 @@ const placeholder = /^(?:__REQUIRED_[A-Z0-9_]+__|\$\{[A-Z0-9_]+\}|<[^>]+>|CHANGE
 const disposablePostgres = (file, value) => { try { const url = new URL(value); return url.protocol === 'postgresql:' && ['127.0.0.1', 'localhost'].includes(url.hostname) && (file === '.env.test.local.example' || file.startsWith('.github/workflows/')); } catch { return false; } };
 for (const file of files) {
   const absolute = resolve(root, file);
-  if (!absolute.startsWith(`${root}\\`) || !existsSync(absolute)) continue;
+  if (!isWithinRoot(root, absolute) || !existsSync(absolute)) continue;
   if (file === 'tests/secret-scanner.test.mjs') continue;
   const text = readFileSync(absolute, 'utf8');
   const add = rule => findings.push({ file: relative(root, absolute).replaceAll('\\', '/'), rule });
