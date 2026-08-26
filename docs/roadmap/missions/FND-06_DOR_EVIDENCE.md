@@ -1,6 +1,6 @@
 # FND-06 — Definition of Ready Evidence
 
-**State:** IMPLEMENTING — CP0–CP3 repository gates PASS; CP2 external rotation BLOCKED. No history rewrite, external credential action, repository setting or production source change occurred.
+**State:** DONE — CP0–CP7 PASS. The Foundation exit is integrated in `main` through merge `e63054b81bc77a4cb438606ef584cbd4bb878f78`. No history rewrite, repository setting, production-source change or credential-value handling occurred.
 
 ## Locked checkpoints
 
@@ -26,11 +26,11 @@ Stop if a critical local-only invariant cannot become a deterministic remote gat
 
 The executable CP1 characterization parses the package manifest, FND runner paths and current workflow. It proves the existing FND-01 aggregate absence, FND-02–FND-05 non-invocation, missing `main`, absent diff/secret gates, PostgreSQL presence and the excluded path classes. The canonical CG-01–CG-12 matrix assigns every non-enforced item to exactly one CP2–CP6 owner, with synthetic controlled-failure, rollback and remote completion evidence plans. CP2 is next; no workflow, credential, PostgreSQL CI or repository-setting change occurred.
 
-## CP2 evidence — repository remediation PASS; external rotation BLOCKED
+## CP2 evidence — PASS; earlier external-rotation blocker reconciled at CP7
 
 Tracked credential-bearing development example values were replaced with placeholders, while local secret files remain ignored. `npm run test:secrets` proves URL, private-key, tracked-env, clean, public Firebase and disposable PostgreSQL cases without echoing a synthetic sentinel, then scans tracked/staged files. The existing `quality-gate` invokes it with no additional permissions or secret environment. No private-key/service-account marker was found in the inspected current tree; Firebase client configuration remains classified as public browser configuration pending external restrictions/rules/IAM validation.
 
-Current-tree removal cannot erase any historical exposure. Rotation is blocked pending authorised external provider owners for potentially active database, connector/API and SMTP categories; required action is provider-side rotation/revocation, replacement in approved local/CI secret storage, and verification without disclosing values. History rewrite remains prohibited without separate authorization. CP3 can proceed independently after this blocker is recorded.
+Current-tree removal cannot erase any historical exposure. During CP2, rotation was blocked pending authorised external provider owners for potentially active database, connector/API and SMTP categories; the required provider-side action was rotation/revocation, replacement in approved local/CI secret storage, and verification without disclosing values. CP7 records the completed external IAM/restrictions verification that reconciles this blocker. History rewrite remains prohibited without separate authorization.
 
 ## CP3 evidence — PASS
 
@@ -50,4 +50,4 @@ The canonical workflow runs on every `push` and every `pull_request`; it has no 
 
 CP0–CP6 evidence is reconciled on `codex/fnd-06-ci-gate`. CP0–CP1 establish the deterministic CI baseline and gate matrix; CP2 has repository secret remediation plus confirmed external least-privilege IAM, Google-managed service-account keys, authorised OAuth origins/redirects and restricted browser-key referrers/APIs; CP3 restores the canonical fail-closed gate; CP4 proves disposable PostgreSQL migration, rollback, tenant-isolation and teardown contracts; CP5 removes trigger/path bypasses and records warning ownership; and CP6 proves Linux secret scanning, a controlled tracked-artifact rejection, and a final green remote workflow.
 
-Final local evidence: `quality-gate`, lint, build and `git diff --check` all pass. The accepted residual risk is that advanced `main` branch-protection settings could not be verified or enabled because of the GitHub plan/visibility limitation; this does not weaken the implemented fail-closed workflow and remains a governance follow-up. No merge, deployment or production change is part of this exit.
+Final local evidence: `quality-gate`, lint, build and `git diff --check` all pass. The accepted residual risk is that advanced `main` branch-protection settings could not be verified or enabled because of the GitHub plan/visibility limitation; this does not weaken the implemented fail-closed workflow and remains a governance follow-up. The evidence records the final green remote workflow used for the exit; it does not assert a separate post-merge CI run. No merge, deployment or production change is part of this exit.

@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-Updated: 2026-08-25
+Updated: 2026-08-26
 
 This file records the current factual engineering state only. It is not a historical diary and must not present planned work as implemented.
 
@@ -8,6 +8,7 @@ This file records the current factual engineering state only. It is not a histor
 
 - Repository: `carlossmiranda1914-lang/NEXUS-WDU-IA`.
 - Comparison baseline: `main`.
+- Foundation exit integration: merge `e63054b81bc77a4cb438606ef584cbd4bb878f78` (PR #74).
 - Frozen implementation branch: `codex/enrollment-p0-foundation`.
 - Frozen checkpoint: `689d1dd8919a25e91911ae118c5aad9ff69c5862`.
 - Draft implementation checkpoint PR: `#65`.
@@ -17,9 +18,9 @@ This file records the current factual engineering state only. It is not a histor
 
 ## 2. Current phase
 
-**Implementation remains frozen pending explicit implementation authorization.**
+**Foundation Authority Convergence is complete. No Part 2 implementation is authorized until an IAM Mission Pack independently passes DoR and receives explicit implementation authorization.**
 
-The planning/governance phase for Foundation is closed sufficiently to begin the controlled implementation flow once the documentation baseline is accepted and the active mission is explicitly authorized.
+The FND-01–FND-06 Foundation sequence is complete and integrated in `main`. The next canonical tranche is IAM / institutional access lifecycle; it remains in `PREPARATION` until a Mission Pack exists, independently satisfies DoR and is explicitly authorized.
 
 Official flow:
 
@@ -143,11 +144,11 @@ The controlled Foundation sequence is:
 1. FND-01 — Schema Authority — **DONE**;
 2. FND-02 — Legacy Write Authority & Fences — DONE — integrated through PR #69 / merge `d84dd0a`; system wipe and legacy student mutations fail closed before token/request/persistence handling; the legacy SLA background writer remains an explicit transitional authority pending a canonical scheduler decision;
 3. FND-03 — Tenant Sweep — DONE — CP0–CP7 tenant isolation evidence is complete; transitional Generic Documents, AI and SLA remain fail-closed pending canonical authority;
-4. FND-04 — Product Truth Cleanup — DONE — CP0–CP7 PASS. The bounded 27-claim matrix has zero UNKNOWN rows; unavailable/prototype/local-only surfaces no longer present institutional success or availability, canonical Enrollment/Enrollment Documents metadata-state/School Tasks paths remain preserved, and backend Membership/InstitutionalContext remains authority. Dashboard/Search await authorized projections; Enrollment Documents does not claim physical storage; IAM/capability and connector domains remain dependencies. CP6 recorded `test:fnd04` (26 contracts), lint, build and diff PASS; CP7 documentation-only closure rechecked diff, FND-04-diff secret scan, temporary-artifact scan and commit scope. Tracked credential-bearing development configuration and Firebase browser configuration predate FND-04 and remain the mandatory FND-06 gate: remove tracked credential-bearing configuration, rotate potentially active credentials, validate Firebase restrictions/rules and add CI secret detection. FND-05 DoR/decision is the next authorized action; the complete Foundation is not DONE;
+4. FND-04 — Product Truth Cleanup — DONE — CP0–CP7 PASS. The bounded 27-claim matrix has zero UNKNOWN rows; unavailable/prototype/local-only surfaces no longer present institutional success or availability, canonical Enrollment/Enrollment Documents metadata-state/School Tasks paths remain preserved, and backend Membership/InstitutionalContext remains authority. Dashboard/Search await authorized projections; Enrollment Documents does not claim physical storage; IAM/capability and connector domains remain dependencies. CP6 recorded `test:fnd04` (26 contracts), lint, build and diff PASS; CP7 documentation-only closure rechecked diff, FND-04-diff secret scan, temporary-artifact scan and commit scope. Tracked credential-bearing development configuration and Firebase browser configuration predate FND-04 and remain the mandatory FND-06 gate: remove tracked credential-bearing configuration, rotate potentially active credentials, validate Firebase restrictions/rules and add CI secret detection. FND-05 DoR/decision was the next authorized action at that checkpoint; Foundation closure was completed later through FND-06.
 5. FND-05 — Audit Truth — DONE — CP0–CP7 PASS. Canonical audit/history paths are factual; generic `/api/logs` is fenced, realtime is refresh-only, observability is operational metadata only, and AI/background/connectors remain no-effect. AT-09 is not durable audit; retention, integrity, export and historical remediation remain dependencies. No schema or historical-data rewrite occurred. FND-06 DoR/decision is next and retains mandatory secret-management controls;
-6. FND-06 — CI vNext Gate — IMPLEMENTING — CP0–CP3 repository gates PASS: `quality-gate` now runs deterministic secret, Foundation non-PostgreSQL aggregate, committed-diff and artifact gates; controlled failures and clean local aggregate pass. PostgreSQL disposable CI remains CP4 and broad trigger redesign CP5. External rotation/revocation of potentially active historical categories is BLOCKED pending provider-owner authorization; Firebase browser configuration remains public-client configuration pending external restrictions/rules/IAM validation. No history rewrite or deployment occurred; CP4 is next.
+6. FND-06 — CI vNext Gate — **DONE** — CP0–CP7 PASS and integrated in `main` through `e63054b81bc77a4cb438606ef584cbd4bb878f78`. The exit evidence covers the fail-closed `quality-gate`, disposable PostgreSQL migration/rollback/tenant-isolation/teardown contracts, trigger coverage, Linux secret scanning, controlled failures and final remote workflow. The earlier CP2 external-rotation blocker was reconciled by CP7 external IAM/restrictions evidence; no history rewrite, repository setting, production-source change or credential-value handling occurred. Advanced `main` branch-protection settings remain unverified/unconfigured because of GitHub plan/visibility limits; this is an accepted governance follow-up, not a claim that a post-merge CI run was green.
 
-No mission starts automatically after a previous mission. Each requires an independent DoR and explicit authorization.
+Foundation completion does not start a mission automatically. IAM is the next canonical tranche, but no IAM Mission Pack is `READY`; IAM remains `PREPARATION` until its Mission Pack and DoR exist and explicit implementation authorization is granted.
 
 ## 10. Coding-agent / Codex execution governance
 
@@ -175,7 +176,7 @@ Rules:
 
 ## 12. Release/readiness statement
 
-Nexus is **not authorized for broad feature expansion or pilot-readiness claims**. FND-01 READY means only that its implementation contract is sufficiently defined. Product/platform readiness must be recalculated after Foundation convergence closes the relevant P0/P1 findings and CI proves the resulting invariants.
+Nexus is **not authorized for broad feature expansion or pilot-readiness claims**. Foundation completion proves only the FND-01–FND-06 convergence scope and its recorded CI evidence; it does not authorize IAM or later product work. Product/platform readiness must be recalculated for each subsequent tranche.
 
 ## 13. Update rule
 
