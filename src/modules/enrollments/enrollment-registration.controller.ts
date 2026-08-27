@@ -22,6 +22,10 @@ function contextForRegistration(req: AuthRequest, res: Response) {
 
 function rejectRegistrationError(res: Response, error: unknown) {
   if (error instanceof EnrollmentRegistrationApiError) {
+    if (error.code === 'STALE_VERSION') return res.status(409).json({
+      code: 'STALE_VERSION',
+      message: 'O registo foi alterado entretanto. Recarregue e reveja antes de submeter novamente.',
+    });
     if (error.code === 'NOT_FOUND') return reject(res, 404, error.message);
     if (error.code === 'FORBIDDEN') return reject(res, 403, error.message);
     if (error.code === 'IMMUTABLE' || error.code === 'AMBIGUOUS_GUARDIAN') return reject(res, 409, error.message);
