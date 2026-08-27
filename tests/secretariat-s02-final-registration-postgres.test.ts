@@ -90,11 +90,28 @@ try {
     enrollment: { previousSchool: 'Escola Primária A', notes: 'Cadastro completo S02 final.' },
   });
   assert(saved.readiness.ready, 'Complete student and guardian registration must become ready.');
+  assert(saved.registrationVersion === '2', 'A successful registration write must advance the registration version.');
+  assert(saved.student.version === '2', 'A successful student mutation must advance the Person version.');
   assert(saved.student.nationalIdNumber === 'BI-ANA-001', 'Student BI must persist.');
   assert(saved.student.whatsapp === '923000000', 'Student WhatsApp must persist separately.');
   assert(saved.guardian?.relationship === 'Mãe', 'Guardian relationship must persist.');
   assert(saved.guardian?.financialResponsible === true, 'Financial responsibility must persist.');
   assert(saved.enrollment.previousSchool === 'Escola Primária A', 'Enrollment-specific previous school must persist.');
+
+  let staleRejected = false;
+  try {
+    await saveEnrollmentRegistration(pool as any, context, first.enrollmentApplicationId, {
+      expectedRegistrationVersion: '1',
+      student: { ...saved.student, expectedVersion: '1', name: 'Ana Manuel Stale' },
+      guardian: saved.guardian ? { ...saved.guardian, expectedVersion: '1' } : null,
+      enrollment: saved.enrollment,
+    });
+  } catch (error) {
+    staleRejected = error instanceof EnrollmentRegistrationApiError && error.code === 'STALE_VERSION';
+  }
+  assert(staleRejected, 'A stale registration write must fail closed with STALE_VERSION.');
+  const persistedStudent = await pool.query('SELECT name FROM people WHERE id=$1', [first.studentPersonId]);
+  assert(persistedStudent.rows[0].name === 'Ana Manuel', 'A stale registration write must not overwrite the accepted student value.');
 
   const application = await pool.query('SELECT guardian_person_id FROM enrollment_applications WHERE id=$1', [first.enrollmentApplicationId]);
   const firstGuardianId = application.rows[0].guardian_person_id as string;

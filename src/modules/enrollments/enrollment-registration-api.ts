@@ -338,7 +338,7 @@ export async function saveEnrollmentRegistration(
       `UPDATE people
           SET name = $1, birth_date = $2::date, phone = $3, whatsapp = $4, email = $5,
               national_id_number = $6, gender = $7, nationality = $8,
-              address_line = $9, municipality = $10, province = $11, updated_at = now()
+              address_line = $9, municipality = $10, province = $11, version = version + 1, updated_at = now()
         WHERE id = $12`,
       [student.name, student.birthDate, student.phone, student.whatsapp, student.email, student.nationalIdNumber,
         student.gender, student.nationality, student.addressLine, student.municipality, student.province, application.student_person_id],
@@ -372,7 +372,7 @@ export async function saveEnrollmentRegistration(
           `UPDATE people
               SET name = $1, birth_date = $2::date, phone = $3, whatsapp = $4, email = $5,
                   national_id_number = $6, gender = $7, nationality = $8,
-                  address_line = $9, municipality = $10, province = $11, updated_at = now()
+                  address_line = $9, municipality = $10, province = $11, version = version + 1, updated_at = now()
             WHERE id = $12`,
           [guardianInput.name, guardianInput.birthDate, guardianInput.phone, guardianInput.whatsapp, guardianInput.email,
             guardianInput.nationalIdNumber, guardianInput.gender, guardianInput.nationality, guardianInput.addressLine,
@@ -399,9 +399,9 @@ export async function saveEnrollmentRegistration(
 
     await client.query(
       `UPDATE enrollment_applications
-          SET guardian_person_id = COALESCE($1::uuid, guardian_person_id),
+              SET guardian_person_id = COALESCE($1::uuid, guardian_person_id),
               previous_school = $2, enrollment_notes = $3,
-              updated_by = $4, updated_at = now()
+              updated_by = $4, registration_version = registration_version + 1, updated_at = now()
         WHERE id = $5 AND institution_id = $6`,
       [guardianPersonId, previousSchool, notes, context.personId, enrollmentId, context.institutionId],
     );
