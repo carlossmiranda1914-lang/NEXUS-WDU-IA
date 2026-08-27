@@ -28,11 +28,21 @@ export type IamMembershipListResponse = {
   page: { nextCursor: string | null };
   summary: { activeInstitutionAdminCount: number };
 };
+export type IamMembershipMutationInput = { expectedVersion: number; idempotencyKey: string };
+export type IamMembershipRoleChangeInput = IamMembershipMutationInput & { role: InstitutionalRole };
+export type IamMembershipMutationResponse = { membership: Pick<IamMembership, 'id' | 'role' | 'status' | 'version'>; replayed: boolean };
+export type IamMembershipMutationErrorCode = 'UNAUTHORIZED' | 'MEMBERSHIP_NOT_FOUND' | 'MEMBERSHIP_STATE_INVALID' | 'VERSION_CONFLICT' | 'LAST_ADMIN_PROTECTED';
 
 export class IamMembershipReadError extends Error {
   constructor(public readonly status: number, message: string) {
     super(message);
     this.name = 'IamMembershipReadError';
+  }
+}
+export class IamMembershipMutationError extends Error {
+  constructor(public readonly status: number, public readonly code: IamMembershipMutationErrorCode | undefined) {
+    super('Não foi possível concluir a alteração do acesso institucional.');
+    this.name = 'IamMembershipMutationError';
   }
 }
 
@@ -64,4 +74,43 @@ export async function listInstitutionMemberships(
     );
   }
   return body as IamMembershipListResponse;
+}
+
+async function mutateInstitutionMembership(
+  token: string,
+  membershipId: string,
+  suffix: 'role' | 'revoke',
+  method: 'PATCH' | 'POST',
+  body: IamMembershipRoleChangeInput | IamMembershipMutationInput,
+  request: FetchLike = fetch,
+): Promise<IamMembershipMutationResponse> {
+  const response = await request(`/api/iam/memberships/${encodeURIComponent(membershipId)}/${suffix}`, {
+    method,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const code = typeof payload.code === 'string' ? payload.code : undefined;
+    throw new IamMembershipMutationError(response.status, code as IamMembershipMutationErrorCode | undefined);
+  }
+  return payload as IamMembershipMutationResponse;
+}
+
+export function changeInstitutionMembershipRole(
+  token: string,
+  membershipId: string,
+  input: IamMembershipRoleChangeInput,
+  request: FetchLike = fetch,
+): Promise<IamMembershipMutationResponse> {
+  return mutateInstitutionMembership(token, membershipId, 'role', 'PATCH', input, request);
+}
+
+export function revokeInstitutionMembership(
+  token: string,
+  membershipId: string,
+  input: IamMembershipMutationInput,
+  request: FetchLike = fetch,
+): Promise<IamMembershipMutationResponse> {
+  return mutateInstitutionMembership(token, membershipId, 'revoke', 'POST', input, request);
 }

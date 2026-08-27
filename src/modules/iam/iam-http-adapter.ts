@@ -3,7 +3,8 @@ import { INSTITUTIONAL_ROLES, type InstitutionalRole } from '../../auth/institut
 import { IamCommandError, type IamCommandResult, type IamResultCode } from './iam-command-types.ts';
 
 type JsonRecord = Record<string, unknown>;
-export type IamPublicError = { status: number; error: string };
+export type IamPublicError = { status: number; error: string; code?: IamPublicErrorCode };
+export type IamPublicErrorCode = 'UNAUTHORIZED' | 'MEMBERSHIP_NOT_FOUND' | 'MEMBERSHIP_STATE_INVALID' | 'VERSION_CONFLICT' | 'LAST_ADMIN_PROTECTED';
 export type IamRequestMetadata = { requestId: string; correlationId?: string };
 
 export class IamHttpAdapterError extends Error {
@@ -94,8 +95,11 @@ const conflictCodes = new Set<IamResultCode>([
 export function publicError(error: unknown): IamPublicError {
   if (error instanceof IamHttpAdapterError) return { status: 400, error: 'Pedido IAM inválido.' };
   if (error instanceof IamCommandError) {
-    if (error.code === 'UNAUTHORIZED') return { status: 403, error: 'Operação institucional não autorizada.' };
-    if (error.code === 'MEMBERSHIP_NOT_FOUND' || error.code === 'IDENTITY_PERSON_UNRESOLVED') return { status: 404, error: 'Recurso institucional não encontrado.' };
+    if (error.code === 'UNAUTHORIZED') return { status: 403, error: 'Operação institucional não autorizada.', code: 'UNAUTHORIZED' };
+    if (error.code === 'MEMBERSHIP_NOT_FOUND' || error.code === 'IDENTITY_PERSON_UNRESOLVED') return { status: 404, error: 'Recurso institucional não encontrado.', code: 'MEMBERSHIP_NOT_FOUND' };
+    if (error.code === 'MEMBERSHIP_STATE_INVALID') return { status: 409, error: 'Conflito de estado do acesso institucional.', code: 'MEMBERSHIP_STATE_INVALID' };
+    if (error.code === 'VERSION_CONFLICT') return { status: 409, error: 'Conflito de estado do acesso institucional.', code: 'VERSION_CONFLICT' };
+    if (error.code === 'LAST_ADMIN_PROTECTED') return { status: 409, error: 'Conflito de estado do acesso institucional.', code: 'LAST_ADMIN_PROTECTED' };
     if (conflictCodes.has(error.code)) return { status: 409, error: 'Conflito de estado do acesso institucional.' };
   }
   return { status: 500, error: 'Não foi possível concluir a operação IAM.' };

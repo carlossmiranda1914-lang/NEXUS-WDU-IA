@@ -19,7 +19,10 @@ function context(req: AuthRequest, res: Response) {
   res.status(401).json({ error: 'Autenticação institucional necessária.' });
   return null;
 }
-function reject(res: Response, error: unknown) { const safe = publicError(error); return res.status(safe.status).json({ error: safe.error }); }
+function reject(res: Response, error: unknown) {
+  const safe = publicError(error);
+  return res.status(safe.status).json(safe.code ? { error: safe.error, code: safe.code } : { error: safe.error });
+}
 
 export function registerIamRoutes(app: Application, dependencies: IamHttpDependencies = defaults): void {
   // Test doubles that exercise only command registration may omit `get`.
