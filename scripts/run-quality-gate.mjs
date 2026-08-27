@@ -10,6 +10,7 @@ const base = (baseIndex >= 0 ? args[baseIndex + 1] : undefined) || process.env.Q
 if (!base) throw new Error('quality-gate requires a valid committed-diff base.');
 const defaultGates = [
   { name: 'secret-scan', command: ['npm', 'run', 'test:secrets'] },
+  { name: 'auth-csp', command: ['npm', 'run', 'test:auth:csp'] },
   { name: 'foundation', command: ['npm', 'run', 'test:foundation'] },
   { name: 'postgres-foundation', command: ['npm', 'run', 'test:postgres-foundation'] },
   { name: 'committed-diff', command: ['npm', 'run', 'test:diff', '--', '--base', base] },
