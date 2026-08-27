@@ -1,0 +1,3 @@
+interface:
+  display_name: "Nexus Code Review"
+  short_description: "Review Nexus changes against canonical engineering invariants"
