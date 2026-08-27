@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import {
   IamMembershipReadError,
+  IamMembershipMutationError,
   buildMembershipsUrl,
+  changeInstitutionMembershipRole,
   listInstitutionMemberships,
+  revokeInstitutionMembership,
   type IamMembershipListResponse,
 } from '../src/modules/iam/iam-read-client.ts';
 
@@ -30,6 +33,28 @@ assert.deepEqual(result, payload);
 assert.equal(receivedUrl, '/api/iam/memberships?status=active');
 assert.equal(receivedAuthorization, 'Bearer firebase-token');
 assert.equal(receivedUrl.includes('institutionId'), false);
+
+let mutationUrl = '';
+let mutationMethod = '';
+let mutationBody = '';
+await changeInstitutionMembershipRole('firebase-token', 'membership-1', { role: 'director', expectedVersion: 3, idempotencyKey: 'iam-ui-change-001' }, async (url, init) => {
+  mutationUrl = String(url); mutationMethod = String(init?.method); mutationBody = String(init?.body);
+  return new Response(JSON.stringify({ membership: { id: 'membership-1', role: 'director', status: 'active', version: 4 }, replayed: false }), { status: 200 });
+});
+assert.equal(mutationUrl, '/api/iam/memberships/membership-1/role');
+assert.equal(mutationMethod, 'PATCH');
+assert.deepEqual(JSON.parse(mutationBody), { role: 'director', expectedVersion: 3, idempotencyKey: 'iam-ui-change-001' });
+await revokeInstitutionMembership('firebase-token', 'membership-1', { expectedVersion: 4, idempotencyKey: 'iam-ui-revoke-001' }, async (url, init) => {
+  mutationUrl = String(url); mutationMethod = String(init?.method); mutationBody = String(init?.body);
+  return new Response(JSON.stringify({ membership: { id: 'membership-1', role: 'director', status: 'revoked', version: 5 }, replayed: false }), { status: 200 });
+});
+assert.equal(mutationUrl, '/api/iam/memberships/membership-1/revoke');
+assert.equal(mutationMethod, 'POST');
+assert.deepEqual(JSON.parse(mutationBody), { expectedVersion: 4, idempotencyKey: 'iam-ui-revoke-001' });
+await assert.rejects(
+  () => revokeInstitutionMembership('firebase-token', 'membership-1', { expectedVersion: 4, idempotencyKey: 'iam-ui-revoke-002' }, async () => new Response(JSON.stringify({ error: 'Conflito', code: 'VERSION_CONFLICT' }), { status: 409 })),
+  (error: unknown) => error instanceof IamMembershipMutationError && error.status === 409 && error.code === 'VERSION_CONFLICT',
+);
 
 await assert.rejects(
   () => listInstitutionMemberships('firebase-token', {}, async () => new Response(JSON.stringify({ error: 'Operação institucional não autorizada.' }), { status: 403 })),
