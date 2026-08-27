@@ -21,9 +21,11 @@ try {
 
   const result = await pool.query<{ table_name: string; column_name: string; data_type: string }>(
     `SELECT table_name, column_name, data_type
-       FROM information_schema.columns
-      WHERE (table_name = 'people' AND column_name = 'version')
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND ((table_name = 'people' AND column_name = 'version')
          OR (table_name = 'enrollment_applications' AND column_name = 'registration_version')
+        )
       ORDER BY table_name, column_name`,
   );
   const expected = [
