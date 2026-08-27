@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   IamMembershipReadError,
   IamMembershipMutationError,
+  activatePendingInstitutionMembership,
   buildMembershipsUrl,
   changeInstitutionMembershipRole,
   listInstitutionMemberships,
@@ -51,6 +52,14 @@ await revokeInstitutionMembership('firebase-token', 'membership-1', { expectedVe
 assert.equal(mutationUrl, '/api/iam/memberships/membership-1/revoke');
 assert.equal(mutationMethod, 'POST');
 assert.deepEqual(JSON.parse(mutationBody), { expectedVersion: 4, idempotencyKey: 'iam-ui-revoke-001' });
+await activatePendingInstitutionMembership('firebase-token', 'membership-pending-1', { role: 'teacher', expectedVersion: 1, idempotencyKey: 'iam-ui-pending-001' }, async (url, init) => {
+  mutationUrl = String(url); mutationMethod = String(init?.method); mutationBody = String(init?.body);
+  return new Response(JSON.stringify({ membership: { id: 'membership-pending-1', role: 'teacher', status: 'active', version: 2 }, replayed: false }), { status: 200 });
+});
+assert.equal(mutationUrl, '/api/iam/memberships/grants');
+assert.equal(mutationMethod, 'POST');
+assert.deepEqual(JSON.parse(mutationBody), { pendingMembershipId: 'membership-pending-1', role: 'teacher', expectedVersion: 1, idempotencyKey: 'iam-ui-pending-001' });
+assert.equal(/personId|identityId|accessIntentId/.test(mutationBody), false);
 await assert.rejects(
   () => revokeInstitutionMembership('firebase-token', 'membership-1', { expectedVersion: 4, idempotencyKey: 'iam-ui-revoke-002' }, async () => new Response(JSON.stringify({ error: 'Conflito', code: 'VERSION_CONFLICT' }), { status: 409 })),
   (error: unknown) => error instanceof IamMembershipMutationError && error.status === 409 && error.code === 'VERSION_CONFLICT',

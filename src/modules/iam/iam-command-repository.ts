@@ -35,6 +35,33 @@ export async function lockIntent(client: IamTransactionClient, institutionId: st
   const result = await client.query<IntentRow>(`SELECT id, authorized_person_id, authorized_identity_id, status, code_expires_at, consumed_at FROM iam_access_intents WHERE id = $1 AND institution_id = $2 FOR UPDATE`, [intentId, institutionId]);
   return result.rows[0] ?? null;
 }
+export async function resolvePendingGrantContext(client: IamTransactionClient, institutionId: string, pendingMembershipId: string, expectedVersion: number): Promise<{ membershipId: string; accessIntentId: string; target: { personId?: string; identityId?: string } }> {
+  const membership = await lockMembership(client, institutionId, pendingMembershipId);
+  if (!membership) throw new Error('MEMBERSHIP_NOT_FOUND');
+  if (membership.status !== 'pending') throw new Error('MEMBERSHIP_STATE_INVALID');
+  if (membership.version !== expectedVersion) throw new Error('VERSION_CONFLICT');
+  const intents = await client.query<{ id: string; authorized_person_id: string | null; authorized_identity_id: string | null }>(
+    `SELECT i.id, i.authorized_person_id, i.authorized_identity_id
+       FROM iam_access_intents i
+      WHERE i.institution_id = $1
+        AND i.status = ANY($2::text[])
+        AND i.consumed_at IS NULL
+        AND i.code_expires_at > now()
+        AND (i.authorized_person_id = $3 OR (i.authorized_identity_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM identities identity_match WHERE identity_match.id = i.authorized_identity_id AND identity_match.person_id = $3
+        )))
+      ORDER BY i.id
+      FOR UPDATE`,
+    [institutionId, ['approved', 'accepted'], membership.person_id],
+  );
+  if (intents.rows.length !== 1) throw new Error('INTENT_INVALID');
+  const intent = intents.rows[0];
+  return {
+    membershipId: membership.id,
+    accessIntentId: intent.id,
+    target: intent.authorized_identity_id ? { identityId: intent.authorized_identity_id } : { personId: membership.person_id },
+  };
+}
 export async function lockActiveAdmins(client: IamTransactionClient, institutionId: string): Promise<MembershipRow[]> {
   const result = await client.query<MembershipRow>(`SELECT id, person_id, institution_id, role, status, version FROM memberships WHERE institution_id = $1 AND status = 'active' AND role = 'institution_admin' ORDER BY id FOR UPDATE`, [institutionId]);
   return result.rows;

@@ -11,7 +11,7 @@ import { readApprovedTestTarget } from '../scripts/nexus-test-db-safety.mjs';
 import { resolveInstitutionalContext } from '../src/auth/institutional-context.ts';
 import { createRequireAuth } from '../src/middleware/auth.ts';
 import { registerIamRoutes } from '../src/modules/iam/iam.controller.ts';
-import { changeMembershipRole, grantInstitutionAccess, revokeInstitutionAccess } from '../src/modules/iam/iam-command-service.ts';
+import { activatePendingInstitutionAccess, changeMembershipRole, grantInstitutionAccess, revokeInstitutionAccess } from '../src/modules/iam/iam-command-service.ts';
 import type { IamCommandPool, IamTransactionClient } from '../src/modules/iam/iam-command-types.ts';
 
 const { connectionString } = readApprovedTestTarget();
@@ -60,7 +60,7 @@ try {
   };
   // The real resolver reads Identity -> Person -> Membership from the isolated CP4 schema.
   const localRequireAuth = createRequireAuth({ verifyIdToken: fakeVerifier, pool: servicePool as any, resolveInstitutionalContext });
-  registerIamRoutes(app, { pool: iamPool(servicePool), requireAuth: localRequireAuth, commands: { grant: grantInstitutionAccess, changeRole: changeMembershipRole, revoke: revokeInstitutionAccess } });
+  registerIamRoutes(app, { pool: iamPool(servicePool), requireAuth: localRequireAuth, commands: { grant: grantInstitutionAccess, changeRole: changeMembershipRole, revoke: revokeInstitutionAccess, activatePending: activatePendingInstitutionAccess } });
   server = http.createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const address = server.address(); assert.ok(address && typeof address !== 'string' && address.address === '127.0.0.1' && address.port > 0, 'HTTP listener must be ephemeral loopback only.');
   const base = `http://127.0.0.1:${address.port}`;

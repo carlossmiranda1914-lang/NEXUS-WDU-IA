@@ -4,7 +4,7 @@ import { IamCommandError, type IamCommandResult, type IamResultCode } from './ia
 
 type JsonRecord = Record<string, unknown>;
 export type IamPublicError = { status: number; error: string; code?: IamPublicErrorCode };
-export type IamPublicErrorCode = 'UNAUTHORIZED' | 'MEMBERSHIP_NOT_FOUND' | 'MEMBERSHIP_STATE_INVALID' | 'VERSION_CONFLICT' | 'LAST_ADMIN_PROTECTED';
+export type IamPublicErrorCode = 'UNAUTHORIZED' | 'MEMBERSHIP_NOT_FOUND' | 'MEMBERSHIP_STATE_INVALID' | 'VERSION_CONFLICT' | 'LAST_ADMIN_PROTECTED' | 'INTENT_INVALID';
 export type IamRequestMetadata = { requestId: string; correlationId?: string };
 
 export class IamHttpAdapterError extends Error {
@@ -57,12 +57,19 @@ function target(value: unknown): { personId?: string; identityId?: string } {
 }
 
 export function parseGrantBody(value: unknown) {
-  const input = record(value); exactKeys(input, ['target', 'role', 'idempotencyKey', 'accessIntentId', 'membershipId', 'expectedVersion']);
+  const input = record(value); exactKeys(input, ['target', 'role', 'idempotencyKey', 'accessIntentId', 'membershipId', 'expectedVersion', 'pendingMembershipId']);
+  const pendingMembershipId = optionalUuid(input.pendingMembershipId);
+  const hasTarget = input.target !== undefined;
+  if (Boolean(pendingMembershipId) === hasTarget) throw new IamHttpAdapterError();
+  if (pendingMembershipId) {
+    if (input.accessIntentId !== undefined || input.membershipId !== undefined) throw new IamHttpAdapterError();
+    return { mode: 'pending' as const, pendingMembershipId, role: role(input.role), expectedVersion: expectedVersion(input.expectedVersion), idempotencyKey: idempotencyKey(input.idempotencyKey) };
+  }
   const membershipId = optionalUuid(input.membershipId);
   const version = input.expectedVersion === undefined ? undefined : expectedVersion(input.expectedVersion);
   if (membershipId && version === undefined) throw new IamHttpAdapterError();
   if (!membershipId && version !== undefined) throw new IamHttpAdapterError();
-  return { target: target(input.target), role: role(input.role), idempotencyKey: idempotencyKey(input.idempotencyKey), accessIntentId: optionalUuid(input.accessIntentId), membershipId, expectedVersion: version };
+  return { mode: 'target' as const, target: target(input.target), role: role(input.role), idempotencyKey: idempotencyKey(input.idempotencyKey), accessIntentId: optionalUuid(input.accessIntentId), membershipId, expectedVersion: version };
 }
 export function parseChangeRoleBody(value: unknown) {
   const input = record(value); exactKeys(input, ['role', 'expectedVersion', 'idempotencyKey']);
@@ -100,6 +107,7 @@ export function publicError(error: unknown): IamPublicError {
     if (error.code === 'MEMBERSHIP_STATE_INVALID') return { status: 409, error: 'Conflito de estado do acesso institucional.', code: 'MEMBERSHIP_STATE_INVALID' };
     if (error.code === 'VERSION_CONFLICT') return { status: 409, error: 'Conflito de estado do acesso institucional.', code: 'VERSION_CONFLICT' };
     if (error.code === 'LAST_ADMIN_PROTECTED') return { status: 409, error: 'Conflito de estado do acesso institucional.', code: 'LAST_ADMIN_PROTECTED' };
+    if (error.code === 'INTENT_INVALID') return { status: 409, error: 'Conflito de estado do acesso institucional.', code: 'INTENT_INVALID' };
     if (conflictCodes.has(error.code)) return { status: 409, error: 'Conflito de estado do acesso institucional.' };
   }
   return { status: 500, error: 'Não foi possível concluir a operação IAM.' };
