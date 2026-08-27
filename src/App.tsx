@@ -87,6 +87,7 @@ const InstitutionalApprovals = lazy(() => import('./components/InstitutionalAppr
 const DigitalSignatureSystem = lazy(() => import('./components/DigitalSignatureSystem'));
 const TasksCenter = lazy(() => import('./components/TasksCenter'));
 const GoogleSheetsCenter = lazy(() => import('./components/GoogleSheetsCenter'));
+const InstitutionalAccessWorkspace = lazy(() => import('./components/InstitutionalAccessWorkspace'));
 
 function fuzzyMatches(text: string, query: string): boolean {
   if (!query) return true;
@@ -114,11 +115,12 @@ const TAB_NAMES: Record<string, string> = {
   approvals: 'Aprovações Internas',
   signatures: 'Assinatura Digital',
   tasks: 'Centro de Tarefas',
-  sheets: 'Google Sheets'
+  sheets: 'Google Sheets',
+  'institutional-access': 'Acessos institucionais'
 };
 
 const DEFAULT_PERMISSIONS: Record<UserRole, string[]> = {
-  admin: ['dashboard', 'students', 'teachers', 'financials', 'documents', 'communications', 'config', 'workflows', 'approvals', 'signatures', 'tasks', 'sheets'],
+  admin: ['dashboard', 'students', 'teachers', 'financials', 'documents', 'communications', 'config', 'workflows', 'approvals', 'signatures', 'tasks', 'sheets', 'institutional-access'],
   director: ['dashboard', 'students', 'teachers', 'financials', 'documents', 'communications', 'config', 'workflows', 'approvals', 'signatures', 'tasks', 'sheets'],
   secretariat: ['dashboard', 'students', 'documents', 'communications', 'approvals', 'signatures', 'tasks', 'sheets'],
   financial: ['dashboard', 'financials', 'documents', 'communications', 'approvals', 'signatures', 'tasks', 'sheets'],
@@ -224,6 +226,11 @@ export const TABS_LAYOUT_CONFIG: Record<string, {
     type: 'Sincronização & Integração de Dados',
     containerClass: "w-full max-w-[1600px] mx-auto space-y-6",
     description: "Integração oficial com Google Sheets e Google Drive para exportação e importação de alunos."
+  },
+  'institutional-access': {
+    type: 'Gestão de acessos institucionais',
+    containerClass: "w-full max-w-6xl mx-auto",
+    description: "Consulta segura das associações e papéis institucionais."
   }
 };
 
@@ -1697,7 +1704,8 @@ export default function App() {
     { id: 'config', name: 'Definições', icon: Sliders },
     { id: 'workflows', name: 'Central de Processos', icon: Zap },
     { id: 'approvals', name: 'Aprovações Internas', icon: ClipboardCheck },
-    { id: 'signatures', name: 'Assinatura Digital', icon: PenTool }
+    { id: 'signatures', name: 'Assinatura Digital', icon: PenTool },
+    { id: 'institutional-access', name: 'Acessos institucionais', icon: UserCheck }
   ].filter(item => {
     const allowedList = rolePermissions[currentUserRole] || [];
     return allowedList.includes(item.id);
@@ -1738,7 +1746,8 @@ export default function App() {
     {
       title: "Configuração",
       items: [
-        { id: 'config', name: 'Definições do Sistema', icon: Sliders }
+        { id: 'config', name: 'Definições do Sistema', icon: Sliders },
+        { id: 'institutional-access', name: 'Acessos institucionais', icon: UserCheck }
       ]
     }
   ];
@@ -2756,6 +2765,10 @@ export default function App() {
                       firebaseUser={firebaseUser}
                       onWipeSystem={handleWipeSystemSessions}
                     />
+                  )}
+
+                  {activeTab === 'institutional-access' && (
+                    <InstitutionalAccessWorkspace theme={theme} />
                   )}
                 </>
                 </Suspense>
