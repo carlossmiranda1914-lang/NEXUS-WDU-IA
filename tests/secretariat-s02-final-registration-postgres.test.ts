@@ -135,6 +135,21 @@ try {
   const versionAfterCollision = await pool.query('SELECT registration_version FROM enrollment_applications WHERE id=$1', [first.enrollmentApplicationId]);
   assert(versionAfterCollision.rows[0].registration_version === '2', 'Collision rollback must leave the registration version unchanged.');
 
+  let guardianStaleRejected = false;
+  const guardianForStale = await pool.query<{ guardian_person_id: string }>('SELECT guardian_person_id FROM enrollment_applications WHERE id = $1', [first.enrollmentApplicationId]);
+  await pool.query('UPDATE people SET version = 2 WHERE id = $1', [guardianForStale.rows[0].guardian_person_id]);
+  try {
+    await saveEnrollmentRegistration(pool as any, context, first.enrollmentApplicationId, {
+      expectedRegistrationVersion: '2',
+      student: { ...saved.student, expectedVersion: '2' },
+      guardian: saved.guardian ? { ...saved.guardian, expectedVersion: saved.guardian.version, phone: '925000000' } : null,
+      enrollment: saved.enrollment,
+    });
+  } catch (error) {
+    guardianStaleRejected = error instanceof EnrollmentRegistrationApiError && error.code === 'STALE_VERSION';
+  }
+  assert(guardianStaleRejected, 'A stale Guardian version must fail before any registration write.');
+
   const application = await pool.query('SELECT guardian_person_id FROM enrollment_applications WHERE id=$1', [first.enrollmentApplicationId]);
   const firstGuardianId = application.rows[0].guardian_person_id as string;
   assert(Boolean(firstGuardianId), 'Enrollment must link the primary guardian person.');
