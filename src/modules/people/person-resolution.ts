@@ -9,6 +9,7 @@ export type PersonResolutionStatus =
 export type PersonMatchReason =
   | 'student_number'
   | 'legacy_student_id'
+  | 'national_id_number'
   | 'name'
   | 'birth_date'
   | 'phone';
@@ -19,6 +20,7 @@ export interface PersonResolutionInput {
   phone?: string | null;
   studentNumber?: string | null;
   legacyStudentId?: string | null;
+  nationalIdNumber?: string | null;
 }
 
 export interface PersonResolutionCandidate {
@@ -28,6 +30,7 @@ export interface PersonResolutionCandidate {
   phone?: string | null;
   studentNumber?: string | null;
   legacyStudentId?: string | null;
+  nationalIdNumber?: string | null;
   relationship: 'local' | 'external';
   disclosure: 'allowed' | 'restricted';
 }
@@ -90,6 +93,8 @@ function evaluateCandidate(
   const candidateStudentNumber = normalizeIdentifier(candidate.studentNumber);
   const inputLegacyStudentId = normalizeIdentifier(input.legacyStudentId);
   const candidateLegacyStudentId = normalizeIdentifier(candidate.legacyStudentId);
+  const inputNationalIdNumber = normalizeIdentifier(input.nationalIdNumber);
+  const candidateNationalIdNumber = normalizeIdentifier(candidate.nationalIdNumber);
 
   const reasons: PersonMatchReason[] = [];
 
@@ -102,14 +107,18 @@ function evaluateCandidate(
   const legacyStudentIdMatches = Boolean(
     inputLegacyStudentId && candidateLegacyStudentId && inputLegacyStudentId === candidateLegacyStudentId,
   );
+  const nationalIdNumberMatches = Boolean(
+    inputNationalIdNumber && candidateNationalIdNumber && inputNationalIdNumber === candidateNationalIdNumber,
+  );
 
   if (studentNumberMatches) reasons.push('student_number');
   if (legacyStudentIdMatches) reasons.push('legacy_student_id');
+  if (nationalIdNumberMatches) reasons.push('national_id_number');
   if (nameMatches) reasons.push('name');
   if (birthDateMatches) reasons.push('birth_date');
   if (phoneMatches) reasons.push('phone');
 
-  const strongInstitutionalMatch = studentNumberMatches || legacyStudentIdMatches;
+  const strongInstitutionalMatch = studentNumberMatches || legacyStudentIdMatches || nationalIdNumberMatches;
   const compositeMatch = nameMatches && (birthDateMatches || phoneMatches);
 
   const nameContradiction = Boolean(inputName && candidateName && inputName !== candidateName);

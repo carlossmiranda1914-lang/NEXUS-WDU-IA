@@ -19,6 +19,7 @@ interface CandidateRow {
   phone: string | null;
   student_number: string | null;
   legacy_student_id: string | null;
+  national_id_number: string | null;
   is_local: boolean;
 }
 
@@ -29,7 +30,8 @@ export function hasResolutionSupportingSignal(input: PersonResolutionInput): boo
     input.birthDate?.trim()
       || normalizePhone(input.phone)
       || normalizeIdentifier(input.studentNumber)
-      || normalizeIdentifier(input.legacyStudentId),
+      || normalizeIdentifier(input.legacyStudentId)
+      || normalizeIdentifier(input.nationalIdNumber),
   );
 }
 
@@ -44,6 +46,7 @@ function rowToCandidate(row: CandidateRow): PersonResolutionCandidate {
     phone: row.phone,
     studentNumber: row.is_local ? row.student_number : null,
     legacyStudentId: row.is_local ? row.legacy_student_id : null,
+    nationalIdNumber: row.national_id_number,
     relationship,
     // Cross-institution disclosure is deliberately closed in T3. A later
     // authority workflow may permit reuse, but this provider never does.
@@ -61,6 +64,7 @@ export async function loadPersonResolutionCandidates(
 
   const studentNumber = normalizeIdentifier(input.studentNumber);
   const legacyStudentId = normalizeIdentifier(input.legacyStudentId);
+  const nationalIdNumber = normalizeIdentifier(input.nationalIdNumber);
   const phone = normalizePhone(input.phone);
   const birthDate = input.birthDate?.trim() || null;
 
@@ -70,6 +74,7 @@ export async function loadPersonResolutionCandidates(
          FROM people p
         WHERE ($2::date IS NOT NULL AND p.birth_date = $2::date AND lower(p.name) = lower($1))
            OR ($3::text IS NOT NULL AND regexp_replace(coalesce(p.phone, ''), '[^0-9]', '', 'g') = $3)
+           OR ($7::text IS NOT NULL AND upper(replace(coalesce(p.national_id_number, ''), ' ', '')) = $7)
        UNION
        SELECT sp.person_id
          FROM student_profiles sp
@@ -81,6 +86,7 @@ export async function loadPersonResolutionCandidates(
             p.name,
             p.birth_date::text AS birth_date,
             p.phone,
+            p.national_id_number,
             local_profile.student_number,
             local_profile.legacy_student_id,
             (local_profile.person_id IS NOT NULL) AS is_local
@@ -90,7 +96,7 @@ export async function loadPersonResolutionCandidates(
          ON local_profile.person_id = p.id
         AND local_profile.institution_id = $4
       ORDER BY (local_profile.person_id IS NOT NULL) DESC, p.id
-      LIMIT $7`,
+      LIMIT $8`,
     [
       input.name.trim(),
       birthDate,
@@ -98,6 +104,7 @@ export async function loadPersonResolutionCandidates(
       institutionId,
       studentNumber,
       legacyStudentId,
+      nationalIdNumber,
       PERSON_RESOLUTION_CANDIDATE_LIMIT,
     ],
   );
