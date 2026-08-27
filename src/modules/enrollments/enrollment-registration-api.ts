@@ -338,7 +338,8 @@ export async function saveEnrollmentRegistration(
       'SELECT national_id_number FROM people WHERE id = $1',
       [application.student_person_id],
     );
-    if (currentStudent.rows[0]?.national_id_number !== student.nationalIdNumber) {
+    const studentMaterialChanged = currentStudent.rows[0]?.national_id_number !== student.nationalIdNumber;
+    if (studentMaterialChanged) {
       const resolution = await resolvePersonForInstitution(client, context.institutionId, {
         name: student.name,
         birthDate: student.birthDate,
@@ -450,7 +451,13 @@ export async function saveEnrollmentRegistration(
       `INSERT INTO enrollment_events
         (institution_id, enrollment_application_id, actor_person_id, event_type, metadata)
        VALUES ($1, $2, $3, 'registration_updated', $4::jsonb)`,
-      [context.institutionId, enrollmentId, context.personId, JSON.stringify({ ready: registration.readiness.ready, missing: registration.readiness.missing })],
+      [context.institutionId, enrollmentId, context.personId, JSON.stringify({
+        operation: 'registration_updated',
+        result: 'success',
+        categories: [studentMaterialChanged ? 'identity_material' : 'profile_only'],
+        previousVersions: { registration: application.registration_version, student: lockedStudent.rows[0].version },
+        newVersions: { registration: registration.registrationVersion, student: registration.student.version },
+      })],
     );
     await client.query('COMMIT');
     return registration;
