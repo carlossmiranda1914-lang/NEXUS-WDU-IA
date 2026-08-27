@@ -1,6 +1,6 @@
 # ENROLLMENT-01 — Identity Mutation Safety & Registration Concurrency
 
-**Estado:** READY — ENROLLMENT-01.
+**Estado:** DONE — ENROLLMENT-01 IDENTITY MUTATION SAFETY PROVEN.
 
 **Tipo:** hardening arquitetural de Enrollment. Este documento é a autoridade de planeamento; não autoriza alterações nesta etapa.
 
