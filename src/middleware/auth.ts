@@ -31,7 +31,9 @@ export function createRequireAuth(dependencies: RequireAuthDependencies) {
       const requestedInstitutionId = typeof req.headers['x-institution-id'] === 'string'
         ? req.headers['x-institution-id']
         : undefined;
-      const resolution = await dependencies.resolveInstitutionalContext(dependencies.pool, decodedToken.uid, requestedInstitutionId);
+      const resolution = dependencies.pool === pool && dependencies.resolveInstitutionalContext === resolveInstitutionalContext
+        ? await resolveInstitutionalContext(pool, decodedToken.uid, requestedInstitutionId)
+        : await dependencies.resolveInstitutionalContext(dependencies.pool, decodedToken.uid, requestedInstitutionId);
 
     if (resolution.kind === 'missing_membership') {
       return res.status(403).json({ error: 'Acesso pendente: esta conta não possui uma associação institucional ativa.' });
