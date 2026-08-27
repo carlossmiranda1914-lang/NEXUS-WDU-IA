@@ -112,6 +112,8 @@ try {
   assert(staleRejected, 'A stale registration write must fail closed with STALE_VERSION.');
   const persistedStudent = await pool.query('SELECT name FROM people WHERE id=$1', [first.studentPersonId]);
   assert(persistedStudent.rows[0].name === 'Ana Manuel', 'A stale registration write must not overwrite the accepted student value.');
+  const successEventsAfterStale = await pool.query("SELECT count(*)::int AS count FROM enrollment_events WHERE enrollment_application_id = $1 AND event_type = 'registration_updated'", [first.enrollmentApplicationId]);
+  assert(successEventsAfterStale.rows[0].count === 1, 'A stale conflict must not create a registration success audit event.');
 
   const externalPerson = randomUUID();
   const externalInstitution = randomUUID();
@@ -134,6 +136,12 @@ try {
   assert(studentAfterCollision.rows[0].national_id_number === 'BI-ANA-001', 'Collision rollback must leave the student unchanged.');
   const versionAfterCollision = await pool.query('SELECT registration_version FROM enrollment_applications WHERE id=$1', [first.enrollmentApplicationId]);
   assert(versionAfterCollision.rows[0].registration_version === '2', 'Collision rollback must leave the registration version unchanged.');
+  const successEventsAfterCollision = await pool.query("SELECT count(*)::int AS count FROM enrollment_events WHERE enrollment_application_id = $1 AND event_type = 'registration_updated'", [first.enrollmentApplicationId]);
+  assert(successEventsAfterCollision.rows[0].count === 1, 'An identity collision must not create a registration success audit event.');
+  const registrationEvent = await pool.query<{ metadata: Record<string, unknown> }>("SELECT metadata FROM enrollment_events WHERE enrollment_application_id = $1 AND event_type = 'registration_updated' ORDER BY created_at DESC LIMIT 1", [first.enrollmentApplicationId]);
+  const auditJson = JSON.stringify(registrationEvent.rows[0].metadata).toLowerCase();
+  assert(registrationEvent.rows[0].metadata.operation === 'registration_updated' && registrationEvent.rows[0].metadata.result === 'success', 'Successful registration audit must record factual operation and result.');
+  assert(!/bi-ana|example\.test|923000000|rua 1/.test(auditJson), 'Registration audit must not contain person PII.');
 
   let guardianStaleRejected = false;
   const guardianForStale = await pool.query<{ guardian_person_id: string }>('SELECT guardian_person_id FROM enrollment_applications WHERE id = $1', [first.enrollmentApplicationId]);
