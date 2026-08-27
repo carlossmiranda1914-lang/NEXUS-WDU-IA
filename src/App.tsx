@@ -867,7 +867,7 @@ export default function App() {
 
       if (isRegistering) {
         // Real Sign Up / Registration
-        console.log(`[AUTH-REAL] Creating real account for email: ${email}`);
+        console.log('[AUTH-REAL] Creating real account.');
         if (password.length < 6) {
           setLoginError('A palavra-passe deve ter pelo menos 6 caracteres.');
           return;
@@ -897,7 +897,7 @@ export default function App() {
         }
       } else {
         // Real Sign In
-        console.log(`[AUTH-REAL] Logging in real account for email: ${email}`);
+        console.log('[AUTH-REAL] Logging in real account.');
         console.log('[DEBUG-AUTH-FLOW] 2. Antes de chamar signInWithEmailAndPassword:', {
           email: email,
           passwordLength: password.length
@@ -918,12 +918,8 @@ export default function App() {
 
       if (usrCredential && usrCredential.user) {
         console.log('[DEBUG-AUTH-FLOW] 4. Login Firebase funcionou!');
-        console.log('[DEBUG-AUTH-FLOW] UID:', usrCredential.user.uid);
-        console.log('[DEBUG-AUTH-FLOW] EMAIL:', usrCredential.user.email);
         const token = await usrCredential.user.getIdToken();
-        console.log('[DEBUG-AUTH-FLOW] TOKEN GERADO:', token);
-        
-        console.log('[DEBUG-AUTH-FLOW] 5. Antes de chamar /api/profile. Authorization Header:', `Bearer ${token}`);
+        console.log('[DEBUG-AUTH-FLOW] 5. A verificar o perfil institucional.');
         const pRes = await fetch('/api/profile', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
