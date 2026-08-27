@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import { commandFingerprint, grantDecision, validateExactlyOneTarget, validateExpectedVersion, validateIdempotencyKey, validateRole } from '../src/modules/iam/iam-policy.ts';
+
+assert.equal(grantDecision(null), 'SUCCEEDED');
+assert.equal(grantDecision('pending'), 'SUCCEEDED');
+assert.equal(grantDecision('active'), 'ALREADY_ACTIVE');
+assert.equal(grantDecision('suspended'), 'MEMBERSHIP_SUSPENDED');
+assert.equal(grantDecision('revoked'), 'MEMBERSHIP_REVOKED');
+assert.equal(commandFingerprint('GrantInstitutionAccess', { personId: 'p', role: 'teacher' }), commandFingerprint('GrantInstitutionAccess', { personId: 'p', role: 'teacher' }));
+assert.match(commandFingerprint('GrantInstitutionAccess', {}), /^[0-9a-f]{64}$/);
+assert.equal(validateIdempotencyKey('  command-001  '), 'command-001');
+assert.throws(() => validateIdempotencyKey('short'));
+assert.equal(validateExpectedVersion(1), 1);
+assert.throws(() => validateExpectedVersion(0));
+assert.equal(validateRole('teacher'), 'teacher');
+assert.throws(() => validateRole('platform_admin'));
+validateExactlyOneTarget({ personId: 'person' });
+assert.throws(() => validateExactlyOneTarget({}));
+assert.throws(() => validateExactlyOneTarget({ personId: 'person', identityId: 'identity' }));
+console.log('IAM command policy tests passed.');
