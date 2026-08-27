@@ -36,10 +36,11 @@ type GuardianForm = {
 
 type RegistrationResponse = {
   enrollmentId: string;
+  registrationVersion: string;
   status: EnrollmentOperationalStatus;
   editable: boolean;
-  student: Partial<StudentForm>;
-  guardian: (Partial<GuardianForm> & { isPrimary?: boolean }) | null;
+  student: Partial<StudentForm> & { version: string };
+  guardian: (Partial<GuardianForm> & { isPrimary?: boolean; version: string }) | null;
   enrollment: { previousSchool?: string | null; notes?: string | null };
   readiness: { ready: boolean; missing: string[] };
 };
@@ -88,6 +89,9 @@ export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentSt
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [registrationVersion, setRegistrationVersion] = useState<string | null>(null);
+  const [studentVersion, setStudentVersion] = useState<string | null>(null);
+  const [guardianVersion, setGuardianVersion] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -111,6 +115,9 @@ export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentSt
       setNotes(value(registration.enrollment?.notes));
       setReadiness(registration.readiness);
       setEditable(registration.editable);
+      setRegistrationVersion(registration.registrationVersion);
+      setStudentVersion(registration.student.version);
+      setGuardianVersion(registration.guardian?.version ?? null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível carregar o cadastro da matrícula.');
     } finally { setLoading(false); }
@@ -124,14 +131,18 @@ export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentSt
 
   async function save() {
     setSaving(true); setError(null); setNotice(null);
+    if (!registrationVersion || !studentVersion) { setSaving(false); setError('Recarregue o cadastro antes de guardar.'); return; }
     try {
       const result = await request(`/api/enrollments/${enrollmentId}/registration`, {
         method: 'PUT',
-        body: JSON.stringify({ student, guardian, enrollment: { previousSchool, notes } }),
+        body: JSON.stringify({ expectedRegistrationVersion: registrationVersion, student: { ...student, expectedVersion: studentVersion }, guardian: guardian.name ? { ...guardian, expectedVersion: guardianVersion } : null, enrollment: { previousSchool, notes } }),
       });
       const registration = result.registration as RegistrationResponse;
       setReadiness(registration.readiness);
       setEditable(registration.editable);
+      setRegistrationVersion(registration.registrationVersion);
+      setStudentVersion(registration.student.version);
+      setGuardianVersion(registration.guardian?.version ?? null);
       setNotice(registration.readiness.ready ? 'Cadastro completo e pronto para verificação documental.' : 'Cadastro guardado. Ainda existem dados obrigatórios por preencher.');
       await onChanged?.();
     } catch (cause) {
