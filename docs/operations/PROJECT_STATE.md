@@ -20,7 +20,7 @@ This file records the current factual engineering state only. It is not a histor
 
 **Foundation Authority Convergence is complete. No Part 2 implementation is authorized until an IAM Mission Pack independently passes DoR and receives explicit implementation authorization.**
 
-The FND-01–FND-06 Foundation sequence is complete and integrated in `main`. The next canonical tranche is IAM / institutional access lifecycle; it remains in `PREPARATION` until a Mission Pack exists, independently satisfies DoR and is explicitly authorized.
+The FND-01–FND-06 Foundation sequence is complete and integrated in `main`. IAM-01 implementation was recovered and validated on `codex/iam-01-recovered` from `8c0a0239a0786c2561ef1ef94e1fb869555bf714`: `0019` establishes Membership versioning, unique active Person × Institution membership, IAM intent/ledger/event integrity and tenant-safe FKs; the recovered command service, IAM audit producer, HTTP routes and Membership read API were verified against the approved local disposable PostgreSQL target. This branch remains unmerged; no UI, deployment or legacy-authority reactivation is implied.
 
 Official flow:
 
@@ -148,7 +148,7 @@ The controlled Foundation sequence is:
 5. FND-05 — Audit Truth — DONE — CP0–CP7 PASS. Canonical audit/history paths are factual; generic `/api/logs` is fenced, realtime is refresh-only, observability is operational metadata only, and AI/background/connectors remain no-effect. AT-09 is not durable audit; retention, integrity, export and historical remediation remain dependencies. No schema or historical-data rewrite occurred. FND-06 DoR/decision is next and retains mandatory secret-management controls;
 6. FND-06 — CI vNext Gate — **DONE** — CP0–CP7 PASS and integrated in `main` through `e63054b81bc77a4cb438606ef584cbd4bb878f78`. The exit evidence covers the fail-closed `quality-gate`, disposable PostgreSQL migration/rollback/tenant-isolation/teardown contracts, trigger coverage, Linux secret scanning, controlled failures and final remote workflow. The earlier CP2 external-rotation blocker was reconciled by CP7 external IAM/restrictions evidence; no history rewrite, repository setting, production-source change or credential-value handling occurred. Advanced `main` branch-protection settings remain unverified/unconfigured because of GitHub plan/visibility limits; this is an accepted governance follow-up, not a claim that a post-merge CI run was green.
 
-Foundation completion does not start a mission automatically. IAM is the next canonical tranche, but no IAM Mission Pack is `READY`; IAM remains `PREPARATION` until its Mission Pack and DoR exist and explicit implementation authorization is granted.
+Foundation completion does not start a mission automatically. IAM is the next canonical tranche. `IAM-01` has a recovered, tested implementation on `codex/iam-01-recovered`; integration still requires normal review and merge, and no further scope is implied.
 
 ## 10. Coding-agent / Codex execution governance
 
