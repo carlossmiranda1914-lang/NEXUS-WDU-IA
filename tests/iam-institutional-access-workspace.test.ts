@@ -39,6 +39,8 @@ const required = [
   'A Person, a Identity e o histórico não serão apagados.',
   "bg-gradient-to-br from-white via-indigo-50 to-cyan-50",
   "bg-indigo-50 text-slate-700",
+  "const workspacePadding = light ? 'p-5 sm:p-[26px]' : 'p-4 sm:p-6';",
+  '${workspacePadding}',
 ];
 for (const token of required) assert.ok(source.includes(token), `Missing required workspace contract: ${token}`);
 
