@@ -46,10 +46,89 @@ export const memberships = pgTable('memberships', {
   approvedAt: timestamp('approved_at', { withTimezone: true }),
   suspendedAt: timestamp('suspended_at', { withTimezone: true }),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  version: integer('version').notNull().default(1),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   uniqueIndex('memberships_person_institution_role_unique').on(table.personId, table.institutionId, table.role),
+  uniqueIndex('memberships_one_active_per_person_institution_unique')
+    .on(table.personId, table.institutionId)
+    .where(sql`${table.status} = 'active'`),
+  uniqueIndex('memberships_institution_id_id_unique').on(table.institutionId, table.id),
+]);
+
+export const iamAccessIntents = pgTable('iam_access_intents', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  kind: text('kind').notNull(),
+  status: text('status').notNull().default('pending'),
+  authorizedPersonId: uuid('authorized_person_id').references(() => people.id, { onDelete: 'restrict' }),
+  authorizedIdentityId: uuid('authorized_identity_id').references(() => identities.id, { onDelete: 'restrict' }),
+  createdByPersonId: uuid('created_by_person_id').references(() => people.id, { onDelete: 'restrict' }),
+  codeHash: text('code_hash').notNull(),
+  codeIssuedAt: timestamp('code_issued_at', { withTimezone: true }).defaultNow().notNull(),
+  codeExpiresAt: timestamp('code_expires_at', { withTimezone: true }).notNull(),
+  codeRotatedAt: timestamp('code_rotated_at', { withTimezone: true }),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+  consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  failedAttemptCount: integer('failed_attempt_count').notNull().default(0),
+  attemptWindowStartedAt: timestamp('attempt_window_started_at', { withTimezone: true }),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
+  idempotencyScope: text('idempotency_scope').notNull(),
+  idempotencyKey: text('idempotency_key').notNull(),
+  requestFingerprint: text('request_fingerprint').notNull(),
+  version: integer('version').notNull().default(1),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('iam_access_intents_institution_id_id_unique').on(table.institutionId, table.id),
+  uniqueIndex('iam_access_intents_idempotency_unique')
+    .on(table.institutionId, table.kind, table.idempotencyScope, table.idempotencyKey),
+  index('iam_access_intents_institution_status_expiry_idx')
+    .on(table.institutionId, table.status, table.codeExpiresAt),
+]);
+
+export const iamCommandLedger = pgTable('iam_command_ledger', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  operation: text('operation').notNull(),
+  actorScope: text('actor_scope').notNull(),
+  actorPersonId: uuid('actor_person_id').references(() => people.id, { onDelete: 'restrict' }),
+  idempotencyKey: text('idempotency_key').notNull(),
+  requestFingerprint: text('request_fingerprint').notNull(),
+  status: text('status').notNull().default('pending'),
+  resultCode: text('result_code'),
+  accessIntentId: uuid('access_intent_id'),
+  membershipId: uuid('membership_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex('iam_command_ledger_idempotency_unique')
+    .on(table.institutionId, table.operation, table.actorScope, table.idempotencyKey),
+  index('iam_command_ledger_institution_created_idx').on(table.institutionId, table.createdAt),
+]);
+
+export const iamMembershipEvents = pgTable('iam_membership_events', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  institutionId: uuid('institution_id').notNull().references(() => institutions.id, { onDelete: 'restrict' }),
+  membershipId: uuid('membership_id'),
+  accessIntentId: uuid('access_intent_id'),
+  actorType: text('actor_type').notNull(),
+  actorPersonId: uuid('actor_person_id').references(() => people.id, { onDelete: 'restrict' }),
+  action: text('action').notNull(),
+  previousStatus: text('previous_status'),
+  newStatus: text('new_status'),
+  result: text('result').notNull(),
+  reasonCode: text('reason_code'),
+  requestId: text('request_id'),
+  correlationId: text('correlation_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('iam_membership_events_institution_target_created_idx')
+    .on(table.institutionId, table.membershipId, table.createdAt),
+  index('iam_membership_events_intent_created_idx')
+    .on(table.institutionId, table.accessIntentId, table.createdAt)
+    .where(sql`${table.accessIntentId} IS NOT NULL`),
 ]);
 
 // vNext school roles. A student and a guardian are people with institutional

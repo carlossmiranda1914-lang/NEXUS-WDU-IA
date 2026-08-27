@@ -2,7 +2,8 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { createTestDatabasePool } from '../src/db/test-database.ts';
+import pg from 'pg';
+import { readApprovedTestTarget } from './nexus-test-db-safety.mjs';
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const migrationsDirectory = path.resolve(currentDirectory, '../src/db/migrations');
@@ -12,8 +13,8 @@ function quoteIdentifier(value: string): string {
 }
 
 async function verifyMigrationsIsolated(): Promise<void> {
-  const pool = createTestDatabasePool();
-  if (!pool) throw new Error('TEST_DATABASE_URL is required to verify migrations.');
+  const { connectionString } = readApprovedTestTarget();
+  const pool = new pg.Pool({ connectionString, connectionTimeoutMillis: 5000 });
 
   const schemaName = `nexus_verify_${Date.now()}_${randomUUID().replaceAll('-', '').slice(0, 12)}`;
   const schemaIdentifier = quoteIdentifier(schemaName);
@@ -87,6 +88,27 @@ async function verifyMigrationsIsolated(): Promise<void> {
       throw new Error('Expected identity resolution case uniqueness per institution.');
     }
 
+    const activeMembershipUnique = await client.query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes
+        WHERE schemaname = $1
+          AND tablename = 'memberships'
+          AND indexname = 'memberships_one_active_per_person_institution_unique'`,
+      [schemaName],
+    );
+    if (activeMembershipUnique.rowCount !== 1) {
+      throw new Error('Expected IAM unique partial active Membership index.');
+    }
+
+    const iamTables = ['iam_access_intents', 'iam_command_ledger', 'iam_membership_events'];
+    const iamTableResult = await client.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables
+        WHERE table_schema = $1 AND table_name = ANY($2::text[])`,
+      [schemaName, iamTables],
+    );
+    if (iamTableResult.rowCount !== iamTables.length) {
+      throw new Error('Expected all IAM-01 migration tables.');
+    }
+
     const identityDecisionSegregation = await client.query<{ constraint_name: string }>(
       `SELECT tc.constraint_name
          FROM information_schema.table_constraints tc
@@ -150,6 +172,7 @@ async function verifyMigrationsIsolated(): Promise<void> {
     console.log('[MIGRATION-VERIFY] PASS: people.birth_date is DATE NULL.');
     console.log('[MIGRATION-VERIFY] PASS: enrollment_intake_commands idempotency constraints are present.');
     console.log('[MIGRATION-VERIFY] PASS: identity_resolution_decisions authority/audit constraints are present.');
+    console.log('[MIGRATION-VERIFY] PASS: IAM active Membership uniqueness and tables are migration-owned.');
     console.log('[MIGRATION-VERIFY] PASS: CP3 active legacy compatibility tables are migration-owned.');
   } finally {
     try {
