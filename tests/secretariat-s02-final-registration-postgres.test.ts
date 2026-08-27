@@ -64,13 +64,26 @@ try {
   assert(!initial.readiness.ready, 'New intake must remain incomplete until full registration is supplied.');
   assert(initial.readiness.missing.includes('guardian'), 'New intake must require a guardian.');
 
+  let missingVersionsRejected = false;
+  try {
+    await saveEnrollmentRegistration(pool as any, context, first.enrollmentApplicationId, {
+      student: { name: 'Ana Manuel', birthDate: '2012-05-04' }, guardian: null, enrollment: {},
+    });
+  } catch (error) {
+    missingVersionsRejected = error instanceof EnrollmentRegistrationApiError && error.code === 'INVALID_INPUT';
+  }
+  assert(missingVersionsRejected, 'Registration writes must reject a payload without explicit expected versions.');
+
   const saved = await saveEnrollmentRegistration(pool as any, context, first.enrollmentApplicationId, {
+    expectedRegistrationVersion: initial.registrationVersion,
     student: {
+      expectedVersion: initial.student.version,
       name: 'Ana Manuel', birthDate: '2012-05-04', phone: '923000000', whatsapp: '923000000', email: 'ana@example.test',
       nationalIdNumber: 'BI-ANA-001', gender: 'female', nationality: 'Angolana', province: 'Luanda', municipality: 'Talatona',
       addressLine: 'Rua 1, Casa 2', studentNumber: 'AL-001',
     },
     guardian: {
+      expectedVersion: '1',
       name: 'Maria Manuel', relationship: 'Mãe', phone: '924000000', whatsapp: '924000000', email: 'maria@example.test',
       nationalIdNumber: 'BI-MARIA-001', financialResponsible: true,
     },
@@ -97,11 +110,14 @@ try {
     person: { kind: 'new_person', name: 'João Manuel', birthDate: '2013-06-05', phone: '925000000' },
   });
   await saveEnrollmentRegistration(pool as any, context, second.enrollmentApplicationId, {
+    expectedRegistrationVersion: '1',
     student: {
+      expectedVersion: '1',
       name: 'João Manuel', birthDate: '2013-06-05', phone: '925000000', gender: 'male', nationality: 'Angolana',
       province: 'Luanda', municipality: 'Talatona', addressLine: 'Rua 2, Casa 3',
     },
     guardian: {
+      expectedVersion: '1',
       name: 'Maria Manuel', relationship: 'Mãe', phone: '924000000', email: 'maria@example.test', nationalIdNumber: 'BI-MARIA-001',
     },
     enrollment: {},
@@ -128,7 +144,10 @@ try {
   let immutable = false;
   try {
     await saveEnrollmentRegistration(pool as any, context, first.enrollmentApplicationId, {
-      student: { ...saved.student, name: 'Ana Manuel Atualizada' }, guardian: saved.guardian, enrollment: saved.enrollment,
+      expectedRegistrationVersion: saved.registrationVersion,
+      student: { ...saved.student, expectedVersion: saved.student.version, name: 'Ana Manuel Atualizada' },
+      guardian: saved.guardian ? { ...saved.guardian, expectedVersion: saved.guardian.version } : null,
+      enrollment: saved.enrollment,
     });
   } catch (error) {
     immutable = error instanceof EnrollmentRegistrationApiError && error.code === 'IMMUTABLE';

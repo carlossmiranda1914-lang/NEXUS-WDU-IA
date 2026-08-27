@@ -19,7 +19,7 @@ export interface RegistrationPool extends RegistrationQueryClient {
 
 export class EnrollmentRegistrationApiError extends Error {
   constructor(
-    public readonly code: 'INVALID_INPUT' | 'NOT_FOUND' | 'FORBIDDEN' | 'IMMUTABLE' | 'AMBIGUOUS_GUARDIAN',
+    public readonly code: 'INVALID_INPUT' | 'NOT_FOUND' | 'FORBIDDEN' | 'IMMUTABLE' | 'AMBIGUOUS_GUARDIAN' | 'STALE_VERSION',
     message: string,
   ) {
     super(message);
@@ -148,6 +148,13 @@ function genderOrNull(value: unknown): string | null {
   return normalized;
 }
 
+function expectedVersion(value: unknown): bigint {
+  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) {
+    throw new EnrollmentRegistrationApiError('INVALID_INPUT', 'É obrigatória uma versão válida para guardar o cadastro.');
+  }
+  return BigInt(value);
+}
+
 function personFromRow(row: RegistrationRow, prefix: 'student' | 'guardian'): RegistrationPerson {
   return {
     name: row[`${prefix}_name` as keyof RegistrationRow] as string | null,
@@ -261,6 +268,8 @@ export async function saveEnrollmentRegistration(
   if (!canManageEnrollment(context.role)) throw new EnrollmentRegistrationApiError('FORBIDDEN', 'O seu papel não pode gerir matrículas.');
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new EnrollmentRegistrationApiError('INVALID_INPUT', 'Cadastro de matrícula inválido.');
   if (!body.student || typeof body.student !== 'object' || Array.isArray(body.student)) throw new EnrollmentRegistrationApiError('INVALID_INPUT', 'Indique os dados do aluno.');
+  const expectedRegistrationVersion = expectedVersion(body.expectedRegistrationVersion);
+  const expectedStudentVersion = expectedVersion(body.student.expectedVersion);
 
   const student = {
     name: requiredName(body.student.name),
@@ -279,6 +288,7 @@ export async function saveEnrollmentRegistration(
 
   const guardianInput = body.guardian && typeof body.guardian === 'object' && !Array.isArray(body.guardian) && trimOrNull(body.guardian.name, 160)
     ? {
+        expectedVersion: expectedVersion(body.guardian.expectedVersion),
         name: requiredName(body.guardian.name),
         birthDate: dateOrNull(body.guardian.birthDate),
         phone: trimOrNull(body.guardian.phone, 40),
@@ -301,8 +311,8 @@ export async function saveEnrollmentRegistration(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const locked = await client.query<{ status: EnrollmentStatus; student_person_id: string; guardian_person_id: string | null }>(
-      `SELECT status, student_person_id, guardian_person_id
+    const locked = await client.query<{ status: EnrollmentStatus; registration_version: string; student_person_id: string; guardian_person_id: string | null }>(
+      `SELECT status, registration_version, student_person_id, guardian_person_id
          FROM enrollment_applications
         WHERE id = $1 AND institution_id = $2
         FOR UPDATE`,
@@ -310,8 +320,18 @@ export async function saveEnrollmentRegistration(
     );
     if (!locked.rowCount) throw new EnrollmentRegistrationApiError('NOT_FOUND', 'Matrícula não encontrada nesta instituição.');
     const application = locked.rows[0];
+    if (BigInt(application.registration_version) !== expectedRegistrationVersion) {
+      throw new EnrollmentRegistrationApiError('STALE_VERSION', 'O registo foi alterado entretanto. Recarregue e reveja antes de submeter novamente.');
+    }
     if (!canEditEnrollmentRegistration(application.status)) {
       throw new EnrollmentRegistrationApiError('IMMUTABLE', 'Este processo já não aceita alterações ao cadastro.');
+    }
+    const lockedStudent = await client.query<{ version: string }>(
+      'SELECT version FROM people WHERE id = $1 FOR UPDATE',
+      [application.student_person_id],
+    );
+    if (!lockedStudent.rowCount || BigInt(lockedStudent.rows[0].version) !== expectedStudentVersion) {
+      throw new EnrollmentRegistrationApiError('STALE_VERSION', 'O registo foi alterado entretanto. Recarregue e reveja antes de submeter novamente.');
     }
 
     await client.query(
