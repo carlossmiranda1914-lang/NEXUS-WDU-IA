@@ -59,6 +59,8 @@ try {
   });
 
   const initial = await loadEnrollmentRegistration(pool as any, context, first.enrollmentApplicationId);
+  assert(initial.registrationVersion === '1', 'Registration reads must expose the application version for stale-write protection.');
+  assert(initial.student.version === '1', 'Registration reads must expose the student Person version for stale-write protection.');
   assert(!initial.readiness.ready, 'New intake must remain incomplete until full registration is supplied.');
   assert(initial.readiness.missing.includes('guardian'), 'New intake must require a guardian.');
 

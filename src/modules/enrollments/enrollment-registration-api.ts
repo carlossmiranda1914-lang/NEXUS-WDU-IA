@@ -30,8 +30,11 @@ export class EnrollmentRegistrationApiError extends Error {
 type RegistrationRow = {
   id: string;
   status: EnrollmentStatus;
+  registration_version: string;
   student_person_id: string;
   guardian_person_id: string | null;
+  student_version: string;
+  guardian_version: string | null;
   previous_school: string | null;
   enrollment_notes: string | null;
   student_number: string | null;
@@ -63,9 +66,10 @@ type RegistrationRow = {
 };
 
 const REGISTRATION_SELECT = `
-  SELECT e.id, e.status, e.student_person_id, e.guardian_person_id,
+  SELECT e.id, e.status, e.registration_version, e.student_person_id, e.guardian_person_id,
          e.previous_school, e.enrollment_notes,
          sp.student_number,
+         student.version::text AS student_version,
          student.name AS student_name,
          student.birth_date::text AS student_birth_date,
          student.phone AS student_phone,
@@ -77,6 +81,7 @@ const REGISTRATION_SELECT = `
          student.address_line AS student_address_line,
          student.municipality AS student_municipality,
          student.province AS student_province,
+         guardian.version::text AS guardian_version,
          guardian.name AS guardian_name,
          guardian.birth_date::text AS guardian_birth_date,
          guardian.phone AS guardian_phone,
@@ -167,14 +172,16 @@ function mapRegistration(row: RegistrationRow) {
         relationship: row.guardian_relationship,
         isPrimary: row.guardian_is_primary ?? true,
         financialResponsible: row.guardian_financial_responsible ?? false,
+        version: row.guardian_version,
       }
     : null;
   const readiness = registrationReadiness(student, guardian as RegistrationGuardian | null);
   return {
     enrollmentId: row.id,
+    registrationVersion: row.registration_version,
     status: row.status,
     editable: canEditEnrollmentRegistration(row.status),
-    student: { ...student, studentNumber: row.student_number },
+    student: { ...student, studentNumber: row.student_number, version: row.student_version },
     guardian,
     enrollment: {
       previousSchool: row.previous_school,
