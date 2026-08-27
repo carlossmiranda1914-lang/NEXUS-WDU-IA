@@ -31,7 +31,7 @@ export type IamMembershipListResponse = {
 export type IamMembershipMutationInput = { expectedVersion: number; idempotencyKey: string };
 export type IamMembershipRoleChangeInput = IamMembershipMutationInput & { role: InstitutionalRole };
 export type IamMembershipMutationResponse = { membership: Pick<IamMembership, 'id' | 'role' | 'status' | 'version'>; replayed: boolean };
-export type IamMembershipMutationErrorCode = 'UNAUTHORIZED' | 'MEMBERSHIP_NOT_FOUND' | 'MEMBERSHIP_STATE_INVALID' | 'VERSION_CONFLICT' | 'LAST_ADMIN_PROTECTED';
+export type IamMembershipMutationErrorCode = 'UNAUTHORIZED' | 'MEMBERSHIP_NOT_FOUND' | 'MEMBERSHIP_STATE_INVALID' | 'VERSION_CONFLICT' | 'LAST_ADMIN_PROTECTED' | 'INTENT_INVALID';
 
 export class IamMembershipReadError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -113,4 +113,20 @@ export function revokeInstitutionMembership(
   request: FetchLike = fetch,
 ): Promise<IamMembershipMutationResponse> {
   return mutateInstitutionMembership(token, membershipId, 'revoke', 'POST', input, request);
+}
+
+export function activatePendingInstitutionMembership(
+  token: string,
+  pendingMembershipId: string,
+  input: IamMembershipRoleChangeInput,
+  request: FetchLike = fetch,
+): Promise<IamMembershipMutationResponse> {
+  return request('/api/iam/memberships/grants', {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pendingMembershipId, ...input }),
+  }).then(async (response) => {
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new IamMembershipMutationError(response.status, typeof payload.code === 'string' ? payload.code as IamMembershipMutationErrorCode : undefined);
+    return payload as IamMembershipMutationResponse;
+  });
 }

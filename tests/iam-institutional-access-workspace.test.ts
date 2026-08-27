@@ -41,6 +41,11 @@ const required = [
   "bg-indigo-50 text-slate-700",
   "const workspacePadding = light ? 'p-5 sm:p-[26px]' : 'p-4 sm:p-6';",
   '${workspacePadding}',
+  'Adicionar acesso',
+  'status: \'pending\'',
+  'activatePendingInstitutionMembership',
+  'Não existem acessos pendentes para ativar.',
+  '#0B8B62',
 ];
 for (const token of required) assert.ok(source.includes(token), `Missing required workspace contract: ${token}`);
 
