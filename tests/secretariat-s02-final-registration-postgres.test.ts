@@ -113,6 +113,28 @@ try {
   const persistedStudent = await pool.query('SELECT name FROM people WHERE id=$1', [first.studentPersonId]);
   assert(persistedStudent.rows[0].name === 'Ana Manuel', 'A stale registration write must not overwrite the accepted student value.');
 
+  const externalPerson = randomUUID();
+  const externalInstitution = randomUUID();
+  await pool.query("INSERT INTO institutions (id,name,slug,status) VALUES ($1,'Escola Externa EN01','externa-en01','active')", [externalInstitution]);
+  await pool.query("INSERT INTO people (id,name,national_id_number) VALUES ($1,'Pessoa Externa','BI-EXTERNO-001')", [externalPerson]);
+  await pool.query("INSERT INTO student_profiles (institution_id,person_id,status) VALUES ($1,$2,'active')", [externalInstitution, externalPerson]);
+  let collisionRejected = false;
+  try {
+    await saveEnrollmentRegistration(pool as any, context, first.enrollmentApplicationId, {
+      expectedRegistrationVersion: saved.registrationVersion,
+      student: { ...saved.student, expectedVersion: saved.student.version, nationalIdNumber: ' bi-externo-001 ' },
+      guardian: saved.guardian ? { ...saved.guardian, expectedVersion: saved.guardian.version } : null,
+      enrollment: saved.enrollment,
+    });
+  } catch (error) {
+    collisionRejected = error instanceof EnrollmentRegistrationApiError && String(error.code) === 'IDENTITY_COLLISION';
+  }
+  assert(collisionRejected, 'A national identifier collision in another institution must fail closed.');
+  const studentAfterCollision = await pool.query('SELECT national_id_number FROM people WHERE id=$1', [first.studentPersonId]);
+  assert(studentAfterCollision.rows[0].national_id_number === 'BI-ANA-001', 'Collision rollback must leave the student unchanged.');
+  const versionAfterCollision = await pool.query('SELECT registration_version FROM enrollment_applications WHERE id=$1', [first.enrollmentApplicationId]);
+  assert(versionAfterCollision.rows[0].registration_version === '2', 'Collision rollback must leave the registration version unchanged.');
+
   const application = await pool.query('SELECT guardian_person_id FROM enrollment_applications WHERE id=$1', [first.enrollmentApplicationId]);
   const firstGuardianId = application.rows[0].guardian_person_id as string;
   assert(Boolean(firstGuardianId), 'Enrollment must link the primary guardian person.');

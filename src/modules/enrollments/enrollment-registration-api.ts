@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
+import { resolvePersonForInstitution } from '../people/person-resolution-access.ts';
 import { canManageEnrollment, type EnrollmentStatus } from './enrollment-policy.ts';
 import {
   canEditEnrollmentRegistration,
@@ -19,7 +20,7 @@ export interface RegistrationPool extends RegistrationQueryClient {
 
 export class EnrollmentRegistrationApiError extends Error {
   constructor(
-    public readonly code: 'INVALID_INPUT' | 'NOT_FOUND' | 'FORBIDDEN' | 'IMMUTABLE' | 'AMBIGUOUS_GUARDIAN' | 'STALE_VERSION',
+    public readonly code: 'INVALID_INPUT' | 'NOT_FOUND' | 'FORBIDDEN' | 'IMMUTABLE' | 'AMBIGUOUS_GUARDIAN' | 'STALE_VERSION' | 'IDENTITY_COLLISION',
     message: string,
   ) {
     super(message);
@@ -332,6 +333,21 @@ export async function saveEnrollmentRegistration(
     );
     if (!lockedStudent.rowCount || BigInt(lockedStudent.rows[0].version) !== expectedStudentVersion) {
       throw new EnrollmentRegistrationApiError('STALE_VERSION', 'O registo foi alterado entretanto. Recarregue e reveja antes de submeter novamente.');
+    }
+    const currentStudent = await client.query<{ national_id_number: string | null }>(
+      'SELECT national_id_number FROM people WHERE id = $1',
+      [application.student_person_id],
+    );
+    if (currentStudent.rows[0]?.national_id_number !== student.nationalIdNumber) {
+      const resolution = await resolvePersonForInstitution(client, context.institutionId, {
+        name: student.name,
+        birthDate: student.birthDate,
+        phone: student.phone,
+        nationalIdNumber: student.nationalIdNumber,
+      });
+      if (resolution.status !== 'NO_MATCH' && resolution.candidatePersonId !== application.student_person_id) {
+        throw new EnrollmentRegistrationApiError('IDENTITY_COLLISION', 'Não foi possível validar a identidade para esta alteração. Reveja os dados antes de continuar.');
+      }
     }
 
     await client.query(
