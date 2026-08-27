@@ -143,13 +143,36 @@ try {
   assert(registrationEvent.rows[0].metadata.operation === 'registration_updated' && registrationEvent.rows[0].metadata.result === 'success', 'Successful registration audit must record factual operation and result.');
   assert(!/bi-ana|example\.test|923000000|rua 1/.test(auditJson), 'Registration audit must not contain person PII.');
 
+  const noResolutionPool = {
+    connect: async () => {
+      const guarded = await pool.connect();
+      const query = guarded.query.bind(guarded);
+      const release = guarded.release.bind(guarded);
+      guarded.query = ((text: string, values?: unknown[]) => {
+        if (text.includes('WITH candidate_people')) throw new Error('Profile-only edit must not invoke Person Resolution.');
+        return query(text, values);
+      }) as typeof guarded.query;
+      guarded.release = ((error?: Error | boolean) => { guarded.query = query as typeof guarded.query; return release(error); }) as typeof guarded.release;
+      return guarded;
+    },
+  };
+  const profileOnly = await saveEnrollmentRegistration(noResolutionPool as any, context, first.enrollmentApplicationId, {
+    expectedRegistrationVersion: saved.registrationVersion,
+    student: { ...saved.student, expectedVersion: saved.student.version, addressLine: 'Rua 1, Casa 3' },
+    guardian: saved.guardian ? { ...saved.guardian, expectedVersion: saved.guardian.version } : null,
+    enrollment: saved.enrollment,
+  });
+  assert(profileOnly.registrationVersion === '3' && profileOnly.student.version === '3', 'A profile-only edit must remain version-protected and advance authoritative versions.');
+  const profileEvent = await pool.query<{ metadata: Record<string, unknown> }>("SELECT metadata FROM enrollment_events WHERE enrollment_application_id=$1 AND event_type='registration_updated' ORDER BY created_at DESC LIMIT 1", [first.enrollmentApplicationId]);
+  assert((profileEvent.rows[0].metadata.categories as string[]).includes('profile_only'), 'A profile-only edit must produce factual profile-only audit metadata.');
+
   let guardianStaleRejected = false;
   const guardianForStale = await pool.query<{ guardian_person_id: string }>('SELECT guardian_person_id FROM enrollment_applications WHERE id = $1', [first.enrollmentApplicationId]);
   await pool.query('UPDATE people SET version = 2 WHERE id = $1', [guardianForStale.rows[0].guardian_person_id]);
   try {
     await saveEnrollmentRegistration(pool as any, context, first.enrollmentApplicationId, {
-      expectedRegistrationVersion: '2',
-      student: { ...saved.student, expectedVersion: '2' },
+      expectedRegistrationVersion: profileOnly.registrationVersion,
+      student: { ...profileOnly.student, expectedVersion: profileOnly.student.version },
       guardian: saved.guardian ? { ...saved.guardian, expectedVersion: saved.guardian.version, phone: '925000000' } : null,
       enrollment: saved.enrollment,
     });
@@ -206,9 +229,9 @@ try {
   let immutable = false;
   try {
     await saveEnrollmentRegistration(pool as any, context, first.enrollmentApplicationId, {
-      expectedRegistrationVersion: saved.registrationVersion,
-      student: { ...saved.student, expectedVersion: saved.student.version, name: 'Ana Manuel Atualizada' },
-      guardian: saved.guardian ? { ...saved.guardian, expectedVersion: saved.guardian.version } : null,
+      expectedRegistrationVersion: profileOnly.registrationVersion,
+      student: { ...profileOnly.student, expectedVersion: profileOnly.student.version, name: 'Ana Manuel Atualizada' },
+      guardian: profileOnly.guardian ? { ...profileOnly.guardian, expectedVersion: '2' } : null,
       enrollment: saved.enrollment,
     });
   } catch (error) {
