@@ -42,7 +42,7 @@ export async function listInstitutionMemberships(pool: IamReadPool, context: Ins
   const limit = input.limit ?? 25;
   const rows = await pool.query<Row>(`
     WITH cursor_row AS (
-      SELECT lower(p.name) AS sort_name, p.id AS person_id, m.id AS membership_id
+      SELECT CASE WHEN m.status = 'pending' THEN 0 ELSE 1 END AS status_priority, lower(p.name) AS sort_name, p.id AS person_id, m.id AS membership_id
         FROM memberships m INNER JOIN people p ON p.id = m.person_id
        WHERE m.institution_id = $1 AND m.id = $2
     )
@@ -52,8 +52,8 @@ export async function listInstitutionMemberships(pool: IamReadPool, context: Ins
        AND ($3::text IS NULL OR m.status = $3)
        AND ($4::text IS NULL OR m.role = $4)
        AND ($2::uuid IS NULL OR EXISTS (SELECT 1 FROM cursor_row)
-         AND (lower(p.name), p.id, m.id) > (SELECT sort_name, person_id, membership_id FROM cursor_row))
-     ORDER BY lower(p.name) ASC, p.id ASC, m.id ASC
+         AND (CASE WHEN m.status = 'pending' THEN 0 ELSE 1 END, lower(p.name), p.id, m.id) > (SELECT status_priority, sort_name, person_id, membership_id FROM cursor_row))
+     ORDER BY CASE WHEN m.status = 'pending' THEN 0 ELSE 1 END ASC, lower(p.name) ASC, p.id ASC, m.id ASC
      LIMIT $5`, [context.institutionId, cursorMembershipId, input.status ?? null, input.role ?? null, limit + 1]);
   if (cursorMembershipId && rows.rows.length === 0) {
     const cursorExists = await pool.query<{ id: string }>('SELECT m.id FROM memberships m WHERE m.institution_id = $1 AND m.id = $2', [context.institutionId, cursorMembershipId]);
