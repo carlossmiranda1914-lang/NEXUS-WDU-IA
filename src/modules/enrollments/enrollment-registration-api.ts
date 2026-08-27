@@ -289,7 +289,7 @@ export async function saveEnrollmentRegistration(
 
   const guardianInput = body.guardian && typeof body.guardian === 'object' && !Array.isArray(body.guardian) && trimOrNull(body.guardian.name, 160)
     ? {
-        expectedVersion: expectedVersion(body.guardian.expectedVersion),
+        expectedVersion: body.guardian.expectedVersion,
         name: requiredName(body.guardian.name),
         birthDate: dateOrNull(body.guardian.birthDate),
         phone: trimOrNull(body.guardian.phone, 40),
@@ -369,6 +369,27 @@ export async function saveEnrollmentRegistration(
 
     let guardianPersonId = application.guardian_person_id;
     if (guardianInput) {
+      if (guardianPersonId) {
+        const guardianVersion = expectedVersion(guardianInput.expectedVersion);
+        const lockedGuardian = await client.query<{ version: string; national_id_number: string | null }>(
+          'SELECT version, national_id_number FROM people WHERE id = $1 FOR UPDATE',
+          [guardianPersonId],
+        );
+        if (!lockedGuardian.rowCount || BigInt(lockedGuardian.rows[0].version) !== guardianVersion) {
+          throw new EnrollmentRegistrationApiError('STALE_VERSION', 'O registo foi alterado entretanto. Recarregue e reveja antes de submeter novamente.');
+        }
+        if (lockedGuardian.rows[0].national_id_number !== guardianInput.nationalIdNumber) {
+          const resolution = await resolvePersonForInstitution(client, context.institutionId, {
+            name: guardianInput.name,
+            birthDate: guardianInput.birthDate,
+            phone: guardianInput.phone,
+            nationalIdNumber: guardianInput.nationalIdNumber,
+          });
+          if (resolution.status !== 'NO_MATCH' && resolution.candidatePersonId !== guardianPersonId) {
+            throw new EnrollmentRegistrationApiError('IDENTITY_COLLISION', 'Não foi possível validar a identidade para esta alteração. Reveja os dados antes de continuar.');
+          }
+        }
+      }
       if (!guardianPersonId) {
         guardianPersonId = await findLocalGuardian(client, context.institutionId, application.student_person_id, guardianInput);
       }
