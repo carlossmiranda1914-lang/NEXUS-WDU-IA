@@ -2,6 +2,8 @@
 
 Updated: 2026-08-26
 
+Closeout update: ACADEMIC-01 canonical temporal Academic Core is complete on `codex/academic-01-temporal-structure`; it establishes additive Class/Subject/TeacherAssignment/StudentAcademicPlacement authority, tenant-safe temporal history, optimistic concurrency and factual audit. Attendance, Assessment, Student 360 and ACADEMIC-02 remain out of scope.
+
 This file records the current factual engineering state only. It is not a historical diary and must not present planned work as implemented.
 
 ## 1. Official repository baseline
