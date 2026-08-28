@@ -34,7 +34,7 @@ const forbiddenContextA: InstitutionalContext = { personId: ids.forbiddenActorA,
 try {
   const migrations = (await readdir(migrationsDir)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
   for (const filename of migrations) await pool.query(await readFile(path.join(migrationsDir, filename), 'utf8'));
-  assert(migrations.length === 21, 'S03 clean schema must contain exactly 21 ordered migrations.');
+  assert(migrations.length === 22, 'S03 clean schema must contain exactly 22 ordered migrations.');
 
   await pool.query("INSERT INTO institutions (id,name,slug,status) VALUES ($1,'Escola A','escola-a','active'),($2,'Escola B','escola-b','active')", [ids.institutionA, ids.institutionB]);
   await pool.query("INSERT INTO people (id,name) VALUES ($1,'Secretaria A'),($2,'Secretaria B'),($3,'Responsável A'),($4,'Pessoa B'),($5,'Financeiro A'),($6,'Financeiro Assignee'),($7,'Secretaria Inativa')", [ids.actorA, ids.actorB, ids.assigneeA, ids.outsiderB, ids.forbiddenActorA, ids.forbiddenAssigneeA, ids.inactiveAssigneeA]);
