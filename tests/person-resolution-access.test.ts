@@ -21,6 +21,7 @@ type Row = {
   phone: string | null;
   student_number: string | null;
   legacy_student_id: string | null;
+  national_id_number: string | null;
   is_local: boolean;
 };
 
@@ -57,6 +58,7 @@ const localDb = fakeClient([
     phone: '+244 923 000 111',
     student_number: 'ALU-001',
     legacy_student_id: null,
+    national_id_number: 'BI-001',
     is_local: true,
   },
 ]);
@@ -66,7 +68,7 @@ expect(local.candidatePersonId === 'person-a', 'Authorized local match may expos
 expect(local.matchReasons.includes('student_number'), 'Local result must explain its local strong reason.');
 expect(localDb.calls.length === 1, 'Local resolution must perform one bounded read query.');
 expect(localDb.calls[0].values?.[3] === 'school-a', 'Institution scope must come from the trusted function argument.');
-expect(localDb.calls[0].values?.[6] === PERSON_RESOLUTION_CANDIDATE_LIMIT, 'Candidate query must carry the hard result limit.');
+expect(localDb.calls[0].values?.[7] === PERSON_RESOLUTION_CANDIDATE_LIMIT, 'Candidate query must carry the hard result limit.');
 expect(!/\b(insert|update|delete|alter|drop|truncate)\b/i.test(localDb.calls[0].text), 'Candidate provider must remain read-only.');
 
 const externalDb = fakeClient([
@@ -77,6 +79,7 @@ const externalDb = fakeClient([
     phone: '+244 923 000 111',
     student_number: null,
     legacy_student_id: null,
+    national_id_number: 'BI-001',
     is_local: false,
   },
 ]);
@@ -90,6 +93,14 @@ expect(external.candidatePersonId === undefined, 'Restricted match must not expo
 expect(external.matchReasons.length === 0, 'Restricted match must not expose reasons.');
 expect(external.candidateCount === 1, 'Restricted response must use an opaque count instead of revealing external cardinality.');
 
+const nationalExternal = await resolvePersonForInstitution(
+  externalDb.client,
+  'school-a',
+  { name: 'João Manuel António', nationalIdNumber: ' bi-001 ' },
+);
+expect(nationalExternal.status === 'RESTRICTED_POSSIBLE_MATCH', 'A national identifier from another institution must remain opaque.');
+expect(nationalExternal.candidatePersonId === undefined && nationalExternal.matchReasons.length === 0, 'External national identifier resolution must not expose Person identity or reason.');
+
 const multipleExternalDb = fakeClient([
   {
     person_id: 'person-b',
@@ -98,6 +109,7 @@ const multipleExternalDb = fakeClient([
     phone: null,
     student_number: null,
     legacy_student_id: null,
+    national_id_number: null,
     is_local: false,
   },
   {
@@ -107,6 +119,7 @@ const multipleExternalDb = fakeClient([
     phone: null,
     student_number: null,
     legacy_student_id: null,
+    national_id_number: null,
     is_local: false,
   },
 ]);

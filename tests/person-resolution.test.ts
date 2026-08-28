@@ -22,6 +22,7 @@ function candidate(overrides: Partial<PersonResolutionCandidate> = {}): PersonRe
     phone: '+244 923 000 111',
     studentNumber: 'ALU-001',
     legacyStudentId: null,
+    nationalIdNumber: 'BI-001',
     relationship: 'local',
     disclosure: 'allowed',
     ...overrides,
@@ -32,6 +33,7 @@ expect(normalizePersonName('  João   Manuel ANTÓNIO ') === 'joao manuel antoni
 expect(normalizePhone('+244 923 000 111') === '244923000111', 'Phone normalization must keep digits only.');
 expect(normalizeIdentifier(' alu-001 ') === 'ALU-001', 'Identifier normalization must ignore surrounding spaces and case while preserving punctuation.');
 expect(normalizeIdentifier('ALU001') !== normalizeIdentifier('ALU-001'), 'Identifier normalization must not collapse punctuation that can distinguish institutional identifiers.');
+expect(normalizeIdentifier(' bi-001 ') === 'BI-001', 'National identifier normalization must reuse canonical identifier normalization.');
 
 const noMatch = resolvePersonCandidates(
   { name: 'Pessoa Nova', birthDate: '2015-01-01' },
@@ -47,6 +49,25 @@ const localStrong = resolvePersonCandidates(
 expect(localStrong.status === 'LOCAL_MATCH', 'Strong institutional identifier must resolve a local Person.');
 expect(localStrong.candidatePersonId === 'person-1', 'LOCAL_MATCH may return the authorized local Person id.');
 expect(localStrong.matchReasons.includes('student_number'), 'LOCAL_MATCH must explain the strong matching reason.');
+
+const nationalIdLocal = resolvePersonCandidates(
+  { name: 'João Manuel António', nationalIdNumber: ' bi-001 ' },
+  [candidate()],
+);
+expect(nationalIdLocal.status === 'LOCAL_MATCH', 'A unique local national identifier must resolve deterministically.');
+expect(nationalIdLocal.matchReasons.includes('national_id_number'), 'National identifier matches must remain auditable inside the resolver.');
+
+const nationalIdAbsent = resolvePersonCandidates(
+  { name: 'Pessoa Nova', nationalIdNumber: 'BI-999' },
+  [candidate()],
+);
+expect(nationalIdAbsent.status === 'NO_MATCH', 'An absent national identifier must not create a false match.');
+
+const nationalIdAmbiguous = resolvePersonCandidates(
+  { name: 'João Manuel António', nationalIdNumber: 'BI-001' },
+  [candidate(), candidate({ personId: 'person-2' })],
+);
+expect(nationalIdAmbiguous.status === 'MULTIPLE_MATCHES', 'Multiple national identifier candidates must fail closed as ambiguous.');
 
 const reusable = resolvePersonCandidates(
   { name: 'João Manuel António', birthDate: '2014-03-12', studentNumber: 'ALU-001' },

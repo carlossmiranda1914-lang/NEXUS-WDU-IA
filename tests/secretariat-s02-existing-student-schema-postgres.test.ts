@@ -56,6 +56,11 @@ try {
   for (const filename of migrationFiles) {
     await pool.query(await readFile(path.join(migrationsDirectory, filename), 'utf8'));
   }
+  // Model an operational schema after the registration-profile additions but
+  // before the forward-only 0015 birth-date repair. Person Resolution may
+  // safely read the canonical national-ID column while this fixture still
+  // proves the legacy birth-date failure and repair.
+  await pool.query(await readFile(path.join(migrationsDirectory, '0014_s02_final_registration_profile.sql'), 'utf8'));
 
   const institutionId = randomUUID();
   const personId = randomUUID();

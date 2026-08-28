@@ -76,7 +76,7 @@ try {
     await admin.query(`CREATE SCHEMA ${schemaIdentifier}`);
     await admin.query(`SET search_path TO ${schemaIdentifier}`);
     const applied = await runMigrations(admin, await discoverMigrations(migrationsDirectory));
-    await assert(applied.length === 19, `Expected migrations 0001–0019; applied ${applied.length}.`);
+    await assert(applied.length === 20, `Expected migrations 0001–0020; applied ${applied.length}.`);
   } finally {
     admin.release();
   }

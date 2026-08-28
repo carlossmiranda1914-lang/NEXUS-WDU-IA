@@ -13,6 +13,6 @@ export async function enrollmentRegistrationRequest(path: string, options: Reque
     },
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || 'Não foi possível concluir o cadastro da matrícula.');
+  if (!response.ok) throw new Error(body.message || body.error || 'Não foi possível concluir o cadastro da matrícula.');
   return body;
 }

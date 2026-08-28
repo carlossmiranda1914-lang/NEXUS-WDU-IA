@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
+import { resolvePersonForInstitution } from '../people/person-resolution-access.ts';
 import { canManageEnrollment, type EnrollmentStatus } from './enrollment-policy.ts';
 import {
   canEditEnrollmentRegistration,
@@ -19,7 +20,7 @@ export interface RegistrationPool extends RegistrationQueryClient {
 
 export class EnrollmentRegistrationApiError extends Error {
   constructor(
-    public readonly code: 'INVALID_INPUT' | 'NOT_FOUND' | 'FORBIDDEN' | 'IMMUTABLE' | 'AMBIGUOUS_GUARDIAN',
+    public readonly code: 'INVALID_INPUT' | 'NOT_FOUND' | 'FORBIDDEN' | 'IMMUTABLE' | 'AMBIGUOUS_GUARDIAN' | 'STALE_VERSION' | 'IDENTITY_COLLISION',
     message: string,
   ) {
     super(message);
@@ -30,8 +31,11 @@ export class EnrollmentRegistrationApiError extends Error {
 type RegistrationRow = {
   id: string;
   status: EnrollmentStatus;
+  registration_version: string;
   student_person_id: string;
   guardian_person_id: string | null;
+  student_version: string;
+  guardian_version: string | null;
   previous_school: string | null;
   enrollment_notes: string | null;
   student_number: string | null;
@@ -63,9 +67,10 @@ type RegistrationRow = {
 };
 
 const REGISTRATION_SELECT = `
-  SELECT e.id, e.status, e.student_person_id, e.guardian_person_id,
+  SELECT e.id, e.status, e.registration_version, e.student_person_id, e.guardian_person_id,
          e.previous_school, e.enrollment_notes,
          sp.student_number,
+         student.version::text AS student_version,
          student.name AS student_name,
          student.birth_date::text AS student_birth_date,
          student.phone AS student_phone,
@@ -77,6 +82,7 @@ const REGISTRATION_SELECT = `
          student.address_line AS student_address_line,
          student.municipality AS student_municipality,
          student.province AS student_province,
+         guardian.version::text AS guardian_version,
          guardian.name AS guardian_name,
          guardian.birth_date::text AS guardian_birth_date,
          guardian.phone AS guardian_phone,
@@ -143,6 +149,13 @@ function genderOrNull(value: unknown): string | null {
   return normalized;
 }
 
+function expectedVersion(value: unknown): bigint {
+  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) {
+    throw new EnrollmentRegistrationApiError('INVALID_INPUT', 'É obrigatória uma versão válida para guardar o cadastro.');
+  }
+  return BigInt(value);
+}
+
 function personFromRow(row: RegistrationRow, prefix: 'student' | 'guardian'): RegistrationPerson {
   return {
     name: row[`${prefix}_name` as keyof RegistrationRow] as string | null,
@@ -167,14 +180,16 @@ function mapRegistration(row: RegistrationRow) {
         relationship: row.guardian_relationship,
         isPrimary: row.guardian_is_primary ?? true,
         financialResponsible: row.guardian_financial_responsible ?? false,
+        version: row.guardian_version,
       }
     : null;
   const readiness = registrationReadiness(student, guardian as RegistrationGuardian | null);
   return {
     enrollmentId: row.id,
+    registrationVersion: row.registration_version,
     status: row.status,
     editable: canEditEnrollmentRegistration(row.status),
-    student: { ...student, studentNumber: row.student_number },
+    student: { ...student, studentNumber: row.student_number, version: row.student_version },
     guardian,
     enrollment: {
       previousSchool: row.previous_school,
@@ -254,6 +269,8 @@ export async function saveEnrollmentRegistration(
   if (!canManageEnrollment(context.role)) throw new EnrollmentRegistrationApiError('FORBIDDEN', 'O seu papel não pode gerir matrículas.');
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new EnrollmentRegistrationApiError('INVALID_INPUT', 'Cadastro de matrícula inválido.');
   if (!body.student || typeof body.student !== 'object' || Array.isArray(body.student)) throw new EnrollmentRegistrationApiError('INVALID_INPUT', 'Indique os dados do aluno.');
+  const expectedRegistrationVersion = expectedVersion(body.expectedRegistrationVersion);
+  const expectedStudentVersion = expectedVersion(body.student.expectedVersion);
 
   const student = {
     name: requiredName(body.student.name),
@@ -272,6 +289,7 @@ export async function saveEnrollmentRegistration(
 
   const guardianInput = body.guardian && typeof body.guardian === 'object' && !Array.isArray(body.guardian) && trimOrNull(body.guardian.name, 160)
     ? {
+        expectedVersion: body.guardian.expectedVersion,
         name: requiredName(body.guardian.name),
         birthDate: dateOrNull(body.guardian.birthDate),
         phone: trimOrNull(body.guardian.phone, 40),
@@ -294,8 +312,8 @@ export async function saveEnrollmentRegistration(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const locked = await client.query<{ status: EnrollmentStatus; student_person_id: string; guardian_person_id: string | null }>(
-      `SELECT status, student_person_id, guardian_person_id
+    const locked = await client.query<{ status: EnrollmentStatus; registration_version: string; student_person_id: string; guardian_person_id: string | null }>(
+      `SELECT status, registration_version, student_person_id, guardian_person_id
          FROM enrollment_applications
         WHERE id = $1 AND institution_id = $2
         FOR UPDATE`,
@@ -303,15 +321,41 @@ export async function saveEnrollmentRegistration(
     );
     if (!locked.rowCount) throw new EnrollmentRegistrationApiError('NOT_FOUND', 'Matrícula não encontrada nesta instituição.');
     const application = locked.rows[0];
+    if (BigInt(application.registration_version) !== expectedRegistrationVersion) {
+      throw new EnrollmentRegistrationApiError('STALE_VERSION', 'O registo foi alterado entretanto. Recarregue e reveja antes de submeter novamente.');
+    }
     if (!canEditEnrollmentRegistration(application.status)) {
       throw new EnrollmentRegistrationApiError('IMMUTABLE', 'Este processo já não aceita alterações ao cadastro.');
+    }
+    const lockedStudent = await client.query<{ version: string }>(
+      'SELECT version FROM people WHERE id = $1 FOR UPDATE',
+      [application.student_person_id],
+    );
+    if (!lockedStudent.rowCount || BigInt(lockedStudent.rows[0].version) !== expectedStudentVersion) {
+      throw new EnrollmentRegistrationApiError('STALE_VERSION', 'O registo foi alterado entretanto. Recarregue e reveja antes de submeter novamente.');
+    }
+    const currentStudent = await client.query<{ national_id_number: string | null }>(
+      'SELECT national_id_number FROM people WHERE id = $1',
+      [application.student_person_id],
+    );
+    const studentMaterialChanged = currentStudent.rows[0]?.national_id_number !== student.nationalIdNumber;
+    if (studentMaterialChanged) {
+      const resolution = await resolvePersonForInstitution(client, context.institutionId, {
+        name: student.name,
+        birthDate: student.birthDate,
+        phone: student.phone,
+        nationalIdNumber: student.nationalIdNumber,
+      });
+      if (resolution.status !== 'NO_MATCH' && resolution.candidatePersonId !== application.student_person_id) {
+        throw new EnrollmentRegistrationApiError('IDENTITY_COLLISION', 'Não foi possível validar a identidade para esta alteração. Reveja os dados antes de continuar.');
+      }
     }
 
     await client.query(
       `UPDATE people
           SET name = $1, birth_date = $2::date, phone = $3, whatsapp = $4, email = $5,
               national_id_number = $6, gender = $7, nationality = $8,
-              address_line = $9, municipality = $10, province = $11, updated_at = now()
+              address_line = $9, municipality = $10, province = $11, version = version + 1, updated_at = now()
         WHERE id = $12`,
       [student.name, student.birthDate, student.phone, student.whatsapp, student.email, student.nationalIdNumber,
         student.gender, student.nationality, student.addressLine, student.municipality, student.province, application.student_person_id],
@@ -326,6 +370,27 @@ export async function saveEnrollmentRegistration(
 
     let guardianPersonId = application.guardian_person_id;
     if (guardianInput) {
+      if (guardianPersonId) {
+        const guardianVersion = expectedVersion(guardianInput.expectedVersion);
+        const lockedGuardian = await client.query<{ version: string; national_id_number: string | null }>(
+          'SELECT version, national_id_number FROM people WHERE id = $1 FOR UPDATE',
+          [guardianPersonId],
+        );
+        if (!lockedGuardian.rowCount || BigInt(lockedGuardian.rows[0].version) !== guardianVersion) {
+          throw new EnrollmentRegistrationApiError('STALE_VERSION', 'O registo foi alterado entretanto. Recarregue e reveja antes de submeter novamente.');
+        }
+        if (lockedGuardian.rows[0].national_id_number !== guardianInput.nationalIdNumber) {
+          const resolution = await resolvePersonForInstitution(client, context.institutionId, {
+            name: guardianInput.name,
+            birthDate: guardianInput.birthDate,
+            phone: guardianInput.phone,
+            nationalIdNumber: guardianInput.nationalIdNumber,
+          });
+          if (resolution.status !== 'NO_MATCH' && resolution.candidatePersonId !== guardianPersonId) {
+            throw new EnrollmentRegistrationApiError('IDENTITY_COLLISION', 'Não foi possível validar a identidade para esta alteração. Reveja os dados antes de continuar.');
+          }
+        }
+      }
       if (!guardianPersonId) {
         guardianPersonId = await findLocalGuardian(client, context.institutionId, application.student_person_id, guardianInput);
       }
@@ -345,7 +410,7 @@ export async function saveEnrollmentRegistration(
           `UPDATE people
               SET name = $1, birth_date = $2::date, phone = $3, whatsapp = $4, email = $5,
                   national_id_number = $6, gender = $7, nationality = $8,
-                  address_line = $9, municipality = $10, province = $11, updated_at = now()
+                  address_line = $9, municipality = $10, province = $11, version = version + 1, updated_at = now()
             WHERE id = $12`,
           [guardianInput.name, guardianInput.birthDate, guardianInput.phone, guardianInput.whatsapp, guardianInput.email,
             guardianInput.nationalIdNumber, guardianInput.gender, guardianInput.nationality, guardianInput.addressLine,
@@ -372,9 +437,9 @@ export async function saveEnrollmentRegistration(
 
     await client.query(
       `UPDATE enrollment_applications
-          SET guardian_person_id = COALESCE($1::uuid, guardian_person_id),
+              SET guardian_person_id = COALESCE($1::uuid, guardian_person_id),
               previous_school = $2, enrollment_notes = $3,
-              updated_by = $4, updated_at = now()
+              updated_by = $4, registration_version = registration_version + 1, updated_at = now()
         WHERE id = $5 AND institution_id = $6`,
       [guardianPersonId, previousSchool, notes, context.personId, enrollmentId, context.institutionId],
     );
@@ -386,7 +451,13 @@ export async function saveEnrollmentRegistration(
       `INSERT INTO enrollment_events
         (institution_id, enrollment_application_id, actor_person_id, event_type, metadata)
        VALUES ($1, $2, $3, 'registration_updated', $4::jsonb)`,
-      [context.institutionId, enrollmentId, context.personId, JSON.stringify({ ready: registration.readiness.ready, missing: registration.readiness.missing })],
+      [context.institutionId, enrollmentId, context.personId, JSON.stringify({
+        operation: 'registration_updated',
+        result: 'success',
+        categories: [studentMaterialChanged ? 'identity_material' : 'profile_only'],
+        previousVersions: { registration: application.registration_version, student: lockedStudent.rows[0].version },
+        newVersions: { registration: registration.registrationVersion, student: registration.student.version },
+      })],
     );
     await client.query('COMMIT');
     return registration;
