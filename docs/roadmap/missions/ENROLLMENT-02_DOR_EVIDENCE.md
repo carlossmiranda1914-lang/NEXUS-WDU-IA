@@ -1,6 +1,6 @@
 # ENROLLMENT-02 — Definition of Ready Evidence
 
-**Estado:** READY — ENROLLMENT-02.
+**Estado:** DONE — ENROLLMENT-02, 2026-08-28.
 
 ## Baseline e autoridade consultada
 
@@ -79,4 +79,4 @@ Antes do primeiro código: confirmar migration number, outbox/ledger reutilizáv
 
 ## Estado DoR
 
-**READY — ENROLLMENT-02.** Não há decisão arquitetural aberta que altere o boundary da missão. Não foram alterados código, schema, migrations, APIs, UI, fixtures ou comportamento de Enrollment nesta fase de preparação.
+**DONE — ENROLLMENT-02 CANONICAL PROCESS AUTHORITY AND ATOMIC ACTIVATION PROVEN.** Quality gate determinístico: `started=2026-08-28T15:39:04.0147085+01:00`, `finished=2026-08-28T15:41:07.7378613+01:00`, `exit=0`, `quality-gate: PASS`. Migration isolation, PostgreSQL/HTTP operational, lint, build, secret/artifact scan e committed diff integraram o gate.

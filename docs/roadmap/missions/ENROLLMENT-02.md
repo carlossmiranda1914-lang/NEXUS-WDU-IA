@@ -1,6 +1,6 @@
 # ENROLLMENT-02 — Canonical Process Authority & Atomic Activation
 
-**Estado:** READY — ENROLLMENT-02.
+**Estado:** DONE — ENROLLMENT-02, 2026-08-28.
 
 **Tipo:** hardening arquitetural de Enrollment. Este Mission Pack autoriza planeamento e provas de readiness; não autoriza implementação até receber instrução explícita.
 
@@ -216,4 +216,17 @@ Depois desta missão, `Enrollment.status = active` significa exatamente: a ativa
 
 ## Definition of Ready
 
-**READY — ENROLLMENT-02.** Estão definidos activation invariants, boundary transacional, expected versions, idempotência, concorrência, matriz de assignment, modelo human/system audit, estratégia de reconciliação, semântica de progresso, decisão de migration, ACs e matriz de testes. A implementação exige autorização explícita e começa por migration/testes de falha, nunca pelo endpoint/UI.
+**DONE — ENROLLMENT-02 CANONICAL PROCESS AUTHORITY AND ATOMIC ACTIVATION PROVEN.** `Enrollment.active` só é produzido por `ActivateEnrollment`, na transação institucional que também ativa `StudentProfile` e grava event/audit factual e ledger idempotente.
+
+## Closeout executável — AC01–AC12
+
+| AC | Prova executável | Evidência |
+| --- | --- | --- |
+| AC01 | Generic HTTP bloqueia `validated → active`, sem writes. | `enrollment-generic-transition-http-operational`, `094594f` |
+| AC02–03 | ActivateEnrollment é exclusivo e atómico com StudentProfile. | `enrollment-activation-postgres`, `3c43326` |
+| AC04–05 | Rollback e A/B não deixam efeitos parciais/duplicados. | `enrollment-activation-postgres`, `3c43326` |
+| AC06 | Stale lifecycle/registration devolve 409 sem auto-retry. | activation HTTP, `1ddfb9d`, `f14ebe2` |
+| AC07–08 | Assignment/Membership/A→B fail-closed. | process policy + activation HTTP, `b7420c7`, `094594f` |
+| AC09–10 | System reconciliation, GET puro e progress determinístico. | S03 PostgreSQL, `b7420c7` |
+| AC11 | Audit factual/correlation minimizado. | activation + S03 PostgreSQL |
+| AC12 | Intake, Person Resolution, tenant/context, IAM/context e foundation regressions. | quality gate `exit=0`, 2026-08-28 |
