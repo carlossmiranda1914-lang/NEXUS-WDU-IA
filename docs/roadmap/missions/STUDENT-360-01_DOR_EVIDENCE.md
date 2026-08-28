@@ -38,3 +38,16 @@
 No external dependency is required to begin implementation of the bounded read-only projection. A later request for financial, assessment, attendance or physical-file facts is a stop condition, not an extension.
 
 **READY — STUDENT-360-01**
+
+## Objective 1 execution evidence
+
+| Invariant | Executed proof | Result |
+| --- | --- | --- |
+| Single read-only backend boundary | `student-context-api.ts` is called only through `student-context.controller.ts`; production registration is in `server.ts` | PASS |
+| Server-side tenant and authorization | `tests/student-context-objective1-postgres-http.test.ts` exercises `requireAuth → InstitutionalContext → boundary → PostgreSQL` | PASS |
+| Same-tenant / cross-tenant / role denial | PostgreSQL and HTTP assertions cover administrator success, tenant B fail-closed, and teacher denial | PASS |
+| No write side effects | PostgreSQL snapshots prove no Academic event, profile, enrollment, or placement mutation | PASS |
+| Safe response | HTTP assertions prove no internal identifiers, SQL/stack detail, address, or phone output | PASS |
+| Unavailable-domain truth | Policy and boundary return `not_yet_authoritative`, never synthesized values | PASS |
+
+**Objective 1 GREEN — Authorized Projection Boundary Proven.**

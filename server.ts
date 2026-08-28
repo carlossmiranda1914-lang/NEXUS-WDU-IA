@@ -25,6 +25,7 @@ import { initializeDatabase } from './src/db/init.ts';
 // Modularized Enterprise School Tasks imports
 import { registerSchoolTaskRoutes } from './src/modules/school-tasks/school-task.controller.ts';
 import { registerEnrollmentRoutes } from './src/modules/enrollments/enrollment.controller.ts';
+import { registerStudentContextRoutes } from './src/modules/student-context/student-context.controller.ts';
 import { registerIamRoutes } from './src/modules/iam/iam.controller.ts';
 import { SchoolTaskWebSocketManager } from './src/modules/school-tasks/websocket-manager.ts';
 import { eventBus } from './src/modules/school-tasks/event-bus.ts';
@@ -3538,6 +3539,7 @@ async function startServer() {
   app.use('/api/school-tasks', requireAuth, multiTenantMiddleware);
   registerSchoolTaskRoutes(app);
   registerEnrollmentRoutes(app);
+  registerStudentContextRoutes(app);
   registerIamRoutes(app);
 
   // FND-02 CP2: legacy mutation bodies are retained temporarily for forensic
