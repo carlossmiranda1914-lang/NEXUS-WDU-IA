@@ -56,6 +56,8 @@ try {
 
   const activated = await request(`/api/academic-years/${id}/activate`, { method: 'POST', body: JSON.stringify({ expectedVersion: 2 }) });
   assert.equal(activated.status, 200); assert.equal((await activated.json() as any).academicYear.status, 'active');
+  const current = await request('/api/academic-years'); assert.equal(current.status, 200);
+  assert.equal((await current.json() as any).academicYears[0].status, 'active');
   const crossTenant = await request(`/api/academic-years/${externalYear}/activate`, { method: 'POST', body: JSON.stringify({ expectedVersion: 1 }) });
   assert.equal(crossTenant.status, 404); safe(await crossTenant.json());
   const external = await service.query<{ status: string; version: string }>('SELECT status,version FROM academic_years WHERE id=$1', [externalYear]);
@@ -65,6 +67,8 @@ try {
   assert.equal(closed.status, 200); assert.equal((await closed.json() as any).academicYear.status, 'closed');
   const historical = await service.query<{ status: string; version: string }>('SELECT status,version FROM academic_years WHERE id=$1 AND institution_id=$2', [id, institutionA]);
   assert.deepEqual(historical.rows[0], { status: 'closed', version: '4' });
+  const historicalRead = await request('/api/academic-years'); assert.equal(historicalRead.status, 200);
+  assert.equal((await historicalRead.json() as any).academicYears[0].status, 'closed');
   console.log('[ACADEMIC-01-ACADEMIC-YEAR-HTTP] auth/context/authority/postgres: PASS.');
 } finally {
   if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
