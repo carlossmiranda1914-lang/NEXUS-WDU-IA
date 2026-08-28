@@ -4,6 +4,14 @@ import { documentValidationGate, type CapturedDocumentRequirement } from './enro
 
 export const ENROLLMENT_PROCESS_STAGE_KEYS = ['P01', 'P02', 'P03', 'P04', 'P05', 'P06'] as const;
 export type EnrollmentProcessStageKey = (typeof ENROLLMENT_PROCESS_STAGE_KEYS)[number];
+
+export function canAssignEnrollmentProcess(role: InstitutionalRole): boolean {
+  return role === 'institution_admin' || role === 'director' || role === 'secretariat';
+}
+
+export function canReceiveEnrollmentProcessAssignment(role: InstitutionalRole): boolean {
+  return role === 'institution_admin' || role === 'director' || role === 'secretariat';
+}
 export type EnrollmentProcessStageStatus = 'pending' | 'in_progress' | 'blocked' | 'completed' | 'not_applicable';
 export type EnrollmentProcessNextActionCode =
   | 'COMPLETE_REGISTRATION'
