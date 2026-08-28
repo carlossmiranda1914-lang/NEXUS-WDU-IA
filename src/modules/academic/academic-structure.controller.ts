@@ -2,7 +2,7 @@ import type { Application, RequestHandler, Response } from 'express';
 import { pool } from '../../db/index.ts';
 import { requireAuth, type AuthRequest } from '../../middleware/auth.ts';
 import { canManageAcademicYear } from '../enrollments/academic-year-policy.ts';
-import { AcademicStructureError, assignTeacher, closeAcademicClass, createAcademicClass, createAcademicSubject, listTeacherAssignments, offerAcademicSubject, replaceTeacher } from './academic-structure-api.ts';
+import { AcademicStructureError, assignTeacher, closeAcademicClass, createAcademicClass, createAcademicSubject, listStudentPlacements, listTeacherAssignments, offerAcademicSubject, placeStudent, replaceStudentPlacement, replaceTeacher } from './academic-structure-api.ts';
 
 function reject(res: Response,status:number,body:object) { return res.status(status).json(body); }
 function actor(req:AuthRequest,res:Response) { const context=req.institutionalContext; if(!context) { reject(res,401,{error:'Autenticação institucional necessária.'}); return null; } if(!canManageAcademicYear(context.role)) { reject(res,403,{error:'O seu papel não pode gerir estrutura académica.'}); return null; } return context; }
@@ -17,4 +17,7 @@ export function registerAcademicStructureRoutes(app:Application,dependencies:{po
  app.post('/api/academic/teacher-assignments',academicRequireAuth,async(req:AuthRequest,res:Response)=>{const context=actor(req,res);if(!context)return;try{return res.status(201).json({teacherAssignment:await assignTeacher(academicPool,context,req.body??{})});}catch(cause){return error(res,cause);}});
  app.post('/api/academic/teacher-assignments/:id/replace',academicRequireAuth,async(req:AuthRequest,res:Response)=>{const context=actor(req,res);if(!context)return;try{return res.json({teacherAssignment:await replaceTeacher(academicPool,context,{id:req.params.id,...(req.body??{})})});}catch(cause){return error(res,cause);}});
  app.get('/api/academic/teacher-assignments',academicRequireAuth,async(req:AuthRequest,res:Response)=>{const context=actor(req,res);if(!context)return;try{return res.json({teacherAssignments:await listTeacherAssignments(academicPool,context,req.query)});}catch(cause){return error(res,cause);}});
+ app.post('/api/academic/student-placements',academicRequireAuth,async(req:AuthRequest,res:Response)=>{const context=actor(req,res);if(!context)return;try{return res.status(201).json({studentPlacement:await placeStudent(academicPool,context,req.body??{})});}catch(cause){return error(res,cause);}});
+ app.post('/api/academic/student-placements/:id/replace',academicRequireAuth,async(req:AuthRequest,res:Response)=>{const context=actor(req,res);if(!context)return;try{return res.json({studentPlacement:await replaceStudentPlacement(academicPool,context,{id:req.params.id,...(req.body??{})})});}catch(cause){return error(res,cause);}});
+ app.get('/api/academic/student-placements',academicRequireAuth,async(req:AuthRequest,res:Response)=>{const context=actor(req,res);if(!context)return;try{return res.json({studentPlacements:await listStudentPlacements(academicPool,context,req.query)});}catch(cause){return error(res,cause);}});
 }
