@@ -1,4 +1,4 @@
-import { Application, Response } from 'express';
+import { Application, RequestHandler, Response } from 'express';
 import { pool } from '../../db/index.ts';
 import { requireAuth, AuthRequest } from '../../middleware/auth.ts';
 import {
@@ -11,6 +11,10 @@ import { resolveEnrollmentTemporalContext } from './enrollment-temporal-context.
 
 function reject(res: Response, status: number, error: string) {
   return res.status(status).json({ error });
+}
+
+function rejectCode(res: Response, status: number, code: string, message: string) {
+  return res.status(status).json({ code, message });
 }
 
 function validUuid(value: unknown): value is string {
@@ -54,11 +58,23 @@ function parseDefinition(body: unknown) {
   return { name, startsOn, endsOn } as const;
 }
 
-export function registerAcademicYearRoutes(app: Application) {
-  app.get('/api/enrollments/context', requireAuth, async (req: AuthRequest, res: Response) => {
+function expectedVersion(body: unknown): number | null {
+  const value = Number((body as Record<string, unknown> | undefined)?.expectedVersion);
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+/** Production defaults are canonical; dependencies only make the same routes testable. */
+export function registerAcademicYearRoutes(
+  app: Application,
+  dependencies: { pool?: typeof pool; requireAuth?: RequestHandler } = {},
+) {
+  const academicPool = dependencies.pool ?? pool;
+  const academicRequireAuth = dependencies.requireAuth ?? requireAuth;
+
+  app.get('/api/enrollments/context', academicRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = institutionActor(req, res); if (!context) return;
     try {
-      const temporal = await resolveEnrollmentTemporalContext(pool, context.institutionId);
+      const temporal = await resolveEnrollmentTemporalContext(academicPool, context.institutionId);
       return res.json({
         institution: { id: context.institutionId, name: context.institutionName },
         academicYear: temporal.academicYear,
@@ -77,16 +93,16 @@ export function registerAcademicYearRoutes(app: Application) {
     }
   });
 
-  app.post('/api/enrollments/setup', requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post('/api/enrollments/setup', academicRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = academicYearActor(req, res); if (!context) return;
     return reject(res, 410, 'Configuração legada desativada. Gira o ano letivo através de /api/academic-years e as ofertas separadamente.');
   });
 
-  app.get('/api/academic-years', requireAuth, async (req: AuthRequest, res: Response) => {
+  app.get('/api/academic-years', academicRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = academicYearActor(req, res); if (!context) return;
     try {
-      const result = await pool.query(
-        `SELECT id, name, starts_on, ends_on, status, created_at, updated_at
+      const result = await academicPool.query(
+        `SELECT id, name, starts_on, ends_on, status, version, created_at, updated_at
            FROM academic_years
           WHERE institution_id = $1
           ORDER BY starts_on DESC, name ASC`,
@@ -99,15 +115,15 @@ export function registerAcademicYearRoutes(app: Application) {
     }
   });
 
-  app.post('/api/academic-years', requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post('/api/academic-years', academicRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = academicYearActor(req, res); if (!context) return;
     const definition = parseDefinition(req.body);
     if ('error' in definition) return reject(res, 400, definition.error);
     try {
-      const result = await pool.query(
+      const result = await academicPool.query(
         `INSERT INTO academic_years (institution_id, name, starts_on, ends_on, status)
          VALUES ($1, $2, $3, $4, 'draft')
-         RETURNING id, name, starts_on, ends_on, status, created_at, updated_at`,
+         RETURNING id, name, starts_on, ends_on, status, version, created_at, updated_at`,
         [context.institutionId, definition.name, definition.startsOn, definition.endsOn],
       );
       return res.status(201).json({ academicYear: result.rows[0] });
@@ -118,29 +134,32 @@ export function registerAcademicYearRoutes(app: Application) {
     }
   });
 
-  app.patch('/api/academic-years/:id', requireAuth, async (req: AuthRequest, res: Response) => {
+  app.patch('/api/academic-years/:id', academicRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = academicYearActor(req, res); if (!context) return;
     if (!validUuid(req.params.id)) return reject(res, 400, 'Ano letivo inválido.');
     const definition = parseDefinition(req.body);
     if ('error' in definition) return reject(res, 400, definition.error);
-    const client = await pool.connect();
+    const version = expectedVersion(req.body);
+    if (!version) return reject(res, 400, 'Indique a versão atual do ano letivo.');
+    const client = await academicPool.connect();
     try {
       await client.query('BEGIN');
-      const existing = await client.query<{ status: AcademicYearStatus }>(
-        `SELECT status FROM academic_years WHERE id = $1 AND institution_id = $2 FOR UPDATE`,
+      const existing = await client.query<{ status: AcademicYearStatus; version: string }>(
+        `SELECT status, version FROM academic_years WHERE id = $1 AND institution_id = $2 FOR UPDATE`,
         [req.params.id, context.institutionId],
       );
       if (!existing.rowCount) { await client.query('ROLLBACK'); return reject(res, 404, 'Ano letivo não encontrado nesta instituição.'); }
+      if (Number(existing.rows[0].version) !== version) { await client.query('ROLLBACK'); return rejectCode(res, 409, 'STALE_VERSION', 'O ano letivo foi alterado entretanto. Atualize os dados antes de tentar novamente.'); }
       if (!canEditAcademicYearDefinition(existing.rows[0].status)) {
         await client.query('ROLLBACK');
         return reject(res, 409, 'A definição do ano letivo só pode ser alterada enquanto estiver em Planeamento.');
       }
       const updated = await client.query(
         `UPDATE academic_years
-            SET name = $1, starts_on = $2, ends_on = $3, updated_at = now()
-          WHERE id = $4 AND institution_id = $5
-          RETURNING id, name, starts_on, ends_on, status, created_at, updated_at`,
-        [definition.name, definition.startsOn, definition.endsOn, req.params.id, context.institutionId],
+            SET name = $1, starts_on = $2, ends_on = $3, version = version + 1, updated_at = now()
+          WHERE id = $4 AND institution_id = $5 AND version = $6
+          RETURNING id, name, starts_on, ends_on, status, version, created_at, updated_at`,
+        [definition.name, definition.startsOn, definition.endsOn, req.params.id, context.institutionId, version],
       );
       await client.query('COMMIT');
       return res.json({ academicYear: updated.rows[0] });
@@ -154,28 +173,31 @@ export function registerAcademicYearRoutes(app: Application) {
     }
   });
 
-  app.post('/api/academic-years/:id/activate', requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post('/api/academic-years/:id/activate', academicRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = academicYearActor(req, res); if (!context) return;
     if (!validUuid(req.params.id)) return reject(res, 400, 'Ano letivo inválido.');
-    const client = await pool.connect();
+    const version = expectedVersion(req.body);
+    if (!version) return reject(res, 400, 'Indique a versão atual do ano letivo.');
+    const client = await academicPool.connect();
     try {
       await client.query('BEGIN');
       await client.query('SELECT id FROM institutions WHERE id = $1 FOR UPDATE', [context.institutionId]);
-      const existing = await client.query<{ status: AcademicYearStatus }>(
-        `SELECT status FROM academic_years WHERE id = $1 AND institution_id = $2 FOR UPDATE`,
+      const existing = await client.query<{ status: AcademicYearStatus; version: string }>(
+        `SELECT status, version FROM academic_years WHERE id = $1 AND institution_id = $2 FOR UPDATE`,
         [req.params.id, context.institutionId],
       );
       if (!existing.rowCount) { await client.query('ROLLBACK'); return reject(res, 404, 'Ano letivo não encontrado nesta instituição.'); }
+      if (Number(existing.rows[0].version) !== version) { await client.query('ROLLBACK'); return rejectCode(res, 409, 'STALE_VERSION', 'O ano letivo foi alterado entretanto. Atualize os dados antes de tentar novamente.'); }
       const from = existing.rows[0].status;
       if (!canTransitionAcademicYear(context.role, from, 'active')) {
         await client.query('ROLLBACK');
         return reject(res, 409, 'Este ano letivo não pode ser ativado a partir do estado atual.');
       }
       const updated = await client.query(
-        `UPDATE academic_years SET status = 'active', updated_at = now()
-          WHERE id = $1 AND institution_id = $2
-          RETURNING id, name, starts_on, ends_on, status, created_at, updated_at`,
-        [req.params.id, context.institutionId],
+        `UPDATE academic_years SET status = 'active', version = version + 1, updated_at = now()
+          WHERE id = $1 AND institution_id = $2 AND version = $3
+          RETURNING id, name, starts_on, ends_on, status, version, created_at, updated_at`,
+        [req.params.id, context.institutionId, version],
       );
       await client.query('COMMIT');
       return res.json({ academicYear: updated.rows[0] });
@@ -189,27 +211,30 @@ export function registerAcademicYearRoutes(app: Application) {
     }
   });
 
-  app.post('/api/academic-years/:id/close', requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post('/api/academic-years/:id/close', academicRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = academicYearActor(req, res); if (!context) return;
     if (!validUuid(req.params.id)) return reject(res, 400, 'Ano letivo inválido.');
-    const client = await pool.connect();
+    const version = expectedVersion(req.body);
+    if (!version) return reject(res, 400, 'Indique a versão atual do ano letivo.');
+    const client = await academicPool.connect();
     try {
       await client.query('BEGIN');
-      const existing = await client.query<{ status: AcademicYearStatus }>(
-        `SELECT status FROM academic_years WHERE id = $1 AND institution_id = $2 FOR UPDATE`,
+      const existing = await client.query<{ status: AcademicYearStatus; version: string }>(
+        `SELECT status, version FROM academic_years WHERE id = $1 AND institution_id = $2 FOR UPDATE`,
         [req.params.id, context.institutionId],
       );
       if (!existing.rowCount) { await client.query('ROLLBACK'); return reject(res, 404, 'Ano letivo não encontrado nesta instituição.'); }
+      if (Number(existing.rows[0].version) !== version) { await client.query('ROLLBACK'); return rejectCode(res, 409, 'STALE_VERSION', 'O ano letivo foi alterado entretanto. Atualize os dados antes de tentar novamente.'); }
       const from = existing.rows[0].status;
       if (!canTransitionAcademicYear(context.role, from, 'closed')) {
         await client.query('ROLLBACK');
         return reject(res, 409, 'Este ano letivo não pode ser encerrado a partir do estado atual.');
       }
       const updated = await client.query(
-        `UPDATE academic_years SET status = 'closed', updated_at = now()
-          WHERE id = $1 AND institution_id = $2
-          RETURNING id, name, starts_on, ends_on, status, created_at, updated_at`,
-        [req.params.id, context.institutionId],
+        `UPDATE academic_years SET status = 'closed', version = version + 1, updated_at = now()
+          WHERE id = $1 AND institution_id = $2 AND version = $3
+          RETURNING id, name, starts_on, ends_on, status, version, created_at, updated_at`,
+        [req.params.id, context.institutionId, version],
       );
       await client.query('COMMIT');
       return res.json({ academicYear: updated.rows[0] });

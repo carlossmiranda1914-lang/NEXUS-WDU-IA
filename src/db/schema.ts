@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp, boolean, doublePrecision, jsonb, date, uuid, uniqueIndex, index } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, integer, bigint, timestamp, boolean, doublePrecision, jsonb, date, uuid, uniqueIndex, index } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 
@@ -307,6 +307,7 @@ export const academicYears = pgTable('academic_years', {
   startsOn: date('starts_on').notNull(),
   endsOn: date('ends_on').notNull(),
   status: text('status').notNull().default('draft'),
+  version: bigint('version', { mode: 'number' }).notNull().default(1),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [uniqueIndex('academic_years_institution_name_unique').on(table.institutionId, table.name)]);

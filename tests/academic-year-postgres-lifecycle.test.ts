@@ -1,18 +1,15 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
-import { createTestDatabasePool, reportSkippedDatabaseTest } from '../src/db/test-database.ts';
+import pg from 'pg';
+import { readApprovedTestTarget } from '../scripts/nexus-test-db-safety.mjs';
 import {
   canEditAcademicYearDefinition,
   canTransitionAcademicYear,
 } from '../src/modules/enrollments/academic-year-policy.ts';
 
 const TEST_NAME = 'ACADEMIC-YEAR-POSTGRES-LIFECYCLE';
-const pool = createTestDatabasePool();
-
-if (!pool) {
-  reportSkippedDatabaseTest(TEST_NAME);
-  process.exit(0);
-}
+const { connectionString } = readApprovedTestTarget();
+const pool = new pg.Pool({ connectionString });
 
 let assertions = 0;
 function assert(condition: unknown, message: string): asserts condition {
@@ -34,23 +31,31 @@ try {
     [institutionA, `AY Gate A ${suffix}`, `ay-gate-a-${suffix}`, institutionB, `AY Gate B ${suffix}`, `ay-gate-b-${suffix}`],
   );
 
-  const first = await client.query<{ id: string; status: string; name: string }>(
+  const first = await client.query<{ id: string; status: string; name: string; version: string }>(
     `INSERT INTO academic_years (institution_id, name, starts_on, ends_on, status)
      VALUES ($1, $2, '2026-09-01', '2027-07-31', 'draft')
-     RETURNING id, status, name`,
+     RETURNING id, status, name, version`,
     [institutionA, `2026/2027 ${suffix}`],
   );
   assert(first.rows[0].status === 'draft', 'A new academic year must persist as draft.');
+  assert(first.rows[0].version === '1', 'A new academic year must begin at version 1.');
 
   assert(canEditAcademicYearDefinition('draft'), 'Draft must be editable by policy.');
-  const edited = await client.query<{ name: string; status: string }>(
+  const edited = await client.query<{ name: string; status: string; version: string }>(
     `UPDATE academic_years
-        SET name = $1, starts_on = '2026-09-02', ends_on = '2027-07-30', updated_at = now()
-      WHERE id = $2 AND institution_id = $3 AND status = 'draft'
-      RETURNING name, status`,
-    [`2026/2027 Planeado ${suffix}`, first.rows[0].id, institutionA],
+        SET name = $1, starts_on = '2026-09-02', ends_on = '2027-07-30', version = version + 1, updated_at = now()
+      WHERE id = $2 AND institution_id = $3 AND status = 'draft' AND version = $4
+      RETURNING name, status, version`,
+    [`2026/2027 Planeado ${suffix}`, first.rows[0].id, institutionA, first.rows[0].version],
   );
   assert(edited.rowCount === 1 && edited.rows[0].status === 'draft', 'Draft definition must be editable inside its institution.');
+  assert(edited.rows[0].version === '2', 'A material definition edit must increment version.');
+  const stale = await client.query(
+    `UPDATE academic_years SET name = 'SHOULD-NOT-APPLY', version = version + 1
+      WHERE id = $1 AND institution_id = $2 AND version = 1 RETURNING id`,
+    [first.rows[0].id, institutionA],
+  );
+  assert(stale.rowCount === 0, 'A stale academic-year version must not write.');
 
   const crossInstitutionEdit = await client.query(
     `UPDATE academic_years SET name = 'SHOULD-NOT-CHANGE'

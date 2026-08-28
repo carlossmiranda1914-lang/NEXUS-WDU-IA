@@ -26,6 +26,9 @@ expect(source.includes("app.post('/api/academic-years'"), 'AY-2.1 must expose dr
 expect(source.includes("app.patch('/api/academic-years/:id'"), 'AY-2.1 must expose draft definition editing.');
 expect(source.includes("app.post('/api/academic-years/:id/activate'"), 'AY-2.1 must expose explicit activation.');
 expect(source.includes("app.post('/api/academic-years/:id/close'"), 'AY-2.1 must expose explicit closure.');
+expect(source.includes("'STALE_VERSION'"), 'Academic-year mutations must expose a stable stale-version response.');
+expect(source.includes('expectedVersion(req.body)'), 'Academic-year mutations must require the authoritative version.');
+expect(source.includes('version = version + 1'), 'Academic-year mutations must advance their authoritative version.');
 
 expect(/VALUES\s*\(\$1,\s*\$2,\s*\$3,\s*\$4,\s*'draft'\)/s.test(source), 'New academic years must always start in draft.');
 expect(!/INSERT INTO enrollment_offers/.test(source), 'Academic-year lifecycle API must not create enrollment offers.');
