@@ -51,3 +51,15 @@ No external dependency is required to begin implementation of the bounded read-o
 | Unavailable-domain truth | Policy and boundary return `not_yet_authoritative`, never synthesized values | PASS |
 
 **Objective 1 GREEN — Authorized Projection Boundary Proven.**
+
+## Objective 2 execution evidence
+
+| Invariant | Executed proof | Result |
+| --- | --- | --- |
+| Current enrollment and year | PostgreSQL fixture has active 2026 enrollment and an active 2025 historical record in a closed year; projection returns only 2026 | PASS |
+| Current placement structure | Projection returns active placement with authoritative AcademicYear, Class, Program and Level display fields | PASS |
+| Subject context | Active Class subject offering is returned as display-safe code/name metadata | PASS |
+| Historical separation | Closed-year enrollment and ended placement are present in PostgreSQL but excluded from `current` | PASS |
+| Security and non-mutation | Same Objective 1 operational test continues to prove tenant fail-closed, role denial, HTTP 401/403 and no writes | PASS |
+
+**Objective 2 GREEN — Current Student Context Proven.**
