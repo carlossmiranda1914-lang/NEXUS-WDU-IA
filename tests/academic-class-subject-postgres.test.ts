@@ -22,5 +22,8 @@ try {
  await assert.rejects(()=>closeAcademicClass(pool as any,context,{id:klass.id,expectedVersion:1}),(e:unknown)=>e instanceof AcademicStructureError&&e.code==='STALE_VERSION');
  const history=await pool.query<{status:string;version:string}>('SELECT status,version FROM academic_classes WHERE id=$1 AND institution_id=$2',[klass.id,a]); assert.deepEqual(history.rows[0],{status:'closed',version:'2'});
  const audit=await pool.query<{metadata:unknown}>("SELECT metadata FROM academic_events WHERE institution_id=$1 ORDER BY created_at",[a]); assert.equal(audit.rows.length,4); assert.deepEqual(audit.rows[0].metadata,{});
+ await pool.query("CREATE FUNCTION reject_academic_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit failure injection'; END $$; CREATE TRIGGER reject_academic_audit BEFORE INSERT ON academic_events FOR EACH ROW EXECUTE FUNCTION reject_academic_audit()");
+ await assert.rejects(()=>createAcademicClass(pool as any,context,{academicYearId:year,programId:program,levelId:level,code:'ROLLBACK'}),(e:unknown)=>e instanceof AcademicStructureError&&e.code==='CONFLICT');
+ const rollback=await pool.query<{classes:string;events:string}>("SELECT (SELECT count(*)::text FROM academic_classes WHERE institution_id=$1 AND code='ROLLBACK') classes,(SELECT count(*)::text FROM academic_events WHERE institution_id=$1 AND operation='created') events",[a]); assert.deepEqual(rollback.rows[0],{classes:'0',events:'3'});
  console.log('[ACADEMIC-01-CLASS-SUBJECT] temporal tenant authority: PASS.');
 } finally { await pool.query('DELETE FROM institutions WHERE id=ANY($1)',[[a,b]]).catch(()=>undefined); await pool.end(); }
