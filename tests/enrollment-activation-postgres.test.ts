@@ -81,6 +81,11 @@ try {
   const eventCount = await pool.query<{ count: string }>("SELECT count(*)::text AS count FROM enrollment_events WHERE enrollment_application_id=$1 AND event_type='enrollment_activated'", [ids.enrollment]);
   assert(eventCount.rows[0].count === '1', 'Replay must not duplicate activation audit event.');
 
+  let staleRejected = false;
+  try { await activateEnrollment(pool, context, ids.enrollment, { expectedLifecycleVersion: '1', expectedRegistrationVersion: '1', idempotencyKey: 'activation-stale-v1-001' }); }
+  catch (error) { staleRejected = error instanceof EnrollmentActivationError && error.code === 'STALE_VERSION'; }
+  assert(staleRejected, 'A second operator holding lifecycle v1 must receive STALE_VERSION after activation A.');
+
   let keyConflict = false;
   try { await activateEnrollment(pool, context, ids.enrollment, { expectedLifecycleVersion: '2', expectedRegistrationVersion: '1', idempotencyKey: 'activation-happy-path-001' }); }
   catch (error) { keyConflict = error instanceof EnrollmentActivationError && error.code === 'IDEMPOTENCY_CONFLICT'; }
