@@ -27,6 +27,27 @@ const context: InstitutionalContext = {
   institutionId: ids.institution, institutionName: 'Escola Activation', institutionSlug: 'activation', role: 'director',
 };
 
+async function seedValidatedEnrollment(label: string) {
+  const student = randomUUID(); const guardian = randomUUID(); const enrollment = randomUUID();
+  await pool.query(
+    `INSERT INTO people (id,name,birth_date,phone,gender,nationality,province,municipality,address_line)
+     VALUES ($1,$2,'2011-02-03','900000004','other','Angolana','Luanda','Luanda','Rua D'),
+            ($3,$4,'1971-03-04','900000005','other','Angolana','Luanda','Luanda','Rua E')`,
+    [student, `Aluno ${label}`, guardian, `Responsável ${label}`],
+  );
+  await pool.query("INSERT INTO student_profiles (institution_id,person_id,status) VALUES ($1,$2,'inactive')", [ids.institution, student]);
+  await pool.query("INSERT INTO guardian_relationships (institution_id,guardian_person_id,student_person_id,relationship,status,is_primary) VALUES ($1,$2,$3,'Mãe','active',true)", [ids.institution, guardian, student]);
+  await pool.query(
+    `INSERT INTO enrollment_applications (id,institution_id,student_person_id,guardian_person_id,academic_year_id,offer_id,status,document_policy_id,created_by,updated_by)
+     VALUES ($1,$2,$3,$4,$5,$6,'validated',$7,$8,$8)`, [enrollment, ids.institution, student, guardian, ids.year, ids.offer, ids.policy, ids.actor],
+  );
+  await pool.query(
+    `INSERT INTO enrollment_documents (institution_id,enrollment_application_id,document_type,required,status,source_requirement_id,verified_by,verified_at)
+     VALUES ($1,$2,'Identificação',true,'verified',$3,$4,now())`, [ids.institution, enrollment, ids.requirement, ids.actor],
+  );
+  return { student, enrollment };
+}
+
 try {
   await bootstrap.query(`CREATE SCHEMA ${schemaIdentifier}`);
   const migrations = (await readdir(migrationsDirectory)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
@@ -86,10 +107,50 @@ try {
   catch (error) { staleRejected = error instanceof EnrollmentActivationError && error.code === 'STALE_VERSION'; }
   assert(staleRejected, 'A second operator holding lifecycle v1 must receive STALE_VERSION after activation A.');
 
+  await pool.query('UPDATE enrollment_applications SET registration_version = 2 WHERE id = $1', [ids.enrollment]);
+  let staleRegistrationRejected = false;
+  try { await activateEnrollment(pool, context, ids.enrollment, { expectedLifecycleVersion: '2', expectedRegistrationVersion: '1', idempotencyKey: 'activation-stale-registration-001' }); }
+  catch (error) { staleRegistrationRejected = error instanceof EnrollmentActivationError && error.code === 'STALE_VERSION'; }
+  assert(staleRegistrationRejected, 'Current lifecycle with stale registration version must reject activation without side effect.');
+  const staleLedger = await pool.query<{ count: string }>('SELECT count(*)::text AS count FROM enrollment_activation_commands WHERE enrollment_application_id=$1', [ids.enrollment]);
+  assert(staleLedger.rows[0].count === '1', 'Stale registration must not create an activation ledger entry.');
+
   let keyConflict = false;
   try { await activateEnrollment(pool, context, ids.enrollment, { expectedLifecycleVersion: '2', expectedRegistrationVersion: '1', idempotencyKey: 'activation-happy-path-001' }); }
   catch (error) { keyConflict = error instanceof EnrollmentActivationError && error.code === 'IDEMPOTENCY_CONFLICT'; }
   assert(keyConflict, 'Same idempotency key with a different request fingerprint must fail closed.');
+
+  const rollback = await seedValidatedEnrollment('Rollback');
+  await pool.query(`CREATE FUNCTION activation_event_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.event_type = 'enrollment_activated' THEN RAISE EXCEPTION 'injected activation event failure'; END IF; RETURN NEW; END $$`);
+  await pool.query('CREATE TRIGGER activation_event_failure_trigger BEFORE INSERT ON enrollment_events FOR EACH ROW EXECUTE FUNCTION activation_event_failure()');
+  let rollbackRejected = false;
+  try { await activateEnrollment(pool, context, rollback.enrollment, { expectedLifecycleVersion: '1', expectedRegistrationVersion: '1', idempotencyKey: 'activation-rollback-001' }); }
+  catch { rollbackRejected = true; }
+  assert(rollbackRejected, 'Injected post-profile failure must reject activation.');
+  await pool.query('DROP TRIGGER activation_event_failure_trigger ON enrollment_events');
+  const rollbackState = await pool.query<{ enrollment_status: string; profile_status: string; events: string; ledger: string }>(
+    `SELECT e.status AS enrollment_status, sp.status AS profile_status,
+            (SELECT count(*)::text FROM enrollment_events ev WHERE ev.enrollment_application_id=e.id AND ev.event_type='enrollment_activated') AS events,
+            (SELECT count(*)::text FROM enrollment_activation_commands ac WHERE ac.enrollment_application_id=e.id) AS ledger
+       FROM enrollment_applications e JOIN student_profiles sp ON sp.institution_id=e.institution_id AND sp.person_id=e.student_person_id WHERE e.id=$1`, [rollback.enrollment],
+  );
+  assert(rollbackState.rows[0].enrollment_status === 'validated' && rollbackState.rows[0].profile_status === 'inactive' && rollbackState.rows[0].events === '0' && rollbackState.rows[0].ledger === '0', 'Activation failure must rollback Enrollment, StudentProfile, event and ledger completely.');
+
+  const concurrent = await seedValidatedEnrollment('Concurrent');
+  const results = await Promise.allSettled([
+    activateEnrollment(pool, context, concurrent.enrollment, { expectedLifecycleVersion: '1', expectedRegistrationVersion: '1', idempotencyKey: 'activation-concurrent-a-001' }),
+    activateEnrollment(pool, context, concurrent.enrollment, { expectedLifecycleVersion: '1', expectedRegistrationVersion: '1', idempotencyKey: 'activation-concurrent-b-001' }),
+  ]);
+  assert(results.filter((result) => result.status === 'fulfilled').length === 1, 'Exactly one concurrent activation must win.');
+  const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+  assert(rejected?.reason instanceof EnrollmentActivationError && rejected.reason.code === 'STALE_VERSION', 'Concurrent losing activation must receive STALE_VERSION.');
+  const concurrentState = await pool.query<{ enrollment_status: string; profile_status: string; events: string; ledger: string }>(
+    `SELECT e.status AS enrollment_status, sp.status AS profile_status,
+            (SELECT count(*)::text FROM enrollment_events ev WHERE ev.enrollment_application_id=e.id AND ev.event_type='enrollment_activated') AS events,
+            (SELECT count(*)::text FROM enrollment_activation_commands ac WHERE ac.enrollment_application_id=e.id) AS ledger
+       FROM enrollment_applications e JOIN student_profiles sp ON sp.institution_id=e.institution_id AND sp.person_id=e.student_person_id WHERE e.id=$1`, [concurrent.enrollment],
+  );
+  assert(concurrentState.rows[0].enrollment_status === 'active' && concurrentState.rows[0].profile_status === 'active' && concurrentState.rows[0].events === '1' && concurrentState.rows[0].ledger === '1', 'Concurrent activation must leave exactly one authoritative active state and side effect.');
 
   console.log(`[ENROLLMENT-ACTIVATION-POSTGRES] passed (${assertions} assertions).`);
 } finally {

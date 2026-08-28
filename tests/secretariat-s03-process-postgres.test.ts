@@ -95,8 +95,15 @@ try {
   catch (error) { inactiveAssigneeRejected = error instanceof EnrollmentProcessApiError && error.code === 'INVALID_ASSIGNEE'; }
   assert(inactiveAssigneeRejected, 'Inactive Membership must not receive Enrollment process work.');
 
+  const progressBeforeAssignment = await pool.query<{ last_progress_at: string }>('SELECT last_progress_at::text FROM enrollment_processes WHERE enrollment_application_id=$1', [intake.enrollmentApplicationId]);
+  await pool.query('SELECT pg_sleep(0.01)');
   const assigned = await assignEnrollmentProcess(pool as any, contextA, intake.enrollmentApplicationId, { assignedToPersonId: ids.assigneeA, expectedVersion: ready.version });
   assert(assigned.assigned_to_person_id === ids.assigneeA && assigned.version === ready.version + 1, 'Same-institution assignment must persist with optimistic versioning.');
+  const progressAfterAssignment = await pool.query<{ last_progress_at: string }>('SELECT last_progress_at::text FROM enrollment_processes WHERE enrollment_application_id=$1', [intake.enrollmentApplicationId]);
+  assert(progressAfterAssignment.rows[0].last_progress_at > progressBeforeAssignment.rows[0].last_progress_at, 'Approved assignment is a progress event and must advance last_progress_at.');
+  await loadEnrollmentProcess(pool as any, contextA, intake.enrollmentApplicationId);
+  const progressAfterRead = await pool.query<{ last_progress_at: string }>('SELECT last_progress_at::text FROM enrollment_processes WHERE enrollment_application_id=$1', [intake.enrollmentApplicationId]);
+  assert(progressAfterRead.rows[0].last_progress_at === progressAfterAssignment.rows[0].last_progress_at, 'Plain read must not advance last_progress_at.');
   let staleRejected = false;
   try { await assignEnrollmentProcess(pool as any, contextA, intake.enrollmentApplicationId, { assignedToPersonId: null, expectedVersion: ready.version }); }
   catch (error) { staleRejected = error instanceof EnrollmentProcessApiError && error.code === 'STALE_VERSION'; }
@@ -136,6 +143,8 @@ try {
   assert(processEvents.rows.filter((row) => row.event_type === 'process_assignment_changed').length === 1, 'Assignment must be audited exactly once after stale retry.');
   assert(processEvents.rows.filter((row) => row.event_type === 'process_reconciled').length === 0, 'Plain reads must not persist reconciliation or attribute it to a human reader.');
   await reconcileEnrollmentProcess(pool as any, contextA, intake.enrollmentApplicationId, 's03-explicit-system-reconciliation');
+  const progressAfterReconciliation = await pool.query<{ last_progress_at: string }>('SELECT last_progress_at::text FROM enrollment_processes WHERE enrollment_application_id=$1', [intake.enrollmentApplicationId]);
+  assert(progressAfterReconciliation.rows[0].last_progress_at === progressAfterAssignment.rows[0].last_progress_at, 'System reconciliation is not progress and must not advance last_progress_at.');
   const reconciliation = await pool.query<{ actor_kind: string; actor_person_id: string | null; system_cause: string | null; correlation_id: string | null }>(
     "SELECT actor_kind, actor_person_id, system_cause, correlation_id FROM enrollment_events WHERE enrollment_application_id=$1 AND event_type='process_reconciled'",
     [intake.enrollmentApplicationId],
