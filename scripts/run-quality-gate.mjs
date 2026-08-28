@@ -20,9 +20,11 @@ if (!Array.isArray(manifest.gates) || manifest.gates.length === 0) throw new Err
 const run = gate => new Promise(done => {
   const executable = gate.command?.[0];
   if (!gate.name || !Array.isArray(gate.command) || !executable) throw new Error('quality-gate gate is invalid.');
+  let settled = false;
   const child = spawn(executable, gate.command.slice(1), { cwd: process.cwd(), shell: process.platform === 'win32' && executable === 'npm', stdio: 'inherit' });
-  child.once('error', error => done({ status: 1, reason: error.message }));
-  child.once('exit', (status, signal) => done({ status: status ?? 1, reason: signal || `exit ${status}` }));
+  const finish = result => { if (settled) return; settled = true; done(result); };
+  child.once('error', error => finish({ status: 1, reason: error.message }));
+  child.once('close', (status, signal) => finish({ status: status ?? 1, reason: signal || `exit ${status}` }));
 });
 for (const gate of manifest.gates) { console.log(`quality-gate: ${gate.name}`); const result = await run(gate); if (result.status !== 0) { console.error(`quality-gate failed: ${gate.name} (${result.reason})`); process.exit(result.status || 1); } }
 console.log('quality-gate: PASS.');

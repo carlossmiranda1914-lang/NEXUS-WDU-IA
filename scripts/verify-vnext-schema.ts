@@ -1,11 +1,12 @@
 import dotenv from 'dotenv';
 import pg from 'pg';
+import { readApprovedTestTarget } from './nexus-test-db-safety.mjs';
 
 dotenv.config();
 
 const verifyTestDatabase = process.env.VERIFY_TEST_DATABASE === 'NEXUS_TEST_DATABASE';
 const databaseUrl = verifyTestDatabase
-  ? process.env.TEST_DATABASE_URL?.trim()
+  ? readApprovedTestTarget().connectionString
   : process.env.DATABASE_URL?.trim();
 if (!databaseUrl) {
   throw new Error(verifyTestDatabase
@@ -24,6 +25,9 @@ const requiredTables = [
   'people',
   'identities',
   'memberships',
+  'iam_access_intents',
+  'iam_command_ledger',
+  'iam_membership_events',
   'student_profiles',
   'guardian_relationships',
   'institution_resource_ownership',
@@ -39,7 +43,10 @@ const requiredColumns: Record<string, string[]> = {
   institutions: ['id', 'name', 'slug', 'status'],
   people: ['id', 'name'],
   identities: ['person_id', 'provider', 'provider_subject'],
-  memberships: ['person_id', 'institution_id', 'role', 'status'],
+  memberships: ['person_id', 'institution_id', 'role', 'status', 'version'],
+  iam_access_intents: ['institution_id', 'kind', 'status', 'code_hash', 'code_expires_at', 'idempotency_key', 'request_fingerprint', 'version'],
+  iam_command_ledger: ['institution_id', 'operation', 'actor_scope', 'idempotency_key', 'request_fingerprint', 'status'],
+  iam_membership_events: ['institution_id', 'actor_type', 'action', 'result', 'created_at'],
   student_profiles: ['institution_id', 'person_id', 'legacy_student_id'],
   guardian_relationships: ['institution_id', 'guardian_person_id', 'student_person_id'],
   institution_resource_ownership: ['institution_id', 'resource_type', 'resource_id'],
@@ -85,7 +92,19 @@ async function verifySchema(): Promise<void> {
       throw new Error(`Missing required columns: ${missingColumns.join(', ')}`);
     }
 
-    await client.query('ROLLBACK');
+    const activeMembershipUnique = await client.query<{ present: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM pg_index
+          WHERE indrelid = 'public.memberships'::regclass
+            AND indisunique
+            AND pg_get_expr(indpred, indrelid) LIKE '%status = ''active''%'
+       ) AS present`,
+    );
+    if (!activeMembershipUnique.rows[0]?.present) {
+      throw new Error('Missing unique partial index for active Membership per Person and Institution.');
+    }
+
+    await client.query('COMMIT');
     console.log(`Schema verification passed for ${requiredTables.length} vNext tables.`);
   } finally {
     client.release();

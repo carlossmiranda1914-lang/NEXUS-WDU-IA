@@ -20,7 +20,7 @@ const run = gate => new Promise(done => {
   const finish = result => { if (settled) return; settled = true; clearTimeout(timer); done(result); };
   const timer = setTimeout(() => { child.kill(); finish({ status: 1, reason: 'timeout' }); }, gate.timeoutMs);
   child.once('error', error => finish({ status: 1, reason: error.message }));
-  child.once('exit', (status, signal) => finish({ status: status ?? 1, reason: signal || `exit ${status}` }));
+  child.once('close', (status, signal) => finish({ status: status ?? 1, reason: signal || `exit ${status}` }));
 });
 for (const gate of manifest.gates) {
   if (Date.now() - started >= manifest.totalTimeoutMs) throw new Error('Foundation aggregate total timeout exceeded.');
