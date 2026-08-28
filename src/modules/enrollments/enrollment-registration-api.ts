@@ -439,7 +439,8 @@ export async function saveEnrollmentRegistration(
       `UPDATE enrollment_applications
               SET guardian_person_id = COALESCE($1::uuid, guardian_person_id),
               previous_school = $2, enrollment_notes = $3,
-              updated_by = $4, registration_version = registration_version + 1, updated_at = now()
+              updated_by = $4, registration_version = registration_version + 1,
+              lifecycle_version = lifecycle_version + 1, updated_at = now()
         WHERE id = $5 AND institution_id = $6`,
       [guardianPersonId, previousSchool, notes, context.personId, enrollmentId, context.institutionId],
     );

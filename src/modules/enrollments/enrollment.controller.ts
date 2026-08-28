@@ -1,4 +1,4 @@
-import { Application, Response } from 'express';
+import { Application, RequestHandler, Response } from 'express';
 import { pool } from '../../db/index.ts';
 import { requireAuth, AuthRequest } from '../../middleware/auth.ts';
 import { IdentityDecisionError } from '../people/identity-resolution-decision.ts';
@@ -20,8 +20,10 @@ import { registerEnrollmentRegistrationRoutes } from './enrollment-registration.
 import { getEnrollmentRegistrationReadiness } from './enrollment-registration-api.ts';
 import { REGISTRATION_FIELD_LABELS } from './enrollment-registration-policy.ts';
 import { registerEnrollmentProcessRoutes } from './enrollment-process.controller.ts';
+import { registerEnrollmentActivationRoutes } from './enrollment-activation.controller.ts';
 
 function reject(res: Response, status: number, error: string) { return res.status(status).json({ error }); }
+function rejectCode(res: Response, status: number, code: string, message: string) { return res.status(status).json({ code, message }); }
 
 function validUuid(value: unknown): value is string {
   return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -61,19 +63,29 @@ function rejectDomainError(res: Response, error: unknown) {
   return reject(res, 500, 'Não foi possível concluir a operação de matrícula.');
 }
 
-export function registerEnrollmentRoutes(app: Application) {
+/**
+ * Production defaults stay canonical; explicit dependencies make the identical
+ * Express router mountable against the disposable PostgreSQL schema in tests.
+ */
+export function registerEnrollmentRoutes(
+  app: Application,
+  dependencies: { pool?: typeof pool; requireAuth?: RequestHandler } = {},
+) {
+  const enrollmentPool = dependencies.pool ?? pool;
+  const enrollmentRequireAuth = dependencies.requireAuth ?? requireAuth;
   registerAcademicYearRoutes(app);
   registerEnrollmentDocumentRoutes(app);
-  registerEnrollmentRegistrationRoutes(app);
+  registerEnrollmentRegistrationRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
   registerEnrollmentProcessRoutes(app);
-  app.get('/api/enrollments', requireAuth, async (req: AuthRequest, res: Response) => {
+  registerEnrollmentActivationRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
+  app.get('/api/enrollments', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
     const status = req.query.status;
     if (status !== undefined && !isEnrollmentStatus(status)) return reject(res, 400, 'Estado de matrícula inválido.');
     const academicYearId = req.query.academicYearId;
     if (academicYearId !== undefined && !validUuid(academicYearId)) return reject(res, 400, 'Ano letivo inválido.');
     try {
-      const result = await pool.query(
+      const result = await enrollmentPool.query(
         `SELECT e.id, e.status, e.created_at, e.updated_at, student.name AS student_name,
           guardian.name AS guardian_name, offer.name AS offer_name, year.name AS academic_year_name
          FROM enrollment_applications e
@@ -91,19 +103,19 @@ export function registerEnrollmentRoutes(app: Application) {
     } catch (error) { console.error('[ENROLLMENTS] list', error); return reject(res, 500, 'Não foi possível carregar as matrículas.'); }
   });
 
-  app.post('/api/enrollments/person-resolution', requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post('/api/enrollments/person-resolution', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
     try {
       assertNoClientAuthority(req.body);
       const student = parseEnrollmentStudentInput(req.body?.student);
-      const resolution = await resolveStudentForEnrollment(pool, context, student);
+      const resolution = await resolveStudentForEnrollment(enrollmentPool, context, student);
       return res.json({ resolution });
     } catch (error) {
       return rejectDomainError(res, error);
     }
   });
 
-  app.post('/api/enrollments/identity-decisions', requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post('/api/enrollments/identity-decisions', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
     try {
       assertNoClientAuthority(req.body);
@@ -112,7 +124,7 @@ export function registerEnrollmentRoutes(app: Application) {
       if (proposedAction !== 'REUSE_PERSON' && proposedAction !== 'CREATE_PERSON') {
         return reject(res, 400, 'Ação de decisão de identidade inválida.');
       }
-      const decision = await proposeEnrollmentIdentityDecision(pool, context, {
+      const decision = await proposeEnrollmentIdentityDecision(enrollmentPool, context, {
         offerId: req.body?.offerId,
         student,
         proposedAction,
@@ -137,7 +149,7 @@ export function registerEnrollmentRoutes(app: Application) {
     }
   });
 
-  app.post('/api/enrollments/identity-decisions/:id/outcome', requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post('/api/enrollments/identity-decisions/:id/outcome', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
     try {
       assertNoClientAuthority(req.body ?? {});
@@ -145,7 +157,7 @@ export function registerEnrollmentRoutes(app: Application) {
       if (outcome !== 'approve' && outcome !== 'reject' && outcome !== 'request_more_information') {
         return reject(res, 400, 'Resultado de decisão inválido.');
       }
-      const decision = await decideEnrollmentIdentityDecision(pool, context, req.params.id, outcome);
+      const decision = await decideEnrollmentIdentityDecision(enrollmentPool, context, req.params.id, outcome);
       return res.json({
         decision: {
           id: decision.id,
@@ -161,14 +173,14 @@ export function registerEnrollmentRoutes(app: Application) {
     }
   });
 
-  app.post('/api/enrollments/intake', requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post('/api/enrollments/intake', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
     try {
       assertNoClientAuthority(req.body);
       const student = parseEnrollmentStudentInput(req.body?.student);
       const idempotencyKeyHeader = req.header('Idempotency-Key');
       if (!idempotencyKeyHeader) return reject(res, 400, 'Idempotency-Key é obrigatório para iniciar a matrícula.');
-      const result = await startEnrollmentIntake(pool, context, {
+      const result = await startEnrollmentIntake(enrollmentPool, context, {
         offerId: req.body?.offerId,
         student,
         idempotencyKey: idempotencyKeyHeader,
@@ -189,21 +201,24 @@ export function registerEnrollmentRoutes(app: Application) {
 
   // Legacy write paths are intentionally closed. They previously created Person
   // directly or trusted a browser-supplied global Person UUID, bypassing 08B.1.
-  app.post('/api/enrollments/drafts', requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post('/api/enrollments/drafts', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
     return reject(res, 410, 'Fluxo antigo de rascunho desativado. Utilize o intake de matrícula com resolução de identidade.');
   });
 
-  app.post('/api/enrollments', requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post('/api/enrollments', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
     return reject(res, 410, 'Fluxo antigo de matrícula desativado. Utilize /api/enrollments/intake.');
   });
 
-  app.post('/api/enrollments/:id/transitions', requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post('/api/enrollments/:id/transitions', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
     if (!validUuid(req.params.id) || !isEnrollmentStatus(req.body?.toStatus)) return reject(res, 400, 'Pedido de transição inválido.');
     const target = req.body.toStatus as EnrollmentStatus;
-    const client = await pool.connect();
+    if (target === 'active') {
+      return rejectCode(res, 409, 'ACTIVE_REQUIRES_CANONICAL_ACTIVATION', 'A ativação exige a operação canónica de matrícula.');
+    }
+    const client = await enrollmentPool.connect();
     try {
       await client.query('BEGIN');
       const existing = await client.query<{ status: EnrollmentStatus; document_policy_id: string | null }>(
@@ -267,4 +282,5 @@ export function registerEnrollmentRoutes(app: Application) {
       res.json({ enrollment: updated.rows[0] });
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   });
+
 }

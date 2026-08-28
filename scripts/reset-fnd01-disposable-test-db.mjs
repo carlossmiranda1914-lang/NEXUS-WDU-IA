@@ -6,10 +6,10 @@ import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts
 import { readApprovedTestTarget, verifyApprovedTestConnection } from './nexus-test-db-safety.mjs';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(directory, '../.env.test.local'), override: true, quiet: true });
+dotenv.config({ path: path.resolve(directory, '../.env.test.local'), override: false, quiet: true });
 
 const { target, connectionString } = readApprovedTestTarget();
-if (target.database !== 'nexus_fnd01_test' || target.host !== 'localhost' || target.port !== '54329') {
+if (target.database !== 'nexus_fnd01_test' || target.host !== '127.0.0.1' || target.port !== '54329') {
   throw new Error('Refusing reset outside the approved disposable FND-01 target.');
 }
 if (process.env.TEST_DATABASE_CONFIRMATION !== 'NEXUS_TEST_DATABASE') {

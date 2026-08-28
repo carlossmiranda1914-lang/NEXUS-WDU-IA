@@ -206,3 +206,7 @@ On 2026-08-28, the reviewed integration sequence was merged into `main` without 
 The resulting baseline contains canonical IAM membership authority, the Firebase Auth CSP connectivity contract, and ENROLLMENT-01 registration version authority, stale-write protection, national-ID Person Resolution, factual audit and PostgreSQL/HTTP evidence. PR #79 remains only as the historical recovery reference until its separately recorded equivalence proof is closed as superseded; it is not an integration source for future work.
 
 No next feature mission is implied by this integration. The next roadmap tranche still requires an explicit Mission Pack and authorization.
+
+## 16. ENROLLMENT-02 canonical activation authority
+
+On 2026-08-28, ENROLLMENT-02 completed on `codex/enrollment-02-process-authority-activation`. `Enrollment.active` is a downstream-consumable fact produced only by canonical `ActivateEnrollment`: institution-scoped authorization, version checks, idempotency ledger, atomic Enrollment + StudentProfile activation and factual event/audit in one PostgreSQL transaction. The generic transition route rejects `active`; assignment, reconciliation audit truth and progress semantics have executable evidence. The authoritative quality gate completed `exit=0` with `quality-gate: PASS`. No subsequent mission is authorized implicitly.
