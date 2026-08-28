@@ -7,7 +7,7 @@ const transitions: Record<EnrollmentStatus, EnrollmentStatus[]> = {
   draft: ['under_review', 'cancelled'],
   under_review: ['awaiting_documents', 'validated', 'blocked', 'cancelled'],
   awaiting_documents: ['under_review', 'blocked', 'cancelled'],
-  validated: ['active', 'blocked', 'cancelled'],
+  validated: ['blocked', 'cancelled'],
   blocked: ['under_review', 'cancelled'],
   active: ['cancelled'],
   cancelled: [],
@@ -24,7 +24,6 @@ export function canConfigureEnrollment(role: InstitutionalRole): boolean {
 
 export function canTransitionEnrollment(role: InstitutionalRole, from: EnrollmentStatus, to: EnrollmentStatus): boolean {
   if (!canManageEnrollment(role) || !transitions[from].includes(to)) return false;
-  if (to === 'active') return role === 'institution_admin' || role === 'director';
   return true;
 }
 
