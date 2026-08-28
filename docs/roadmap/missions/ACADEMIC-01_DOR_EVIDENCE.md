@@ -1,6 +1,6 @@
 # ACADEMIC-01 — Definition of Ready Evidence
 
-**Estado:** READY — ACADEMIC-01.
+**Estado:** DONE — ACADEMIC-01 (DoR preserved; execution evidence closed in `ACADEMIC-01.md`).
 
 | Fonte factual | Resultado |
 | --- | --- |
@@ -25,4 +25,4 @@
 
 Aggregate boundaries, temporal authority, teacher eligibility, optimistic concurrency, tenant isolation, migration approach, AC01–AC12, test matrix e downstream contract estão definidos. A migration 0022 é autorizável apenas na implementação TDD posterior; nenhuma migration/schema/API foi criada nesta preparação.
 
-**READY — ACADEMIC-01.**
+**DONE — ACADEMIC-01.**

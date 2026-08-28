@@ -1,6 +1,6 @@
 # ACADEMIC-01 — Canonical Temporal Academic Structure & Teacher Assignment
 
-**Estado:** READY — ACADEMIC-01.
+**Estado:** DONE — ACADEMIC-01.
 
 ## Objetivo
 
@@ -73,3 +73,14 @@ Attendance, Assessment/grades, timetable engine, Student 360, Finance, object st
 Attendance e Assessment poderão autorizar docentes somente por TeacherAssignment ativa; Student 360 poderá ler placements, class/subject e histórico sem criar writes; Finance não recebe authority académica. Nenhum consumidor pode criar `Enrollment.active` ou assignment por tabela/JSON legado.
 
 **READY — ACADEMIC-01.**
+
+## Closeout evidence
+
+| AC | requisito exato | teste/comando | resultado | evidência |
+| --- | --- | --- | --- | --- |
+| AC01–02 | estrutura e temporalidade institution-scoped | migration + class/subject PostgreSQL/HTTP | PASS | `0022`, `academic-temporal-migration-postgres.test.ts` |
+| AC03–09 | assignment versionada, auditável, temporal, replacement/history | TeacherAssignment PostgreSQL/HTTP | PASS | `teacher-assignment-*.test.ts` |
+| AC10–11 | placement exige handoff ativo e separa current/historical | Placement PostgreSQL/HTTP | PASS | `student-academic-placement-*.test.ts` |
+| AC12 | audit factual sem payload PII | audit trigger rollback contracts | PASS | PostgreSQL placement/assignment tests |
+
+Final validation executes migration isolation, target PostgreSQL/HTTP regressions, lint, build, secret scan, diff and the repository quality gate. No Attendance, Assessment, Student 360, Finance or ACADEMIC-02 scope was introduced.
