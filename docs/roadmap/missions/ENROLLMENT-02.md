@@ -71,7 +71,7 @@ Dentro de uma única transação PostgreSQL, por ordem estável:
 4. carregar `enrollment_applications` por `id + institution_id FOR UPDATE`; ausência é `NOT_FOUND` seguro;
 5. confirmar `status = validated`, `expectedLifecycleVersion` e `expectedRegistrationVersion` antes de qualquer mutação;
 6. carregar/lockar `student_profiles` por `institution_id + student_person_id FOR UPDATE`; tem de existir e estar num estado ativável;
-7. revalidar os invariantes de readiness atuais no mesmo client: registration completa, policy documental capturada e documentos obrigatórios verificados, academic year/oferta existentes e consistentes com a instituição; 
+7. revalidar os invariantes de readiness atuais no mesmo client: registration completa, policy documental capturada e documentos obrigatórios verificados, academic year/oferta existentes e consistentes com a instituição;
 8. marcar a Enrollment `active`, incrementar lifecycle version e preservar a version de registration; marcar StudentProfile `active` na mesma transação;
 9. gravar event/audit factual `enrollment_activated` sem PII, o ledger concluído e, se a arquitetura de outbox existente for a autoridade aplicável, um único handoff event durável para consumidores downstream;
 10. `COMMIT`.
