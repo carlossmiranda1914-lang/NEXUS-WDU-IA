@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { readApprovedTestTarget } from '../scripts/nexus-test-db-safety.mjs';
-import { bootstrapInstitutionAdmin, changeMembershipRole, grantInstitutionAccess, revokeInstitutionAccess } from '../src/modules/iam/iam-command-service.ts';
+import { activatePendingInstitutionAccess, bootstrapInstitutionAdmin, changeMembershipRole, grantInstitutionAccess, revokeInstitutionAccess } from '../src/modules/iam/iam-command-service.ts';
 import type { InstitutionalContext } from '../src/auth/institutional-context.ts';
 import type { IamCommandPool, IamTransactionClient } from '../src/modules/iam/iam-command-types.ts';
 
@@ -88,7 +88,7 @@ try {
   const pendingIntentMembership = randomUUID(), pendingIntent = randomUUID();
   await setupClient.query(`INSERT INTO memberships (id, person_id, institution_id, role, status) VALUES ($1, $2, $3, 'student', 'pending')`, [pendingIntentMembership, pendingIntentPerson, institutionA]);
   await setupClient.query(`INSERT INTO iam_access_intents (id, institution_id, kind, status, authorized_person_id, code_hash, code_issued_at, code_expires_at, idempotency_scope, idempotency_key, request_fingerprint) VALUES ($1, $2, 'access_request', 'approved', $3, $4, now(), now() + interval '72 hours', 'intent-scope-pending', 'intent-key-pending', $5)`, [pendingIntent, institutionA, pendingIntentPerson, 'e'.repeat(64), 'f'.repeat(64)]);
-  const pendingActivated = await grantInstitutionAccess(commands, { context: adminContext, target: { personId: pendingIntentPerson }, membershipId: pendingIntentMembership, expectedVersion: 1, role: 'teacher', accessIntentId: pendingIntent, idempotencyKey: 'cp3-pending-intent-ok' });
+  const pendingActivated = await activatePendingInstitutionAccess(commands, { context: adminContext, pendingMembershipId: pendingIntentMembership, expectedVersion: 1, role: 'teacher', idempotencyKey: 'cp3-pending-intent-ok' });
   assert.equal(pendingActivated.status, 'active', 'Pending Membership must activate only with a compatible locked Intent.');
 
   const invalidIntent = randomUUID();

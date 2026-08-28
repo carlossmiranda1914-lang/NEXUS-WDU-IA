@@ -1,7 +1,7 @@
 import type { InstitutionalRole } from '../../auth/institutional-context.ts';
 import { recordIamEvent } from './iam-audit.ts';
 import { commandFingerprint, grantDecision, IAM_ACTIVATABLE_PENDING_INTENT_STATES, requireInstitutionAdmin, safeRejectionCode, validateExactlyOneTarget, validateExpectedVersion, validateIdempotencyKey, validateRole } from './iam-policy.ts';
-import { lockActiveAdmins, lockActiveInstitution, lockIntent, lockMembership, lockMembershipForPerson, resolveTargetPerson, type MembershipRow } from './iam-command-repository.ts';
+import { lockActiveAdmins, lockActiveInstitution, lockIntent, lockMembership, lockMembershipForPerson, resolvePendingGrantContext, resolveTargetPerson, type MembershipRow } from './iam-command-repository.ts';
 import type { BootstrapInstitutionAdminInput, ChangeMembershipRoleInput, GrantInstitutionAccessInput, IamCommandError, IamCommandPool, IamCommandResult, IamEventAction, IamOperation, IamResultCode, IamTransactionClient, RevokeInstitutionAccessInput } from './iam-command-types.ts';
 import { IamCommandError as CommandError } from './iam-command-types.ts';
 
@@ -136,6 +136,33 @@ export async function grantInstitutionAccess(pool: IamCommandPool, input: GrantI
     await recordIamEvent(client, { institutionId: base.institutionId, membershipId: membership.id, accessIntentId: input.accessIntentId, actor: { type: 'person', personId: base.actorPersonId! }, action: 'IAM_MEMBERSHIP_ACTIVATED', previousStatus: membership.status === 'active' ? (input.membershipId ? 'pending' : null) : membership.status, newStatus: 'active', result: 'succeeded', requestId: input.requestId, correlationId: input.correlationId });
     return { ...asResult(membership, 'SUCCEEDED', false), accessIntentId: input.accessIntentId };
   });
+}
+
+export type ActivatePendingInstitutionAccessInput = Pick<GrantInstitutionAccessInput, 'context' | 'role' | 'expectedVersion' | 'idempotencyKey' | 'requestId' | 'correlationId'> & { pendingMembershipId: string };
+export async function activatePendingInstitutionAccess(pool: IamCommandPool, input: ActivatePendingInstitutionAccessInput): Promise<IamCommandResult> {
+  try { requireInstitutionAdmin(input.context.role); validateExpectedVersion(input.expectedVersion); }
+  catch (error) { throw normalizeError(error); }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await lockActiveInstitution(client, input.context.institutionId);
+    const resolved = await resolvePendingGrantContext(client, input.context.institutionId, input.pendingMembershipId, input.expectedVersion);
+    await client.query('COMMIT');
+    return await grantInstitutionAccess(pool, {
+      context: input.context,
+      target: resolved.target,
+      membershipId: resolved.membershipId,
+      accessIntentId: resolved.accessIntentId,
+      role: input.role,
+      expectedVersion: input.expectedVersion,
+      idempotencyKey: input.idempotencyKey,
+      requestId: input.requestId,
+      correlationId: input.correlationId,
+    });
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw normalizeError(error);
+  } finally { client.release(); }
 }
 
 export async function changeMembershipRole(pool: IamCommandPool, input: ChangeMembershipRoleInput): Promise<IamCommandResult> {

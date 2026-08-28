@@ -190,3 +190,7 @@ Update this file only when one of these materially changes:
 - release/readiness state.
 
 Use commits, PRs, mission evidence and archive documents for chronology rather than appending daily logs.
+
+## 14. Firebase Auth CSP operational evidence
+
+On 2026-08-27, the production Helmet CSP was verified with an explicit least-privilege `connect-src` allowlist for Firebase Authentication: `identitytoolkit.googleapis.com` and `securetoken.googleapis.com`, plus same-origin Nexus traffic. The policy remains active in production and does not permit a wildcard destination. This is an authentication-connectivity contract only; it does not grant institutional authorization or alter IAM authority.

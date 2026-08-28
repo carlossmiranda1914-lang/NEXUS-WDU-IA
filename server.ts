@@ -30,6 +30,7 @@ import { SchoolTaskWebSocketManager } from './src/modules/school-tasks/websocket
 import { eventBus } from './src/modules/school-tasks/event-bus.ts';
 import { registerSchoolTaskRealtimeBridge } from './src/modules/school-tasks/realtime-bridge.ts';
 import { describeRequestForAudit, outcomeForStatus, shouldAuditRequest } from './src/observability/request-audit.ts';
+import { productionContentSecurityPolicy } from './src/security/production-content-security-policy.ts';
 
 
 let wssInstance: WebSocketServer | null = null;
@@ -157,7 +158,9 @@ async function startServer() {
   // development. The production CSP remains enabled; only the development
   // server disables this policy so the local app can render.
   app.use(helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+    contentSecurityPolicy: process.env.NODE_ENV === 'production'
+      ? productionContentSecurityPolicy
+      : false,
   }));
   app.use(cors({
     origin: process.env.NODE_ENV === 'production' 
