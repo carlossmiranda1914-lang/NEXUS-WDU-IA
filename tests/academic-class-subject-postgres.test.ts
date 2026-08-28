@@ -21,5 +21,6 @@ try {
  const closed=await closeAcademicClass(pool as any,context,{id:klass.id,expectedVersion:1}); assert.equal(closed.version,'2');
  await assert.rejects(()=>closeAcademicClass(pool as any,context,{id:klass.id,expectedVersion:1}),(e:unknown)=>e instanceof AcademicStructureError&&e.code==='STALE_VERSION');
  const history=await pool.query<{status:string;version:string}>('SELECT status,version FROM academic_classes WHERE id=$1 AND institution_id=$2',[klass.id,a]); assert.deepEqual(history.rows[0],{status:'closed',version:'2'});
+ const audit=await pool.query<{metadata:unknown}>("SELECT metadata FROM academic_events WHERE institution_id=$1 ORDER BY created_at",[a]); assert.equal(audit.rows.length,4); assert.deepEqual(audit.rows[0].metadata,{});
  console.log('[ACADEMIC-01-CLASS-SUBJECT] temporal tenant authority: PASS.');
 } finally { await pool.query('DELETE FROM institutions WHERE id=ANY($1)',[[a,b]]).catch(()=>undefined); await pool.end(); }
