@@ -11,7 +11,7 @@ expect(canManageEnrollment('secretariat'), 'Secretaria deve poder gerir matrícu
 expect(!canManageEnrollment('student'), 'Aluno não pode gerir matrículas.');
 expect(canTransitionEnrollment('secretariat', 'draft', 'under_review'), 'Secretaria deve submeter rascunho para análise.');
 expect(!canTransitionEnrollment('secretariat', 'validated', 'active'), 'Secretaria não pode ativar matrícula.');
-expect(canTransitionEnrollment('director', 'validated', 'active'), 'Direção deve poder ativar matrícula validada.');
+expect(!canTransitionEnrollment('director', 'validated', 'active'), 'Direção deve ativar apenas pelo comando canónico, nunca por transição genérica.');
 expect(!canTransitionEnrollment('teacher', 'under_review', 'validated'), 'Professor não pode validar matrícula.');
 expect(!canTransitionEnrollment('director', 'cancelled', 'draft'), 'Matrícula cancelada não pode ser reaberta por transição implícita.');
 expect(isEnrollmentStatus('awaiting_documents'), 'Estado válido deve ser reconhecido.');
