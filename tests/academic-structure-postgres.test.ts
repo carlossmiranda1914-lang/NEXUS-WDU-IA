@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { readApprovedTestTarget } from '../scripts/nexus-test-db-safety.mjs';
-import { createAcademicProgram, createAcademicLevel, AcademicStructureError } from '../src/modules/academic/academic-structure-api.ts';
+import { createAcademicProgram, createAcademicLevel, retireAcademicProgram, AcademicStructureError } from '../src/modules/academic/academic-structure-api.ts';
 
 const { connectionString } = readApprovedTestTarget(); const pool = new pg.Pool({ connectionString });
 const a=randomUUID(), b=randomUUID(), actor=randomUUID(), year=randomUUID();
@@ -15,5 +15,7 @@ try {
  const level=await createAcademicLevel(pool as any,context,{programId:program.id,code:'10',name:'10.º'}); assert.equal(level.programId,program.id);
  await assert.rejects(()=>createAcademicProgram(pool as any,context,{code:'GEN',name:'Duplicado'}),(e:unknown)=>e instanceof AcademicStructureError&&e.code==='CONFLICT');
  await assert.rejects(()=>createAcademicLevel(pool as any,{...context,institutionId:b},{programId:program.id,code:'10',name:'Externo'}),(e:unknown)=>e instanceof AcademicStructureError&&e.code==='NOT_FOUND');
+ const retired=await retireAcademicProgram(pool as any,context,{id:program.id,expectedVersion:1}); assert.equal(retired.version,'2');
+ await assert.rejects(()=>retireAcademicProgram(pool as any,context,{id:program.id,expectedVersion:1}),(e:unknown)=>e instanceof AcademicStructureError&&e.code==='CONFLICT');
  console.log('[ACADEMIC-01-STRUCTURE] program/level tenant authority: PASS.');
 } finally { await pool.query('DELETE FROM institutions WHERE id=ANY($1)',[[a,b]]).catch(()=>undefined); await pool.end(); }

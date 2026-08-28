@@ -1,5 +1,6 @@
 -- ACADEMIC-01: additive temporal Academic Core authority. AcademicYear remains
 -- the existing canonical authority; legacy teachers/classes JSON is untouched.
+ALTER TABLE academic_years ADD COLUMN version BIGINT NOT NULL DEFAULT 1 CHECK (version > 0);
 CREATE TABLE academic_programs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(), institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE RESTRICT,
   code TEXT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','retired')),

@@ -12,3 +12,7 @@ export async function createAcademicLevel(pool:Pool, context:InstitutionalContex
  const p=await pool.query('SELECT id FROM academic_programs WHERE id=$1 AND institution_id=$2 AND status=\'active\'',[programId,context.institutionId]); if(!p.rowCount) throw new AcademicStructureError('NOT_FOUND','Programa académico não encontrado.');
  try { const r=await pool.query<{id:string;program_id:string;code:string;name:string;version:string}>("INSERT INTO academic_levels(institution_id,program_id,code,name) VALUES($1,$2,$3,$4) RETURNING id,program_id,code,name,version",[context.institutionId,programId,code,name]); return {id:r.rows[0].id,programId:r.rows[0].program_id,code:r.rows[0].code,name:r.rows[0].name,version:r.rows[0].version}; } catch { throw new AcademicStructureError('CONFLICT','Já existe um nível com este código neste programa.'); }
 }
+export async function retireAcademicProgram(pool:Pool, context:InstitutionalContext,input:{id:unknown;expectedVersion:unknown}) {
+ const id=text(input.id,36), version=Number(input.expectedVersion); if(!id||!Number.isInteger(version)||version<1) throw new AcademicStructureError('INVALID_INPUT','Versão académica inválida.');
+ const r=await pool.query<{version:string}>("UPDATE academic_programs SET status='retired',version=version+1,updated_at=now() WHERE id=$1 AND institution_id=$2 AND version=$3 AND status='active' RETURNING version",[id,context.institutionId,version]); if(!r.rowCount) throw new AcademicStructureError('CONFLICT','O programa foi alterado entretanto.'); return {version:r.rows[0].version};
+}
