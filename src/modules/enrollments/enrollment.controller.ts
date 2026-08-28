@@ -20,7 +20,7 @@ import { registerEnrollmentRegistrationRoutes } from './enrollment-registration.
 import { getEnrollmentRegistrationReadiness } from './enrollment-registration-api.ts';
 import { REGISTRATION_FIELD_LABELS } from './enrollment-registration-policy.ts';
 import { registerEnrollmentProcessRoutes } from './enrollment-process.controller.ts';
-import { activateEnrollment, EnrollmentActivationError } from './enrollment-activation-api.ts';
+import { registerEnrollmentActivationRoutes } from './enrollment-activation.controller.ts';
 
 function reject(res: Response, status: number, error: string) { return res.status(status).json({ error }); }
 function rejectCode(res: Response, status: number, code: string, message: string) { return res.status(status).json({ code, message }); }
@@ -59,14 +59,6 @@ function rejectDomainError(res: Response, error: unknown) {
     if (error.code === 'DECISION_CASE_CONFLICT' || error.code === 'DECISION_ALREADY_FINAL') return reject(res, 409, error.message);
     return reject(res, 400, error.message);
   }
-  if (error instanceof EnrollmentActivationError) {
-    if (error.code === 'NOT_FOUND') return rejectCode(res, 404, error.code, error.message);
-    if (error.code === 'FORBIDDEN') return rejectCode(res, 403, error.code, error.message);
-    if (error.code === 'STALE_VERSION' || error.code === 'INVALID_STATE' || error.code === 'ACTIVATION_NOT_READY' || error.code === 'IDEMPOTENCY_CONFLICT' || error.code === 'ALREADY_ACTIVE') {
-      return rejectCode(res, 409, error.code, error.message);
-    }
-    return rejectCode(res, 400, error.code, error.message);
-  }
   console.error('[ENROLLMENTS] unhandled domain error', error);
   return reject(res, 500, 'Não foi possível concluir a operação de matrícula.');
 }
@@ -76,6 +68,7 @@ export function registerEnrollmentRoutes(app: Application) {
   registerEnrollmentDocumentRoutes(app);
   registerEnrollmentRegistrationRoutes(app);
   registerEnrollmentProcessRoutes(app);
+  registerEnrollmentActivationRoutes(app);
   app.get('/api/enrollments', requireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
     const status = req.query.status;
@@ -281,19 +274,4 @@ export function registerEnrollmentRoutes(app: Application) {
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   });
 
-  app.post('/api/enrollments/:id/activate', requireAuth, async (req: AuthRequest, res: Response) => {
-    const context = enrollmentActor(req, res); if (!context) return;
-    try {
-      const key = req.header('Idempotency-Key');
-      const result = await activateEnrollment(pool, context, req.params.id, {
-        expectedLifecycleVersion: req.body?.expectedLifecycleVersion,
-        expectedRegistrationVersion: req.body?.expectedRegistrationVersion,
-        idempotencyKey: key,
-        correlationId: typeof req.headers['x-correlation-id'] === 'string' ? req.headers['x-correlation-id'] : null,
-      });
-      return res.status(result.replayed ? 200 : 201).json({ activation: result });
-    } catch (error) {
-      return rejectDomainError(res, error);
-    }
-  });
 }
