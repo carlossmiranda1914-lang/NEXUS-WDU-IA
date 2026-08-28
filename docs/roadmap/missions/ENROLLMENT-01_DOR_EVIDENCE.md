@@ -49,3 +49,11 @@ O planeamento e readiness estão completos. Até este commit de documentação, 
 - Person Resolution/access, intake, intake API, identity decisions, S03 PostgreSQL e FND-03 tenant/context PASS.
 - Lint, build, secret scan e `git diff --check` PASS.
 - Build residuals: bundle >500 kB e direct `eval` em `server.ts`; ambos preexistentes e não introduzidos por ENROLLMENT-01.
+
+### Quality gate autoritativo final — 2026-08-28
+
+- Comando: `TEST_DATABASE_LOCAL_AUTHORIZED=true npm run quality-gate`, executado por wrapper local temporário com stdout/stderr redirecionados e exit code gravado após o processo filho terminar.
+- Resultado: `exit=0`; conclusão agregada `quality-gate: PASS`; `postgres-foundation: PASS`; `committed-diff: PASS`; artifact/secret scan PASS (402 ficheiros tracked/staged).
+- O CP4 FND-01 passou com o ledger canónico `0001–0020`. A correção mínima `ca6106c` apenas atualiza a expectativa histórica de 18 para 20, mantendo os controlos de ordenação, checksum, rollback e ledger.
+- As duas tentativas anteriores foram recusas de precondição do harness (`TEST_DATABASE_LOCAL_AUTHORIZED=true` não chegou ao processo filho); não são regressões do produto. A tentativa seguinte revelou a expectativa CP4 obsoleta, corrigida e comprovada isoladamente antes deste run autoritativo.
+- Os avisos/erros PostgreSQL de `changed_by` no stderr são os negative paths intencionais do CP4; o próprio subgate terminou PASS.
