@@ -194,3 +194,15 @@ Use commits, PRs, mission evidence and archive documents for chronology rather t
 ## 14. Firebase Auth CSP operational evidence
 
 On 2026-08-27, the production Helmet CSP was verified with an explicit least-privilege `connect-src` allowlist for Firebase Authentication: `identitytoolkit.googleapis.com` and `securetoken.googleapis.com`, plus same-origin Nexus traffic. The policy remains active in production and does not permit a wildcard destination. This is an authentication-connectivity contract only; it does not grant institutional authorization or alter IAM authority.
+
+## 15. IAM / Auth / ENROLLMENT-01 integration baseline
+
+On 2026-08-28, the reviewed integration sequence was merged into `main` without history rewrite:
+
+- PR #78 — IAM recovery baseline — merge `516daab4cd703a294e4db4f47551aeb74d39f4f3`;
+- PR #80 — Institutional Access Center, pending activation and AUTH-CSP — merge `91deb51304d485aefbf22fc36373c347e4adf3d4`;
+- PR #81 — ENROLLMENT-01 identity-mutation safety — merge `6eceff36dcc829b48abae62ce4244f0ffc4339b1`.
+
+The resulting baseline contains canonical IAM membership authority, the Firebase Auth CSP connectivity contract, and ENROLLMENT-01 registration version authority, stale-write protection, national-ID Person Resolution, factual audit and PostgreSQL/HTTP evidence. PR #79 remains only as the historical recovery reference until its separately recorded equivalence proof is closed as superseded; it is not an integration source for future work.
+
+No next feature mission is implied by this integration. The next roadmap tranche still requires an explicit Mission Pack and authorization.
