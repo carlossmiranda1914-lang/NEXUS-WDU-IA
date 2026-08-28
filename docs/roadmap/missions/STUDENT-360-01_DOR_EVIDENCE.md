@@ -63,3 +63,15 @@ No external dependency is required to begin implementation of the bounded read-o
 | Security and non-mutation | Same Objective 1 operational test continues to prove tenant fail-closed, role denial, HTTP 401/403 and no writes | PASS |
 
 **Objective 2 GREEN — Current Student Context Proven.**
+
+## Objective 3 execution evidence
+
+| Invariant | Executed proof | Result |
+| --- | --- | --- |
+| Current/history separation | Fixture creates current 2026 context plus ended 2025 and 2024 placements; `current` contains only 2026 and `history` contains only the earlier periods | PASS |
+| Deterministic temporal history | Enrollment and placement history order by AcademicYear start date descending, then canonical record timestamps/IDs | PASS |
+| Historical structure fidelity | Each historical placement is read through its authoritative AcademicYear, Class, Program and Level; no current state is inferred into history | PASS |
+| Honest absence | Active StudentProfile with no enrollment/placement returns `current` nulls and empty `history` arrays | PASS |
+| Security/read-only/HTTP | Same isolated PostgreSQL test proves tenant fail-closed, teacher denial, HTTP 200/401/403, PII minimization and no authority mutation/event | PASS |
+
+**Objective 3 GREEN — Historical Student Context Proven.**
