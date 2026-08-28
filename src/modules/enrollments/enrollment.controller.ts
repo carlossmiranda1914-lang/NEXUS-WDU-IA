@@ -21,6 +21,7 @@ import { getEnrollmentRegistrationReadiness } from './enrollment-registration-ap
 import { REGISTRATION_FIELD_LABELS } from './enrollment-registration-policy.ts';
 import { registerEnrollmentProcessRoutes } from './enrollment-process.controller.ts';
 import { registerEnrollmentActivationRoutes } from './enrollment-activation.controller.ts';
+import { registerAcademicStructureRoutes } from '../academic/academic-structure.controller.ts';
 
 function reject(res: Response, status: number, error: string) { return res.status(status).json({ error }); }
 function rejectCode(res: Response, status: number, code: string, message: string) { return res.status(status).json({ code, message }); }
@@ -74,6 +75,7 @@ export function registerEnrollmentRoutes(
   const enrollmentPool = dependencies.pool ?? pool;
   const enrollmentRequireAuth = dependencies.requireAuth ?? requireAuth;
   registerAcademicYearRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
+  registerAcademicStructureRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
   registerEnrollmentDocumentRoutes(app);
   registerEnrollmentRegistrationRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
   registerEnrollmentProcessRoutes(app);
