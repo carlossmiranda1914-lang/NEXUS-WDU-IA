@@ -35,6 +35,11 @@ CREATE TABLE academic_subject_offerings (
 CREATE TABLE teacher_assignments (
  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), institution_id UUID NOT NULL, academic_year_id UUID NOT NULL, class_id UUID NOT NULL, subject_offering_id UUID NOT NULL, teacher_person_id UUID NOT NULL REFERENCES people(id), effective_from DATE NOT NULL, effective_to DATE, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('planned','active','replaced','ended')), version BIGINT NOT NULL DEFAULT 1 CHECK(version>0), created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), CHECK(effective_to IS NULL OR effective_to>=effective_from), UNIQUE(institution_id,id), FOREIGN KEY(institution_id,academic_year_id) REFERENCES academic_years(institution_id,id), FOREIGN KEY(institution_id,class_id) REFERENCES academic_classes(institution_id,id), FOREIGN KEY(institution_id,subject_offering_id) REFERENCES academic_subject_offerings(institution_id,id)
 );
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+ALTER TABLE teacher_assignments ADD CONSTRAINT teacher_assignments_no_overlapping_slot
+  EXCLUDE USING gist (institution_id WITH =, subject_offering_id WITH =,
+    daterange(effective_from, COALESCE(effective_to, 'infinity'::date), '[]') WITH &&)
+  WHERE (status IN ('planned', 'active'));
 CREATE UNIQUE INDEX teacher_assignments_one_open_slot ON teacher_assignments(institution_id,subject_offering_id) WHERE status='active' AND effective_to IS NULL;
 ALTER TABLE student_profiles ADD CONSTRAINT student_profiles_institution_id_person_id_unique UNIQUE(institution_id,person_id);
 CREATE TABLE student_academic_placements (
