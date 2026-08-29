@@ -87,3 +87,16 @@ No external dependency is required to begin implementation of the bounded read-o
 | Read purity | Pre/post PostgreSQL snapshot covers events, all StudentProfile/Enrollment/Placement timestamps and schema-table count, proving no mutation or materialization | PASS |
 
 **Objective 4 GREEN — Privacy and Unavailable-Domain Truth Proven.**
+
+## Objective 5 execution evidence
+
+| Invariant | Executed proof | Result |
+| --- | --- | --- |
+| Operational HTTP chain | Isolated real HTTP test covers current, history, unavailable domains, real `requireAuth`, InstitutionalContext and PostgreSQL source reads | PASS |
+| Read-model coherence | Current 2026 enrollment/placement/class/program/level/subjects and older 2025/2024 history are asserted separately | PASS |
+| Fixed query shape / N+1 fence | Counting executor asserts exactly three source queries for admin projection, independent of the number of historical records | PASS |
+| Source-read indexes | Migration `0023_student_context_read_indexes.sql` provides tenant/student temporal indexes for Enrollment and Placement history filters | PASS |
+| Safe partial/failure behavior | No-history StudentProfile returns null current/empty history; nonexistent and cross-tenant targets return safe 404; missing membership and denied roles return 403 | PASS |
+| Read purity | Existing full snapshot proves no event, timestamp, source-authority or schema/materialization mutation | PASS |
+
+**Objective 5 GREEN — Operational Student Context Projection Proven.**
