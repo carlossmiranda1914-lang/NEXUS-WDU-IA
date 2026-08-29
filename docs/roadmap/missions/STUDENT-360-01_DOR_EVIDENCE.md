@@ -1,6 +1,6 @@
 # STUDENT-360-01 — Definition of Ready Evidence
 
-**State:** READY — STUDENT-360-01  
+**State:** READY — STUDENT-360-01
 **Audited baseline:** `main @ c093fab221489e273aead35312ac8339a6e32718`
 
 | Source / authority | AS-IS fact | Projection treatment |

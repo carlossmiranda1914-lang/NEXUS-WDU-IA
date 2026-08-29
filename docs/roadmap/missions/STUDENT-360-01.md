@@ -1,7 +1,7 @@
 # STUDENT-360-01 — Authorized Student Context Projection
 
-**State:** READY — STUDENT-360-01  
-**Baseline:** `main @ c093fab221489e273aead35312ac8339a6e32718`  
+**State:** READY — STUDENT-360-01
+**Baseline:** `main @ c093fab221489e273aead35312ac8339a6e32718`
 **Dependencies:** IAM/InstitutionalContext, ENROLLMENT-01/02, ACADEMIC-01 — DONE.
 
 ## Outcome

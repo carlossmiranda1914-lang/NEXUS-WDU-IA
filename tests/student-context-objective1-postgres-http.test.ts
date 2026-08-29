@@ -49,6 +49,7 @@ try {
   await service.query("INSERT INTO student_profiles(institution_id,person_id,status) VALUES($1,$2,'active'),($1,$3,'active')", [institutionA, student, emptyStudent]);
   await service.query("INSERT INTO guardian_relationships(institution_id,guardian_person_id,student_person_id,relationship,status) VALUES($1,$2,$3,'parent','active')", [institutionA, parentA, student]);
   await service.query("INSERT INTO enrollment_applications(id,institution_id,student_person_id,academic_year_id,offer_id,status,created_by,updated_by) VALUES($1,$2,$3,$4,$5,'active',$6,$6),($7,$2,$3,$8,$9,'active',$6,$6),($10,$2,$3,$11,$12,'active',$6,$6)", [enrollment, institutionA, student, year, offer, adminA, oldEnrollment, oldYear, oldOffer, olderEnrollment, olderYear, olderOffer]);
+  await service.query("INSERT INTO enrollment_documents(institution_id,enrollment_application_id,document_type,status,verified_by,verified_at,evidence_reference) VALUES($1,$2,'Identity','verified',$3,'2026-01-15T10:00:00Z','must-not-leak')", [institutionA, enrollment, adminA]);
   const adminContext = { institutionId: institutionA, personId: adminA, membershipId: membershipA, role: 'institution_admin' as const, personName: 'Admin A', identityEmail: null, institutionName: 'A', institutionSlug: `student-context-a-${suffix}` };
   await placeStudent(service as any, adminContext, { academicYearId: year, classId: klass, studentPersonId: student, expectedVersion: 1 });
   await service.query("INSERT INTO student_academic_placements(id,institution_id,academic_year_id,class_id,student_person_id,status) VALUES($1,$2,$3,$4,$5,'ended')", [oldPlacement, institutionA, oldYear, oldClass, student]);
@@ -60,7 +61,7 @@ try {
   let projectionQueries = 0;
   const countedPool = { query: async <T>(sql: string, params?: unknown[]) => { projectionQueries += 1; return service!.query(sql, params) as any as Promise<{ rows: T[]; rowCount: number | null }>; } };
   const direct = await loadStudentContext(countedPool, adminContext, student);
-  assert.equal(projectionQueries, 3, 'admin current/history projection must use a fixed three-query shape, independent of history row count');
+  assert.equal(projectionQueries, 4, 'admin current/history/document-metadata projection must use a fixed four-query shape, independent of history row count');
   assert.deepEqual(direct.student, { displayName: 'Student Safe', status: 'active' });
   assert.deepEqual(direct.current, {
     enrollment: { status: 'active', academicYear: { name: '2026' } },
@@ -73,16 +74,21 @@ try {
       subjects: [{ code: 'MAT', name: 'Mathematics' }],
     },
   });
+  assert.deepEqual(direct.documents, { metadata: [{ type: 'Identity', status: 'verified', verifiedAt: '2026-01-15T10:00:00.000Z' }] }, 'current enrollment document metadata must be factual and safe');
   assert.deepEqual(direct.history, {
-    enrollments: [{ status: 'active', academicYear: { name: '2025' } }, { status: 'active', academicYear: { name: '2024' } }],
-    placements: [
+    enrollments: { items: [{ status: 'active', academicYear: { name: '2025' } }, { status: 'active', academicYear: { name: '2024' } }], nextOffset: null },
+    placements: { items: [
       { status: 'ended', academicYear: { name: '2025' }, class: { code: 'OLD' }, program: { code: 'GEN', name: 'General' }, level: { code: '10', name: '10' } },
       { status: 'ended', academicYear: { name: '2024' }, class: { code: 'OLDER' }, program: { code: 'GEN', name: 'General' }, level: { code: '10', name: '10' } },
-    ],
+    ], nextOffset: null },
   });
+  const firstHistoryPage = await loadStudentContext(service as any, adminContext, student, { historyLimit: 1 });
+  assert.deepEqual(firstHistoryPage.history, { enrollments: { items: [{ status: 'active', academicYear: { name: '2025' } }], nextOffset: 1 }, placements: { items: [{ status: 'ended', academicYear: { name: '2025' }, class: { code: 'OLD' }, program: { code: 'GEN', name: 'General' }, level: { code: '10', name: '10' } }], nextOffset: 1 } });
+  const secondHistoryPage = await loadStudentContext(service as any, adminContext, student, { historyLimit: 1, enrollmentOffset: 1, placementOffset: 1 });
+  assert.deepEqual(secondHistoryPage.history, { enrollments: { items: [{ status: 'active', academicYear: { name: '2024' } }], nextOffset: null }, placements: { items: [{ status: 'ended', academicYear: { name: '2024' }, class: { code: 'OLDER' }, program: { code: 'GEN', name: 'General' }, level: { code: '10', name: '10' } }], nextOffset: null } });
   const noHistory = await loadStudentContext(service as any, adminContext, emptyStudent);
   assert.deepEqual(noHistory.current, { enrollment: null, placement: null });
-  assert.deepEqual(noHistory.history, { enrollments: [], placements: [] }, 'absence of history must remain an explicit empty history, not a synthesized fact');
+  assert.deepEqual(noHistory.history, { enrollments: { items: [], nextOffset: null }, placements: { items: [], nextOffset: null } }, 'absence of history must remain an explicit empty history, not a synthesized fact');
   assert.deepEqual(direct.unavailable.finance, { status: 'not_yet_authoritative' });
   assert.deepEqual(direct.unavailable.assessment, { status: 'not_yet_authoritative' });
   assert.deepEqual((await service.query("SELECT (SELECT count(*)::text FROM academic_events) AS events, (SELECT string_agg(id::text||':'||updated_at::text,',' ORDER BY id) FROM student_profiles WHERE institution_id=$1) AS profiles, (SELECT string_agg(id::text||':'||updated_at::text,',' ORDER BY id) FROM enrollment_applications WHERE institution_id=$1 AND student_person_id=$2) AS enrollments, (SELECT string_agg(id::text||':'||updated_at::text,',' ORDER BY id) FROM student_academic_placements WHERE institution_id=$1 AND student_person_id=$2) AS placements, (SELECT count(*)::text FROM information_schema.tables WHERE table_schema=current_schema()) AS tables", [institutionA, student])).rows[0], before, 'read boundary must not write, emit events, alter current or historical authority records, or materialize a projection');
@@ -95,9 +101,11 @@ try {
   const base = `http://127.0.0.1:${(server.address() as any).port}/api/student-context/${student}`;
   const request = (token?: string, target = student) => fetch(`http://127.0.0.1:${(server.address() as any).port}/api/student-context/${target}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
   const success = await request('student-context-admin-a'); assert.equal(success.status, 200); const body = await success.json() as Record<string, unknown>; assert.deepEqual(body.current, direct.current, 'HTTP must expose the same server-authorized current projection'); assert.deepEqual(body.history, direct.history, 'HTTP must expose the same server-authorized historical projection');
+  const paginated = await fetch(`${base}?historyLimit=1`, { headers: { Authorization: 'Bearer student-context-admin-a' } }); assert.equal(paginated.status, 200); assert.deepEqual((await paginated.json() as any).history, firstHistoryPage.history, 'HTTP history query options must use the same deterministic pagination contract');
   assert.equal(JSON.stringify(body).includes(student), false, 'response must not expose internal student identifiers');
   assert.equal(JSON.stringify(body).includes(institutionA), false, 'response must not expose institution identifiers');
   assert.equal(/stack|select\s|postgres|900000004|Rua S/i.test(JSON.stringify(body)), false, 'response must minimize PII and hide implementation detail');
+  assert.equal(JSON.stringify(body).includes('must-not-leak'), false, 'response must never expose Enrollment document evidence references');
   assert.equal([adminA, teacherA, membershipA, membershipTeacher, membershipDirector, membershipSecretariat, membershipFinancial, membershipStudent, membershipParent].some((internalId) => JSON.stringify(body).includes(internalId)), false, 'response must not expose identity, membership, or other internal identifiers');
   assert.deepEqual(body.unavailable, { finance: { status: 'not_yet_authoritative' }, assessment: { status: 'not_yet_authoritative' }, attendance: { status: 'not_yet_authoritative' }, physicalDocuments: { status: 'not_yet_authoritative' } });
   assert.equal(/sem d[ií]vidas|sem faltas|sem notas|saldo|balance|physical.*available/i.test(JSON.stringify(body)), false, 'unavailable domains must not report invented operational facts');

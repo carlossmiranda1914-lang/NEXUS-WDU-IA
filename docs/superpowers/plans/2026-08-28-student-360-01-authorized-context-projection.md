@@ -1,7 +1,7 @@
 # STUDENT-360-01 — Executable TDD Plan
 
-**Mission:** `STUDENT-360-01`  
-**Baseline:** `main @ c093fab221489e273aead35312ac8339a6e32718`  
+**Mission:** `STUDENT-360-01`
+**Baseline:** `main @ c093fab221489e273aead35312ac8339a6e32718`
 **Invariant:** one tenant-safe, backend-authorized, read-only Student Context projection; no new source of truth.
 
 ## Objective 1 — Projection contract + authorization matrix
