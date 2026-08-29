@@ -1,6 +1,6 @@
 # STUDENT-360-01 — Authorized Student Context Projection
 
-**State:** READY — STUDENT-360-01
+**State:** VALIDATING — STUDENT-360-01
 **Baseline:** `main @ c093fab221489e273aead35312ac8339a6e32718`
 **Dependencies:** IAM/InstitutionalContext, ENROLLMENT-01/02, ACADEMIC-01 — DONE.
 
@@ -89,3 +89,7 @@ Stop and return to PREPARATION if a role needs information not covered by the ab
 AS-IS sources, role names, relationship policy, response sections, unavailable-domain semantics, query boundaries, ACs, no-write proof and stop rules are explicit. Finance, Assessment, Attendance and physical storage are explicitly unavailable rather than dependencies that silently broaden this mission.
 
 **READY — STUDENT-360-01**
+
+## Closeout validation
+
+The implementation remains a read-only composition boundary. It has no Student-360 table, cache, event emission or write authority. Historical enrollment and placement history uses bounded, deterministic pagination; Enrollment document output is metadata-only (`type`, `status`, `verifiedAt`) and never contains evidence references, bytes or download locations. Final aggregate quality-gate evidence is recorded in `STUDENT-360-01_DOR_EVIDENCE.md` after the validating run completes.

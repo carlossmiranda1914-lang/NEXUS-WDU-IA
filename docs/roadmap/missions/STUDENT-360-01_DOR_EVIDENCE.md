@@ -1,6 +1,6 @@
 # STUDENT-360-01 — Definition of Ready Evidence
 
-**State:** READY — STUDENT-360-01
+**State:** VALIDATING — STUDENT-360-01
 **Audited baseline:** `main @ c093fab221489e273aead35312ac8339a6e32718`
 
 | Source / authority | AS-IS fact | Projection treatment |
@@ -100,3 +100,26 @@ No external dependency is required to begin implementation of the bounded read-o
 | Read purity | Existing full snapshot proves no event, timestamp, source-authority or schema/materialization mutation | PASS |
 
 **Objective 5 GREEN — Operational Student Context Projection Proven.**
+
+## AC01–AC12 executable closeout matrix
+
+| AC | Requirement | Executable proof / command | Result | Commit |
+| --- | --- | --- | --- | --- |
+| AC01 | Same-tenant authorized PostgreSQL and HTTP response | `TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/student-context-objective1-postgres-http.test.ts` | PASS | `9e559bc`, `bd123eb` |
+| AC02 | A→B is fail-closed without PII | same isolated PostgreSQL/HTTP test | PASS | `9e559bc` |
+| AC03 | Admin/director/secretariat allow; teacher/financial deny | `npx tsx tests/student-context-policy.test.ts` and isolated PostgreSQL/HTTP test | PASS | `9e559bc`, `6d7a7c0` |
+| AC04 | Student self and active linked parent only | isolated PostgreSQL/HTTP test | PASS | `9e559bc`, `6d7a7c0` |
+| AC05 | Current Enrollment and Placement remain distinct | isolated PostgreSQL/HTTP test | PASS | `9047b1f` |
+| AC06 | Historical Enrollment/Placement are deterministic and paginated | isolated PostgreSQL/HTTP test with `historyLimit=1` and offsets | PASS | `68eb7ae`, `bd123eb` |
+| AC07 | Program/Level/Class/Subject are institution/year coherent | isolated PostgreSQL/HTTP test | PASS | `9047b1f` |
+| AC08 | Enrollment document metadata is factual and PII-minimized | isolated PostgreSQL/HTTP test asserts safe metadata and rejects `evidence_reference` | PASS | `bd123eb` |
+| AC09 | Unavailable domains express only `not_yet_authoritative` | policy and isolated PostgreSQL/HTTP tests | PASS | `6d7a7c0` |
+| AC10 | Reads do not mutate source authorities/events/schema | isolated PostgreSQL/HTTP before/after snapshot | PASS | `9e559bc`, `6d7a7c0` |
+| AC11 | HTTP requires auth and server InstitutionalContext | isolated HTTP test: 200/401/403/404 chain | PASS | `9e559bc` |
+| AC12 | Bounded query shape, indexes, pagination and no cache | isolated PostgreSQL/HTTP counting executor + `npm run test:migrations:isolated` | PASS | `62e94a0`, `bd123eb` |
+
+## Migration 0023 final validation
+
+`npm run test:migrations:isolated` applied the complete contiguous ledger `0001–0023` in an isolated PostgreSQL schema and reported 23 migrations PASS. The canonical migration runner verifies ordering, applied-ledger checksums and repeat application behavior; `0023_student_context_read_indexes.sql` contains only tenant/student temporal read indexes for Enrollment and Placement history, with no table, trigger or write-authority change. The Student-360 operational test additionally asserts both index names from PostgreSQL.
+
+The final aggregate quality-gate result is pending the validating run; no `DONE` claim is made until it records `exit=0` and `quality-gate: PASS`.

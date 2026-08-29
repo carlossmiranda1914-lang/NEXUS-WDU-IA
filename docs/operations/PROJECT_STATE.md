@@ -212,3 +212,7 @@ No next feature mission is implied by this integration. The next roadmap tranche
 ## 16. ENROLLMENT-02 canonical activation authority
 
 On 2026-08-28, ENROLLMENT-02 completed on `codex/enrollment-02-process-authority-activation`. `Enrollment.active` is a downstream-consumable fact produced only by canonical `ActivateEnrollment`: institution-scoped authorization, version checks, idempotency ledger, atomic Enrollment + StudentProfile activation and factual event/audit in one PostgreSQL transaction. The generic transition route rejects `active`; assignment, reconciliation audit truth and progress semantics have executable evidence. The authoritative quality gate completed `exit=0` with `quality-gate: PASS`. No subsequent mission is authorized implicitly.
+
+## 17. STUDENT-360-01 authorized context projection
+
+STUDENT-360-01 is in final validation on `codex/student-360-01-authorized-context-projection`. It is a server-authorized, tenant-scoped and read-only Student Context projection over existing Person, Membership/InstitutionalContext, StudentProfile, Enrollment, Academic and GuardianRelationship authorities. It has no Student-360 persistence, cache, event or write authority. The projection separates current context from deterministic paginated historical Enrollment/Placement context and exposes only safe Enrollment-document metadata; Finance, Assessment, Attendance and physical Documents remain explicitly `not_yet_authoritative`. Finance Core has not been started. Final quality-gate and PR evidence remain required before this entry can be marked DONE.
