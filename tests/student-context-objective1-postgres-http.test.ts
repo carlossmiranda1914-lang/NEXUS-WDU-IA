@@ -51,7 +51,7 @@ try {
   const studentRef = profileRefs.rows.find((profile) => profile.person_id === student)!.public_ref;
   const emptyStudentRef = profileRefs.rows.find((profile) => profile.person_id === emptyStudent)!.public_ref;
   const secondStudentRef = profileRefs.rows.find((profile) => profile.person_id === secondStudent)!.public_ref;
-  await service.query("INSERT INTO guardian_relationships(institution_id,guardian_person_id,student_person_id,relationship,status) VALUES($1,$2,$3,'parent','active')", [institutionA, parentA, student]);
+  await service.query("INSERT INTO guardian_relationships(institution_id,guardian_person_id,student_person_id,relationship,status) VALUES($1,$2,$3,'Mãe','active'),($1,$4,$3,'Tutor','inactive')", [institutionA, parentA, student, teacherA]);
   await service.query("INSERT INTO enrollment_applications(id,institution_id,student_person_id,academic_year_id,offer_id,status,created_by,updated_by) VALUES($1,$2,$3,$4,$5,'active',$6,$6),($7,$2,$3,$8,$9,'active',$6,$6),($10,$2,$3,$11,$12,'active',$6,$6),($13,$2,$14,$4,$5,'active',$6,$6),($15,$2,$14,$8,$9,'active',$6,$6)", [enrollment, institutionA, student, year, offer, adminA, oldEnrollment, oldYear, oldOffer, olderEnrollment, olderYear, olderOffer, secondEnrollment, secondStudent, secondOldEnrollment]);
   await service.query("INSERT INTO enrollment_documents(institution_id,enrollment_application_id,document_type,status,verified_by,verified_at,evidence_reference) VALUES($1,$2,'Identity','verified',$3,'2026-01-15T10:00:00Z','must-not-leak')", [institutionA, enrollment, adminA]);
   await service.query("INSERT INTO enrollment_documents(institution_id,enrollment_application_id,document_type,status) VALUES($1,$2,'Declaration','submitted')", [institutionA, secondEnrollment]);
@@ -66,7 +66,7 @@ try {
   let projectionQueries = 0;
   const countedPool = { query: async <T>(sql: string, params?: unknown[]) => { projectionQueries += 1; return service!.query(sql, params) as any as Promise<{ rows: T[]; rowCount: number | null }>; } };
   const direct = await loadStudentContext(countedPool, adminContext, studentRef);
-  assert.equal(projectionQueries, 5, 'public-ref resolution plus current/history/document-metadata projection must use a fixed five-query shape, independent of history row count');
+  assert.equal(projectionQueries, 6, 'public-ref resolution plus current/history/document-metadata/guardian projection must use a fixed six-query shape, independent of history row count');
   assert.deepEqual(direct.student, { displayName: 'Student Safe', status: 'active' });
   assert.deepEqual(direct.current, {
     enrollment: { status: 'active', academicYear: { name: '2026' } },
@@ -80,6 +80,7 @@ try {
     },
   });
   assert.deepEqual(direct.documents, { metadata: [{ type: 'Identity', status: 'verified', verifiedAt: '2026-01-15T10:00:00.000Z' }] }, 'current enrollment document metadata must be factual and safe');
+  assert.deepEqual(direct.guardians, { items: [{ name: 'Parent', relationship: 'Mãe', status: 'active' }, { name: 'Teacher A', relationship: 'Tutor', status: 'inactive' }] }, 'guardian read model must preserve multiple factual relationships without contact data');
   assert.deepEqual(direct.history, {
     enrollments: { items: [{ status: 'active', academicYear: { name: '2025' } }, { status: 'active', academicYear: { name: '2024' } }], nextOffset: null },
     placements: { items: [
@@ -93,6 +94,7 @@ try {
   assert.deepEqual(secondDirect.history.enrollments, { items: [{ status: 'active', academicYear: { name: '2025' } }], nextOffset: null });
   assert.deepEqual(secondDirect.documents, { metadata: [{ type: 'Declaration', status: 'submitted', verifiedAt: null }] }, 'student B must receive only its own authoritative document metadata');
   assert.equal(secondDirect.current.placement, null, 'partial academic context for a second student must remain an honest null rather than inherit another student placement');
+  assert.deepEqual(secondDirect.guardians, { items: [] }, 'student B must not inherit student A guardian relationships');
   assert.equal(JSON.stringify(secondDirect).includes('Student Safe'), false, 'the same projection boundary must not mix student A data into student B');
   const firstHistoryPage = await loadStudentContext(service as any, adminContext, studentRef, { historyLimit: 1 });
   assert.deepEqual(firstHistoryPage.history, { enrollments: { items: [{ status: 'active', academicYear: { name: '2025' } }], nextOffset: 1 }, placements: { items: [{ status: 'ended', academicYear: { name: '2025' }, class: { code: 'OLD' }, program: { code: 'GEN', name: 'General' }, level: { code: '10', name: '10' } }], nextOffset: 1 } });

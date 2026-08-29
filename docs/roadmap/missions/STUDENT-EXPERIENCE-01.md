@@ -23,8 +23,8 @@ Objective 1 is **ACCEPTED AS NAVIGATION FOUNDATION ONLY**: Active Students is a 
 1. **Objective 2.1 — Workspace + Resumo**: dedicated, read-only Student Record workspace with factual identity/status/current academic summary. **Human UAT accepted.**
 2. **Objective 2.2 — Percurso académico**. **Human UAT accepted.**
 3. **Objective 2.3 — Matrículas**. **Human UAT accepted.**
-4. **Objective 2.4 — Documentos**. **Currently authorised.**
-5. **Objective 2.5 — Encarregados**.
+4. **Objective 2.4 — Documentos**. **Human UAT accepted.** Physical document lifecycle remains outside this mission.
+5. **Objective 2.5 — Encarregados**. **Currently authorised.**
 6. **Objective 2.6 — hardening final / responsive / security / states**.
 
 Every objective requires Human UAT before the following objective. No future section may be presented as operational before its authoritative data and approval exist.
