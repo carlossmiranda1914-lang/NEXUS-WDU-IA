@@ -24,8 +24,8 @@ Objective 1 is **ACCEPTED AS NAVIGATION FOUNDATION ONLY**: Active Students is a 
 2. **Objective 2.2 — Percurso académico**. **Human UAT accepted.**
 3. **Objective 2.3 — Matrículas**. **Human UAT accepted.**
 4. **Objective 2.4 — Documentos**. **Human UAT accepted.** Physical document lifecycle remains outside this mission.
-5. **Objective 2.5 — Encarregados**. **Currently authorised.**
-6. **Objective 2.6 — hardening final / responsive / security / states**.
+5. **Objective 2.5 — Encarregados**. **Human UAT accepted.**
+6. **Objective 2.6 — hardening final / responsive / security / states**. **VALIDATING: automated gates green; final Human UAT required.**
 
 Every objective requires Human UAT before the following objective. No future section may be presented as operational before its authoritative data and approval exist.
 

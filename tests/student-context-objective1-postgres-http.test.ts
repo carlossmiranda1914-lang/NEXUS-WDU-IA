@@ -42,7 +42,9 @@ try {
   await service.query("INSERT INTO academic_years(id,institution_id,name,starts_on,ends_on,status) VALUES($1,$2,'2026','2026-01-01','2026-12-31','active'),($3,$2,'2025','2025-01-01','2025-12-31','closed'),($4,$2,'2024','2024-01-01','2024-12-31','closed')", [year, institutionA, oldYear, olderYear]);
   await service.query("INSERT INTO academic_programs(id,institution_id,code,name) VALUES($1,$2,'GEN','General')", [program, institutionA]);
   await service.query("INSERT INTO academic_levels(id,institution_id,program_id,code,name) VALUES($1,$2,$3,'10','10')", [level, institutionA, program]);
-  await service.query("INSERT INTO academic_classes(id,institution_id,academic_year_id,program_id,level_id,code,status) VALUES($1,$2,$3,$4,$5,'10A','active'),($6,$2,$7,$4,$5,'OLD','closed'),($8,$2,$9,$4,$5,'OLDER','closed')", [klass, institutionA, year, program, level, oldClass, oldYear, olderClass, olderYear]);
+  const secondClass = randomUUID();
+  const secondPlacement = randomUUID();
+  await service.query("INSERT INTO academic_classes(id,institution_id,academic_year_id,program_id,level_id,code,status) VALUES($1,$2,$3,$4,$5,'10A','active'),($6,$2,$7,$4,$5,'OLD','closed'),($8,$2,$9,$4,$5,'OLDER','closed'),($10,$2,$3,$4,$5,'10B','active')", [klass, institutionA, year, program, level, oldClass, oldYear, olderClass, olderYear, secondClass]);
   await service.query("INSERT INTO academic_subjects(id,institution_id,code,name,status) VALUES($1,$2,'MAT','Mathematics','active')", [subject, institutionA]);
   await service.query("INSERT INTO academic_subject_offerings(id,institution_id,academic_year_id,class_id,subject_id,status) VALUES($1,$2,$3,$4,$5,'active')", [subjectOffering, institutionA, year, klass, subject]);
   await service.query("INSERT INTO enrollment_offers(id,institution_id,academic_year_id,name,code,status) VALUES($1,$2,$3,'General','GEN','active'),($4,$2,$5,'Old','OLD','active'),($6,$2,$7,'Older','OLDER','active')", [offer, institutionA, year, oldOffer, oldYear, olderOffer, olderYear]);
@@ -57,6 +59,7 @@ try {
   await service.query("INSERT INTO enrollment_documents(institution_id,enrollment_application_id,document_type,status) VALUES($1,$2,'Declaration','submitted')", [institutionA, secondEnrollment]);
   const adminContext = { institutionId: institutionA, personId: adminA, membershipId: membershipA, role: 'institution_admin' as const, personName: 'Admin A', identityEmail: null, institutionName: 'A', institutionSlug: `student-context-a-${suffix}` };
   await placeStudent(service as any, adminContext, { academicYearId: year, classId: klass, studentPersonId: student, expectedVersion: 1 });
+  await service.query("INSERT INTO student_academic_placements(id,institution_id,academic_year_id,class_id,student_person_id,status) VALUES($1,$2,$3,$4,$5,'active')", [secondPlacement, institutionA, year, secondClass, secondStudent]);
   await service.query("INSERT INTO student_academic_placements(id,institution_id,academic_year_id,class_id,student_person_id,status) VALUES($1,$2,$3,$4,$5,'ended')", [oldPlacement, institutionA, oldYear, oldClass, student]);
   await service.query("INSERT INTO student_academic_placements(id,institution_id,academic_year_id,class_id,student_person_id,status) VALUES($1,$2,$3,$4,$5,'ended')", [olderPlacement, institutionA, olderYear, olderClass, student]);
   const readIndexes = await service.query("SELECT indexname FROM pg_indexes WHERE schemaname=current_schema() AND indexname IN ('student_context_enrollment_history_idx','student_context_placement_history_idx') ORDER BY indexname");
@@ -91,9 +94,9 @@ try {
   const secondDirect = await loadStudentContext(service as any, adminContext, secondStudentRef);
   assert.deepEqual(secondDirect.student, { displayName: 'Student Other', status: 'active' });
   assert.deepEqual(secondDirect.current.enrollment, { status: 'active', academicYear: { name: '2026' } });
+  assert.deepEqual(secondDirect.current.placement, { status: 'active', academicYear: { name: '2026' }, class: { code: '10B' }, program: { code: 'GEN', name: 'General' }, level: { code: '10', name: '10' }, subjects: [] }, 'student B must receive its own current academic context through the same projection');
   assert.deepEqual(secondDirect.history.enrollments, { items: [{ status: 'active', academicYear: { name: '2025' } }], nextOffset: null });
   assert.deepEqual(secondDirect.documents, { metadata: [{ type: 'Declaration', status: 'submitted', verifiedAt: null }] }, 'student B must receive only its own authoritative document metadata');
-  assert.equal(secondDirect.current.placement, null, 'partial academic context for a second student must remain an honest null rather than inherit another student placement');
   assert.deepEqual(secondDirect.guardians, { items: [{ name: 'Director', relationship: 'Encarregado de Educação', status: 'active' }] }, 'student B must receive only its own guardian relationship, not student A guardian data');
   assert.equal(JSON.stringify(secondDirect).includes('Student Safe'), false, 'the same projection boundary must not mix student A data into student B');
   const firstHistoryPage = await loadStudentContext(service as any, adminContext, studentRef, { historyLimit: 1 });
