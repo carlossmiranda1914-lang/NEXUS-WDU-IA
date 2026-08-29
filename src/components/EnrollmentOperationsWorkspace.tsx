@@ -140,7 +140,7 @@ function statusExplanation(status: EnrollmentOperationalStatus) {
   }
 }
 
-export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { theme?: Theme }) {
+export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenStudentRecord }: { theme?: Theme; onOpenStudentRecord: (studentRef: string) => void }) {
   const light = theme === 'light';
   const surface = light ? 'bg-white border-zinc-200' : 'bg-zinc-900 border-white/10';
   const mutedSurface = light ? 'bg-slate-50 border-zinc-200' : 'bg-zinc-950/60 border-white/5';
@@ -158,7 +158,6 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<EnrollmentOperationalStatus[] | null>(null);
   const [selected, setSelected] = useState<EnrollmentOperationalRecord | null>(null);
-  const [selectedStudentRef, setSelectedStudentRef] = useState<string | null>(null);
   const [activeStudentError, setActiveStudentError] = useState<string | null>(null);
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   const [newEntryOpen, setNewEntryOpen] = useState(false);
@@ -301,7 +300,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
             </div>
           )}
 
-          {view === 'students' && <ActiveStudentsView students={visibleStudents} error={activeStudentError} light={light} onRetry={() => void load()} onOpen={(studentRef) => setSelectedStudentRef(studentRef)} />}
+          {view === 'students' && <ActiveStudentsView students={visibleStudents} error={activeStudentError} light={light} onRetry={() => void load()} onOpen={onOpenStudentRecord} />}
 
           {view !== 'overview' && view !== 'students' && (
             <div className={`overflow-hidden rounded-2xl border ${surface}`}>
@@ -316,7 +315,6 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
       )}
 
       {selected && <ProcessDrawer record={selected} light={light} onClose={() => setSelected(null)} onTransition={async (toStatus) => { await request(`/api/enrollments/${selected.id}/transitions`, { method: 'POST', body: JSON.stringify({ toStatus }) }); setSelected((current) => current ? { ...current, status: toStatus, updated_at: new Date().toISOString() } : current); setNotice('Estado da matrícula atualizado.'); await load(); }} />}
-      {selectedStudentRef && <StudentRecordDrawer studentRef={selectedStudentRef} light={light} onClose={() => setSelectedStudentRef(null)} />}
       {newEntryOpen && <EnrollmentNewEntryDrawer offers={offers} light={light} onClose={() => setNewEntryOpen(false)} onCreated={async () => { setNewEntryOpen(false); setNotice('Processo de matrícula iniciado com segurança e adicionado à fila institucional.'); await load(); setView('enrollments'); }} />}
     </section>
   );

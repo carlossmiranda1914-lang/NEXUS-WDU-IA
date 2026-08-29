@@ -65,6 +65,7 @@ import type { SchoolDoc } from './components/SchoolDocuments';
 // Subcomponents - Lazy Loaded for Code Splitting and Bundle Optimization
 const Dashboard = lazy(() => import('./components/Dashboard'));
 const EnrollmentOperationsWorkspace = lazy(() => import('./components/EnrollmentOperationsWorkspace'));
+const StudentRecordWorkspace = lazy(() => import('./components/StudentRecordWorkspace'));
 const TeachersList = lazy(() => import('./components/TeachersList'));
 const FinancialPanel = lazy(() => import('./components/FinancialPanel'));
 const CommunicationCenter = lazy(() => import('./components/CommunicationCenter'));
@@ -384,6 +385,7 @@ export default function App() {
   const [loginStep, setLoginStep] = useState<number>(1);
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [studentRecordRef, setStudentRecordRef] = useState<string | null>(null);
   // Until the backend resolves an active Membership, the client has no institutional authority.
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('student');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
@@ -605,6 +607,15 @@ export default function App() {
       setAuthLoading(false);
     });
     return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const openStudentRecord = (event: Event) => {
+      const studentRef = (event as CustomEvent<string>).detail;
+      if (typeof studentRef === 'string' && /^stu_[A-Za-z0-9_-]{22}$/.test(studentRef)) { setStudentRecordRef(studentRef); setActiveTab('student-record'); }
+    };
+    window.addEventListener('nexus-open-student-record', openStudentRecord);
+    return () => window.removeEventListener('nexus-open-student-record', openStudentRecord);
   }, []);
 
   // Custom Event listener for granular cross-tab transitions (eg dossier -> signature)
@@ -1722,11 +1733,12 @@ export default function App() {
 
   // Auto-validate active tab on role changes to satisfy granular role isolation
   useEffect(() => {
+    if (activeTab === 'student-record' && studentRecordRef) return;
     const allowedIds = sidebarItems.map(item => item.id);
     if (!allowedIds.includes(activeTab) && allowedIds.length > 0) {
       setActiveTab(allowedIds[0]);
     }
-  }, [currentUserRole, rolePermissions]);
+  }, [activeTab, currentUserRole, rolePermissions, studentRecordRef]);
 
   if (authLoading) {
     return (
@@ -2592,7 +2604,7 @@ export default function App() {
               transition={{ duration: 0.15 }}
               className="h-full"
             >
-              {!(rolePermissions[currentUserRole] || []).includes(activeTab) ? (
+              {activeTab !== 'student-record' && !(rolePermissions[currentUserRole] || []).includes(activeTab) ? (
                 <div className={`p-10 text-center space-y-6 max-w-lg mx-auto border rounded-2xl shadow-xl mt-12 animate-fadeIn ${
                   theme === 'light' 
                     ? 'bg-white border-red-200 text-zinc-800' 
@@ -2632,8 +2644,9 @@ export default function App() {
                   )}
                   
                   {activeTab === 'students' && (
-                    <EnrollmentOperationsWorkspace theme={theme} />
+                    <EnrollmentOperationsWorkspace theme={theme} onOpenStudentRecord={(studentRef) => window.dispatchEvent(new CustomEvent('nexus-open-student-record', { detail: studentRef }))} />
                   )}
+                  {activeTab === 'student-record' && studentRecordRef && <StudentRecordWorkspace studentRef={studentRecordRef} theme={theme} onBack={() => { setStudentRecordRef(null); setActiveTab('students'); }} />}
 
                   {activeTab === 'teachers' && (
                     <>
