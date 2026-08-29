@@ -56,6 +56,7 @@ import {
 } from './supabaseClient';
 
 import { auth, googleAuthProvider } from './lib/firebase.ts';
+import { profileAccessError } from './auth/profile-access-error.ts';
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
 
 // Subcomponents - Statically Imported
@@ -938,7 +939,7 @@ export default function App() {
         } else {
           console.error('[AUTH-CLIENT] Failed to synchronize and verify PostgreSQL profile.');
           await signOut(auth);
-          setLoginError('Falha crítica de sincronização: Não foi possível obter ou persistir o perfil do utilizador no PostgreSQL.');
+          setLoginError(profileAccessError(pRes.status));
         }
       }
     } catch (err: any) {
