@@ -9,7 +9,7 @@ Restore one factual operational baseline so a new session can locate scope, boot
 
 ## Scope and invariants
 
-**IN:** state reconciliation, ACTIVE_MISSION, safe external-config linking, idempotent UAT bootstrap, documentation-only experience decision and `STUDENT-EXPERIENCE-01` preparation.  
+**IN:** state reconciliation, ACTIVE_MISSION, safe external-config linking, idempotent UAT bootstrap, documentation-only experience decision and `STUDENT-EXPERIENCE-01` preparation.
 **OUT:** Finance, Assessment, Attendance, physical Documents, Student UI implementation, new Student writers, migrations and product refactors.
 
 - Only merged `main` commits/migrations are canonical; open PRs are supporting.

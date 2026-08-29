@@ -1,7 +1,7 @@
 # STUDENT-EXPERIENCE-01 — Active Students & Student Record Workspace
 
 **State:** IMPLEMENTING
-**Dependencies:** IAM, ENROLLMENT-02, ACADEMIC-01, STUDENT-360-01 and NEXUS-RECOVERY-01 UAT bootstrap.  
+**Dependencies:** IAM, ENROLLMENT-02, ACADEMIC-01, STUDENT-360-01 and NEXUS-RECOVERY-01 UAT bootstrap.
 **Implementation:** requires separate explicit authorisation.
 
 ## Product contract
