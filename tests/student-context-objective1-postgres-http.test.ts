@@ -54,6 +54,7 @@ try {
   await service.query("INSERT INTO guardian_relationships(institution_id,guardian_person_id,student_person_id,relationship,status) VALUES($1,$2,$3,'parent','active')", [institutionA, parentA, student]);
   await service.query("INSERT INTO enrollment_applications(id,institution_id,student_person_id,academic_year_id,offer_id,status,created_by,updated_by) VALUES($1,$2,$3,$4,$5,'active',$6,$6),($7,$2,$3,$8,$9,'active',$6,$6),($10,$2,$3,$11,$12,'active',$6,$6),($13,$2,$14,$4,$5,'active',$6,$6),($15,$2,$14,$8,$9,'active',$6,$6)", [enrollment, institutionA, student, year, offer, adminA, oldEnrollment, oldYear, oldOffer, olderEnrollment, olderYear, olderOffer, secondEnrollment, secondStudent, secondOldEnrollment]);
   await service.query("INSERT INTO enrollment_documents(institution_id,enrollment_application_id,document_type,status,verified_by,verified_at,evidence_reference) VALUES($1,$2,'Identity','verified',$3,'2026-01-15T10:00:00Z','must-not-leak')", [institutionA, enrollment, adminA]);
+  await service.query("INSERT INTO enrollment_documents(institution_id,enrollment_application_id,document_type,status) VALUES($1,$2,'Declaration','submitted')", [institutionA, secondEnrollment]);
   const adminContext = { institutionId: institutionA, personId: adminA, membershipId: membershipA, role: 'institution_admin' as const, personName: 'Admin A', identityEmail: null, institutionName: 'A', institutionSlug: `student-context-a-${suffix}` };
   await placeStudent(service as any, adminContext, { academicYearId: year, classId: klass, studentPersonId: student, expectedVersion: 1 });
   await service.query("INSERT INTO student_academic_placements(id,institution_id,academic_year_id,class_id,student_person_id,status) VALUES($1,$2,$3,$4,$5,'ended')", [oldPlacement, institutionA, oldYear, oldClass, student]);
@@ -90,6 +91,7 @@ try {
   assert.deepEqual(secondDirect.student, { displayName: 'Student Other', status: 'active' });
   assert.deepEqual(secondDirect.current.enrollment, { status: 'active', academicYear: { name: '2026' } });
   assert.deepEqual(secondDirect.history.enrollments, { items: [{ status: 'active', academicYear: { name: '2025' } }], nextOffset: null });
+  assert.deepEqual(secondDirect.documents, { metadata: [{ type: 'Declaration', status: 'submitted', verifiedAt: null }] }, 'student B must receive only its own authoritative document metadata');
   assert.equal(secondDirect.current.placement, null, 'partial academic context for a second student must remain an honest null rather than inherit another student placement');
   assert.equal(JSON.stringify(secondDirect).includes('Student Safe'), false, 'the same projection boundary must not mix student A data into student B');
   const firstHistoryPage = await loadStudentContext(service as any, adminContext, studentRef, { historyLimit: 1 });
@@ -112,6 +114,7 @@ try {
   const request = (token?: string, target = studentRef) => fetch(`http://127.0.0.1:${(server.address() as any).port}/api/student-context/${target}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
   const success = await request('student-context-admin-a'); assert.equal(success.status, 200); const body = await success.json() as Record<string, unknown>; assert.deepEqual(body.current, direct.current, 'HTTP must expose the same server-authorized current projection'); assert.deepEqual(body.history, direct.history, 'HTTP must expose the same server-authorized historical projection');
   const secondSuccess = await request('student-context-admin-a', secondStudentRef); assert.equal(secondSuccess.status, 200); const secondBody = await secondSuccess.json() as Record<string, unknown>; assert.deepEqual(secondBody.current, secondDirect.current, 'the same HTTP endpoint must expose student B current data without frontend-specific constants'); assert.deepEqual(secondBody.history, secondDirect.history, 'the same HTTP endpoint must expose student B history without mixing student A');
+  assert.deepEqual((secondBody as any).documents, secondDirect.documents, 'the same HTTP endpoint must expose student B document metadata without mixing student A');
   const paginated = await fetch(`${base}?historyLimit=1`, { headers: { Authorization: 'Bearer student-context-admin-a' } }); assert.equal(paginated.status, 200); assert.deepEqual((await paginated.json() as any).history, firstHistoryPage.history, 'HTTP history query options must use the same deterministic pagination contract');
   assert.equal(JSON.stringify(body).includes(student), false, 'response must not expose internal student identifiers');
   assert.equal(JSON.stringify(body).includes(institutionA), false, 'response must not expose institution identifiers');

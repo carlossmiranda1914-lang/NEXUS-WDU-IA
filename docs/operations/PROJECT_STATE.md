@@ -31,4 +31,4 @@ Run `npm run uat:bootstrap` from a named branch. It links ignored external local
 
 `STUDENT-EXPERIENCE-01` Objective 1 is accepted as the navigation foundation: Active Students is separate from Enrollment processes, resolves one active StudentProfile per person through server-owned context and opens via opaque `studentRef`. It is not the final student-record UX.
 
-Objectives 2.1 — Dedicated Student Record Workspace + Resumo —, 2.2 — Percurso académico — and 2.3 — Matrículas — have passed their Human UAT gates. No later `STUDENT-EXPERIENCE-01` objective is authorised. Finance is not authorised.
+Objectives 2.1 — Dedicated Student Record Workspace + Resumo —, 2.2 — Percurso académico — and 2.3 — Matrículas — have passed their Human UAT gates. Execute only the explicitly authorised `STUDENT-EXPERIENCE-01` Objective 2.4 — Documentos — on `codex/student-experience-01-active-students`. Finance is not authorised.
