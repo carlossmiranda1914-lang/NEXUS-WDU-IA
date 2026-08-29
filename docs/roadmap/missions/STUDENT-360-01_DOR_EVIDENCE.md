@@ -1,6 +1,6 @@
 # STUDENT-360-01 — Definition of Ready Evidence
 
-**State:** VALIDATING — STUDENT-360-01
+**State:** DONE — STUDENT-360-01
 **Audited baseline:** `main @ c093fab221489e273aead35312ac8339a6e32718`
 
 | Source / authority | AS-IS fact | Projection treatment |
@@ -122,4 +122,6 @@ No external dependency is required to begin implementation of the bounded read-o
 
 `npm run test:migrations:isolated` applied the complete contiguous ledger `0001–0023` in an isolated PostgreSQL schema and reported 23 migrations PASS. The canonical migration runner verifies ordering, applied-ledger checksums and repeat application behavior; `0023_student_context_read_indexes.sql` contains only tenant/student temporal read indexes for Enrollment and Placement history, with no table, trigger or write-authority change. The Student-360 operational test additionally asserts both index names from PostgreSQL.
 
-The final aggregate quality-gate result is pending the validating run; no `DONE` claim is made until it records `exit=0` and `quality-gate: PASS`.
+The final aggregate quality gate was executed on the closeout head and recorded `quality_gate_exit=0` and `quality-gate: PASS`. It included the secret scan, IAM/foundation and enrolled-domain regressions, PostgreSQL bootstrap/isolation/ledger rollback, S03 process reconciliation, committed-diff and artifact scan. No AC relies on inspection alone.
+
+**DONE — STUDENT-360-01 AUTHORIZED STUDENT CONTEXT PROJECTION PROVEN.**

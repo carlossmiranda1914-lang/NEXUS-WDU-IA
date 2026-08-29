@@ -1,6 +1,6 @@
 # STUDENT-360-01 — Authorized Student Context Projection
 
-**State:** VALIDATING — STUDENT-360-01
+**State:** DONE — STUDENT-360-01
 **Baseline:** `main @ c093fab221489e273aead35312ac8339a6e32718`
 **Dependencies:** IAM/InstitutionalContext, ENROLLMENT-01/02, ACADEMIC-01 — DONE.
 
@@ -92,4 +92,6 @@ AS-IS sources, role names, relationship policy, response sections, unavailable-d
 
 ## Closeout validation
 
-The implementation remains a read-only composition boundary. It has no Student-360 table, cache, event emission or write authority. Historical enrollment and placement history uses bounded, deterministic pagination; Enrollment document output is metadata-only (`type`, `status`, `verifiedAt`) and never contains evidence references, bytes or download locations. Final aggregate quality-gate evidence is recorded in `STUDENT-360-01_DOR_EVIDENCE.md` after the validating run completes.
+The implementation remains a read-only composition boundary. It has no Student-360 table, cache, event emission or write authority. Historical enrollment and placement history uses bounded, deterministic pagination; Enrollment document output is metadata-only (`type`, `status`, `verifiedAt`) and never contains evidence references, bytes or download locations. The final aggregate gate recorded `exit=0` and `quality-gate: PASS`; the executable evidence is in `STUDENT-360-01_DOR_EVIDENCE.md`.
+
+**DONE — STUDENT-360-01 AUTHORIZED STUDENT CONTEXT PROJECTION PROVEN.**
