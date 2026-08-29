@@ -20,9 +20,9 @@ Objective 1 is **ACCEPTED AS NAVIGATION FOUNDATION ONLY**: Active Students is a 
 
 **Target surface:** **DEDICATED STUDENT RECORD WORKSPACE**.
 
-1. **Objective 2.1 — Workspace + Resumo**: dedicated, read-only Student Record workspace with factual identity/status/current academic summary.
-2. **Objective 2.2 — Percurso académico**.
-3. **Objective 2.3 — Matrículas**.
+1. **Objective 2.1 — Workspace + Resumo**: dedicated, read-only Student Record workspace with factual identity/status/current academic summary. **Human UAT accepted.**
+2. **Objective 2.2 — Percurso académico**. **Human UAT accepted.**
+3. **Objective 2.3 — Matrículas**. **Currently authorised.**
 4. **Objective 2.4 — Documentos**.
 5. **Objective 2.5 — Encarregados**.
 6. **Objective 2.6 — hardening final / responsive / security / states**.
