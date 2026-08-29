@@ -24,6 +24,11 @@ async function ensureStudentFixture(pool: pg.Pool, institutionId: string, adminI
     const classCodes = ['10A','10A-2025','10A-2024']; const classes: string[] = [];
     for (let i=0;i<years.length;i++) { const result=await client.query<{id:string}>(`INSERT INTO academic_classes(institution_id,academic_year_id,program_id,level_id,code,status) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(institution_id,academic_year_id,program_id,level_id,code) DO UPDATE SET status=EXCLUDED.status RETURNING id`, [institutionId,years[i],program.rows[0].id,level.rows[0].id,classCodes[i],i===0?'active':'closed']); classes.push(result.rows[0].id); }
     for (let i=0;i<years.length;i++) { const offer=await client.query<{id:string}>(`INSERT INTO enrollment_offers(institution_id,academic_year_id,name,code,status) VALUES($1,$2,$3,$4,'active') ON CONFLICT(institution_id,code) DO UPDATE SET status='active' RETURNING id`, [institutionId,years[i],`Matrícula ${2026-i}`,`ENS-G-${2026-i}`]); await client.query(`INSERT INTO enrollment_applications(institution_id,student_person_id,academic_year_id,offer_id,status,created_by,updated_by) VALUES($1,$2,$3,$4,'active',$5,$5) ON CONFLICT DO NOTHING`, [institutionId,studentId,years[i],offer.rows[0].id,adminId]); }
+    await client.query(`INSERT INTO enrollment_documents(institution_id,enrollment_application_id,document_type,status,verified_by,verified_at)
+      SELECT e.institution_id,e.id,'Bilhete de Identidade','verified',$3,'2026-01-15T10:00:00Z'
+      FROM enrollment_applications e JOIN academic_years y ON y.id=e.academic_year_id AND y.institution_id=e.institution_id
+      WHERE e.institution_id=$1 AND e.student_person_id=$2 AND e.status='active' AND y.status='active'
+      ON CONFLICT(enrollment_application_id,document_type) DO NOTHING`, [institutionId,studentId,adminId]);
     const subject=await client.query<{id:string}>(`INSERT INTO academic_subjects(institution_id,code,name,status) VALUES($1,'MAT','Matemática','active') ON CONFLICT(institution_id,code) DO UPDATE SET status='active' RETURNING id`, [institutionId]);
     await client.query(`INSERT INTO academic_subject_offerings(institution_id,academic_year_id,class_id,subject_id,status) VALUES($1,$2,$3,$4,'active') ON CONFLICT(institution_id,academic_year_id,class_id,subject_id) DO NOTHING`, [institutionId,years[0],classes[0],subject.rows[0].id]);
     for (let i=0;i<years.length;i++) { await client.query(`INSERT INTO student_academic_placements(institution_id,academic_year_id,class_id,student_person_id,status) SELECT $1,$2,$3,$4,$5 WHERE NOT EXISTS(SELECT 1 FROM student_academic_placements WHERE institution_id=$1 AND academic_year_id=$2 AND student_person_id=$4)`, [institutionId,years[i],classes[i],studentId,i===0?'active':'ended']); }
@@ -54,16 +59,17 @@ async function main() {
     );
     if (admin.rowCount !== 1) throw new Error('Configured UAT administrative identity must resolve to exactly one active institution_admin Membership in the canonical local institution.');
     await ensureStudentFixture(pool, admin.rows[0].institution_id, admin.rows[0].person_id);
-    const fixture = await pool.query<{ active_profile: boolean; active_enrollment: boolean; active_placement: boolean; history_count: string; separate_from_admin: boolean }>(
+    const fixture = await pool.query<{ active_profile: boolean; active_enrollment: boolean; active_placement: boolean; document_metadata: boolean; history_count: string; separate_from_admin: boolean }>(
       `SELECT EXISTS(SELECT 1 FROM student_profiles sp WHERE sp.institution_id=$1 AND sp.student_number=$2 AND sp.status='active') AS active_profile,
        EXISTS(SELECT 1 FROM enrollment_applications e JOIN student_profiles sp ON sp.person_id=e.student_person_id AND sp.institution_id=e.institution_id JOIN academic_years y ON y.id=e.academic_year_id AND y.institution_id=e.institution_id WHERE e.institution_id=$1 AND sp.student_number=$2 AND e.status='active' AND y.status='active') AS active_enrollment,
        EXISTS(SELECT 1 FROM student_academic_placements pl JOIN student_profiles sp ON sp.person_id=pl.student_person_id AND sp.institution_id=pl.institution_id JOIN academic_years y ON y.id=pl.academic_year_id AND y.institution_id=pl.institution_id WHERE pl.institution_id=$1 AND sp.student_number=$2 AND pl.status='active' AND y.status='active') AS active_placement,
+       EXISTS(SELECT 1 FROM enrollment_documents d JOIN enrollment_applications e ON e.id=d.enrollment_application_id AND e.institution_id=d.institution_id JOIN student_profiles sp ON sp.person_id=e.student_person_id AND sp.institution_id=e.institution_id JOIN academic_years y ON y.id=e.academic_year_id AND y.institution_id=e.institution_id WHERE d.institution_id=$1 AND sp.student_number=$2 AND e.status='active' AND y.status='active') AS document_metadata,
        (SELECT count(*) FROM student_academic_placements pl JOIN student_profiles sp ON sp.person_id=pl.student_person_id AND sp.institution_id=pl.institution_id JOIN academic_years y ON y.id=pl.academic_year_id AND y.institution_id=pl.institution_id WHERE pl.institution_id=$1 AND sp.student_number=$2 AND NOT(pl.status='active' AND y.status='active')) AS history_count,
        EXISTS(SELECT 1 FROM student_profiles sp WHERE sp.institution_id=$1 AND sp.student_number=$2 AND sp.person_id <> $3) AS separate_from_admin`,
       [admin.rows[0].institution_id, UAT_STUDENT_NUMBER, admin.rows[0].person_id],
     );
     const row = fixture.rows[0];
-    if (!row?.active_profile || !row.active_enrollment || !row.active_placement || !row.separate_from_admin || Number(row.history_count) < 1) {
+    if (!row?.active_profile || !row.active_enrollment || !row.active_placement || !row.document_metadata || !row.separate_from_admin || Number(row.history_count) < 1) {
       throw new Error('The canonical Student fixture is missing. Restore it through the approved UAT fixture procedure; bootstrap never invents a browser or legacy Student authority.');
     }
     console.log(JSON.stringify({ target: 'approved-local-postgres', migrations: 'verified', firebaseIdentity: 'canonical', institutionalContext: 'active', studentFixture: 'current-and-history-ready' }));
