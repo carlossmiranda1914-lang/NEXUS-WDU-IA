@@ -24,7 +24,7 @@ expect(!source.includes('institutionId:'), 'Browser must not supply institution 
 expect(!source.includes('studentPersonId:'), 'Browser must not supply global Person authority.');
 expect(source.includes('Ainda não disponível'), 'Unavailable pipeline domains must remain explicit in product language and never be simulated.');
 expect(!source.includes('Domínio ainda não persistido'), 'Technical backend wording must not leak into the user-facing pipeline.');
-expect(source.includes('Um aluno aparece aqui depois de a matrícula estar ativa.'), 'Empty active-student view must explain that only activated enrollments appear.');
+expect(source.includes('Os alunos ativos aparecem aqui quando o respetivo perfil institucional está ativo.'), 'Empty active-student view must describe the authoritative StudentProfile condition.');
 expect(source.includes('exclusivamente pelos processos institucionais persistidos'), 'Workspace empty states must continue to reject demonstrative records.');
 
 expect(app.includes("const EnrollmentOperationsWorkspace = lazy(() => import('./components/EnrollmentOperationsWorkspace'));"), 'App shell must load the vNext enrollment workspace.');

@@ -22,6 +22,7 @@ import { REGISTRATION_FIELD_LABELS } from './enrollment-registration-policy.ts';
 import { registerEnrollmentProcessRoutes } from './enrollment-process.controller.ts';
 import { registerEnrollmentActivationRoutes } from './enrollment-activation.controller.ts';
 import { registerAcademicStructureRoutes } from '../academic/academic-structure.controller.ts';
+import { ActiveStudentsError, loadActiveStudents } from '../student-context/active-students-api.ts';
 
 function reject(res: Response, status: number, error: string) { return res.status(status).json({ error }); }
 function rejectCode(res: Response, status: number, code: string, message: string) { return res.status(status).json({ code, message }); }
@@ -80,6 +81,17 @@ export function registerEnrollmentRoutes(
   registerEnrollmentRegistrationRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
   registerEnrollmentProcessRoutes(app);
   registerEnrollmentActivationRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
+  app.get('/api/active-students', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
+    const context = req.institutionalContext;
+    if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+    try {
+      return res.json(await loadActiveStudents(enrollmentPool as any, context));
+    } catch (error) {
+      if (error instanceof ActiveStudentsError) return reject(res, 403, 'O seu papel não pode consultar alunos ativos.');
+      console.error('[ACTIVE-STUDENTS] list', error);
+      return reject(res, 500, 'Não foi possível carregar os alunos ativos.');
+    }
+  });
   app.get('/api/enrollments', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
     const status = req.query.status;
