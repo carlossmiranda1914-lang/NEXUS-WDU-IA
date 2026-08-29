@@ -68,7 +68,16 @@ type ActiveStudent = {
 };
 type StudentRecordContext = {
   student: { displayName: string; status: string };
-  current: ActiveStudent['current'];
+  current: {
+    enrollment: { status: string; academicYear: { name: string } } | null;
+    placement: {
+      status: string;
+      academicYear: { name: string };
+      class: { code: string };
+      program: { code: string; name: string | null };
+      level: { code: string; name: string | null };
+    } | null;
+  };
 };
 
 const PIPELINE_CONTEXT: Record<string, PipelineContext> = {
@@ -348,7 +357,9 @@ function StudentRecordDrawer({ studentRef, light, onClose }: { studentRef: strin
   useEffect(() => { void loadRecord(); }, [loadRecord]);
   const text = light ? 'text-zinc-900' : 'text-white';
   const muted = light ? 'text-zinc-500' : 'text-zinc-400';
-  return <div className="fixed inset-0 z-[12000] flex justify-end bg-black/40" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className={`h-full w-full max-w-xl overflow-y-auto border-l p-4 shadow-2xl sm:p-6 ${light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-900'}`} aria-label="Registo do Aluno"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-600">Registo do Aluno</p><h2 className={`mt-1 text-xl font-bold ${text}`}>{context?.student.displayName || 'A carregar registo…'}</h2></div><button type="button" aria-label="Fechar registo do aluno" onClick={onClose} className={`min-h-11 min-w-11 rounded-lg p-2 ${light ? 'hover:bg-zinc-100' : 'hover:bg-white/5'}`}><X className="h-5 w-5" /></button></div>{loading && <div className={`mt-6 flex min-h-40 items-center justify-center gap-2 rounded-2xl border ${light ? 'border-zinc-200 bg-slate-50 text-zinc-500' : 'border-white/10 bg-zinc-950/60 text-zinc-400'}`}><LoaderCircle className="h-4 w-4 animate-spin" /> A carregar contexto atual…</div>}{error && <div role="alert" className="mt-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-500"><strong>Não foi possível abrir o registo.</strong><p className="mt-1">{error}</p><button type="button" onClick={() => void loadRecord()} className="mt-3 underline">Tentar novamente</button></div>}{context && !loading && <section className={`mt-6 rounded-2xl border p-4 ${light ? 'border-zinc-200 bg-slate-50' : 'border-white/10 bg-zinc-950/60'}`}><h3 className={`font-semibold ${text}`}>Contexto atual</h3><dl className={`mt-4 grid gap-3 text-sm ${muted}`}><div><dt className="text-xs">Ano letivo</dt><dd className={`mt-1 font-medium ${text}`}>{context.current?.academicYear?.name || 'Ainda não definido'}</dd></div><div><dt className="text-xs">Turma</dt><dd className={`mt-1 font-medium ${text}`}>{context.current?.class?.code || 'Ainda não definida'}</dd></div><div><dt className="text-xs">Programa e nível</dt><dd className={`mt-1 font-medium ${text}`}>{[context.current?.program?.name, context.current?.level?.name].filter(Boolean).join(' · ') || 'Ainda não definidos'}</dd></div></dl></section>}</aside></div>;
+  const current = context?.current.placement;
+  const currentYear = current?.academicYear ?? context?.current.enrollment?.academicYear;
+  return <div className="fixed inset-0 z-[12000] flex justify-end bg-black/40" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className={`h-full w-full max-w-xl overflow-y-auto border-l p-4 shadow-2xl sm:p-6 ${light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-900'}`} aria-label="Registo do Aluno"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-600">Registo do Aluno</p><h2 className={`mt-1 text-xl font-bold ${text}`}>{context?.student.displayName || 'A carregar registo…'}</h2></div><button type="button" aria-label="Fechar registo do aluno" onClick={onClose} className={`min-h-11 min-w-11 rounded-lg p-2 ${light ? 'hover:bg-zinc-100' : 'hover:bg-white/5'}`}><X className="h-5 w-5" /></button></div>{loading && <div className={`mt-6 flex min-h-40 items-center justify-center gap-2 rounded-2xl border ${light ? 'border-zinc-200 bg-slate-50 text-zinc-500' : 'border-white/10 bg-zinc-950/60 text-zinc-400'}`}><LoaderCircle className="h-4 w-4 animate-spin" /> A carregar contexto atual…</div>}{error && <div role="alert" className="mt-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-500"><strong>Não foi possível abrir o registo.</strong><p className="mt-1">{error}</p><button type="button" onClick={() => void loadRecord()} className="mt-3 underline">Tentar novamente</button></div>}{context && !loading && <section className={`mt-6 rounded-2xl border p-4 ${light ? 'border-zinc-200 bg-slate-50' : 'border-white/10 bg-zinc-950/60'}`}><h3 className={`font-semibold ${text}`}>Contexto atual</h3><dl className={`mt-4 grid gap-3 text-sm ${muted}`}><div><dt className="text-xs">Ano letivo</dt><dd className={`mt-1 font-medium ${text}`}>{currentYear?.name || 'Ainda não definido'}</dd></div><div><dt className="text-xs">Turma</dt><dd className={`mt-1 font-medium ${text}`}>{current?.class?.code || 'Ainda não definida'}</dd></div><div><dt className="text-xs">Programa e nível</dt><dd className={`mt-1 font-medium ${text}`}>{[current?.program?.name, current?.level?.name].filter(Boolean).join(' · ') || 'Ainda não definidos'}</dd></div></dl></section>}</aside></div>;
 }
 
 function ProcessRow({ record, light, onOpen }: { record: EnrollmentOperationalRecord; light: boolean; onOpen: () => void }) {
