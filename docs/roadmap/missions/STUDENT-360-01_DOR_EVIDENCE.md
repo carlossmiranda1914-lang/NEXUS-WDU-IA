@@ -75,3 +75,15 @@ No external dependency is required to begin implementation of the bounded read-o
 | Security/read-only/HTTP | Same isolated PostgreSQL test proves tenant fail-closed, teacher denial, HTTP 200/401/403, PII minimization and no authority mutation/event | PASS |
 
 **Objective 3 GREEN — Historical Student Context Proven.**
+
+## Objective 4 execution evidence
+
+| Invariant | Executed proof | Result |
+| --- | --- | --- |
+| Unavailable-domain truth | HTTP and policy assertions require Finance, Assessment, Attendance and physical Documents to be exactly `not_yet_authoritative`; assertions reject invented balance/absence/success claims | PASS |
+| Complete real-role matrix | PostgreSQL/HTTP exercises `institution_admin`, `director`, `secretariat`, `student` self and linked `parent` as allowed; `teacher`, `financial` and unlinked parent as denied | PASS |
+| No invented aliases | Policy explicitly rejects non-role labels `guardian` and `finance`; actual roles remain `parent` and `financial` | PASS |
+| Tenant/privacy hardening | Tenant B receives non-disclosing 404; assertions reject internal person, membership, institution and provider-related identifiers plus contact/address/SQL/stack detail | PASS |
+| Read purity | Pre/post PostgreSQL snapshot covers events, all StudentProfile/Enrollment/Placement timestamps and schema-table count, proving no mutation or materialization | PASS |
+
+**Objective 4 GREEN — Privacy and Unavailable-Domain Truth Proven.**
