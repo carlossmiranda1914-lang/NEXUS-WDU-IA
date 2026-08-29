@@ -1,6 +1,6 @@
 # STUDENT-EXPERIENCE-01 — Active Students & Student Record Workspace
 
-**State:** READY  
+**State:** IMPLEMENTING  
 **Dependencies:** IAM, ENROLLMENT-02, ACADEMIC-01, STUDENT-360-01 and NEXUS-RECOVERY-01 UAT bootstrap.  
 **Implementation:** requires separate explicit authorisation.
 
@@ -13,6 +13,21 @@ One person appears once in Active Students with name, state, current class/level
 Reuse authorised Student Context, StudentProfile, Enrollment, AcademicYear, Program/Level, Class, StudentAcademicPlacement, GuardianRelationship and safe document metadata. Create no Student writer/aggregate, browser-owned Institution, localStorage authority, Finance/Assessment/Attendance/physical-document fact or duplicated join.
 
 Sections: **Resumo**, **Percurso académico**, **Matrículas**, **Documentos**, **Encarregados**; future areas appear only when authoritative, otherwise explicitly unavailable.
+
+## Execution sequence
+
+Objective 1 is **ACCEPTED AS NAVIGATION FOUNDATION ONLY**: Active Students is a server-owned, one-person list and its primary action uses the opaque `studentRef`. The existing `StudentRecordDrawer` is **TRANSITIONAL / QUICK PREVIEW ONLY** and is not the final Registo do Aluno.
+
+**Target surface:** **DEDICATED STUDENT RECORD WORKSPACE**.
+
+1. **Objective 2.1 — Workspace + Resumo**: dedicated, read-only Student Record workspace with factual identity/status/current academic summary.
+2. **Objective 2.2 — Percurso académico**.
+3. **Objective 2.3 — Matrículas**.
+4. **Objective 2.4 — Documentos**.
+5. **Objective 2.5 — Encarregados**.
+6. **Objective 2.6 — hardening final / responsive / security / states**.
+
+Every objective requires Human UAT before the following objective. No future section may be presented as operational before its authoritative data and approval exist.
 
 ## UX / safety / DoR
 

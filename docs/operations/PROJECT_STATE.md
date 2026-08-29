@@ -29,4 +29,6 @@ Run `npm run uat:bootstrap` from a named branch. It links ignored external local
 
 ## Next authorised action
 
-Execute only the explicitly authorised `STUDENT-EXPERIENCE-01` Objective 1 on its dedicated implementation branch after this recovery checkpoint is committed and pushed. Finance is not authorised.
+`STUDENT-EXPERIENCE-01` Objective 1 is accepted as the navigation foundation: Active Students is separate from Enrollment processes, resolves one active StudentProfile per person through server-owned context and opens via opaque `studentRef`. It is not the final student-record UX.
+
+Execute only the explicitly authorised `STUDENT-EXPERIENCE-01` Objective 2.1 — Dedicated Student Record Workspace + Resumo — on `codex/student-experience-01-active-students`. Finance is not authorised.

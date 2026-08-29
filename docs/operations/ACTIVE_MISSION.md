@@ -1,9 +1,9 @@
 # Active Mission
 
-- Mission: NEXUS-RECOVERY-01 — Canonical Execution Baseline Recovery
-- Canonical branch: `codex/nexus-recovery-01`
-- Canonical worktree path: `D:\Soft\NEXUS-WDU-IA-recovery-01`
-- Baseline: `main @ f413d61381a6f9edb54a0ce1138e9c49fb49dd9b`
-- Status: DONE
-- Completed outcome: canonical UAT administrative identity was proven through bootstrap ×2, real browser login, repeat login and post-runtime-restart resolution; `/api/profile` returned 200 and the server resolved Identity, Person, active Membership, Institution and InstitutionalContext without exposing secrets.
-- Next authorised work: `STUDENT-EXPERIENCE-01` Objective 1 on a dedicated branch/worktree. Finance remains not started.
+- Mission: STUDENT-EXPERIENCE-01 — Active Students & Student Record Workspace
+- Canonical branch: `codex/student-experience-01-active-students`
+- Canonical worktree path: `D:\Soft\NEXUS-WDU-IA-student-experience-01`
+- Baseline: `main @ f413d61381a6f9edb54a0ce1138e9c49fb49dd9b`; implementation checkpoint `a73917c`
+- Status: IMPLEMENTING
+- Completed foundation: Objective 1 is accepted as navigation foundation only. Active Students is server-owned, tenant-safe and one-person/one-row; opaque `studentRef` opens a transitional quick preview rather than an Enrollment process drawer.
+- Current authorised objective: Objective 2.1 — Dedicated Student Record Workspace + Resumo. It remains read-only and limited to factual identity, StudentProfile status and current academic context. Objectives 2.2–2.6 require Human UAT gates in sequence. Finance remains not started.
