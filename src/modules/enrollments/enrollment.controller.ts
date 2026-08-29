@@ -88,7 +88,7 @@ export function registerEnrollmentRoutes(
     if (academicYearId !== undefined && !validUuid(academicYearId)) return reject(res, 400, 'Ano letivo inválido.');
     try {
       const result = await enrollmentPool.query(
-        `SELECT e.id, e.status, e.created_at, e.updated_at, student.name AS student_name,
+        `SELECT e.id, e.student_person_id AS student_ref, e.status, e.created_at, e.updated_at, student.name AS student_name,
           guardian.name AS guardian_name, offer.name AS offer_name, year.name AS academic_year_name
          FROM enrollment_applications e
          INNER JOIN people student ON student.id = e.student_person_id

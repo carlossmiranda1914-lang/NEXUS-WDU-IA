@@ -11,6 +11,7 @@ import {
 const now = '2026-08-12T10:00:00.000Z';
 const record = (id: string, status: EnrollmentOperationalRecord['status'], updated_at = now): EnrollmentOperationalRecord => ({
   id,
+  student_ref: `opaque-${id}`,
   status,
   student_name: `Aluno ${id}`,
   guardian_name: null,

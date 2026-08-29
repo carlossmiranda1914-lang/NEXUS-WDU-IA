@@ -12,6 +12,7 @@ export type PipelineStage = 'entry' | 'identity' | 'documents' | 'verification' 
 
 export interface EnrollmentOperationalRecord {
   id: string;
+  student_ref: string;
   status: EnrollmentOperationalStatus;
   student_name: string;
   guardian_name: string | null;
