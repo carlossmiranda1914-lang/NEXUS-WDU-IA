@@ -42,14 +42,8 @@ async function main() {
       await runMigrations(client, migrations);
     } finally { client.release(); }
 
-    const configuredUid = process.env.NEXUS_UAT_FIREBASE_UID?.trim();
-    const knownUid = await pool.query<{ provider_subject: string }>(
-      `SELECT i.provider_subject FROM identities i JOIN memberships m ON m.person_id=i.person_id JOIN institutions n ON n.id=m.institution_id
-       WHERE i.provider='firebase' AND n.slug=$1 AND n.status='active' AND m.status='active' AND m.role='institution_admin'
-       ORDER BY m.created_at LIMIT 1`, [UAT_INSTITUTION],
-    );
-    const firebaseUid = configuredUid || knownUid.rows[0]?.provider_subject;
-    if (!firebaseUid) throw new Error('No canonical UAT Firebase identity is available. Set NEXUS_UAT_FIREBASE_UID in external local configuration after creating the Firebase UAT account.');
+    const firebaseUid = process.env.NEXUS_UAT_FIREBASE_UID?.trim();
+    if (!firebaseUid) throw new Error('NEXUS_UAT_FIREBASE_UID must be set in ignored external local configuration for the canonical UAT administrative account.');
     await execFileAsync(process.execPath, ['--import', 'tsx', 'scripts/provision-local-iam-uat.ts', firebaseUid], {
       cwd: process.cwd(), env: process.env, windowsHide: true,
     });
@@ -58,17 +52,18 @@ async function main() {
       `SELECT n.id AS institution_id,m.person_id FROM institutions n JOIN identities i ON i.provider='firebase' AND i.provider_subject=$1 JOIN memberships m ON m.person_id=i.person_id AND m.institution_id=n.id
        WHERE n.slug=$2 AND n.status='active' AND m.status='active' AND m.role='institution_admin' LIMIT 1`, [firebaseUid, UAT_INSTITUTION],
     );
-    if (!admin.rowCount) throw new Error('Canonical UAT institutional context was not resolved.');
+    if (admin.rowCount !== 1) throw new Error('Configured UAT administrative identity must resolve to exactly one active institution_admin Membership in the canonical local institution.');
     await ensureStudentFixture(pool, admin.rows[0].institution_id, admin.rows[0].person_id);
-    const fixture = await pool.query<{ active_profile: boolean; active_enrollment: boolean; active_placement: boolean; history_count: string }>(
+    const fixture = await pool.query<{ active_profile: boolean; active_enrollment: boolean; active_placement: boolean; history_count: string; separate_from_admin: boolean }>(
       `SELECT EXISTS(SELECT 1 FROM student_profiles sp WHERE sp.institution_id=$1 AND sp.student_number=$2 AND sp.status='active') AS active_profile,
        EXISTS(SELECT 1 FROM enrollment_applications e JOIN student_profiles sp ON sp.person_id=e.student_person_id AND sp.institution_id=e.institution_id JOIN academic_years y ON y.id=e.academic_year_id AND y.institution_id=e.institution_id WHERE e.institution_id=$1 AND sp.student_number=$2 AND e.status='active' AND y.status='active') AS active_enrollment,
        EXISTS(SELECT 1 FROM student_academic_placements pl JOIN student_profiles sp ON sp.person_id=pl.student_person_id AND sp.institution_id=pl.institution_id JOIN academic_years y ON y.id=pl.academic_year_id AND y.institution_id=pl.institution_id WHERE pl.institution_id=$1 AND sp.student_number=$2 AND pl.status='active' AND y.status='active') AS active_placement,
-       (SELECT count(*) FROM student_academic_placements pl JOIN student_profiles sp ON sp.person_id=pl.student_person_id AND sp.institution_id=pl.institution_id JOIN academic_years y ON y.id=pl.academic_year_id AND y.institution_id=pl.institution_id WHERE pl.institution_id=$1 AND sp.student_number=$2 AND NOT(pl.status='active' AND y.status='active')) AS history_count`,
-      [admin.rows[0].institution_id, UAT_STUDENT_NUMBER],
+       (SELECT count(*) FROM student_academic_placements pl JOIN student_profiles sp ON sp.person_id=pl.student_person_id AND sp.institution_id=pl.institution_id JOIN academic_years y ON y.id=pl.academic_year_id AND y.institution_id=pl.institution_id WHERE pl.institution_id=$1 AND sp.student_number=$2 AND NOT(pl.status='active' AND y.status='active')) AS history_count,
+       EXISTS(SELECT 1 FROM student_profiles sp WHERE sp.institution_id=$1 AND sp.student_number=$2 AND sp.person_id <> $3) AS separate_from_admin`,
+      [admin.rows[0].institution_id, UAT_STUDENT_NUMBER, admin.rows[0].person_id],
     );
     const row = fixture.rows[0];
-    if (!row?.active_profile || !row.active_enrollment || !row.active_placement || Number(row.history_count) < 1) {
+    if (!row?.active_profile || !row.active_enrollment || !row.active_placement || !row.separate_from_admin || Number(row.history_count) < 1) {
       throw new Error('The canonical Student Context UAT fixture is missing. Restore it through the approved UAT fixture procedure; bootstrap never invents a browser or legacy Student authority.');
     }
     console.log(JSON.stringify({ target: 'approved-local-postgres', migrations: 'verified', firebaseIdentity: 'canonical', institutionalContext: 'active', studentFixture: 'current-and-history-ready' }));
