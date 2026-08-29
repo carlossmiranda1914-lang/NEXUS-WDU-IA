@@ -1,10 +1,9 @@
 # Active Mission
 
-- Mission: ACADEMIC-01 — Canonical Temporal Academic Structure & Teacher Assignment
-- Canonical branch: `codex/academic-01-temporal-structure`
-- Canonical worktree path: `D:\Soft\NEXUS-WDU-IA-academic-01`
-- Baseline: `322561c56c51a8b3c1e6c443a35a5c0feb3a3495`
-- Last GREEN objective: Objective 5 — Student Academic Placement
-- Current objective: Closeout — ACADEMIC-01
-- Last pushed commit: `bbb687b feat(academic): add student placement authority`
-- Next expected outcome: `DONE — ACADEMIC-01 CANONICAL TEMPORAL ACADEMIC STRUCTURE PROVEN`
+- Mission: STUDENT-360-01 — Authorized Student Context Projection
+- Canonical branch: `codex/student-360-01-authorized-context-projection`
+- Canonical worktree path: `D:\Soft\NEXUS-WDU-IA-student-360-01`
+- Baseline: `main @ c093fab221489e273aead35312ac8339a6e32718`
+- Status: DONE — closeout evidence complete; Finance Core is not started
+- Current objective: none; awaiting explicit next-mission authorization
+- Latest completed outcome: `DONE — STUDENT-360-01 AUTHORIZED STUDENT CONTEXT PROJECTION PROVEN` (`quality-gate: PASS`, `exit=0`)
