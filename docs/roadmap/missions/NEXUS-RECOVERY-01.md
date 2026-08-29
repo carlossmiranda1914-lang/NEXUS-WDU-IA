@@ -1,6 +1,6 @@
 # NEXUS-RECOVERY-01 — Canonical Execution Baseline Recovery
 
-**State:** BLOCKED  
+**State:** VALIDATING
 **Baseline/ref:** `main @ f413d61381a6f9edb54a0ce1138e9c49fb49dd9b`
 
 ## Outcome
@@ -19,4 +19,4 @@ Restore one factual operational baseline so a new session can locate scope, boot
 
 ## Evidence / stop rules
 
-Run UAT bootstrap twice, verify target/migrations/fixture facts, prove real Firebase login, run contract/secret/diff gates. **Current blocker:** the canonical local target was reset to repair its stale `0023` checksum, and the real Firebase UAT UID is not available in external local configuration to re-establish the canonical Identity → Person → Membership chain. Set `NEXUS_UAT_FIREBASE_UID` outside the repository, then run `npm run uat:bootstrap` twice. Stop if config, approved target or canonical Firebase UAT identity is unavailable, or if a change needs new product/domain authority.
+The external local Firebase UID was resolved without entering Git, `npm run uat:bootstrap` passed twice against the approved local PostgreSQL target, and the canonical Identity → Person → active Membership chain plus Student fixture were verified. Contract, IAM HTTP, lint, build, secret-scan and diff gates passed. The remaining required evidence is visual browser authentication (`/api/profile` 200 and institutional portal render) before mission closure. No product authority, migration or Student UI was implemented by this recovery mission.
