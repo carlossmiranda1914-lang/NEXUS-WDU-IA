@@ -7,14 +7,26 @@ type DocumentMetadata = { document_type: string; status: string; verified_at: Da
 
 export class StudentContextError extends Error { constructor(public code: 'NOT_FOUND' | 'FORBIDDEN' | 'INVALID_INPUT') { super(code); } }
 
+const publicStudentRef = /^stu_[A-Za-z0-9_-]{22}$/;
+
+/** Resolves a browser-safe handle only inside the server-owned institution. */
+export async function resolveStudentRef(pool: Queryable, institutionId: string, studentRef: unknown): Promise<string> {
+  if (typeof studentRef !== 'string' || !publicStudentRef.test(studentRef)) throw new StudentContextError('NOT_FOUND');
+  const profile = await pool.query<{ person_id: string }>(
+    "SELECT person_id FROM student_profiles WHERE institution_id=$1 AND public_ref=$2 AND status='active'",
+    [institutionId, studentRef],
+  );
+  if (!profile.rowCount) throw new StudentContextError('NOT_FOUND');
+  return profile.rows[0].person_id;
+}
+
 const pageNumber = (value: unknown, fallback: number, max: number) => {
   const parsed = typeof value === 'number' ? value : typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN;
   return Number.isInteger(parsed) && parsed >= 0 && parsed <= max ? parsed : fallback;
 };
 
-export async function loadStudentContext(pool: Queryable, context: InstitutionalContext, personRef: unknown, options: HistoryOptions = {}) {
-  if (typeof personRef !== 'string' || !personRef.trim()) throw new StudentContextError('INVALID_INPUT');
-  const personId = personRef.trim();
+export async function loadStudentContext(pool: Queryable, context: InstitutionalContext, studentRef: unknown, options: HistoryOptions = {}) {
+  const personId = await resolveStudentRef(pool, context.institutionId, studentRef);
   let relationship: StudentContextRelationship = 'any';
   if (context.role === 'student') relationship = context.personId === personId ? 'self' : 'other';
   if (context.role === 'parent') {

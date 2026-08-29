@@ -47,7 +47,7 @@ const requiredColumns: Record<string, string[]> = {
   iam_access_intents: ['institution_id', 'kind', 'status', 'code_hash', 'code_expires_at', 'idempotency_key', 'request_fingerprint', 'version'],
   iam_command_ledger: ['institution_id', 'operation', 'actor_scope', 'idempotency_key', 'request_fingerprint', 'status'],
   iam_membership_events: ['institution_id', 'actor_type', 'action', 'result', 'created_at'],
-  student_profiles: ['institution_id', 'person_id', 'legacy_student_id'],
+  student_profiles: ['institution_id', 'person_id', 'public_ref', 'legacy_student_id'],
   guardian_relationships: ['institution_id', 'guardian_person_id', 'student_person_id'],
   institution_resource_ownership: ['institution_id', 'resource_type', 'resource_id'],
   operational_logs: ['institution_id', 'request_id', 'correlation_id', 'outcome', 'metadata'],

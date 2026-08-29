@@ -47,6 +47,9 @@ try {
   await service.query("INSERT INTO academic_subject_offerings(id,institution_id,academic_year_id,class_id,subject_id,status) VALUES($1,$2,$3,$4,$5,'active')", [subjectOffering, institutionA, year, klass, subject]);
   await service.query("INSERT INTO enrollment_offers(id,institution_id,academic_year_id,name,code,status) VALUES($1,$2,$3,'General','GEN','active'),($4,$2,$5,'Old','OLD','active'),($6,$2,$7,'Older','OLDER','active')", [offer, institutionA, year, oldOffer, oldYear, olderOffer, olderYear]);
   await service.query("INSERT INTO student_profiles(institution_id,person_id,status) VALUES($1,$2,'active'),($1,$3,'active')", [institutionA, student, emptyStudent]);
+  const profileRefs = await service.query<{ person_id: string; public_ref: string }>("SELECT person_id,public_ref FROM student_profiles WHERE institution_id=$1", [institutionA]);
+  const studentRef = profileRefs.rows.find((profile) => profile.person_id === student)!.public_ref;
+  const emptyStudentRef = profileRefs.rows.find((profile) => profile.person_id === emptyStudent)!.public_ref;
   await service.query("INSERT INTO guardian_relationships(institution_id,guardian_person_id,student_person_id,relationship,status) VALUES($1,$2,$3,'parent','active')", [institutionA, parentA, student]);
   await service.query("INSERT INTO enrollment_applications(id,institution_id,student_person_id,academic_year_id,offer_id,status,created_by,updated_by) VALUES($1,$2,$3,$4,$5,'active',$6,$6),($7,$2,$3,$8,$9,'active',$6,$6),($10,$2,$3,$11,$12,'active',$6,$6)", [enrollment, institutionA, student, year, offer, adminA, oldEnrollment, oldYear, oldOffer, olderEnrollment, olderYear, olderOffer]);
   await service.query("INSERT INTO enrollment_documents(institution_id,enrollment_application_id,document_type,status,verified_by,verified_at,evidence_reference) VALUES($1,$2,'Identity','verified',$3,'2026-01-15T10:00:00Z','must-not-leak')", [institutionA, enrollment, adminA]);
@@ -60,8 +63,8 @@ try {
   const before = (await service.query("SELECT (SELECT count(*)::text FROM academic_events) AS events, (SELECT string_agg(id::text||':'||updated_at::text,',' ORDER BY id) FROM student_profiles WHERE institution_id=$1) AS profiles, (SELECT string_agg(id::text||':'||updated_at::text,',' ORDER BY id) FROM enrollment_applications WHERE institution_id=$1 AND student_person_id=$2) AS enrollments, (SELECT string_agg(id::text||':'||updated_at::text,',' ORDER BY id) FROM student_academic_placements WHERE institution_id=$1 AND student_person_id=$2) AS placements, (SELECT count(*)::text FROM information_schema.tables WHERE table_schema=current_schema()) AS tables", [institutionA, student])).rows[0];
   let projectionQueries = 0;
   const countedPool = { query: async <T>(sql: string, params?: unknown[]) => { projectionQueries += 1; return service!.query(sql, params) as any as Promise<{ rows: T[]; rowCount: number | null }>; } };
-  const direct = await loadStudentContext(countedPool, adminContext, student);
-  assert.equal(projectionQueries, 4, 'admin current/history/document-metadata projection must use a fixed four-query shape, independent of history row count');
+  const direct = await loadStudentContext(countedPool, adminContext, studentRef);
+  assert.equal(projectionQueries, 5, 'public-ref resolution plus current/history/document-metadata projection must use a fixed five-query shape, independent of history row count');
   assert.deepEqual(direct.student, { displayName: 'Student Safe', status: 'active' });
   assert.deepEqual(direct.current, {
     enrollment: { status: 'active', academicYear: { name: '2026' } },
@@ -82,24 +85,24 @@ try {
       { status: 'ended', academicYear: { name: '2024' }, class: { code: 'OLDER' }, program: { code: 'GEN', name: 'General' }, level: { code: '10', name: '10' } },
     ], nextOffset: null },
   });
-  const firstHistoryPage = await loadStudentContext(service as any, adminContext, student, { historyLimit: 1 });
+  const firstHistoryPage = await loadStudentContext(service as any, adminContext, studentRef, { historyLimit: 1 });
   assert.deepEqual(firstHistoryPage.history, { enrollments: { items: [{ status: 'active', academicYear: { name: '2025' } }], nextOffset: 1 }, placements: { items: [{ status: 'ended', academicYear: { name: '2025' }, class: { code: 'OLD' }, program: { code: 'GEN', name: 'General' }, level: { code: '10', name: '10' } }], nextOffset: 1 } });
-  const secondHistoryPage = await loadStudentContext(service as any, adminContext, student, { historyLimit: 1, enrollmentOffset: 1, placementOffset: 1 });
+  const secondHistoryPage = await loadStudentContext(service as any, adminContext, studentRef, { historyLimit: 1, enrollmentOffset: 1, placementOffset: 1 });
   assert.deepEqual(secondHistoryPage.history, { enrollments: { items: [{ status: 'active', academicYear: { name: '2024' } }], nextOffset: null }, placements: { items: [{ status: 'ended', academicYear: { name: '2024' }, class: { code: 'OLDER' }, program: { code: 'GEN', name: 'General' }, level: { code: '10', name: '10' } }], nextOffset: null } });
-  const noHistory = await loadStudentContext(service as any, adminContext, emptyStudent);
+  const noHistory = await loadStudentContext(service as any, adminContext, emptyStudentRef);
   assert.deepEqual(noHistory.current, { enrollment: null, placement: null });
   assert.deepEqual(noHistory.history, { enrollments: { items: [], nextOffset: null }, placements: { items: [], nextOffset: null } }, 'absence of history must remain an explicit empty history, not a synthesized fact');
   assert.deepEqual(direct.unavailable.finance, { status: 'not_yet_authoritative' });
   assert.deepEqual(direct.unavailable.assessment, { status: 'not_yet_authoritative' });
   assert.deepEqual((await service.query("SELECT (SELECT count(*)::text FROM academic_events) AS events, (SELECT string_agg(id::text||':'||updated_at::text,',' ORDER BY id) FROM student_profiles WHERE institution_id=$1) AS profiles, (SELECT string_agg(id::text||':'||updated_at::text,',' ORDER BY id) FROM enrollment_applications WHERE institution_id=$1 AND student_person_id=$2) AS enrollments, (SELECT string_agg(id::text||':'||updated_at::text,',' ORDER BY id) FROM student_academic_placements WHERE institution_id=$1 AND student_person_id=$2) AS placements, (SELECT count(*)::text FROM information_schema.tables WHERE table_schema=current_schema()) AS tables", [institutionA, student])).rows[0], before, 'read boundary must not write, emit events, alter current or historical authority records, or materialize a projection');
-  await assert.rejects(() => loadStudentContext(service as any, { ...adminContext, institutionId: institutionB, personId: adminB, membershipId: membershipB }, student), (error: unknown) => error instanceof StudentContextError && error.code === 'NOT_FOUND');
-  await assert.rejects(() => loadStudentContext(service as any, { ...adminContext, personId: teacherA, membershipId: membershipTeacher, role: 'teacher' }, student), (error: unknown) => error instanceof StudentContextError && error.code === 'FORBIDDEN');
+  await assert.rejects(() => loadStudentContext(service as any, { ...adminContext, institutionId: institutionB, personId: adminB, membershipId: membershipB }, studentRef), (error: unknown) => error instanceof StudentContextError && error.code === 'NOT_FOUND');
+  await assert.rejects(() => loadStudentContext(service as any, { ...adminContext, personId: teacherA, membershipId: membershipTeacher, role: 'teacher' }, studentRef), (error: unknown) => error instanceof StudentContextError && error.code === 'FORBIDDEN');
 
   const app = express();
   registerStudentContextRoutes(app, { pool: service as any, requireAuth: createRequireAuth({ verifyIdToken: async (token) => ({ uid: token }), pool: service as any, resolveInstitutionalContext }) });
   server = http.createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  const base = `http://127.0.0.1:${(server.address() as any).port}/api/student-context/${student}`;
-  const request = (token?: string, target = student) => fetch(`http://127.0.0.1:${(server.address() as any).port}/api/student-context/${target}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+  const base = `http://127.0.0.1:${(server.address() as any).port}/api/student-context/${studentRef}`;
+  const request = (token?: string, target = studentRef) => fetch(`http://127.0.0.1:${(server.address() as any).port}/api/student-context/${target}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
   const success = await request('student-context-admin-a'); assert.equal(success.status, 200); const body = await success.json() as Record<string, unknown>; assert.deepEqual(body.current, direct.current, 'HTTP must expose the same server-authorized current projection'); assert.deepEqual(body.history, direct.history, 'HTTP must expose the same server-authorized historical projection');
   const paginated = await fetch(`${base}?historyLimit=1`, { headers: { Authorization: 'Bearer student-context-admin-a' } }); assert.equal(paginated.status, 200); assert.deepEqual((await paginated.json() as any).history, firstHistoryPage.history, 'HTTP history query options must use the same deterministic pagination contract');
   assert.equal(JSON.stringify(body).includes(student), false, 'response must not expose internal student identifiers');
@@ -116,7 +119,7 @@ try {
   assert.equal((await request('student-context-secretariat-a')).status, 200);
   assert.equal((await request('student-context-student-a')).status, 200);
   assert.equal((await request('student-context-parent-a')).status, 200);
-  assert.equal((await request('student-context-parent-a', emptyStudent)).status, 403);
+  assert.equal((await request('student-context-parent-a', emptyStudentRef)).status, 403);
   assert.equal((await request('student-context-admin-b')).status, 404);
   const notFound = await request('student-context-admin-a', randomUUID()); assert.equal(notFound.status, 404); assert.equal(/stack|select\s|postgres|constraint/i.test(await notFound.text()), false);
   assert.equal((await request('student-context-outsider-a')).status, 403);

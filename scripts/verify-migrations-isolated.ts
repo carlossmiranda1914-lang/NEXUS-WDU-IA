@@ -50,6 +50,24 @@ async function verifyMigrationsIsolated(): Promise<void> {
       throw new Error('Expected people.birth_date to be DATE NULL after migrations.');
     }
 
+    const studentPublicRef = await client.query<{ is_nullable: string; column_default: string | null }>(
+      `SELECT is_nullable,column_default FROM information_schema.columns
+        WHERE table_schema=$1 AND table_name='student_profiles' AND column_name='public_ref'`,
+      [schemaName],
+    );
+    if (studentPublicRef.rowCount !== 1 || studentPublicRef.rows[0].is_nullable !== 'NO' || !studentPublicRef.rows[0].column_default?.includes('gen_random_bytes')) {
+      throw new Error('Expected mandatory CSPRNG-backed student_profiles.public_ref after migrations.');
+    }
+
+    const studentPublicRefUnique = await client.query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes
+        WHERE schemaname=$1 AND tablename='student_profiles' AND indexname='student_profiles_institution_public_ref_unique'`,
+      [schemaName],
+    );
+    if (studentPublicRefUnique.rowCount !== 1) {
+      throw new Error('Expected institutional StudentProfile public reference uniqueness index.');
+    }
+
     const commandTable = await client.query<{ constraint_name: string }>(
       `SELECT tc.constraint_name
          FROM information_schema.table_constraints tc
@@ -170,6 +188,7 @@ async function verifyMigrationsIsolated(): Promise<void> {
 
     console.log(`[MIGRATION-VERIFY] PASS: ${migrationFiles.length} migrations applied in isolated schema.`);
     console.log('[MIGRATION-VERIFY] PASS: people.birth_date is DATE NULL.');
+    console.log('[MIGRATION-VERIFY] PASS: StudentProfile public references are mandatory, CSPRNG-backed and institution-unique.');
     console.log('[MIGRATION-VERIFY] PASS: enrollment_intake_commands idempotency constraints are present.');
     console.log('[MIGRATION-VERIFY] PASS: identity_resolution_decisions authority/audit constraints are present.');
     console.log('[MIGRATION-VERIFY] PASS: IAM active Membership uniqueness and tables are migration-owned.');
