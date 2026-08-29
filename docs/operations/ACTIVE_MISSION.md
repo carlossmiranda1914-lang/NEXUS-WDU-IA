@@ -4,6 +4,6 @@
 - Canonical branch: `codex/nexus-recovery-01`
 - Canonical worktree path: `D:\Soft\NEXUS-WDU-IA-recovery-01`
 - Baseline: `main @ f413d61381a6f9edb54a0ce1138e9c49fb49dd9b`
-- Status: VALIDATING
-- Current objective: resolve canonical UAT admin email mapping, then obtain visual browser authentication evidence
-- Latest completed outcome: approved external UID now fail-fast resolves to exactly one active administrative context and a distinct Student fixture; bootstrap passed twice with the disposable local PostgreSQL target and 23 migrations. Student visual UAT remains not accepted; Finance remains not started.
+- Status: DONE
+- Completed outcome: canonical UAT administrative identity was proven through bootstrap ×2, real browser login, repeat login and post-runtime-restart resolution; `/api/profile` returned 200 and the server resolved Identity, Person, active Membership, Institution and InstitutionalContext without exposing secrets.
+- Next authorised work: `STUDENT-EXPERIENCE-01` Objective 1 on a dedicated branch/worktree. Finance remains not started.

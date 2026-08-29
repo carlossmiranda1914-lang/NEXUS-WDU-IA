@@ -13,7 +13,7 @@ Updated: 2026-08-29
 
 ## Current priority
 
-**Product/UAT recovery baseline validating.** The ignored external UAT Firebase identity was reconciled with the disposable local PostgreSQL target and bootstrap passed idempotently. The remaining recovery proof is the real browser session (`/api/profile` 200 and institutional portal render). Student visual UAT is still not accepted and requires its separately authorised UI/UAT path; this recovery did not implement it.
+**NEXUS-RECOVERY-01 is DONE.** The ignored external UAT administrative identity was reconciled with the disposable local PostgreSQL target; bootstrap passed idempotently and real browser authentication resolved the canonical UID, Identity, Person, active Membership, Institution and InstitutionalContext with `/api/profile` 200, including a repeat login and post-runtime-restart resolution. Student visual UAT is still not accepted and requires its separately authorised UI/UAT path; this recovery did not implement it.
 
 Finance is **NOT STARTED**. Assessment, Attendance and physical Documents remain non-authoritative for Student Context and must not be presented as completed facts.
 
@@ -29,4 +29,4 @@ Run `npm run uat:bootstrap` from a named branch. It links ignored external local
 
 ## Next authorised action
 
-Complete the real browser authentication evidence for `NEXUS-RECOVERY-01`. `STUDENT-EXPERIENCE-01` is READY but requires separate explicit implementation authorisation. Finance is not authorised.
+Execute only the explicitly authorised `STUDENT-EXPERIENCE-01` Objective 1 on its dedicated implementation branch after this recovery checkpoint is committed and pushed. Finance is not authorised.

@@ -855,8 +855,6 @@ export default function App() {
     const email = loginEmail.trim().toLowerCase();
     const password = loginPassword.trim();
 
-    console.log('[DEBUG-AUTH-FLOW] 1. Clique no botão Login.');
-
     if (!email || !password) {
       setLoginError('O email e a palavra-passe são obrigatórios.');
       return;
@@ -876,50 +874,27 @@ export default function App() {
           setLoginError('O Nome Completo é obrigatório para registo.');
           return;
         }
-        console.log('[DEBUG-AUTH-FLOW] 2. Antes de chamar createUserWithEmailAndPassword:', {
-          email: email,
-          passwordLength: password.length
-        });
         try {
           usrCredential = await createUserWithEmailAndPassword(auth, email, password);
           if (usrCredential.user) {
             await updateProfile(usrCredential.user, { displayName: authRegisterName.trim() });
             console.log('[AUTH-REAL] Display name updated successfully in Firebase Auth');
           }
-          console.log('[DEBUG-AUTH-FLOW] 3. Depois da chamada: SUCCESS');
         } catch (regErr: any) {
-          console.log('[DEBUG-AUTH-FLOW] 3. Depois da chamada falhou:', {
-            code: regErr.code,
-            message: regErr.message,
-            stack: regErr.stack
-          });
           throw regErr;
         }
       } else {
         // Real Sign In
         console.log('[AUTH-REAL] Logging in real account.');
-        console.log('[DEBUG-AUTH-FLOW] 2. Antes de chamar signInWithEmailAndPassword:', {
-          email: email,
-          passwordLength: password.length
-        });
-
         try {
           usrCredential = await signInWithEmailAndPassword(auth, email, password);
-          console.log('[DEBUG-AUTH-FLOW] 3. Depois da chamada: SUCCESS');
         } catch (signInErr: any) {
-          console.log('[DEBUG-AUTH-FLOW] 3. Depois da chamada falhou:', {
-            code: signInErr.code,
-            message: signInErr.message,
-            stack: signInErr.stack
-          });
           throw signInErr;
         }
       }
 
       if (usrCredential && usrCredential.user) {
-        console.log('[DEBUG-AUTH-FLOW] 4. Login Firebase funcionou!');
         const token = await usrCredential.user.getIdToken();
-        console.log('[DEBUG-AUTH-FLOW] 5. A verificar o perfil institucional.');
         const pRes = await fetch('/api/profile', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -936,14 +911,11 @@ export default function App() {
           setCurrentUserStatus(profile.status || 'active');
           setFirebaseUser(usrCredential.user);
         } else {
-          console.error('[AUTH-CLIENT] Failed to synchronize and verify PostgreSQL profile.');
           await signOut(auth);
           setLoginError('Falha crítica de sincronização: Não foi possível obter ou persistir o perfil do utilizador no PostgreSQL.');
         }
       }
     } catch (err: any) {
-      console.warn('[DEBUG-AUTH-FLOW] 10. Exceção de autenticação tratada no frontend:', err);
-      console.log('[DEBUG-AUTH-FLOW] Stack Trace do erro de autenticação:', err.stack);
       let errorMsg = 'Falha durante a autenticação. Verifique os dados introduzidos.';
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
         errorMsg = 'Credenciais incorretas ou utilizador não encontrado.';

@@ -1,6 +1,6 @@
 # NEXUS-RECOVERY-01 — Canonical Execution Baseline Recovery
 
-**State:** VALIDATING
+**State:** DONE
 **Baseline/ref:** `main @ f413d61381a6f9edb54a0ce1138e9c49fb49dd9b`
 
 ## Outcome
@@ -19,4 +19,4 @@ Restore one factual operational baseline so a new session can locate scope, boot
 
 ## Evidence / stop rules
 
-The external local Firebase UID was resolved without entering Git, `npm run uat:bootstrap` passed twice against the approved local PostgreSQL target, and the canonical Identity → Person → active Membership chain plus Student fixture were verified. The bootstrap now requires that external UID, requires exactly one active administrative context, and proves the administrative person is distinct from the Student fixture. Contract, IAM HTTP, lint, build, secret-scan and diff gates passed. The remaining required evidence is the canonical Firebase account email mapping and visual browser authentication (`/api/profile` 200 and institutional portal render) before mission closure. No product authority, migration or Student UI was implemented by this recovery mission.
+The external local Firebase UID and administrative email remain ignored and never enter Git. The approved disposable PostgreSQL target was reset, `npm run uat:bootstrap` passed twice, and the canonical Identity → Person → active Membership → InstitutionalContext chain plus a distinct Student fixture were verified. Three real browser resolutions were observed: initial login, logout/login repeat, and resolution after runtime restart; each produced Firebase authentication, UID match, `/api/profile` 200 and an institutional portal session. Contract, IAM HTTP, auth, lint, build, secret-scan and diff gates passed. No product authority, migration or Student UI was implemented by this recovery mission.
