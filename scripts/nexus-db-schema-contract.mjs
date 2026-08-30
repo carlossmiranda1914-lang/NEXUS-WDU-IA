@@ -4,7 +4,7 @@ export const S02_SCHEMA_REQUIREMENTS = {
     'national_id_number', 'gender', 'nationality', 'address_line',
     'municipality', 'province',
   ],
-  student_profiles: ['institution_id', 'person_id', 'student_number', 'legacy_student_id'],
+  student_profiles: ['institution_id', 'person_id', 'public_ref', 'student_number', 'legacy_student_id'],
   enrollment_applications: [
     'institution_id', 'student_person_id', 'academic_year_id', 'offer_id',
     'document_policy_id', 'document_policy_captured_at', 'previous_school',

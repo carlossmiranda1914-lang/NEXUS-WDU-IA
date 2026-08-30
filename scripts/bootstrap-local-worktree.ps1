@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [string]$ExpectedBranch = 'codex/academic-01-temporal-structure',
+  [string]$ExpectedBranch = '',
   [string]$ConfigSource = 'D:\NexusLocalConfig\NEXUS-WDU-IA\.env.test.local'
 )
 
@@ -8,7 +8,9 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $root
 
-if ((git branch --show-current).Trim() -ne $ExpectedBranch) { throw "Expected branch $ExpectedBranch." }
+$currentBranch = (git branch --show-current).Trim()
+if (-not $currentBranch) { throw 'A named Git branch is required for local bootstrap.' }
+if ($ExpectedBranch -and $currentBranch -ne $ExpectedBranch) { throw "Expected branch $ExpectedBranch." }
 if (-not (Test-Path -LiteralPath $ConfigSource -PathType Leaf)) { throw 'Missing external local test configuration.' }
 git check-ignore -q .env.test.local
 if ($LASTEXITCODE -ne 0) { throw '.env.test.local must remain ignored.' }

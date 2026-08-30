@@ -24,11 +24,11 @@ expect(!source.includes('institutionId:'), 'Browser must not supply institution 
 expect(!source.includes('studentPersonId:'), 'Browser must not supply global Person authority.');
 expect(source.includes('Ainda não disponível'), 'Unavailable pipeline domains must remain explicit in product language and never be simulated.');
 expect(!source.includes('Domínio ainda não persistido'), 'Technical backend wording must not leak into the user-facing pipeline.');
-expect(source.includes('Um aluno aparece aqui depois de a matrícula estar ativa.'), 'Empty active-student view must explain that only activated enrollments appear.');
+expect(source.includes('Os alunos ativos aparecem aqui quando o respetivo perfil institucional está ativo.'), 'Empty active-student view must describe the authoritative StudentProfile condition.');
 expect(source.includes('exclusivamente pelos processos institucionais persistidos'), 'Workspace empty states must continue to reject demonstrative records.');
 
 expect(app.includes("const EnrollmentOperationsWorkspace = lazy(() => import('./components/EnrollmentOperationsWorkspace'));"), 'App shell must load the vNext enrollment workspace.');
-expect(app.includes("<EnrollmentOperationsWorkspace theme={theme} />"), 'Students module must mount the vNext operational workspace.');
+expect(app.includes('<EnrollmentOperationsWorkspace theme={theme} onOpenStudentRecord='), 'Students module must mount the vNext operational workspace with its dedicated Student Record navigation boundary.');
 expect(!app.includes('studentsSubTab'), 'Legacy student subtab state must be removed.');
 expect(!app.includes('Portal de Matrícula'), 'Legacy Portal de Matrícula subtab must be removed.');
 expect(!app.includes('Mérito & Engajamento / Pódio'), 'Gamification must not compete inside the enrollment operational workspace.');

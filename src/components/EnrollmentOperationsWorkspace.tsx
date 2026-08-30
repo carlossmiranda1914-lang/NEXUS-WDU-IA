@@ -55,6 +55,30 @@ type ProcessProjection = {
   version: number;
   timestamps: { startedAt: string; lastProgressAt: string; blockedAt: string | null; updatedAt: string };
 };
+type ActiveStudent = {
+  studentRef: string;
+  displayName: string;
+  status: 'active';
+  current: {
+    academicYear: { name: string } | null;
+    class: { code: string } | null;
+    program: { code: string; name: string | null } | null;
+    level: { code: string; name: string | null } | null;
+  } | null;
+};
+type StudentRecordContext = {
+  student: { displayName: string; status: string };
+  current: {
+    enrollment: { status: string; academicYear: { name: string } } | null;
+    placement: {
+      status: string;
+      academicYear: { name: string };
+      class: { code: string };
+      program: { code: string; name: string | null };
+      level: { code: string; name: string | null };
+    } | null;
+  };
+};
 
 const PIPELINE_CONTEXT: Record<string, PipelineContext> = {
   entry: { label: 'Entrada', description: 'Processos iniciados que ainda precisam de tratamento pela Secretaria.' },
@@ -116,7 +140,7 @@ function statusExplanation(status: EnrollmentOperationalStatus) {
   }
 }
 
-export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { theme?: Theme }) {
+export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenStudentRecord }: { theme?: Theme; onOpenStudentRecord: (studentRef: string) => void }) {
   const light = theme === 'light';
   const surface = light ? 'bg-white border-zinc-200' : 'bg-zinc-900 border-white/10';
   const mutedSurface = light ? 'bg-slate-50 border-zinc-200' : 'bg-zinc-950/60 border-white/5';
@@ -124,6 +148,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
   const muted = light ? 'text-zinc-500' : 'text-zinc-400';
 
   const [records, setRecords] = useState<EnrollmentOperationalRecord[]>([]);
+  const [activeStudents, setActiveStudents] = useState<ActiveStudent[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [institutionName, setInstitutionName] = useState('');
   const [view, setView] = useState<OperationalView>('overview');
@@ -133,20 +158,27 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<EnrollmentOperationalStatus[] | null>(null);
   const [selected, setSelected] = useState<EnrollmentOperationalRecord | null>(null);
+  const [activeStudentError, setActiveStudentError] = useState<string | null>(null);
   const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   const [newEntryOpen, setNewEntryOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setActiveStudentError(null);
     try {
-      const [context, list] = await Promise.all([
+      const [context, list, students] = await Promise.allSettled([
         request('/api/enrollments/context'),
         request('/api/enrollments'),
+        request('/api/active-students'),
       ]);
-      setOffers(Array.isArray(context.offers) ? context.offers : []);
-      setInstitutionName(context.institution?.name || 'Instituição atual');
-      setRecords(Array.isArray(list.enrollments) ? list.enrollments : []);
+      if (context.status === 'rejected') throw context.reason;
+      if (list.status === 'rejected') throw list.reason;
+      setOffers(Array.isArray(context.value.offers) ? context.value.offers : []);
+      setInstitutionName(context.value.institution?.name || 'Instituição atual');
+      setRecords(Array.isArray(list.value.enrollments) ? list.value.enrollments : []);
+      if (students.status === 'fulfilled') setActiveStudents(Array.isArray(students.value.students) ? students.value.students : []);
+      else { setActiveStudents([]); setActiveStudentError(students.reason instanceof Error ? students.reason.message : 'Não foi possível carregar os alunos ativos.'); }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar a operação de matrículas.');
     } finally {
@@ -170,6 +202,10 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
     }
     return base;
   }, [records, view, statusFilter, query]);
+  const visibleStudents = useMemo(() => {
+    const term = query.trim().toLocaleLowerCase('pt');
+    return term ? activeStudents.filter((student) => [student.displayName, student.current?.academicYear?.name, student.current?.class?.code, student.current?.program?.name, student.current?.level?.name].filter(Boolean).some((value) => String(value).toLocaleLowerCase('pt').includes(term))) : activeStudents;
+  }, [activeStudents, query]);
 
   function selectMetric(filter: EnrollmentOperationalStatus[]) {
     setStatusFilter(filter);
@@ -181,16 +217,16 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
       <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0 space-y-1.5">
           <p className="break-words text-[10px] font-bold uppercase leading-5 tracking-[0.14em] text-emerald-700 sm:tracking-[0.18em]">Secretaria escolar</p>
-          <h1 className={`text-2xl font-bold tracking-tight ${text}`}>Alunos & Matrículas</h1>
-          <p className={`max-w-3xl text-sm leading-6 ${muted}`}>Entradas, matrículas em curso, exceções e alunos ativos num único fluxo operacional. Os indicadores abaixo são calculados apenas a partir dos processos reais da instituição atual.</p>
+          <h1 className={`text-2xl font-bold tracking-tight ${text}`}>{view === 'students' ? 'Alunos ativos' : 'Alunos & Matrículas'}</h1>
+          <p className={`max-w-3xl text-sm leading-6 ${muted}`}>{view === 'students' ? 'Encontre e abra o registo atual de cada aluno ativo.' : 'Entradas, matrículas em curso, exceções e alunos ativos num único fluxo operacional. Os indicadores abaixo são calculados apenas a partir dos processos reais da instituição atual.'}</p>
         </div>
         <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap">
           <button type="button" onClick={() => void load()} disabled={loading} className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border px-3.5 py-2.5 text-xs font-semibold sm:w-auto ${light ? 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50' : 'border-white/10 bg-zinc-900 text-zinc-300 hover:bg-white/5'} disabled:opacity-50`}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </button>
-          <button type="button" onClick={() => setNewEntryOpen(true)} className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-center text-xs font-bold text-white hover:bg-emerald-600 sm:w-auto">
+          {view !== 'students' && <button type="button" onClick={() => setNewEntryOpen(true)} className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-center text-xs font-bold text-white hover:bg-emerald-600 sm:w-auto">
             <Plus className="h-4 w-4" /> Nova entrada / matrícula
-          </button>
+          </button>}
         </div>
       </header>
 
@@ -264,13 +300,15 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
             </div>
           )}
 
-          {view !== 'overview' && (
+          {view === 'students' && <ActiveStudentsView students={visibleStudents} error={activeStudentError} light={light} onRetry={() => void load()} onOpen={onOpenStudentRecord} />}
+
+          {view !== 'overview' && view !== 'students' && (
             <div className={`overflow-hidden rounded-2xl border ${surface}`}>
               <div className={`flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between ${light ? 'border-zinc-200' : 'border-white/10'}`}>
                 <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className={`font-semibold ${text}`}>{selectedStage?.label || VIEW_LABELS.find((item) => item.id === view)?.label}</h2></div><p className={`mt-1 text-xs leading-5 ${muted}`}>{selectedStage?.description || `${visible.length} registo${visible.length === 1 ? '' : 's'} real${visible.length === 1 ? '' : 'is'} nesta vista.`}</p>{selectedStage && <p className={`mt-1 text-[11px] ${muted}`}>{visible.length} processo{visible.length === 1 ? '' : 's'} nesta etapa.</p>}</div>
                 <div className="relative w-full sm:w-80"><Search aria-hidden="true" className={`pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 ${muted}`} /><input aria-label="Procurar processos" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Procurar aluno, oferta ou ano" className={`min-h-11 w-full rounded-lg border py-2.5 pl-12 pr-3 text-sm outline-none focus:border-emerald-600 ${light ? 'border-zinc-200 bg-white text-zinc-900' : 'border-white/10 bg-zinc-950 text-white'}`} /></div>
               </div>
-              {visible.length === 0 ? <EmptyState title={view === 'students' ? 'Ainda não existem alunos ativos nesta base' : 'Nenhum processo nesta vista'} body={view === 'students' ? 'Um aluno aparece aqui depois de a matrícula estar ativa.' : 'Os dados desta vista são alimentados exclusivamente pelos processos institucionais persistidos.'} light={light} /> : <ul className={`divide-y ${light ? 'divide-zinc-200' : 'divide-white/10'}`}>{visible.map((record) => <li key={record.id}><ProcessRow record={record} light={light} onOpen={() => setSelected(record)} /></li>)}</ul>}
+              {visible.length === 0 ? <EmptyState title="Nenhum processo nesta vista" body="Os dados desta vista são alimentados exclusivamente pelos processos institucionais persistidos." light={light} /> : <ul className={`divide-y ${light ? 'divide-zinc-200' : 'divide-white/10'}`}>{visible.map((record) => <li key={record.id}><ProcessRow record={record} light={light} onOpen={() => setSelected(record)} /></li>)}</ul>}
             </div>
           )}
         </>
@@ -280,6 +318,46 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark' }: { them
       {newEntryOpen && <EnrollmentNewEntryDrawer offers={offers} light={light} onClose={() => setNewEntryOpen(false)} onCreated={async () => { setNewEntryOpen(false); setNotice('Processo de matrícula iniciado com segurança e adicionado à fila institucional.'); await load(); setView('enrollments'); }} />}
     </section>
   );
+}
+
+function ActiveStudentsView({ students, error, light, onRetry, onOpen }: { students: ActiveStudent[]; error: string | null; light: boolean; onRetry: () => void; onOpen: (studentRef: string) => void }) {
+  const surface = light ? 'bg-white border-zinc-200' : 'bg-zinc-900 border-white/10';
+  const text = light ? 'text-zinc-900' : 'text-zinc-100';
+  const muted = light ? 'text-zinc-500' : 'text-zinc-400';
+  return <div className={`overflow-hidden rounded-2xl border ${surface}`}>
+    <div className={`flex flex-col gap-2 border-b p-4 sm:flex-row sm:items-center sm:justify-between ${light ? 'border-zinc-200' : 'border-white/10'}`}><div><h2 className={`font-semibold ${text}`}>Alunos ativos</h2><p className={`mt-1 text-xs leading-5 ${muted}`}>{students.length} aluno{students.length === 1 ? '' : 's'} ativo{students.length === 1 ? '' : 's'} nesta instituição.</p></div></div>
+    {error ? <div role="alert" className="m-4 flex gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-500"><AlertCircle className="h-5 w-5 shrink-0" /><div className="min-w-0"><strong>Não foi possível carregar os alunos ativos.</strong><p className="mt-1">{error}</p><button type="button" onClick={onRetry} className="mt-3 underline">Tentar novamente</button></div></div> : students.length === 0 ? <EmptyState title="Ainda não existem alunos ativos nesta base" body="Os alunos ativos aparecem aqui quando o respetivo perfil institucional está ativo." light={light} /> : <ul className={`divide-y ${light ? 'divide-zinc-200' : 'divide-white/10'}`}>{students.map((student) => <li key={student.studentRef}><ActiveStudentRow student={student} light={light} onOpen={() => onOpen(student.studentRef)} /></li>)}</ul>}
+  </div>;
+}
+
+function ActiveStudentRow({ student, light, onOpen }: { student: ActiveStudent; light: boolean; onOpen: () => void }) {
+  const current = student.current;
+  const summary = current?.class?.code
+    ? `${current.class.code}${current.level?.name ? ` · ${current.level.name}` : ''}`
+    : current?.level?.name || 'Contexto académico ainda não definido';
+  return <article className={`grid min-w-0 gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto] sm:items-center sm:px-5 ${light ? 'hover:bg-emerald-50/40' : 'hover:bg-emerald-500/[0.04]'}`}>
+    <div className="min-w-0"><p className={`line-clamp-2 break-words text-sm font-semibold leading-5 [overflow-wrap:anywhere] ${light ? 'text-zinc-900' : 'text-white'}`}>{student.displayName}</p><span className="mt-1.5 inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold leading-4 text-emerald-700">Aluno ativo</span></div>
+    <div className={`min-w-0 text-xs ${light ? 'text-zinc-600' : 'text-zinc-300'}`}><p className="break-words font-medium leading-5">{summary}</p><p className={`mt-1 break-words leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{current?.academicYear?.name || 'Ano letivo atual ainda não definido'}{current?.program?.name ? ` · ${current.program.name}` : ''}</p></div>
+    <button type="button" onClick={onOpen} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-emerald-600/30 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-500/10">Abrir registo <ChevronRight className="h-4 w-4" /></button>
+  </article>;
+}
+
+function StudentRecordDrawer({ studentRef, light, onClose }: { studentRef: string; light: boolean; onClose: () => void }) {
+  const [context, setContext] = useState<StudentRecordContext | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const loadRecord = useCallback(async () => {
+    setLoading(true); setError(null);
+    try { setContext(await request(`/api/student-context/${studentRef}`)); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível abrir o registo do aluno.'); }
+    finally { setLoading(false); }
+  }, [studentRef]);
+  useEffect(() => { void loadRecord(); }, [loadRecord]);
+  const text = light ? 'text-zinc-900' : 'text-white';
+  const muted = light ? 'text-zinc-500' : 'text-zinc-400';
+  const current = context?.current.placement;
+  const currentYear = current?.academicYear ?? context?.current.enrollment?.academicYear;
+  return <div className="fixed inset-0 z-[12000] flex justify-end bg-black/40" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className={`h-full w-full max-w-xl overflow-y-auto border-l p-4 shadow-2xl sm:p-6 ${light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-900'}`} aria-label="Registo do Aluno"><div className="flex items-start justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-600">Registo do Aluno</p><h2 className={`mt-1 text-xl font-bold ${text}`}>{context?.student.displayName || 'A carregar registo…'}</h2></div><button type="button" aria-label="Fechar registo do aluno" onClick={onClose} className={`min-h-11 min-w-11 rounded-lg p-2 ${light ? 'hover:bg-zinc-100' : 'hover:bg-white/5'}`}><X className="h-5 w-5" /></button></div>{loading && <div className={`mt-6 flex min-h-40 items-center justify-center gap-2 rounded-2xl border ${light ? 'border-zinc-200 bg-slate-50 text-zinc-500' : 'border-white/10 bg-zinc-950/60 text-zinc-400'}`}><LoaderCircle className="h-4 w-4 animate-spin" /> A carregar contexto atual…</div>}{error && <div role="alert" className="mt-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-500"><strong>Não foi possível abrir o registo.</strong><p className="mt-1">{error}</p><button type="button" onClick={() => void loadRecord()} className="mt-3 underline">Tentar novamente</button></div>}{context && !loading && <section className={`mt-6 rounded-2xl border p-4 ${light ? 'border-zinc-200 bg-slate-50' : 'border-white/10 bg-zinc-950/60'}`}><h3 className={`font-semibold ${text}`}>Contexto atual</h3><dl className={`mt-4 grid gap-3 text-sm ${muted}`}><div><dt className="text-xs">Ano letivo</dt><dd className={`mt-1 font-medium ${text}`}>{currentYear?.name || 'Ainda não definido'}</dd></div><div><dt className="text-xs">Turma</dt><dd className={`mt-1 font-medium ${text}`}>{current?.class?.code || 'Ainda não definida'}</dd></div><div><dt className="text-xs">Programa e nível</dt><dd className={`mt-1 font-medium ${text}`}>{[current?.program?.name, current?.level?.name].filter(Boolean).join(' · ') || 'Ainda não definidos'}</dd></div></dl></section>}</aside></div>;
 }
 
 function ProcessRow({ record, light, onOpen }: { record: EnrollmentOperationalRecord; light: boolean; onOpen: () => void }) {
