@@ -64,3 +64,40 @@ No current candidate satisfies every link for an **active Student Record**. In p
 ## Stop rule
 
 Task 2 is not authorised by this Task 1 result. A later task may only add an attention projection after a new candidate meets every acceptance link above; it must not reinterpret `NONE` as permission to infer attention from absence or raw metadata.
+
+## Task 3 — Contextual Owner-Routing Readiness Audit
+
+`INTERNAL_ID_ROUTING=NO`
+
+`FAKE_ACTIONS_ADDED=NO`
+
+`ROUTABLE_SECTIONS=NONE`
+
+### Acceptance rule
+
+The Student Record is a read-only contextual projection. A section is `ROUTABLE` only when the owner has a real use case, a browser-safe public reference, an actual route that accepts that reference, and server-side InstitutionalContext authorisation. An existing controller that accepts an internal UUID is not a safe route.
+
+| SECTION | OWNER | REAL OWNER USE CASE | SAFE PUBLIC REF | SAFE ROUTE | AUTHORISATION | CURRENTLY ROUTABLE? | PREREQUISITE |
+|---|---|---|---|---|---|---|---|
+| Resumo | Student Context read model, consuming Student/Academic authorities | Read the authorised current identity/status and academic context | Yes — `student_profiles.public_ref` (`studentRef`), resolved server-side by `(institution_id, public_ref)` | Yes — read-only `GET /api/student-context/:studentRef` | `requireAuth` → InstitutionalContext → `canReadStudentContext`; cross-tenant ref is non-disclosing | READ_ONLY_NO_ACTION | No mutable owner use case is approved for this section; it must remain factual read-only |
+| Percurso académico | Academic Core, projected by Student Context | Read current placement and ordered historical placements | Yes — the same opaque `studentRef` | Yes — read-only `GET /api/student-context/:studentRef` | Same Student Context policy and tenant-scoped resolver | READ_ONLY_NO_ACTION | No approved Academic owner action is exposed from Student Record; history is context, not a command |
+| Matrículas | Enrollment Process / Enrollment Registration | Inspect or progress a mutable enrollment process where the owner policy permits it | No — current owner APIs accept the internal `enrollment_applications.id`; Student Context deliberately omits it | No safe Student Record route — existing `GET /api/enrollments/:id/process` and registration/transition routes require internal `:id` | `requireAuth` + InstitutionalContext + owner-specific role/lifecycle/version checks | PREREQUISITE_REQUIRED | Add a separately approved opaque enrollment/process reference, institution-scoped resolver and Student Record-to-owner policy bridge; never route with `person_id` or enrollment UUID |
+| Documentos | Enrollment Documents | Manage required document lifecycle only for a mutable Enrollment Process | No — documents and their owner APIs use internal enrollment/document UUIDs; Student Context exposes safe metadata only | No safe Student Record route — existing `/api/enrollments/:id/documents` and `:documentId/transitions` routes require internal IDs | `requireAuth` + InstitutionalContext + Enrollment Document policy and mutable lifecycle checks | PREREQUISITE_REQUIRED | Add a separately approved opaque owner reference and policy-safe process bridge before any document action; current metadata remains read-only |
+| Encarregados | Student relationships, currently maintained through Enrollment Registration | Read factual guardian relationship name/relationship/status | Yes — the same opaque `studentRef` for projection only | Yes — read-only `GET /api/student-context/:studentRef`; no standalone guardian owner route is proven | Same Student Context policy; parent access is relationship-scoped server-side | READ_ONLY_NO_ACTION | A guardian write use case, public relationship reference and dedicated policy/route are not currently authoritative; do not infer them from registration internals |
+
+### Audit evidence
+
+- `src/modules/student-context/student-context.controller.ts` accepts only `studentRef`, then resolves it inside server-derived InstitutionalContext. It provides the safe read boundary for Resumo, Percurso académico, document metadata and guardian relationship metadata.
+- `src/modules/student-context/student-context-api.ts` resolves `student_profiles.public_ref` to an internal person identifier only on the server and does not return enrollment, document, person or membership identifiers.
+- `src/modules/enrollments/enrollment-process.controller.ts` exposes real process reads/assignment actions at `/api/enrollments/:id/process` and `/api/enrollments/:id/process/assignment`. Its `:id` is an internal enrollment identifier, not a browser-safe reference.
+- `src/modules/enrollments/enrollment-document.controller.ts` exposes real document lifecycle routes at `/api/enrollments/:id/documents` and `/api/enrollments/:id/documents/:documentId/transitions`. Both identifiers are internal and owner-policy/lifecycle guarded.
+- `src/modules/enrollments/enrollment-registration.controller.ts` similarly accepts an internal enrollment `:id`; it is not a guardian-route contract.
+
+### Task 3 verification
+
+- `npx tsx tests/student-experience-02-owner-routing-contract.test.ts`
+- `git diff --check`
+
+### Stop rule
+
+Task 3 adds no route, button, alias, schema, write or UI. Matrículas and Documentos remain `PREREQUISITE_REQUIRED` until a separate approved owner-routing contract supplies opaque references and server-side policy. This result must not be used to expose internal identifiers or fake disabled actions.
