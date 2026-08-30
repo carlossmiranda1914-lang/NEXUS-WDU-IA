@@ -1,13 +1,12 @@
 # Active Mission
 
-- Mission: STUDENT-EXPERIENCE-01 — Active Students & Student Record Workspace
-- Canonical branch: `codex/student-experience-01-active-students`
-- Canonical worktree path: `D:\Soft\NEXUS-WDU-IA-student-experience-01`
-- Baseline: `main @ f413d61381a6f9edb54a0ce1138e9c49fb49dd9b`; implementation checkpoint `a73917c`
+- Mission: STUDENT-EXPERIENCE-02 — Student Record Clarity & Operational Refinement
+- Canonical branch: `codex/student-experience-02-design`
+- Canonical worktree path: `D:\Soft\NEXUS-WDU-IA-student-experience-02`
+- Baseline: `f5b787789f61744ddb6c512ae5a0ab2c87f7c329`; Task 6 checkpoint `eaf4d62e759fa94acf094037b3a15c744305ec72`
 - Status: VALIDATING
-- Completed foundation: Objective 1 is accepted as navigation foundation only. Active Students is server-owned, tenant-safe and one-person/one-row; opaque `studentRef` opens a transitional quick preview rather than an Enrollment process drawer.
-- Completed objectives: Objective 2.1 — Dedicated Student Record Workspace + Resumo — and Objective 2.2 — Percurso académico — are accepted through their Human UAT gates.
-- Completed objective: Objective 2.3 — Matrículas — is Human UAT accepted. It remains read-only and presents only the current matrícula and previous matrículas supplied by the authorised Student Context.
-- Completed objective: Objective 2.4 — Documentos — is Human UAT accepted. The physical document lifecycle remains a separate Documents-authority gap and is not implemented here.
-- Completed objective: Objective 2.5 — Encarregados — is Human UAT accepted. It projects only authoritative guardian relationship metadata.
-- Current authorised objective: Objective 2.6 — final product hardening. Automated PostgreSQL/HTTP, tenant/privacy, read-only, visual-regression, responsive and static gates are green; final Human UAT remains required before mission closeout. Finance remains not started.
+- Checkpoint: `READY_FOR_HUMAN_UAT=YES`. Tasks 1–6 are frozen green; no product feature, attention rule, owner route, schema or authority was added by Task 7.
+- UAT data: two distinct fictitious Student fixtures are prepared through the canonical local bootstrap. Administrative identity and all credentials remain external/ignored.
+- Human gate: validate the authorised five-section read path, A/B replacement, responsive/theme/focus/back-navigation behavior, privacy and quiet normal state at `http://localhost:3000`.
+- Deferred: attention rules remain `NONE`; Enrollment/Document actions lack a safe owner bridge; Finance and other deferred domains remain out of scope.
+- Do not mark `DONE`, open a PR or merge until explicit human acceptance.

@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-Updated: 2026-08-29
+Updated: 2026-08-30
 
 ## Canonical baseline
 
@@ -13,7 +13,7 @@ Updated: 2026-08-29
 
 ## Current priority
 
-**NEXUS-RECOVERY-01 is DONE.** The ignored external UAT administrative identity was reconciled with the disposable local PostgreSQL target; bootstrap passed idempotently and real browser authentication resolved the canonical UID, Identity, Person, active Membership, Institution and InstitutionalContext with `/api/profile` 200, including a repeat login and post-runtime-restart resolution. Student visual UAT is still not accepted and requires its separately authorised UI/UAT path; this recovery did not implement it.
+**STUDENT-EXPERIENCE-02 is VALIDATING with `READY_FOR_HUMAN_UAT=YES`.** Tasks 1–6 are frozen green: attention rules remain `NONE`; backend/frontend truth, owner-routing audit, UX baseline, premium-serene refinement and product hardening are evidenced. Task 7 prepares two distinct fictitious local UAT students through the canonical bootstrap for the final human visual acceptance; no product authority, schema, route or write was added.
 
 Finance is **NOT STARTED**. Assessment, Attendance and physical Documents remain non-authoritative for Student Context and must not be presented as completed facts.
 
@@ -29,6 +29,4 @@ Run `npm run uat:bootstrap` from a named branch. It links ignored external local
 
 ## Next authorised action
 
-`STUDENT-EXPERIENCE-01` Objective 1 is accepted as the navigation foundation: Active Students is separate from Enrollment processes, resolves one active StudentProfile per person through server-owned context and opens via opaque `studentRef`. It is not the final student-record UX.
-
-Objectives 2.1 — Dedicated Student Record Workspace + Resumo —, 2.2 — Percurso académico —, 2.3 — Matrículas —, 2.4 — Documentos — and 2.5 — Encarregados — have passed their Human UAT gates. `STUDENT-EXPERIENCE-01` Objective 2.6 — final product hardening — is **VALIDATING** on `codex/student-experience-01-active-students`: integrated real-data, security, read-only and visual gates are green; final Human UAT remains required. Physical document replacement/version management requires a separate Documents authority. Finance is not authorised.
+The active gate is the explicit human acceptance of `STUDENT-EXPERIENCE-02` on `codex/student-experience-02-design`. Validate the five-section, read-only Student Record with Student A and Student B through the local UAT path. The mission must not be marked `DONE`, opened as a PR or merged before that acceptance. Physical document lifecycle, Enrollment/Document owner-action routing, Finance, Assessment, Attendance, Communication, AI and guardian writes remain separate prerequisites or deferred domains.

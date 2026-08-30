@@ -1,6 +1,6 @@
 # STUDENT-EXPERIENCE-02 — Student Record Clarity & Operational Refinement
 
-**State:** IMPLEMENTING
+**State:** VALIDATING
 **Branch:** `codex/student-experience-02-design`
 **Baseline:** `f5b787789f61744ddb6c512ae5a0ab2c87f7c329`
 **Dependencies:** STUDENT-EXPERIENCE-01 accepted foundation; canonical Enrollment, Academic Core and Student Context read authorities.
@@ -129,3 +129,44 @@ No state above creates attention: `ATTENTION_RULES_ACCEPTED=NONE` remains frozen
 > Minimalist does not mean visually flat/simple. Future Student Experience visual polish may increase depth, contrast, composition and Nexus identity while preserving premium-serene simplicity and existing architecture.
 
 This is documentation-only debt. It does not authorise UI changes in Task 6.
+
+## Task 7 — Human UAT checkpoint
+
+`READY_FOR_HUMAN_UAT=YES`
+
+Task 7 does not add product capability. It prepares the local disposable UAT target and records the evidence required for human acceptance. The official mission state remains `VALIDATING` until that acceptance occurs.
+
+### Canonical UAT data
+
+- **Student A** and **Student B** are two distinct fictitious StudentProfiles prepared only through the canonical local UAT bootstrap on the approved disposable PostgreSQL target.
+- Both have an active profile, active enrollment, active placement, factual history, metadata-only document data and a guardian relationship. Their current class/programme, history, document type and guardian relationship differ materially.
+- The administrative UAT identity remains external and ignored. No email, UID, password, token, internal identifier or public student reference is recorded in this Mission Pack.
+- Bootstrap is idempotent: it was executed twice and each run reported the approved target, verified migrations, canonical institutional context and `fixtures: 2`.
+
+### Human path and matrix
+
+`http://localhost:3000` → **Alunos & Matrículas** → **Alunos ativos** → **Abrir registo** → **Resumo** → **Percurso académico** → **Matrículas** → **Documentos** → **Encarregados** → voltar à lista → abrir o outro aluno.
+
+The human acceptance checks desktop, 768px and 390px; light and dark themes; keyboard focus; back navigation; one-person/one-row; A/B replacement without stale data; header status; current/history separation; metadata-only Documents; read-only Encarregados; no identifiers, technical language, fake actions or attention UI; and no Student Record fatal console error or unexpected failed Student Record request.
+
+### Evidence before human acceptance
+
+- Tasks 1–6 governance/product contracts: PASS.
+- Active Students, opaque public references and Student Context PostgreSQL/HTTP: PASS, including tenant isolation, 401/403/404, privacy and read-only purity.
+- Enrollment, Academic Core and document-metadata regressions: PASS.
+- Migration isolation: PASS for ledger `0001–0024`.
+- UAT A/B PostgreSQL fixture proof and bootstrap idempotence: PASS.
+- TypeScript/lint, production build, secret scan, diff check and compatible aggregate quality gate: PASS.
+- Machine path check: PASS. The authenticated local portal served HTTP 200; A and B each opened all five read-only sections; A→B carried no stale A content; no Student Record console error was observed. The portal is left at Student B → Encarregados for human acceptance.
+
+### Deferred prerequisites and known non-blocking warnings
+
+- `ATTENTION_RULES_ACCEPTED=NONE`; no alert, score, warning or placeholder is authorised.
+- Enrollment and Document owner actions remain `PREREQUISITE_REQUIRED`: no safe opaque owner route exists from Student Record, so no action is presented.
+- Physical document lifecycle, Finance, Assessment, Attendance, Communication, AI and guardian writes remain out of scope.
+- Existing non-Student-Record integration warnings (notice, chat, finance and teacher integrations) may return 503 in local visual inspection; they are not treated as Student Record evidence or silently fixed here.
+- Future visual refinement debt remains: “Minimalist does not mean visually flat/simple. Future Student Experience visual polish may increase depth, contrast, composition and Nexus identity while preserving premium-serene simplicity and existing architecture.”
+
+### Stop rule
+
+Do not mark this mission `DONE`, open a PR or merge before explicit human acceptance. The next authorised action is human acceptance only.
