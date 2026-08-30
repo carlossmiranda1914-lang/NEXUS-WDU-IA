@@ -387,6 +387,7 @@ function ProcessDrawer({ record, light, onClose, onTransition }: { record: Enrol
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [drawerVisible, setDrawerVisible] = useState(false);
   const loadProcess = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -400,6 +401,19 @@ function ProcessDrawer({ record, light, onClose, onTransition }: { record: Enrol
     }
   }, [record.id]);
   useEffect(() => { void loadProcess(); }, [loadProcess]);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setDrawerVisible(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  function requestClose() {
+    if (globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      onClose();
+      return;
+    }
+    setDrawerVisible(false);
+    window.setTimeout(onClose, 200);
+  }
 
   async function runPrimaryAction() {
     if (!process?.nextAction?.available) return;
@@ -423,9 +437,9 @@ function ProcessDrawer({ record, light, onClose, onTransition }: { record: Enrol
   }
 
   const currentStage = process?.stages.find((stage) => stage.key === process.currentStage);
-  return <div className="fixed inset-0 z-[12000] flex justify-end bg-black/50 transition-opacity duration-200 motion-reduce:transition-none" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <aside className={`h-full w-full max-w-2xl overflow-y-auto border-l p-4 shadow-2xl transition-transform duration-300 motion-reduce:transition-none sm:p-6 ${light ? 'border-zinc-200 bg-white' : 'border-zinc-700/70 bg-zinc-950'}`} aria-label="Processo persistido de matrícula">
-      <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="break-words text-[10px] font-bold uppercase leading-5 tracking-[0.14em] text-emerald-600">Processo de matrícula</p><h2 className={`mt-1 line-clamp-2 break-words text-xl font-bold leading-7 ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</h2><p className={`mt-1 break-words text-sm leading-6 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.offer_name} · {record.academic_year_name}</p></div><button type="button" aria-label="Fechar processo" onClick={onClose} className={`min-h-11 min-w-11 shrink-0 rounded-lg p-2 ${light ? 'hover:bg-zinc-100' : 'hover:bg-white/5'}`}><X className="h-5 w-5" /></button></div>
+  return <div className={`fixed inset-0 z-[12000] flex justify-end bg-black/50 transition-opacity duration-200 motion-reduce:transition-none ${drawerVisible ? 'opacity-100' : 'opacity-0'}`} onMouseDown={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
+    <aside className={`h-full w-full max-w-2xl overflow-y-auto border-l p-4 shadow-2xl transition-transform duration-300 motion-reduce:transition-none sm:p-6 ${drawerVisible ? 'translate-x-0' : 'translate-x-full'} ${light ? 'border-zinc-200 bg-white' : 'border-zinc-700/70 bg-zinc-950'}`} aria-label="Processo persistido de matrícula">
+      <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="break-words text-[10px] font-bold uppercase leading-5 tracking-[0.14em] text-emerald-600">Processo de matrícula</p><h2 className={`mt-1 line-clamp-2 break-words text-xl font-bold leading-7 ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</h2><p className={`mt-1 break-words text-sm leading-6 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.offer_name} · {record.academic_year_name}</p></div><button type="button" aria-label="Fechar processo" onClick={requestClose} className={`min-h-11 min-w-11 shrink-0 rounded-lg p-2 ${light ? 'hover:bg-zinc-100' : 'hover:bg-white/5'}`}><X className="h-5 w-5" /></button></div>
       {loading && <div className={`mt-6 flex min-h-40 items-center justify-center gap-2 rounded-2xl border ${light ? 'border-zinc-200 bg-slate-50 text-zinc-500' : 'border-white/10 bg-zinc-950/60 text-zinc-400'}`}><LoaderCircle className="h-4 w-4 animate-spin" /> A carregar etapas reais…</div>}
       {error && <div role="alert" className="mt-6 flex gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-500"><AlertCircle className="h-5 w-5 shrink-0" />{error}<button type="button" onClick={() => void loadProcess()} className="ml-auto underline">Tentar novamente</button></div>}
       {process && !loading && <>

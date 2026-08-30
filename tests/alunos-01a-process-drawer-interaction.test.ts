@@ -15,6 +15,11 @@ expect(source.includes('Versão') && source.includes('process.version'), 'Proces
 expect(!source.includes('ID do processo'), 'Process drawer must not display an internal process identifier.');
 expect(source.includes('aria-label="Fechar processo"'), 'Process drawer must retain its close action.');
 expect(source.includes('motion-reduce:'), 'Animated process-drawer elements must provide reduced-motion treatment.');
+expect(source.includes('const [drawerVisible, setDrawerVisible] = useState(false);'), 'Process drawer must maintain an enter/exit visibility state.');
+expect(source.includes('requestAnimationFrame(() => setDrawerVisible(true))'), 'Process drawer must enter after mount instead of mounting at its final visual state.');
+expect(source.includes("drawerVisible ? 'opacity-100' : 'opacity-0'"), 'Process drawer overlay must transition between actual opacity states.');
+expect(source.includes("drawerVisible ? 'translate-x-0' : 'translate-x-full'"), 'Process drawer panel must transition between actual transform states.');
+expect(source.includes("globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches"), 'Process drawer close must bypass delayed animation when reduced motion is requested.');
 
 if (failures.length) throw new Error(failures.join('\n'));
 console.log(`ALUNOS-01A process drawer interaction contract passed (${assertions} assertions).`);
