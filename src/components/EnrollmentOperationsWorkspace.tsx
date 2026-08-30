@@ -26,13 +26,13 @@ import {
   buildOperationalMetrics,
   getAttentionQueue,
   nextAction,
-  pipelineCounts,
   recordsForView,
   STATUS_LABELS,
   type EnrollmentOperationalRecord,
   type EnrollmentOperationalStatus,
   type OperationalView,
 } from '../modules/enrollments/enrollment-operations-model.ts';
+import { buildEnrollmentLifecyclePresentation } from '../modules/enrollments/enrollment-lifecycle-presentation.ts';
 
 type Theme = 'light' | 'dark';
 type Offer = { id: string; name: string; code: string; academic_year_id: string; academic_year_name: string };
@@ -41,7 +41,6 @@ type Resolution = {
   candidateCount: number;
 };
 
-type PipelineContext = { label: string; description: string };
 type ProcessAction = { code: string; label: string; available: boolean; unavailableReason: string | null };
 type ProcessProjection = {
   enrollmentId: string;
@@ -78,14 +77,6 @@ type StudentRecordContext = {
       level: { code: string; name: string | null };
     } | null;
   };
-};
-
-const PIPELINE_CONTEXT: Record<string, PipelineContext> = {
-  entry: { label: 'Entrada', description: 'Processos iniciados que ainda precisam de tratamento pela Secretaria.' },
-  documents: { label: 'Documentos', description: 'Matrículas que aguardam documentação necessária para continuar.' },
-  verification: { label: 'Verificação', description: 'Processos em análise e validação antes da decisão.' },
-  decision: { label: 'Decisão', description: 'Processos validados e preparados para a decisão autorizada.' },
-  activation: { label: 'Ativação', description: 'Alunos cuja matrícula já está ativa no contexto escolar.' },
 };
 
 const VIEW_LABELS: Array<{ id: OperationalView; label: string }> = [
@@ -159,7 +150,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
   const [statusFilter, setStatusFilter] = useState<EnrollmentOperationalStatus[] | null>(null);
   const [selected, setSelected] = useState<EnrollmentOperationalRecord | null>(null);
   const [activeStudentError, setActiveStudentError] = useState<string | null>(null);
-  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
+  const [selectedLifecycleLabel, setSelectedLifecycleLabel] = useState<string | null>(null);
   const [newEntryOpen, setNewEntryOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -189,12 +180,11 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
   useEffect(() => { void load(); }, [load]);
 
   const metrics = useMemo(() => buildOperationalMetrics(records), [records]);
-  const pipeline = useMemo(() => pipelineCounts(records), [records]);
   const attention = useMemo(() => getAttentionQueue(records), [records]);
-  const selectedStage = selectedStageId ? PIPELINE_CONTEXT[selectedStageId] : null;
+  const lifecycle = useMemo(() => buildEnrollmentLifecyclePresentation(records, activeStudents.length), [records, activeStudents.length]);
   const visible = useMemo(() => {
     let base = recordsForView(records, view);
-    if (statusFilter) base = base.filter((record) => statusFilter.includes(record.status));
+    if (statusFilter) base = records.filter((record) => statusFilter.includes(record.status));
     const term = query.trim().toLocaleLowerCase('pt');
     if (term) {
       base = base.filter((record) => [record.student_name, record.guardian_name, record.offer_name, record.academic_year_name]
@@ -232,7 +222,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
 
       <nav className={`flex max-w-full gap-1 overflow-x-auto overscroll-x-contain border-b pb-3 ${light ? 'border-zinc-200' : 'border-white/10'}`} aria-label="Vistas de Alunos e Matrículas">
         {VIEW_LABELS.map((item) => (
-          <button key={item.id} type="button" onClick={() => { setView(item.id); setStatusFilter(null); setSelectedStageId(null); }} className={`min-h-11 whitespace-nowrap rounded-lg px-3.5 py-2 text-xs font-semibold transition ${view === item.id ? light ? 'bg-emerald-50 text-emerald-800' : 'bg-emerald-500/15 text-emerald-200' : light ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}>
+          <button key={item.id} type="button" onClick={() => { setView(item.id); setStatusFilter(null); setSelectedLifecycleLabel(null); }} className={`min-h-11 whitespace-nowrap rounded-lg px-3.5 py-2 text-xs font-semibold transition ${view === item.id ? light ? 'bg-emerald-50 text-emerald-800' : 'bg-emerald-500/15 text-emerald-200' : light ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}>
             {item.label}
           </button>
         ))}
@@ -260,19 +250,19 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
               </div>
 
               <div className={`rounded-2xl border p-5 ${surface}`}>
-                <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className={`font-semibold ${text}`}>Fluxo das matrículas</h2><p className={`mt-1 text-xs ${muted}`}>Acompanhe o percurso da matrícula. Selecione uma etapa disponível para abrir a respetiva fila de trabalho.</p></div><ShieldCheck className="h-5 w-5 text-emerald-700" /></div>
+                <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className={`font-semibold ${text}`}>Percurso de alunos e matrículas</h2><p className={`mt-1 text-xs ${muted}`}>Acompanhe o percurso institucional. Cada etapa abre apenas uma vista existente; o estado continua a ser confirmado pelo servidor.</p></div><ShieldCheck className="h-5 w-5 text-emerald-700" /></div>
                 <div className="grid max-w-full snap-x snap-mandatory grid-flow-col auto-cols-[minmax(168px,78vw)] gap-2 overflow-x-auto overscroll-x-contain pb-2 sm:auto-cols-[minmax(176px,42vw)] lg:auto-cols-[minmax(176px,24vw)] xl:auto-cols-[minmax(168px,1fr)]">
-                  {pipeline.map((stage, index) => (
-                    <button key={stage.id} type="button" disabled={!stage.available} aria-label={stage.available ? `Abrir etapa ${stage.label}` : `${stage.label}: domínio ainda não disponível`} onClick={() => { if (!stage.available) return; setSelectedStageId(stage.id); setStatusFilter(stage.statuses); setView(stage.id === 'entry' ? 'entries' : stage.id === 'activation' ? 'students' : 'enrollments'); }} className={`group relative flex min-h-24 min-w-0 snap-start flex-col rounded-xl border p-3 text-left transition ${mutedSurface} ${stage.available ? 'cursor-pointer hover:border-emerald-500/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40' : 'cursor-default opacity-65'}`}>
+                  {lifecycle.map((stage, index) => (
+                    <button key={stage.key} type="button" aria-label={`Abrir etapa ${stage.label}`} onClick={() => { setSelectedLifecycleLabel(stage.label); setStatusFilter(stage.statuses.length > 0 ? stage.statuses : null); setView(stage.selectedView); }} className={`group relative flex min-h-24 min-w-0 snap-start flex-col rounded-xl border p-3 text-left transition ${mutedSurface} cursor-pointer hover:border-emerald-500/50 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40`}>
                       <div className="flex min-w-0 items-start gap-2">
                         <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${light ? 'bg-zinc-200 text-zinc-700' : 'bg-white/10 text-zinc-300'}`}>{index + 1}</span>
                         <p className={`min-w-0 whitespace-normal break-normal text-sm font-semibold leading-5 [overflow-wrap:normal] ${text}`}>{stage.label}</p>
                       </div>
                       <div className="mt-auto flex min-w-0 items-end justify-between gap-2 pl-8 pt-3">
-                        <span className={`min-w-0 text-[11px] leading-4 ${muted}`}>{stage.available ? 'Processos nesta etapa' : 'Ainda não disponível'}</span>
+                        <span className={`min-w-0 text-[11px] leading-4 ${muted}`}>{stage.source === 'active-students' ? 'Alunos ativos' : 'Processos confirmados'}</span>
                         <span className="flex shrink-0 items-center gap-1.5">
-                          <span className={`text-sm font-bold tabular-nums ${stage.available ? text : muted}`}>{stage.available ? stage.count : '—'}</span>
-                          {stage.available && <ChevronRight className="h-4 w-4 shrink-0 text-emerald-700 opacity-60 transition group-hover:translate-x-0.5 group-hover:opacity-100" />}
+                          <span className={`text-sm font-bold tabular-nums ${text}`}>{stage.count}</span>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-emerald-700 opacity-60 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
                         </span>
                       </div>
                     </button>
@@ -305,7 +295,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
           {view !== 'overview' && view !== 'students' && (
             <div className={`overflow-hidden rounded-2xl border ${surface}`}>
               <div className={`flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between ${light ? 'border-zinc-200' : 'border-white/10'}`}>
-                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className={`font-semibold ${text}`}>{selectedStage?.label || VIEW_LABELS.find((item) => item.id === view)?.label}</h2></div><p className={`mt-1 text-xs leading-5 ${muted}`}>{selectedStage?.description || `${visible.length} registo${visible.length === 1 ? '' : 's'} real${visible.length === 1 ? '' : 'is'} nesta vista.`}</p>{selectedStage && <p className={`mt-1 text-[11px] ${muted}`}>{visible.length} processo{visible.length === 1 ? '' : 's'} nesta etapa.</p>}</div>
+                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className={`font-semibold ${text}`}>{selectedLifecycleLabel || VIEW_LABELS.find((item) => item.id === view)?.label}</h2></div><p className={`mt-1 text-xs leading-5 ${muted}`}>{selectedLifecycleLabel ? 'A vista apresenta apenas dados institucionais confirmados pelo servidor.' : `${visible.length} registo${visible.length === 1 ? '' : 's'} real${visible.length === 1 ? '' : 'is'} nesta vista.`}</p></div>
                 <div className="relative w-full sm:w-80"><Search aria-hidden="true" className={`pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 ${muted}`} /><input aria-label="Procurar processos" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Procurar aluno, oferta ou ano" className={`min-h-11 w-full rounded-lg border py-2.5 pl-12 pr-3 text-sm outline-none focus:border-emerald-600 ${light ? 'border-zinc-200 bg-white text-zinc-900' : 'border-white/10 bg-zinc-950 text-white'}`} /></div>
               </div>
               {visible.length === 0 ? <EmptyState title="Nenhum processo nesta vista" body="Os dados desta vista são alimentados exclusivamente pelos processos institucionais persistidos." light={light} /> : <ul className={`divide-y ${light ? 'divide-zinc-200' : 'divide-white/10'}`}>{visible.map((record) => <li key={record.id}><ProcessRow record={record} light={light} onOpen={() => setSelected(record)} /></li>)}</ul>}

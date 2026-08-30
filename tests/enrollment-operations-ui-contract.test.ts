@@ -22,7 +22,9 @@ expect(!source.includes("'/api/enrollments/drafts'"), 'Legacy draft endpoint mus
 expect(!source.includes("request('/api/enrollments', { method: 'POST'"), 'Legacy enrollment POST must not return.');
 expect(!source.includes('institutionId:'), 'Browser must not supply institution authority.');
 expect(!source.includes('studentPersonId:'), 'Browser must not supply global Person authority.');
-expect(source.includes('Ainda não disponível'), 'Unavailable pipeline domains must remain explicit in product language and never be simulated.');
+expect(source.includes('Percurso de alunos e matrículas'), 'Workspace must present the approved single lifecycle rather than unavailable parallel pipeline domains.');
+expect(!source.includes('Identificação'), 'The superseded parallel identity pipeline card must not remain in the lifecycle summary.');
+expect(!source.includes('Financeiro'), 'The out-of-scope finance pipeline card must not remain in the lifecycle summary.');
 expect(!source.includes('Domínio ainda não persistido'), 'Technical backend wording must not leak into the user-facing pipeline.');
 expect(source.includes('Os alunos ativos aparecem aqui quando o respetivo perfil institucional está ativo.'), 'Empty active-student view must describe the authoritative StudentProfile condition.');
 expect(source.includes('exclusivamente pelos processos institucionais persistidos'), 'Workspace empty states must continue to reject demonstrative records.');
