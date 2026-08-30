@@ -1,6 +1,6 @@
 # ALUNOS-01A — Enrollment-to-Student Continuity & Interaction
 
-**State:** IMPLEMENTING  
+**State:** BLOCKED
 **Design authority:** `docs/superpowers/specs/2026-08-30-alunos-01a-enrollment-student-continuity-design.md`  
 **Implementation plan:** `docs/superpowers/plans/2026-08-30-alunos-01a-enrollment-student-continuity.md`  
 **Baseline:** `main@f945fe43d72e9f86078a184d557691e1c32d4b63`  
@@ -74,4 +74,17 @@ The present operational model exposes status labels such as `Entrada iniciada`, 
 
 ## Execution boundary
 
-Task 1 is documentation and governance only. It introduces no product code, schema, write, navigation, animation or user-visible lifecycle behavior. Subsequent Tasks 2–6 remain unstarted until their independent review gates.
+Task 1 introduced no product code, schema, write, navigation, animation or user-visible lifecycle behavior. Tasks 2 and 3 subsequently passed their independent review gates; Task 4 is blocked by the safe-reference prerequisite below.
+
+## Task 4 stop-rule evidence — activation-to-Student-Record bridge
+
+**Status:** BLOCKED — no approved safe public correlation exists.
+
+The independent repository audit on `8f2298a` established:
+
+- `activateEnrollment` returns and the HTTP controller serializes only `{ enrollmentId, lifecycleVersion, status }`; `enrollmentId` is an internal command target and cannot enter browser navigation.
+- The authorized Active Students projection exposes opaque `studentRef`, but has no enrollment correlation reference. Its HTTP contract explicitly excludes enrollment and person internal identifiers.
+- Enrollment workspace records share only human display data with Active Students. Matching by a name, offer or academic year would be ambiguous and is prohibited.
+- The existing Process Drawer provides only the approved validation/review actions; it has no canonical activation action path. Activation remains reserved to the existing Administration/Direção authority.
+
+Task 4 Step 2 in the approved plan therefore requires a stop: no internal-ID fallback, display-name matching, client mapping or new authority is permitted. The smallest prerequisite is an explicitly approved, server-owned activation result / authorized Active Students correlation contract that yields exactly one opaque `studentRef`, plus an approved action owner if a direct activation handoff is still desired. It requires its own authority, tenancy, privacy, PostgreSQL and HTTP contract before ALUNOS-01A can resume.
