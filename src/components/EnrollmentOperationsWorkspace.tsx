@@ -217,16 +217,16 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
       <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0 space-y-1.5">
           <p className="break-words text-[10px] font-bold uppercase leading-5 tracking-[0.14em] text-emerald-700 sm:tracking-[0.18em]">Secretaria escolar</p>
-          <h1 className={`text-2xl font-bold tracking-tight ${text}`}>Alunos & Matrículas</h1>
-          <p className={`max-w-3xl text-sm leading-6 ${muted}`}>Entradas, matrículas em curso, exceções e alunos ativos num único fluxo operacional. Os indicadores abaixo são calculados apenas a partir dos processos reais da instituição atual.</p>
+          <h1 className={`text-2xl font-bold tracking-tight ${text}`}>{view === 'students' ? 'Alunos ativos' : 'Alunos & Matrículas'}</h1>
+          <p className={`max-w-3xl text-sm leading-6 ${muted}`}>{view === 'students' ? 'Encontre e abra o registo atual de cada aluno ativo.' : 'Entradas, matrículas em curso, exceções e alunos ativos num único fluxo operacional. Os indicadores abaixo são calculados apenas a partir dos processos reais da instituição atual.'}</p>
         </div>
         <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap">
           <button type="button" onClick={() => void load()} disabled={loading} className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border px-3.5 py-2.5 text-xs font-semibold sm:w-auto ${light ? 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50' : 'border-white/10 bg-zinc-900 text-zinc-300 hover:bg-white/5'} disabled:opacity-50`}>
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </button>
-          <button type="button" onClick={() => setNewEntryOpen(true)} className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-center text-xs font-bold text-white hover:bg-emerald-600 sm:w-auto">
+          {view !== 'students' && <button type="button" onClick={() => setNewEntryOpen(true)} className="inline-flex min-h-11 w-full min-w-0 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-4 py-2.5 text-center text-xs font-bold text-white hover:bg-emerald-600 sm:w-auto">
             <Plus className="h-4 w-4" /> Nova entrada / matrícula
-          </button>
+          </button>}
         </div>
       </header>
 
