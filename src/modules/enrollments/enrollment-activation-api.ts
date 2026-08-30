@@ -76,7 +76,8 @@ export async function activateEnrollment(
     );
     if (!enrollment.rowCount) throw new EnrollmentActivationError('NOT_FOUND', 'Matrícula não encontrada nesta instituição.');
 
-    const prior = await client.query<{ request_fingerprint: string; result: ActivationResult }>(
+    const current = enrollment.rows[0];
+    const prior = await client.query<{ request_fingerprint: string }>(
       `SELECT request_fingerprint, result
          FROM enrollment_activation_commands
         WHERE institution_id = $1 AND idempotency_key = $2
@@ -85,11 +86,15 @@ export async function activateEnrollment(
     );
     if (prior.rowCount) {
       if (prior.rows[0].request_fingerprint !== fingerprint) throw new EnrollmentActivationError('IDEMPOTENCY_CONFLICT', 'A chave de idempotência já foi usada para outro pedido.');
+      const replayProfile = await client.query<{ public_ref: string }>(
+        `SELECT public_ref FROM student_profiles WHERE institution_id = $1 AND person_id = $2 FOR UPDATE`,
+        [context.institutionId, current.student_person_id],
+      );
+      if (!replayProfile.rowCount) throw new EnrollmentActivationError('NOT_FOUND', 'Matrícula não encontrada nesta instituição.');
       await client.query('COMMIT');
-      return { ...prior.rows[0].result, replayed: true };
+      return { studentRef: replayProfile.rows[0].public_ref, lifecycleVersion: current.lifecycle_version, status: 'active' as const, replayed: true };
     }
 
-    const current = enrollment.rows[0];
     if (BigInt(current.lifecycle_version) !== lifecycleVersion || BigInt(current.registration_version) !== registrationVersion) {
       throw new EnrollmentActivationError('STALE_VERSION', 'A matrícula foi alterada entretanto. Recarregue e reveja antes de ativar.');
     }

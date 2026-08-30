@@ -106,6 +106,22 @@ try {
   const eventCount = await pool.query<{ count: string }>("SELECT count(*)::text AS count FROM enrollment_events WHERE enrollment_application_id=$1 AND event_type='enrollment_activated'", [ids.enrollment]);
   assert(eventCount.rows[0].count === '1', 'Replay must not duplicate activation audit event.');
 
+  await pool.query(
+    `UPDATE enrollment_activation_commands SET result=$4::jsonb WHERE institution_id=$1 AND enrollment_application_id=$2 AND idempotency_key=$3`,
+    [ids.institution, ids.enrollment, 'activation-happy-path-001', JSON.stringify({ enrollmentId: ids.enrollment, lifecycleVersion: '2', status: 'active' })],
+  );
+  const legacyReplay = await activateEnrollment(pool, context, ids.enrollment, {
+    expectedLifecycleVersion: '1', expectedRegistrationVersion: '1', idempotencyKey: 'activation-happy-path-001', correlationId: 'activation-test-001',
+  });
+  assert(legacyReplay.replayed === true && legacyReplay.studentRef === activated.studentRef && !('enrollmentId' in legacyReplay), 'Legacy idempotency payloads must be normalized through the locked canonical profile without leaking enrollment ids.');
+  const legacyReplayState = await pool.query<{ events: string; ledger: string; profiles: string }>(
+    `SELECT (SELECT count(*)::text FROM enrollment_events WHERE enrollment_application_id=$1 AND event_type='enrollment_activated') AS events,
+            (SELECT count(*)::text FROM enrollment_activation_commands WHERE enrollment_application_id=$1) AS ledger,
+            (SELECT count(*)::text FROM student_profiles WHERE institution_id=$2 AND person_id=$3) AS profiles`,
+    [ids.enrollment, ids.institution, ids.student],
+  );
+  assert(legacyReplayState.rows[0].events === '1' && legacyReplayState.rows[0].ledger === '1' && legacyReplayState.rows[0].profiles === '1', 'Legacy replay must not create another event, ledger row, profile, or reference.');
+
   let staleRejected = false;
   try { await activateEnrollment(pool, context, ids.enrollment, { expectedLifecycleVersion: '1', expectedRegistrationVersion: '1', idempotencyKey: 'activation-stale-v1-001' }); }
   catch (error) { staleRejected = error instanceof EnrollmentActivationError && error.code === 'STALE_VERSION'; }
