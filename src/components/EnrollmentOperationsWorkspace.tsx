@@ -236,8 +236,8 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
       ) : (
         <>
           {view === 'overview' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-4">
+            <div className="flex flex-col gap-6">
+              <div className="order-2"><div className="mb-2 flex items-center gap-2"><p className={`text-xs font-semibold ${muted}`}>Resumo operacional</p><span className={`text-[11px] ${muted}`}>Indicadores de apoio</span></div><div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-4">
                 {metrics.map((metric) => (
                   <button key={metric.id} type="button" onClick={() => selectMetric(metric.filter)} className={`flex min-h-40 min-w-0 flex-col rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${surface}`}>
                     <div className="flex min-w-0 items-start justify-between gap-3">
@@ -247,9 +247,9 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
                     <p className={`mt-auto pt-4 text-xs leading-5 ${muted}`}>{metric.description}</p>
                   </button>
                 ))}
-              </div>
+              </div></div>
 
-              <div className={`rounded-2xl border p-5 ${surface}`}>
+              <div className={`order-1 rounded-2xl border p-5 ${surface}`}>
                 <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className={`font-semibold ${text}`}>Percurso de alunos e matrículas</h2><p className={`mt-1 text-xs ${muted}`}>Acompanhe o percurso institucional. Cada etapa abre apenas uma vista existente; o estado continua a ser confirmado pelo servidor.</p></div><ShieldCheck className="h-5 w-5 text-emerald-700" /></div>
                 <div className="grid max-w-full snap-x snap-mandatory grid-flow-col auto-cols-[minmax(168px,78vw)] gap-2 overflow-x-auto overscroll-x-contain pb-2 sm:auto-cols-[minmax(176px,42vw)] lg:auto-cols-[minmax(176px,24vw)] xl:auto-cols-[minmax(168px,1fr)]">
                   {lifecycle.map((stage, index) => (
@@ -438,7 +438,7 @@ function ProcessDrawer({ record, light, onClose, onTransition }: { record: Enrol
 
   const currentStage = process?.stages.find((stage) => stage.key === process.currentStage);
   return <div className={`fixed inset-0 z-[12000] flex justify-end bg-black/50 transition-opacity duration-200 motion-reduce:transition-none ${drawerVisible ? 'opacity-100' : 'opacity-0'}`} onMouseDown={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
-    <aside className={`h-full w-full max-w-2xl overflow-y-auto border-l p-4 shadow-2xl transition-transform duration-300 motion-reduce:transition-none sm:p-6 ${drawerVisible ? 'translate-x-0' : 'translate-x-full'} ${light ? 'border-zinc-200 bg-white' : 'border-zinc-700/70 bg-zinc-950'}`} aria-label="Processo persistido de matrícula">
+    <aside className={`h-full w-full max-w-2xl overflow-y-auto border-l p-4 shadow-2xl transition-transform duration-300 motion-reduce:transition-none sm:p-6 ${drawerVisible ? 'translate-x-0' : 'translate-x-full'} ${light ? 'border-zinc-200 bg-white' : 'border-zinc-700/70 bg-zinc-950'}`} aria-label="Processo selecionado de matrícula">
       <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="break-words text-[10px] font-bold uppercase leading-5 tracking-[0.14em] text-emerald-600">Processo de matrícula</p><h2 className={`mt-1 line-clamp-2 break-words text-xl font-bold leading-7 ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</h2><p className={`mt-1 break-words text-sm leading-6 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.offer_name} · {record.academic_year_name}</p></div><button type="button" aria-label="Fechar processo" onClick={requestClose} className={`min-h-11 min-w-11 shrink-0 rounded-lg p-2 ${light ? 'hover:bg-zinc-100' : 'hover:bg-white/5'}`}><X className="h-5 w-5" /></button></div>
       {loading && <div className={`mt-6 flex min-h-40 items-center justify-center gap-2 rounded-2xl border ${light ? 'border-zinc-200 bg-slate-50 text-zinc-500' : 'border-white/10 bg-zinc-950/60 text-zinc-400'}`}><LoaderCircle className="h-4 w-4 animate-spin" /> A carregar etapas reais…</div>}
       {error && <div role="alert" className="mt-6 flex gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-500"><AlertCircle className="h-5 w-5 shrink-0" />{error}<button type="button" onClick={() => void loadProcess()} className="ml-auto underline">Tentar novamente</button></div>}
