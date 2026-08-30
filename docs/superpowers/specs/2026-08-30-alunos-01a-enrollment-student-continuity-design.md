@@ -1,8 +1,8 @@
 # ALUNOS-01A — Enrollment-to-Student Continuity & Interaction
 
-**Status:** DESIGN APPROVED — planning required before implementation  
-**Date:** 2026-08-30  
-**Baseline:** `main@f945fe43d72e9f86078a184d557691e1c32d4b63`  
+**Status:** DESIGN APPROVED — planning required before implementation
+**Date:** 2026-08-30
+**Baseline:** `main@f945fe43d72e9f86078a184d557691e1c32d4b63`
 **Program position:** bounded prerequisite/refinement before Finance Core
 
 ## 1. Product decision

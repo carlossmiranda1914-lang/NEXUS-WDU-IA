@@ -1,11 +1,11 @@
 # ALUNOS-01A — Enrollment-to-Student Continuity & Interaction
 
 **State:** IMPLEMENTING
-**Design authority:** `docs/superpowers/specs/2026-08-30-alunos-01a-enrollment-student-continuity-design.md`  
-**Implementation plan:** `docs/superpowers/plans/2026-08-30-alunos-01a-enrollment-student-continuity.md`  
-**Baseline:** `main@f945fe43d72e9f86078a184d557691e1c32d4b63`  
-**Execution branch:** `codex/alunos-01a-design`  
-**Worktree:** `D:\Soft\NEXUS-WDU-IA-alunos-01a`  
+**Design authority:** `docs/superpowers/specs/2026-08-30-alunos-01a-enrollment-student-continuity-design.md`
+**Implementation plan:** `docs/superpowers/plans/2026-08-30-alunos-01a-enrollment-student-continuity.md`
+**Baseline:** `main@f945fe43d72e9f86078a184d557691e1c32d4b63`
+**Execution branch:** `codex/alunos-01a-design`
+**Worktree:** `D:\Soft\NEXUS-WDU-IA-alunos-01a`
 **Task 1 checkpoint input:** `15d3f99edff765a9076ebb38f14c9acb1c11e186`; upstream `origin/codex/alunos-01a-design`; merge-base `f945fe43d72e9f86078a184d557691e1c32d4b63`.
 
 ## Scope statement
