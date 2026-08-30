@@ -84,6 +84,9 @@ try {
     expectedLifecycleVersion: '1', expectedRegistrationVersion: '1', idempotencyKey: 'activation-happy-path-001', correlationId: 'activation-test-001',
   });
   assert(activated.status === 'active' && activated.lifecycleVersion === '2' && !activated.replayed, 'Validated Enrollment must activate exactly once.');
+  assert(typeof (activated as any).studentRef === 'string' && /^stu_[A-Za-z0-9_-]{22}$/.test((activated as any).studentRef), 'Activation must return the StudentProfile opaque public ref.');
+  const activatedRef = await pool.query<{ public_ref: string }>('SELECT public_ref FROM student_profiles WHERE institution_id=$1 AND person_id=$2', [ids.institution, ids.student]);
+  assert(activated.studentRef === activatedRef.rows[0].public_ref, 'The returned reference must be the activated StudentProfile public ref from the same institution.');
   const readback = await pool.query<{ enrollment_status: string; profile_status: string; lifecycle_version: string }>(
     `SELECT e.status AS enrollment_status, e.lifecycle_version, sp.status AS profile_status
        FROM enrollment_applications e JOIN student_profiles sp ON sp.institution_id=e.institution_id AND sp.person_id=e.student_person_id
@@ -99,6 +102,7 @@ try {
     expectedLifecycleVersion: '1', expectedRegistrationVersion: '1', idempotencyKey: 'activation-happy-path-001', correlationId: 'activation-test-001',
   });
   assert(replay.replayed === true && replay.status === 'active', 'Same activation command must replay safely.');
+  assert(replay.studentRef === activated.studentRef, 'A replay must preserve exactly the originally persisted opaque StudentProfile reference.');
   const eventCount = await pool.query<{ count: string }>("SELECT count(*)::text AS count FROM enrollment_events WHERE enrollment_application_id=$1 AND event_type='enrollment_activated'", [ids.enrollment]);
   assert(eventCount.rows[0].count === '1', 'Replay must not duplicate activation audit event.');
 
@@ -151,6 +155,11 @@ try {
        FROM enrollment_applications e JOIN student_profiles sp ON sp.institution_id=e.institution_id AND sp.person_id=e.student_person_id WHERE e.id=$1`, [concurrent.enrollment],
   );
   assert(concurrentState.rows[0].enrollment_status === 'active' && concurrentState.rows[0].profile_status === 'active' && concurrentState.rows[0].events === '1' && concurrentState.rows[0].ledger === '1', 'Concurrent activation must leave exactly one authoritative active state and side effect.');
+  const concurrentProfile = await pool.query<{ count: string; public_ref: string }>(
+    `SELECT count(*) OVER ()::text AS count, public_ref FROM student_profiles WHERE institution_id=$1 AND person_id=$2`,
+    [ids.institution, concurrent.student],
+  );
+  assert(concurrentProfile.rows[0].count === '1' && /^stu_[A-Za-z0-9_-]{22}$/.test(concurrentProfile.rows[0].public_ref), 'Concurrent activation must retain one pre-existing StudentProfile with one stable opaque reference.');
 
   console.log(`[ENROLLMENT-ACTIVATION-POSTGRES] passed (${assertions} assertions).`);
 } finally {
