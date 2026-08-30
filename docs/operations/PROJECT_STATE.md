@@ -13,7 +13,7 @@ Updated: 2026-08-30
 
 ## Current priority
 
-**STUDENT-EXPERIENCE-02 is VALIDATING with `READY_FOR_HUMAN_UAT=YES`.** Tasks 1–6 are frozen green: attention rules remain `NONE`; backend/frontend truth, owner-routing audit, UX baseline, premium-serene refinement and product hardening are evidenced. Task 7 prepares two distinct fictitious local UAT students through the canonical bootstrap for the final human visual acceptance; no product authority, schema, route or write was added.
+**STUDENT-EXPERIENCE-02 is DONE (Human UAT accepted), pending PR review and integration.** Tasks 1–7 established the bounded, read-only Student Record: attention rules remain `NONE`; backend/frontend truth, owner-routing audit, UX baseline, premium-serene refinement, product hardening and A/B human UAT are evidenced. No product authority, schema, route or write was added by closeout.
 
 Finance is **NOT STARTED**. Assessment, Attendance and physical Documents remain non-authoritative for Student Context and must not be presented as completed facts.
 
@@ -29,4 +29,4 @@ Run `npm run uat:bootstrap` from a named branch. It links ignored external local
 
 ## Next authorised action
 
-The active gate is the explicit human acceptance of `STUDENT-EXPERIENCE-02` on `codex/student-experience-02-design`. Validate the five-section, read-only Student Record with Student A and Student B through the local UAT path. The mission must not be marked `DONE`, opened as a PR or merged before that acceptance. Physical document lifecycle, Enrollment/Document owner-action routing, Finance, Assessment, Attendance, Communication, AI and guardian writes remain separate prerequisites or deferred domains.
+The active gate is PR review of `STUDENT-EXPERIENCE-02` on `codex/student-experience-02-design`; do not merge before explicit approval. Higher-fidelity Nexus visual polish, physical document lifecycle, Enrollment/Document owner-action routing, attention semantics, Finance, Assessment, Attendance, Communication, guardian writes, photograph/identity media, cross-domain timeline and AI/predictive capability remain separate prerequisites or deferred domains.

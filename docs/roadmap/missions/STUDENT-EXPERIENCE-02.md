@@ -1,6 +1,6 @@
 # STUDENT-EXPERIENCE-02 — Student Record Clarity & Operational Refinement
 
-**State:** VALIDATING
+**State:** DONE
 **Branch:** `codex/student-experience-02-design`
 **Baseline:** `f5b787789f61744ddb6c512ae5a0ab2c87f7c329`
 **Dependencies:** STUDENT-EXPERIENCE-01 accepted foundation; canonical Enrollment, Academic Core and Student Context read authorities.
@@ -132,9 +132,9 @@ This is documentation-only debt. It does not authorise UI changes in Task 6.
 
 ## Task 7 — Human UAT checkpoint
 
-`READY_FOR_HUMAN_UAT=YES`
+`HUMAN_UAT=ACCEPTED`
 
-Task 7 does not add product capability. It prepares the local disposable UAT target and records the evidence required for human acceptance. The official mission state remains `VALIDATING` until that acceptance occurs.
+Task 7 did not add product capability. It prepared the local disposable UAT target and recorded the evidence required for human acceptance. Human UAT was accepted; the official mission state is now `DONE` for this bounded mission.
 
 ### Canonical UAT data
 
@@ -149,24 +149,26 @@ Task 7 does not add product capability. It prepares the local disposable UAT tar
 
 The human acceptance checks desktop, 768px and 390px; light and dark themes; keyboard focus; back navigation; one-person/one-row; A/B replacement without stale data; header status; current/history separation; metadata-only Documents; read-only Encarregados; no identifiers, technical language, fake actions or attention UI; and no Student Record fatal console error or unexpected failed Student Record request.
 
-### Evidence before human acceptance
+### Final evidence and human acceptance
 
 - Tasks 1–6 governance/product contracts: PASS.
 - Active Students, opaque public references and Student Context PostgreSQL/HTTP: PASS, including tenant isolation, 401/403/404, privacy and read-only purity.
 - Enrollment, Academic Core and document-metadata regressions: PASS.
 - Migration isolation: PASS for ledger `0001–0024`.
 - UAT A/B PostgreSQL fixture proof and bootstrap idempotence: PASS.
-- TypeScript/lint, production build, secret scan, diff check and compatible aggregate quality gate: PASS.
+- Fresh closeout TypeScript/lint, production build, secret scan, diff check and compatible aggregate quality gate: PASS.
 - Machine path check: PASS. The authenticated local portal served HTTP 200; A and B each opened all five read-only sections; A→B carried no stale A content; no Student Record console error was observed. The portal is left at Student B → Encarregados for human acceptance.
+- **Human UAT: ACCEPTED.** The five-section student record, two-fixture A/B replacement, responsive/theme/focus/back-navigation behaviour and safe quiet states were visually accepted.
 
 ### Deferred prerequisites and known non-blocking warnings
 
 - `ATTENTION_RULES_ACCEPTED=NONE`; no alert, score, warning or placeholder is authorised.
 - Enrollment and Document owner actions remain `PREREQUISITE_REQUIRED`: no safe opaque owner route exists from Student Record, so no action is presented.
 - Physical document lifecycle, Finance, Assessment, Attendance, Communication, AI and guardian writes remain out of scope.
+- Photograph/identity media and a cross-domain timeline remain separate future work; this mission neither creates nor implies either capability.
 - Existing non-Student-Record integration warnings (notice, chat, finance and teacher integrations) may return 503 in local visual inspection; they are not treated as Student Record evidence or silently fixed here.
 - Future visual refinement debt remains: “Minimalist does not mean visually flat/simple. Future Student Experience visual polish may increase depth, contrast, composition and Nexus identity while preserving premium-serene simplicity and existing architecture.”
 
-### Stop rule
+### Closeout rule
 
-Do not mark this mission `DONE`, open a PR or merge before explicit human acceptance. The next authorised action is human acceptance only.
+This bounded mission is `DONE`: its accepted scope is the read-only Student Record clarity and operational refinement described above. This does not prevent future Student Experience missions. Integration remains a separate PR-review and merge gate; do not merge without approval.
