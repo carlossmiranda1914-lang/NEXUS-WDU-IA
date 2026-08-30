@@ -101,3 +101,31 @@ The Student Record is a read-only contextual projection. A section is `ROUTABLE`
 ### Stop rule
 
 Task 3 adds no route, button, alias, schema, write or UI. Matrículas and Documentos remain `PREREQUISITE_REQUIRED` until a separate approved owner-routing contract supplies opaque references and server-side policy. This result must not be used to expose internal identifiers or fake disabled actions.
+
+## Task 6 — Product Hardening Gate
+
+`ATTENTION_RULES_ACCEPTED=NONE` remains frozen. Task 6 measures the existing read path and state semantics only: it adds no attention UI, route, write, schema or backend authority.
+
+### Product hardening evidence contract
+
+| Interaction / state | Measured contract | Result |
+|---|---|---|
+| Open Active Students | Existing workspace load batch has three fixed HTTP reads (`/api/enrollments/context`, `/api/enrollments`, `/api/active-students`); the Active Students endpoint occurs once and never per row | PASS — bounded, no request storm |
+| Open Student Record | One authorised `GET /api/student-context/:studentRef` | PASS — one opaque-ref request feeds all five sections |
+| Switch any of five sections | Changes local `section` presentation state only | PASS — zero Student Context refetches |
+| Retry / reload | Explicit retry invokes exactly one new Student Context request; changed opaque ref invokes the same safe load boundary | PASS |
+| PostgreSQL query shape | One public-ref resolver + current-context query + bounded parallel history/document/guardian batch | PASS — existing PostgreSQL proof asserts six queries for an institutional administrator, independent of history row count; no N+1 |
+| Polling/materialisation | No interval, polling or browser storage | PASS |
+| Loading / retryable read error | Explicit loading surface and safe retryable error surface | PASS — distinct from empty |
+| Partial/no current placement | Explicit authorised partial-context message | PASS — partial is not empty or attention |
+| No history / documents / guardians | Separate factual empty states in their owning sections | PASS — empty is not error |
+| 401 / 403 / 404 / cross-tenant ref | `requireAuth` and Student Context controller return 401, 403 or non-disclosing 404; PostgreSQL/HTTP contract proves foreign-tenant opaque ref is 404 | PASS |
+| Terminology/dates | Visible text uses concise school-administration Portuguese; technical names remain code-only; verified document date formatter uses `pt-AO` | PASS |
+
+No state above creates attention: `ATTENTION_RULES_ACCEPTED=NONE` remains frozen.
+
+### Future visual refinement debt
+
+> Minimalist does not mean visually flat/simple. Future Student Experience visual polish may increase depth, contrast, composition and Nexus identity while preserving premium-serene simplicity and existing architecture.
+
+This is documentation-only debt. It does not authorise UI changes in Task 6.
