@@ -30,7 +30,7 @@ expect('search icon noninteractive', 'pointer-events-none absolute left-4');
 expect('search accessible label', 'aria-label="Procurar processos"');
 expect('search text clearance', 'pl-12 pr-3 text-sm');
 expect('compact empty state', 'min-h-36');
-expect('real institution context retained', 'setInstitutionName(context.institution?.name');
+expect('real institution context retained', 'setInstitutionName(context.value.institution?.name');
 expect('real metrics retained', 'const metrics = useMemo(() => buildOperationalMetrics(records)');
 expect('real pipeline retained', 'const pipeline = useMemo(() => pipelineCounts(records)');
 expect('real attention retained', 'const attention = useMemo(() => getAttentionQueue(records)');
