@@ -1,6 +1,6 @@
 # ALUNOS-01A — Enrollment-to-Student Continuity & Interaction
 
-**State:** BLOCKED
+**State:** IMPLEMENTING
 **Design authority:** `docs/superpowers/specs/2026-08-30-alunos-01a-enrollment-student-continuity-design.md`  
 **Implementation plan:** `docs/superpowers/plans/2026-08-30-alunos-01a-enrollment-student-continuity.md`  
 **Baseline:** `main@f945fe43d72e9f86078a184d557691e1c32d4b63`  
@@ -78,7 +78,7 @@ Task 1 introduced no product code, schema, write, navigation, animation or user-
 
 ## Task 4 stop-rule evidence — activation-to-Student-Record bridge
 
-**Status:** BLOCKED — no approved safe public correlation exists.
+**Status:** RESOLVED — server-owned opaque correlation implemented and independently reviewed.
 
 The independent repository audit on `8f2298a` established:
 
@@ -87,4 +87,13 @@ The independent repository audit on `8f2298a` established:
 - Enrollment workspace records share only human display data with Active Students. Matching by a name, offer or academic year would be ambiguous and is prohibited.
 - The existing Process Drawer provides only the approved validation/review actions; it has no canonical activation action path. Activation remains reserved to the existing Administration/Direção authority.
 
-Task 4 Step 2 in the approved plan therefore requires a stop: no internal-ID fallback, display-name matching, client mapping or new authority is permitted. The smallest prerequisite is an explicitly approved, server-owned activation result / authorized Active Students correlation contract that yields exactly one opaque `studentRef`, plus an approved action owner if a direct activation handoff is still desired. It requires its own authority, tenancy, privacy, PostgreSQL and HTTP contract before ALUNOS-01A can resume.
+The approved prerequisite is now implemented in `49cbf13`: canonical activation resolves `student_profiles.public_ref` in the locked institutional transaction, returns and persists only the opaque `studentRef`, and normalizes legacy idempotency-ledger replays without exposing historical internal identifiers. PostgreSQL and HTTP proofs cover exact correlation, retry/idempotency, concurrency, one Active Students row, tenant fail-closed behavior and Student Record access. No internal-ID fallback, display-name matching, client mapping, schema change or new activation authority was introduced.
+
+## Task 5 visual and motion evidence
+
+**Status:** static contract GREEN; live matrix remains reserved for Task 6 human UAT.
+
+- Lifecycle and workspace navigation retain horizontal overflow protection for narrow screens.
+- Keyboard focus now uses a distinct `focus-visible` emerald ring with a theme-aware offset, separate from selected state treatment.
+- Existing drawer enter/exit and progress transitions retain `motion-reduce` static fallbacks; no looping decorative animation or dashboard metric wall was introduced.
+- The contractual dark and light classes remain in the same component. Desktop, 768px, 390px and authenticated live interaction are deliberately not marked observed until the Task 6 UAT run.
