@@ -239,8 +239,9 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
               <div className={`rounded-2xl border p-5 ${surface}`}>
                 <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className={`font-semibold ${text}`}>Percurso de alunos e matrículas</h2><p className={`mt-1 text-xs ${muted}`}>Acompanhe o percurso institucional. Cada etapa abre apenas uma vista existente; o estado continua a ser confirmado pelo servidor.</p></div><ShieldCheck className="h-5 w-5 text-emerald-700" /></div>
                 {journeyError ? <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-700">{journeyError}</div> : <div className="grid max-w-full snap-x snap-mandatory grid-flow-col auto-cols-[minmax(168px,78vw)] gap-2 overflow-x-auto overscroll-x-contain pb-2 sm:auto-cols-[minmax(176px,42vw)] lg:auto-cols-[minmax(176px,24vw)] xl:auto-cols-[minmax(168px,1fr)]">
-                  {lifecycle.map((stage, index) => (
-                    <button key={stage.key} type="button" aria-label={`Abrir etapa ${stage.label}`} onClick={() => { setSelectedLifecycleLabel(stage.label); setJourneyEnrollmentIds(stage.enrollmentIds); setView(stage.selectedView); }} className={`group relative flex min-h-24 min-w-0 snap-start flex-col rounded-xl border p-3 text-left transition ${mutedSurface} cursor-pointer hover:border-emerald-500/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 ${light ? 'focus-visible:ring-offset-slate-50' : 'focus-visible:ring-offset-zinc-950'}`}>
+                  {lifecycle.map((stage, index) => {
+                    const journeySelected = selectedLifecycleLabel === stage.label;
+                    return <button key={stage.key} type="button" aria-label={`Abrir etapa ${stage.label}`} aria-pressed={journeySelected} data-journey-selected={journeySelected ? 'true' : 'false'} onClick={() => { setSelectedLifecycleLabel(stage.label); setJourneyEnrollmentIds(stage.enrollmentIds); setView(stage.selectedView); }} className={`group relative flex min-h-24 min-w-0 snap-start flex-col rounded-xl border p-3 text-left motion-safe:transition-[transform,box-shadow,border-color,background-color] motion-safe:duration-200 motion-reduce:transition-none ${journeySelected ? light ? 'border-emerald-500 bg-emerald-50 shadow-[0_10px_28px_rgba(5,150,105,0.12)]' : 'border-emerald-400/70 bg-gradient-to-br from-emerald-500/[0.18] via-zinc-950 to-blue-500/[0.12] shadow-[0_12px_32px_rgba(16,185,129,0.12)]' : mutedSurface} cursor-pointer hover:-translate-y-0.5 hover:border-emerald-500/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 ${light ? 'focus-visible:ring-offset-slate-50' : 'focus-visible:ring-offset-zinc-950'}`}>
                       <div className="flex min-w-0 items-start gap-2">
                         <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${light ? 'bg-zinc-200 text-zinc-700' : 'bg-white/10 text-zinc-300'}`}>{index + 1}</span>
                         <p className={`min-w-0 whitespace-normal break-normal text-sm font-semibold leading-5 [overflow-wrap:normal] ${text}`}>{stage.label}</p>
@@ -252,8 +253,8 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
                           <ChevronRight className="h-4 w-4 shrink-0 text-emerald-700 opacity-60 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
                         </span>
                       </div>
-                    </button>
-                  ))}
+                    </button>;
+                  })}
                 </div>}
               </div>
 
@@ -291,7 +292,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
         </>
       )}
 
-      {selected && <ProcessDrawer record={selected} light={light} onClose={() => setSelected(null)} onTransition={async (toStatus) => { await request(`/api/enrollments/${selected.id}/transitions`, { method: 'POST', body: JSON.stringify({ toStatus }) }); await load(); setNotice('Estado da matrícula atualizado.'); }} />}
+      {selected && <ProcessDrawer record={selected} light={light} onClose={() => setSelected(null)} onTransition={async (toStatus) => { await request(`/api/enrollments/${selected.id}/transitions`, { method: 'POST', body: JSON.stringify({ toStatus }) }); await load(); setNotice('Estado da matrícula confirmado pelo servidor.'); }} />}
       {newEntryOpen && <EnrollmentNewEntryDrawer offers={offers} light={light} onClose={() => setNewEntryOpen(false)} onCreated={async () => { setNewEntryOpen(false); setNotice('Processo de matrícula iniciado com segurança e adicionado à fila institucional.'); await load(); setView('enrollments'); }} />}
     </section>
   );
@@ -431,7 +432,7 @@ function ProcessDrawer({ record, light, onClose, onTransition }: { record: Enrol
       : [currentStage]
     : [];
   return <div className={`fixed inset-0 z-[12000] flex justify-end bg-black/50 transition-opacity duration-200 motion-reduce:transition-none ${drawerVisible ? 'opacity-100' : 'opacity-0'}`} onMouseDown={(event) => { if (event.target === event.currentTarget) requestClose(); }}>
-    <aside className={`h-full w-full max-w-2xl overflow-y-auto border-l p-4 shadow-2xl transition-transform duration-300 motion-reduce:transition-none sm:p-6 ${drawerVisible ? 'translate-x-0' : 'translate-x-full'} ${light ? 'border-zinc-200 bg-white' : 'border-zinc-700/70 bg-zinc-950'}`} aria-label="Processo selecionado de matrícula">
+    <aside role="dialog" aria-modal="true" className={`h-full w-full max-w-2xl overflow-y-auto border-l p-4 shadow-2xl transition-transform duration-300 motion-reduce:transition-none sm:p-6 ${drawerVisible ? 'translate-x-0' : 'translate-x-full'} ${light ? 'border-zinc-200 bg-white' : 'border-zinc-700/70 bg-zinc-950'}`} aria-label="Processo selecionado de matrícula">
       <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="break-words text-[10px] font-bold uppercase leading-5 tracking-[0.14em] text-emerald-600">Processo de matrícula</p><h2 className={`mt-1 line-clamp-2 break-words text-xl font-bold leading-7 ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</h2><p className={`mt-1 break-words text-sm leading-6 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.offer_name} · {record.academic_year_name}</p></div><button type="button" aria-label="Fechar processo" onClick={requestClose} className={`min-h-11 min-w-11 shrink-0 rounded-lg p-2 ${light ? 'hover:bg-zinc-100' : 'hover:bg-white/5'}`}><X className="h-5 w-5" /></button></div>
       {loading && <div className={`mt-6 flex min-h-40 items-center justify-center gap-2 rounded-2xl border ${light ? 'border-zinc-200 bg-slate-50 text-zinc-500' : 'border-white/10 bg-zinc-950/60 text-zinc-400'}`}><LoaderCircle className="h-4 w-4 animate-spin" /> A carregar etapas reais…</div>}
       {error && <div role="alert" className="mt-6 flex gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-500"><AlertCircle className="h-5 w-5 shrink-0" />{error}<button type="button" onClick={() => void loadProcess()} className="ml-auto underline">Tentar novamente</button></div>}
