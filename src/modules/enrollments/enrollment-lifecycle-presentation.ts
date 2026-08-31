@@ -28,6 +28,30 @@ const JOURNEY_STAGE_BY_PROCESS_STAGE: Record<EnrollmentProcessStageKey, Enrollme
   P06: 'decision',
 };
 
+const HUMAN_LABEL_BY_JOURNEY_STAGE: Record<EnrollmentJourneyStage, string> = {
+  entry: 'Entrada',
+  preparation: 'Preparação',
+  documents: 'Documentos',
+  verification: 'Verificação',
+  decision: 'Decisão',
+  activation: 'Ativação',
+};
+
+export function getEnrollmentJourneyLabel(
+  process: Pick<EnrollmentJourneyProcessProjection, 'currentStage' | 'enrollmentStatus'>,
+): string;
+export function getEnrollmentJourneyLabel(
+  process: Pick<EnrollmentJourneyProcessProjection, 'enrollmentStatus'> & { currentStage: string },
+): string | null;
+export function getEnrollmentJourneyLabel(
+  process: (Pick<EnrollmentJourneyProcessProjection, 'currentStage' | 'enrollmentStatus'> | (Pick<EnrollmentJourneyProcessProjection, 'enrollmentStatus'> & { currentStage: string })),
+): string | null {
+  const stage = process.enrollmentStatus === 'active'
+    ? 'activation'
+    : JOURNEY_STAGE_BY_PROCESS_STAGE[process.currentStage as EnrollmentProcessStageKey];
+  return stage ? HUMAN_LABEL_BY_JOURNEY_STAGE[stage] : null;
+}
+
 function hasCanonicalProcessProjection(value: EnrollmentJourneyProcessProjection | EnrollmentOperationalRecord): value is EnrollmentJourneyProcessProjection {
   return 'currentStage' in value && 'stages' in value && 'progress' in value && 'blockers' in value && 'nextAction' in value;
 }
@@ -55,12 +79,12 @@ export function buildEnrollmentLifecyclePresentation(
   };
 
   return [
-    step('entry', 'Entrada', 'info', 'entries'),
-    step('preparation', 'Preparação', 'neutral', 'enrollments'),
-    step('documents', 'Documentos', 'attention', 'enrollments'),
-    step('verification', 'Verificação', 'info', 'enrollments'),
-    step('decision', 'Decisão', 'success', 'enrollments'),
-    step('activation', 'Ativação', 'success', 'enrollments'),
+    step('entry', HUMAN_LABEL_BY_JOURNEY_STAGE.entry, 'info', 'entries'),
+    step('preparation', HUMAN_LABEL_BY_JOURNEY_STAGE.preparation, 'neutral', 'enrollments'),
+    step('documents', HUMAN_LABEL_BY_JOURNEY_STAGE.documents, 'attention', 'enrollments'),
+    step('verification', HUMAN_LABEL_BY_JOURNEY_STAGE.verification, 'info', 'enrollments'),
+    step('decision', HUMAN_LABEL_BY_JOURNEY_STAGE.decision, 'success', 'enrollments'),
+    step('activation', HUMAN_LABEL_BY_JOURNEY_STAGE.activation, 'success', 'enrollments'),
     { key: 'active_student', label: 'Aluno ativo', count: activeStudentCount, tone: 'success', selectedView: 'students', source: 'active-students', enrollmentIds: [], statuses: [] },
   ];
 }
