@@ -77,7 +77,7 @@ export function registerEnrollmentRoutes(
   const enrollmentRequireAuth = dependencies.requireAuth ?? requireAuth;
   registerAcademicYearRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
   registerAcademicStructureRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
-  registerEnrollmentDocumentRoutes(app);
+  registerEnrollmentDocumentRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
   registerEnrollmentRegistrationRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
   registerEnrollmentProcessRoutes(app);
   registerEnrollmentActivationRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });

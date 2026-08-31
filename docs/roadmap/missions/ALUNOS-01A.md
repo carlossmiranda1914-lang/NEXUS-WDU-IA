@@ -97,3 +97,48 @@ The approved prerequisite is now implemented in `49cbf13`: canonical activation 
 - Keyboard focus now uses a distinct `focus-visible` emerald ring with a theme-aware offset, separate from selected state treatment.
 - Existing drawer enter/exit and progress transitions retain `motion-reduce` static fallbacks; no looping decorative animation or dashboard metric wall was introduced.
 - The contractual dark and light classes remain in the same component. Desktop, 768px, 390px and authenticated live interaction are deliberately not marked observed until the Task 6 UAT run.
+
+## P0 continuation — Document requirements & Enrollment continuity
+
+**State:** IMPLEMENTING — authorised P0 repair within the existing Enrollment Document authority.
+
+### Root cause
+
+The canonical data model, intake snapshot service, document-status transitions and validation gate already existed. The UAT target, however, contained no active `enrollment_document_policies` and no `enrollment_document_requirements`; the only configuration evidence was direct PostgreSQL setup in tests. No server-authorized configuration boundary existed to create an offer policy and explicitly materialize its first snapshot, so the Process Drawer correctly failed closed with `POLICY_NOT_CAPTURED`.
+
+### Frozen repair contract
+
+```text
+DOCUMENT_REQUIREMENT_AUTHORITY=enrollment_document_policies + enrollment_document_requirements
+CONFIGURATION_OWNER=SERVER (institution_admin | director)
+MATERIALIZATION_OWNER=SERVER (explicit selected-enrollment command)
+DOCUMENT_STATUS_AUTHORITY=enrollment_documents
+PHYSICAL_UPLOAD_STORAGE=OUT_OF_SCOPE
+SCHEMA_CHANGE_EXPECTED=NO
+SNAPSHOT_STABILITY=CAPTURED_ENROLLMENTS_IMMUTABLE
+```
+
+- The new command receives only the existing Enrollment internal command target; it resolves the offer and institution server-side.
+- A mutable enrollment with no prior policy snapshot may explicitly receive a newly configured or matching active offer policy and one materialized pending row per requirement.
+- A repeated equivalent command replays without duplicate policy/requirements/documents. A captured snapshot with different requirements returns conflict; later offer-policy changes do not rewrite it.
+- `pending → submitted → verified/rejected` remains the existing Enrollment Document transition authority. A submitted reference is evidence metadata only and never claims upload/storage.
+- Configuration does not alter Enrollment activation, `studentRef`, Active Students, Student Record, schema migrations or browser-owned institutional authority.
+
+### P0 evidence ledger
+
+| Proof | Evidence | Result |
+| --- | --- | --- |
+| AS-IS root cause | Approved local PostgreSQL target: `policies_active=0`, `requirements_total=0`, `enrollments_uncaptured=1` | PASS |
+| RED | `npx tsx tests/alunos-01a-document-requirements-postgres-http.test.ts` before the boundary existed | PASS — missing module, exit 1 |
+| PostgreSQL + HTTP | Same test after implementation: configuration, materialization, replay, required status truth, gate, 401/403/404, tenant isolation and exact public success shape | PASS (15 assertions) |
+| Drawer contract | `npx tsx tests/alunos-01a-document-requirements-drawer-contract.test.ts` | PASS |
+| Snapshot stability | Same PostgreSQL/HTTP test confirms a subsequent policy configuration does not rewrite the earlier enrollment snapshot | PASS |
+| Affected regressions | Document policy/PostgreSQL/HTTP/UX/integration, S03 process, Enrollment activation PostgreSQL/HTTP, Active Students PostgreSQL/HTTP and Student Context PostgreSQL/HTTP/policy | PASS |
+| Static + security | `npm run lint`, `npm run build`, `npm run test:secrets`, `git diff --check` | PASS |
+| Aggregate quality gate | `npm run quality-gate` with the authorised local test target | PASS — exit 0 |
+| Independent review | Read-only review of the complete P0 diff | PASS — no P0/P1; public success-shape P2 added and retested |
+| Local UAT runtime | `npm run dev:test` with external, approved `TEST_DATABASE_URL` | PASS — `http://localhost:3000` returns 200 |
+
+### Human UAT entry condition
+
+The repair is technically validated and the local UAT server is prepared. The remaining acceptance is human validation of an authorised mutable Enrollment through the existing Process Drawer: configure factual requirements, observe the persisted checklist, record the existing metadata-only document transitions, verify the document stage advances only after all required rows are verified, and confirm a later policy configuration leaves the first captured snapshot unchanged. The official mission state remains `VALIDATING` until that human acceptance is recorded.

@@ -12,7 +12,7 @@ expect('controller delegates listing', 'listEnrollmentDocuments', controller);
 expect('controller delegates creation', 'addEnrollmentDocument', controller);
 expect('controller delegates transition', 'transitionEnrollmentDocument', controller);
 expect('root imports document routes', 'registerEnrollmentDocumentRoutes', root);
-expect('root registers document routes', 'registerEnrollmentDocumentRoutes(app);', root);
+expect('root registers document routes with canonical dependencies', 'registerEnrollmentDocumentRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });', root);
 
 if (failures.length) throw new Error(failures.join('\n'));
 console.log('Secretariat S02.3 document HTTP contract passed (8 assertions).');

@@ -23,6 +23,8 @@ type DocumentReadiness = {
   submittedCount: number;
 };
 
+type DocumentConfiguration = { allowed: boolean };
+
 type Request = (path: string, options?: RequestInit) => Promise<any>;
 
 const STATUS_LABELS: Record<EnrollmentDocumentStatus, string> = {
@@ -48,6 +50,9 @@ export default function EnrollmentDocumentChecklist({ enrollmentId, enrollmentSt
   const [busyId, setBusyId] = useState<string | null>(null);
   const [evidenceById, setEvidenceById] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [configuration, setConfiguration] = useState<DocumentConfiguration | null>(null);
+  const [requirementsDraft, setRequirementsDraft] = useState('');
+  const [configuring, setConfiguring] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,6 +61,7 @@ export default function EnrollmentDocumentChecklist({ enrollmentId, enrollmentSt
       const result = await request(`/api/enrollments/${enrollmentId}/documents`);
       setDocuments(Array.isArray(result.documents) ? result.documents : []);
       setReadiness(result.readiness || null);
+      setConfiguration(result.configuration || null);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível carregar os documentos da matrícula.');
     } finally {
@@ -89,6 +95,26 @@ export default function EnrollmentDocumentChecklist({ enrollmentId, enrollmentSt
     }
   }
 
+  async function configureRequirements() {
+    const requirements = requirementsDraft.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+    if (!requirements.length) {
+      setError('Indique pelo menos um requisito documental.');
+      return;
+    }
+    setConfiguring(true);
+    setError(null);
+    try {
+      await request(`/api/enrollments/${enrollmentId}/document-requirements`, { method: 'POST', body: JSON.stringify({ requirements }) });
+      setRequirementsDraft('');
+      await load();
+      await onChanged?.();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível configurar os requisitos documentais.');
+    } finally {
+      setConfiguring(false);
+    }
+  }
+
   return <>
     <EnrollmentRegistrationPanel enrollmentId={enrollmentId} enrollmentStatus={enrollmentStatus} light={light} request={request} onChanged={onChanged} />
     <section className={`mt-6 rounded-2xl border p-4 ${light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-950/40'}`} aria-label="Documentos da matrícula">
@@ -108,6 +134,7 @@ export default function EnrollmentDocumentChecklist({ enrollmentId, enrollmentSt
           </article>;
         })}
       </div>}
+      {!loading && configuration?.allowed && (readiness?.reason === 'POLICY_NOT_CAPTURED' || readiness?.reason === 'REQUIREMENTS_NOT_CONFIGURED') && <div className={`mt-4 rounded-xl border p-3 ${light ? 'border-zinc-200 bg-slate-50' : 'border-white/10 bg-zinc-900'}`}><p className={`text-xs font-semibold ${light ? 'text-zinc-900' : 'text-white'}`}>Configurar requisitos documentais</p><p className={`mt-1 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Indique um requisito por linha. Esta configuração é aplicada explicitamente a esta matrícula; snapshots já capturadas não são alteradas.</p><textarea aria-label="Requisitos documentais" value={requirementsDraft} onChange={(event) => setRequirementsDraft(event.target.value)} placeholder={'Bilhete de identidade\nDeclaração escolar'} className={`mt-3 min-h-24 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:border-emerald-600 ${light ? 'border-zinc-200 bg-white text-zinc-900' : 'border-white/10 bg-zinc-950 text-white'}`} /><button type="button" disabled={configuring} onClick={() => void configureRequirements()} className="mt-3 min-h-11 rounded-lg bg-emerald-700 px-3.5 py-2 text-xs font-bold text-white hover:bg-emerald-600 disabled:opacity-50">{configuring ? 'A configurar…' : 'Configurar requisitos'}</button></div>}
       {!mutable && !loading && documents.length > 0 && <p className={`mt-4 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>A checklist está em modo de consulta porque este processo já não aceita alterações documentais.</p>}
       {error && <p role="alert" className="mt-4 text-xs text-rose-500">{error}</p>}
     </section>

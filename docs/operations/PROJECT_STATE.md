@@ -13,7 +13,7 @@ Updated: 2026-08-30
 
 ## Current priority
 
-**STUDENT-EXPERIENCE-02 is DONE (Human UAT accepted), pending PR review and integration.** Tasks 1–7 established the bounded, read-only Student Record: attention rules remain `NONE`; backend/frontend truth, owner-routing audit, UX baseline, premium-serene refinement, product hardening and A/B human UAT are evidenced. No product authority, schema, route or write was added by closeout.
+**ALUNOS-01A is VALIDATING on `codex/alunos-01a-design`.** Its P0 continuation repairs the existing canonical Enrollment Document configuration/materialization boundary so a mutable enrollment can receive a real policy snapshot and progress through the preserved checklist. It adds no schema migration or physical document storage; focused, security and aggregate quality gates are green, with Human UAT pending. Student Experience 02 remains historically DONE (Human UAT accepted) on its own branch/closeout evidence.
 
 Finance is **NOT STARTED**. Assessment, Attendance and physical Documents remain non-authoritative for Student Context and must not be presented as completed facts.
 
@@ -29,4 +29,4 @@ Run `npm run uat:bootstrap` from a named branch. It links ignored external local
 
 ## Next authorised action
 
-The active gate is PR review of `STUDENT-EXPERIENCE-02` on `codex/student-experience-02-design`; do not merge before explicit approval. Higher-fidelity Nexus visual polish, physical document lifecycle, Enrollment/Document owner-action routing, attention semantics, Finance, Assessment, Attendance, Communication, guardian writes, photograph/identity media, cross-domain timeline and AI/predictive capability remain separate prerequisites or deferred domains.
+The active gate is Human UAT of ALUNOS-01A's document-requirements continuation on `codex/alunos-01a-design`; do not advance the mission before explicit acceptance. Higher-fidelity Nexus visual polish, physical document lifecycle, Enrollment/Document owner-action routing, attention semantics, Finance, Assessment, Attendance, Communication, guardian writes, photograph/identity media, cross-domain timeline and AI/predictive capability remain separate prerequisites or deferred domains.
