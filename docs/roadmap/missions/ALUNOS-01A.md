@@ -194,3 +194,21 @@ SECOND_CLIENT_STATE_MACHINE=NO
 SCHEMA_CHANGE=NO
 MISSION_GATE=READY_FOR_HUMAN_UAT
 ```
+
+### ALUNOS-01A.2 Task 6 — engineering evidence
+
+**State:** `VALIDATING`; the engineering gate is ready for human UAT. This is not mission completion or a merge decision.
+
+| Evidence | Result |
+| --- | --- |
+| Canonical local UAT bootstrap | PASS — authenticated institutional UAT session and local PostgreSQL fixture prepared through `npm run uat:bootstrap`; no frontend fixture used. |
+| Document gate in the real drawer | PASS — configuration materialized two required rows; `pending` and `submitted` remained blocking; each required row was verified and only then did the server move the process to `Decisão`. |
+| Server-confirmed transitions | PASS — the drawer refreshed from `Em verificação` to `Pronta para decisão` only after the canonical transition response. |
+| Activation and opaque handoff | PASS — `tests/enrollment-activation-postgres.test.ts` and `tests/enrollment-activation-http-operational.test.ts` prove the canonical, idempotent activation returns only the correct opaque `studentRef`, creates one Active Student row, and resolves the same-tenant Student Record. The Process Drawer deliberately does not invent this Administration/Direção-owned activation command. |
+| Active Students and Student Context | PASS — PostgreSQL/HTTP regressions prove one active row, opaque reference resolution, tenant fail-closed behavior, privacy and read-only projection. |
+| Read-only drawer privacy correction | PASS — live UAT found `student_profiles.student_number` rendered in the read-only registration view. `2ea45bb` makes that field visible only while the server has declared the registration editable; its editable payload and all backend authority remain unchanged. Focused RED/GREEN contract and independent review PASS. |
+| Responsive and interaction inspection | Desktop, 768px and 390px were inspected with no document overflow; dark drawer state and keyboard focus were observed. Light theme and reduced-motion contracts are automated/static PASS and remain explicit human-UAT checks, not claimed as observed. |
+| Console and requests | No fatal Student/Enrollment console error observed. The local portal still emits unrelated 503 warnings for legacy Finance, teachers, chat and bulletin-board lazy panels; they are outside this tranche and no Student/Enrollment failed request was observed. |
+| Final verification | `npm run quality-gate` with `TEST_DATABASE_LOCAL_AUTHORIZED=true` PASS, exit 0; committed-diff, migration isolation, lint, build, secret scan and artifact scan all included. |
+
+**Human UAT entry:** open `http://localhost:3000`, go to **Alunos & Matrículas → Visão Operacional**, open the enrollment process, and validate the factual Journey, drawer, documents and the separately authorized activation-owner handoff. Keep the documented browser checks for light theme and reduced motion as human verification; no unobserved visual state is recorded as PASS.

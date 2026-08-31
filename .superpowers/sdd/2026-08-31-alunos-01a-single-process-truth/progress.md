@@ -34,6 +34,12 @@ Task 4: complete — canonical checkpoint `493ac6bead7855c980c7eef61a0e3b908e301
 
 Task 5: complete — canonical visual/motion checkpoint `a7de5918b705da8e1120ecf93be8500f46446ad0`; RED/GREEN semantic Journey motion contract, visual/motion, Journey Rail and drawer continuity proofs plus canonical lint/build are GREEN. Independent review approved after two reduced-motion fixes: stage and Chevron hover transforms/transitions are `motion-safe`, while selection, server-confirmed feedback, focus-visible, dark/light and drawer dialog continuity remain within the existing authority and design system. No backend, schema, API or lifecycle authority changed.
 
+Task 6: privacy fix — live engineering inspection reproduced `student_profiles.student_number` in the read-only Process Drawer. Ruling: treat this as an in-scope privacy regression because the task's no-internal-ID constraint is explicit; preserve editable server-authorized intake and remove only the read-only rendering. Cost if wrong: an operator might lose a useful intake input, so the field remains available exclusively when the server declares the registration editable.
+
+Task 6: fix complete — checkpoint `2ea45bb4ff98b593e00301df29bb4dea07d47195`; RED/GREEN registration privacy contract, drawer contracts, TypeScript and diff check PASS. Independent review PASS, no findings.
+
+Task 6: complete — engineering evidence recorded after canonical local UAT bootstrap; real document materialization/status gate and server-confirmed transitions observed in the authenticated Drawer; activation-to-opaque-studentRef, Active Students and Student Record proven by existing PostgreSQL/HTTP contracts. Full quality gate PASS with `TEST_DATABASE_LOCAL_AUTHORIZED=true`, exit 0. Desktop/768/390, dark and keyboard observed; light and reduced-motion remain human-UAT checks because they were not claimed live-observed. Portal left running for human UAT.
+
 Task 3: IMPLEMENTED — the Overview retains one responsive Journey Rail and removes the four large operational metric cards. The rail loads the existing, tenant-authorized per-enrollment process projection, retains exact canonical `enrollmentIds`, and filters list rows only by that membership. If any process projection cannot be confirmed, the rail fails closed with a refreshable message rather than a status-derived substitute. Active Students remains the existing distinct server projection.
 
 ## Task 1 — Single Process Truth Adapter
