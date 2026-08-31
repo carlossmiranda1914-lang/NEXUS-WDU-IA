@@ -250,7 +250,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
                         <span className={`min-w-0 text-[11px] leading-4 ${muted}`}>{stage.source === 'active-students' ? 'Alunos ativos' : 'Processos confirmados'}</span>
                         <span className="flex shrink-0 items-center gap-1.5">
                           <span className={`text-sm font-bold tabular-nums ${text}`}>{stage.count}</span>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-emerald-700 opacity-60 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+                          <ChevronRight className="h-4 w-4 shrink-0 text-emerald-700 opacity-60 motion-safe:transition-[transform,opacity] motion-safe:duration-200 motion-safe:group-hover:translate-x-0.5 group-hover:opacity-100" />
                         </span>
                       </div>
                     </button>;
