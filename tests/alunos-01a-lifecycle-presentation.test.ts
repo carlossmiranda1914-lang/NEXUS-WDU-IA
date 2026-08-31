@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { buildEnrollmentLifecyclePresentation, type EnrollmentJourneyProcessProjection } from '../src/modules/enrollments/enrollment-lifecycle-presentation.ts';
 
 const process = (currentStage: EnrollmentJourneyProcessProjection['currentStage'], enrollmentStatus: EnrollmentJourneyProcessProjection['enrollmentStatus'] = 'under_review'): EnrollmentJourneyProcessProjection => ({
@@ -38,13 +37,4 @@ assert.equal(steps.find((step) => step.key === 'active_student')?.source, 'activ
 assert.equal(steps.filter((step) => step.key === 'active_student')[0]?.count, 7);
 assert.equal(Object.isFrozen(steps), false, 'The helper need not freeze caller-owned presentation values.');
 
-const workspace = await readFile(new URL('../src/components/EnrollmentOperationsWorkspace.tsx', import.meta.url), 'utf8');
-assert.match(workspace, /request\('\/api\/enrollments\/processes'\)/, 'The workspace must request the server-owned bulk process projection.');
-assert.match(workspace, /buildEnrollmentLifecyclePresentation\(processes, activeStudents\.length\)/, 'The workspace must render the lifecycle from canonical process projections.');
-assert.match(workspace, /Percurso de alunos e matrículas/, 'The workspace must expose one human lifecycle rail.');
-assert.doesNotMatch(workspace, /pipelineCounts\(|PIPELINE_CONTEXT|pipeline\.map\(/, 'The competing pipeline summary must not remain visible.');
-assert.match(workspace, /<ActiveStudentsView/, 'Active Students must remain a distinct server-owned view.');
-assert.match(workspace, /lifecycle\.map\(\(stage, index\).*stage\.key/s, 'Lifecycle rendering must use only the public presentation step key.');
-assert.match(workspace, /setEnrollmentFilter\(stage\.enrollmentIds\)/, 'A lifecycle click must filter the exact server-projected process membership.');
-
-console.log('[ALUNOS-01A] Task 2 lifecycle presentation: PASS.');
+console.log('[ALUNOS-01A.2] lifecycle projection adapter: PASS.');

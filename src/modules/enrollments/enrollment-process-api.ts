@@ -206,19 +206,6 @@ export async function loadEnrollmentProcess(pool: EnrollmentProcessPool, context
   }
 }
 
-/** Read-only bulk projection for an authorized institutional Journey Rail. */
-export async function loadEnrollmentProcesses(pool: EnrollmentProcessPool, context: InstitutionalContext) {
-  if (!canManageEnrollment(context.role)) throw new EnrollmentProcessApiError('FORBIDDEN', 'O seu papel não pode consultar processos de matrícula.');
-  const enrollments = await pool.query<{ id: string }>(
-    `SELECT id
-       FROM enrollment_applications
-      WHERE institution_id = $1
-      ORDER BY updated_at DESC`,
-    [context.institutionId],
-  );
-  return Promise.all(enrollments.rows.map((enrollment) => loadEnrollmentProcess(pool, context, enrollment.id)));
-}
-
 /** Explicit server-side materialization; it is never invoked by a browser read. */
 export async function reconcileEnrollmentProcess(pool: EnrollmentProcessPool, context: InstitutionalContext, enrollmentId: string, correlationId: string | null = null) {
   if (!validUuid(enrollmentId)) throw new EnrollmentProcessApiError('INVALID_INPUT', 'Matrícula inválida.');

@@ -18,9 +18,13 @@
 
 Ruling: No internal task contradiction was found. `Preparação` groups P02/P03 only through the canonical process projection; no task permits a client lifecycle/state authority.
 
+## Task 1 fix-round ruling
+
+Ruling: The existing lifecycle-presentation regression must be updated to assert the approved canonical-projection adapter rather than the superseded status-count behavior. Task 1 must not modify the Workspace or introduce a process-list HTTP route merely to satisfy that old test: the plan assigns factual selection/filtering to Task 3, and its Task 1 file scope limits production changes to the lifecycle adapter unless `enrollment-process-api.ts` is required by evidence. Cost if wrong: Task 3 may need an explicit server-read contract; that is preferable to silently expanding Task 1 without tenant/authorization proof.
+
 ## Task 1 — Single Process Truth Adapter
 
-- Status: IMPLEMENTED; fix round 1 complete; pending independent review.
+- Status: IMPLEMENTED; fix round 2 complete; pending independent review.
 - RED: `tests/alunos-01a-single-process-truth-contract.test.ts` failed against the prior status-count adapter because it did not consume `EnrollmentProcessProjection`.
 - GREEN: the adapter groups only exact server projection membership (`P02`/`P03` → `Preparação`) and retains exact `enrollmentIds` for factual Journey filtering. It does not alter schema or server authority.
-- Fix round 1: the review-established P1 was resolved with the authorized read-only `/api/enrollments/processes` bulk projection. The workspace feeds those server projections to the Journey and filters exact `enrollmentIds`, not broad status counts. `tests/alunos-01a-lifecycle-presentation.test.ts` is GREEN with canonical P01–P06 and active-result fixtures; the focused contract covers the complete mapping and membership.
+- Fix round 1 scope expansion was reverted under the controller ruling: Task 1 introduces no Workspace change, process-list HTTP route, or bulk API. `tests/alunos-01a-lifecycle-presentation.test.ts` is now a projection-only characterization with canonical P01–P06 and active-result fixtures; the focused contract covers the complete mapping and membership.
