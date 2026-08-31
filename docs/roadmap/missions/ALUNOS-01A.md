@@ -142,3 +142,55 @@ SNAPSHOT_STABILITY=CAPTURED_ENROLLMENTS_IMMUTABLE
 ### Human UAT entry condition
 
 The repair is technically validated and the local UAT server is prepared. The remaining acceptance is human validation of an authorised mutable Enrollment through the existing Process Drawer: configure factual requirements, observe the persisted checklist, record the existing metadata-only document transitions, verify the document stage advances only after all required rows are verified, and confirm a later policy configuration leaves the first captured snapshot unchanged. The official mission state remains `VALIDATING` until that human acceptance is recorded.
+
+## ALUNOS-01A.2 — Single Process Truth execution tranche
+
+**State:** AUTHORISED FOR SDD EXECUTION
+
+**Design addendum:** `docs/superpowers/specs/2026-08-31-alunos-01a-single-process-truth-design.md`  
+**SDD plan:** `docs/superpowers/plans/2026-08-31-alunos-01a-single-process-truth.md`
+
+### Why this tranche exists
+
+Human review confirmed that the current Overview still presents multiple competing interpretations of the same process. The four large operational metric cards remain a second navigation/process surface, while the Journey presentation still derives several stages from broad Enrollment status counts and hardcodes `Preparação` to zero. This is not accepted as the final Nexus experience.
+
+### Frozen execution order
+
+```text
+T1=SINGLE_PROCESS_TRUTH
+T2=HUMAN_TERMINOLOGY
+T3=ONE_JOURNEY_RAIL
+T4=DRAWER_CONTINUITY
+T5=NEXUS_MOTION_VISUAL
+T6=REAL_ENROLLMENT_TO_STUDENT_UAT
+```
+
+### Protected completed work
+
+The following are frozen and must not be rebuilt during ALUNOS-01A.2:
+
+- P0 document requirements/materialization/checklist at `20cb0a9`;
+- canonical Enrollment activation authority;
+- activation → opaque `studentRef` bridge;
+- Active Students authority/projection;
+- Student Record authority/read model;
+- tenant/auth/privacy guarantees;
+- existing Process Drawer functional content.
+
+### Controller rule
+
+The conversation is not the execution authority. The spec, plan and plan-specific SDD ledger are authoritative. Each task uses a fresh implementer subagent followed by independent review. Completed ledger tasks are never re-dispatched. Normal implementation/test defects are fixed without pausing for human approval. Human input is required only at the final UAT gate or for a genuine stop-rule condition.
+
+### Acceptance target
+
+```text
+PROCESS_TRUTH_SOURCE=SERVER_PROCESS_PROJECTION
+ONE_PRIMARY_LIFECYCLE=YES
+METRIC_CARD_WALL_AS_PROCESS_SURFACE=NO
+DRAWER_IS_PROCESS_DETAIL=YES
+HUMAN_TERMINOLOGY_UNIFIED=YES
+MOTION_SERVER_CONFIRMED=YES
+SECOND_CLIENT_STATE_MACHINE=NO
+SCHEMA_CHANGE=NO
+MISSION_GATE=READY_FOR_HUMAN_UAT
+```
