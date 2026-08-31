@@ -23,7 +23,6 @@ import EnrollmentNewEntryDrawer from './EnrollmentNewEntryDrawer.tsx';
 import EnrollmentLifecycleActions from './EnrollmentLifecycleActions.tsx';
 import EnrollmentDocumentChecklist from './EnrollmentDocumentChecklist.tsx';
 import {
-  buildOperationalMetrics,
   getAttentionQueue,
   nextAction,
   recordsForView,
@@ -32,7 +31,7 @@ import {
   type EnrollmentOperationalStatus,
   type OperationalView,
 } from '../modules/enrollments/enrollment-operations-model.ts';
-import { buildEnrollmentLifecyclePresentation, getEnrollmentJourneyLabel } from '../modules/enrollments/enrollment-lifecycle-presentation.ts';
+import { buildEnrollmentLifecyclePresentation, getEnrollmentJourneyLabel, type EnrollmentJourneyProcessProjection } from '../modules/enrollments/enrollment-lifecycle-presentation.ts';
 
 type Theme = 'light' | 'dark';
 type Offer = { id: string; name: string; code: string; academic_year_id: string; academic_year_name: string };
@@ -41,16 +40,8 @@ type Resolution = {
   candidateCount: number;
 };
 
-type ProcessAction = { code: string; label: string; available: boolean; unavailableReason: string | null };
-type ProcessProjection = {
-  enrollmentId: string;
-  enrollmentStatus: EnrollmentOperationalStatus;
-  currentStage: string;
-  progress: { completed: number; applicable: number; percent: number };
+type ProcessProjection = EnrollmentJourneyProcessProjection & {
   assignedTo: { personId: string; name: string | null } | null;
-  stages: Array<{ key: string; label: string; status: 'pending' | 'in_progress' | 'blocked' | 'completed' | 'not_applicable'; reasonCode: string | null; nextAction: ProcessAction | null; evidence: { summary: string; source: string } }>;
-  nextAction: ProcessAction | null;
-  blockers: Array<{ reasonCode: string; message: string; stage: string }>;
   version: number;
   timestamps: { startedAt: string; lastProgressAt: string; blockedAt: string | null; updatedAt: string };
 };
@@ -139,6 +130,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
   const muted = light ? 'text-zinc-500' : 'text-zinc-400';
 
   const [records, setRecords] = useState<EnrollmentOperationalRecord[]>([]);
+  const [processes, setProcesses] = useState<EnrollmentJourneyProcessProjection[]>([]);
   const [activeStudents, setActiveStudents] = useState<ActiveStudent[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [institutionName, setInstitutionName] = useState('');
@@ -147,7 +139,8 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<EnrollmentOperationalStatus[] | null>(null);
+  const [journeyEnrollmentIds, setJourneyEnrollmentIds] = useState<string[] | null>(null);
+  const [journeyError, setJourneyError] = useState<string | null>(null);
   const [selected, setSelected] = useState<EnrollmentOperationalRecord | null>(null);
   const [activeStudentError, setActiveStudentError] = useState<string | null>(null);
   const [selectedLifecycleLabel, setSelectedLifecycleLabel] = useState<string | null>(null);
@@ -157,6 +150,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
     setLoading(true);
     setError(null);
     setActiveStudentError(null);
+    setJourneyError(null);
     try {
       const [context, list, students] = await Promise.allSettled([
         request('/api/enrollments/context'),
@@ -167,7 +161,18 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
       if (list.status === 'rejected') throw list.reason;
       setOffers(Array.isArray(context.value.offers) ? context.value.offers : []);
       setInstitutionName(context.value.institution?.name || 'Instituição atual');
-      setRecords(Array.isArray(list.value.enrollments) ? list.value.enrollments : []);
+      const enrollmentRecords = Array.isArray(list.value.enrollments) ? list.value.enrollments as EnrollmentOperationalRecord[] : [];
+      setRecords(enrollmentRecords);
+      const processResults = await Promise.allSettled(enrollmentRecords.map(async (record) => {
+        const result = await request(`/api/enrollments/${record.id}/process`);
+        return result.process as EnrollmentJourneyProcessProjection;
+      }));
+      if (processResults.every((result) => result.status === 'fulfilled')) {
+        setProcesses(processResults.map((result) => (result as PromiseFulfilledResult<EnrollmentJourneyProcessProjection>).value));
+      } else {
+        setProcesses([]);
+        setJourneyError('Não foi possível confirmar o percurso de todos os processos. Atualize para tentar novamente.');
+      }
       if (students.status === 'fulfilled') setActiveStudents(Array.isArray(students.value.students) ? students.value.students : []);
       else { setActiveStudents([]); setActiveStudentError(students.reason instanceof Error ? students.reason.message : 'Não foi possível carregar os alunos ativos.'); }
     } catch (loadError) {
@@ -179,28 +184,22 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
 
   useEffect(() => { void load(); }, [load]);
 
-  const metrics = useMemo(() => buildOperationalMetrics(records), [records]);
   const attention = useMemo(() => getAttentionQueue(records), [records]);
-  const lifecycle = useMemo(() => buildEnrollmentLifecyclePresentation(records, activeStudents.length), [records, activeStudents.length]);
+  const lifecycle = useMemo(() => buildEnrollmentLifecyclePresentation(processes, activeStudents.length), [processes, activeStudents.length]);
   const visible = useMemo(() => {
     let base = recordsForView(records, view);
-    if (statusFilter) base = records.filter((record) => statusFilter.includes(record.status));
+    if (journeyEnrollmentIds) base = records.filter((record) => journeyEnrollmentIds.includes(record.id));
     const term = query.trim().toLocaleLowerCase('pt');
     if (term) {
       base = base.filter((record) => [record.student_name, record.guardian_name, record.offer_name, record.academic_year_name]
         .filter(Boolean).some((value) => String(value).toLocaleLowerCase('pt').includes(term)));
     }
     return base;
-  }, [records, view, statusFilter, query]);
+  }, [records, view, journeyEnrollmentIds, query]);
   const visibleStudents = useMemo(() => {
     const term = query.trim().toLocaleLowerCase('pt');
     return term ? activeStudents.filter((student) => [student.displayName, student.current?.academicYear?.name, student.current?.class?.code, student.current?.program?.name, student.current?.level?.name].filter(Boolean).some((value) => String(value).toLocaleLowerCase('pt').includes(term))) : activeStudents;
   }, [activeStudents, query]);
-
-  function selectMetric(filter: EnrollmentOperationalStatus[]) {
-    setStatusFilter(filter);
-    setView('enrollments');
-  }
 
   return (
     <section className="min-w-0 max-w-full space-y-5 overflow-x-hidden sm:space-y-6" aria-label="Workspace operacional de Alunos e Matrículas">
@@ -222,7 +221,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
 
       <nav className={`flex max-w-full gap-1 overflow-x-auto overscroll-x-contain border-b pb-3 ${light ? 'border-zinc-200' : 'border-white/10'}`} aria-label="Vistas de Alunos e Matrículas">
         {VIEW_LABELS.map((item) => (
-          <button key={item.id} type="button" onClick={() => { setView(item.id); setStatusFilter(null); setSelectedLifecycleLabel(null); }} className={`min-h-11 whitespace-nowrap rounded-lg px-3.5 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 ${light ? 'focus-visible:ring-offset-white' : 'focus-visible:ring-offset-zinc-950'} ${view === item.id ? light ? 'bg-emerald-50 text-emerald-800' : 'bg-emerald-500/15 text-emerald-200' : light ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}>
+          <button key={item.id} type="button" onClick={() => { setView(item.id); setJourneyEnrollmentIds(null); setSelectedLifecycleLabel(null); }} className={`min-h-11 whitespace-nowrap rounded-lg px-3.5 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 ${light ? 'focus-visible:ring-offset-white' : 'focus-visible:ring-offset-zinc-950'} ${view === item.id ? light ? 'bg-emerald-50 text-emerald-800' : 'bg-emerald-500/15 text-emerald-200' : light ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-white/5 hover:text-white'}`}>
             {item.label}
           </button>
         ))}
@@ -237,23 +236,11 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
         <>
           {view === 'overview' && (
             <div className="flex flex-col gap-6">
-              <div className="order-2"><div className="mb-2 flex items-center gap-2"><p className={`text-xs font-semibold ${muted}`}>Resumo operacional</p><span className={`text-[11px] ${muted}`}>Indicadores de apoio</span></div><div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-4">
-                {metrics.map((metric) => (
-                  <button key={metric.id} type="button" onClick={() => selectMetric(metric.filter)} className={`flex min-h-40 min-w-0 flex-col rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${surface}`}>
-                    <div className="flex min-w-0 items-start justify-between gap-3">
-                      <div className="min-w-0"><p className={`text-xs font-semibold leading-5 ${muted}`}>{metric.label}</p><p className={`mt-2 text-3xl font-bold tabular-nums ${text}`}>{metric.value}</p></div>
-                      <ChevronRight className={`mt-1 h-4 w-4 ${muted}`} />
-                    </div>
-                    <p className={`mt-auto pt-4 text-xs leading-5 ${muted}`}>{metric.description}</p>
-                  </button>
-                ))}
-              </div></div>
-
-              <div className={`order-1 rounded-2xl border p-5 ${surface}`}>
+              <div className={`rounded-2xl border p-5 ${surface}`}>
                 <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className={`font-semibold ${text}`}>Percurso de alunos e matrículas</h2><p className={`mt-1 text-xs ${muted}`}>Acompanhe o percurso institucional. Cada etapa abre apenas uma vista existente; o estado continua a ser confirmado pelo servidor.</p></div><ShieldCheck className="h-5 w-5 text-emerald-700" /></div>
-                <div className="grid max-w-full snap-x snap-mandatory grid-flow-col auto-cols-[minmax(168px,78vw)] gap-2 overflow-x-auto overscroll-x-contain pb-2 sm:auto-cols-[minmax(176px,42vw)] lg:auto-cols-[minmax(176px,24vw)] xl:auto-cols-[minmax(168px,1fr)]">
+                {journeyError ? <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-700">{journeyError}</div> : <div className="grid max-w-full snap-x snap-mandatory grid-flow-col auto-cols-[minmax(168px,78vw)] gap-2 overflow-x-auto overscroll-x-contain pb-2 sm:auto-cols-[minmax(176px,42vw)] lg:auto-cols-[minmax(176px,24vw)] xl:auto-cols-[minmax(168px,1fr)]">
                   {lifecycle.map((stage, index) => (
-                    <button key={stage.key} type="button" aria-label={`Abrir etapa ${stage.label}`} onClick={() => { setSelectedLifecycleLabel(stage.label); setStatusFilter(stage.statuses.length > 0 ? stage.statuses : null); setView(stage.selectedView); }} className={`group relative flex min-h-24 min-w-0 snap-start flex-col rounded-xl border p-3 text-left transition ${mutedSurface} cursor-pointer hover:border-emerald-500/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 ${light ? 'focus-visible:ring-offset-slate-50' : 'focus-visible:ring-offset-zinc-950'}`}>
+                    <button key={stage.key} type="button" aria-label={`Abrir etapa ${stage.label}`} onClick={() => { setSelectedLifecycleLabel(stage.label); setJourneyEnrollmentIds(stage.enrollmentIds); setView(stage.selectedView); }} className={`group relative flex min-h-24 min-w-0 snap-start flex-col rounded-xl border p-3 text-left transition ${mutedSurface} cursor-pointer hover:border-emerald-500/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 ${light ? 'focus-visible:ring-offset-slate-50' : 'focus-visible:ring-offset-zinc-950'}`}>
                       <div className="flex min-w-0 items-start gap-2">
                         <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${light ? 'bg-zinc-200 text-zinc-700' : 'bg-white/10 text-zinc-300'}`}>{index + 1}</span>
                         <p className={`min-w-0 whitespace-normal break-normal text-sm font-semibold leading-5 [overflow-wrap:normal] ${text}`}>{stage.label}</p>
@@ -267,7 +254,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
                       </div>
                     </button>
                   ))}
-                </div>
+                </div>}
               </div>
 
               <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] 2xl:gap-6">
