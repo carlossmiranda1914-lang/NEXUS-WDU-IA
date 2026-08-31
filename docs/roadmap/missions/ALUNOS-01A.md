@@ -147,7 +147,7 @@ The repair is technically validated and the local UAT server is prepared. The re
 
 **State:** AUTHORISED FOR SDD EXECUTION
 
-**Design addendum:** `docs/superpowers/specs/2026-08-31-alunos-01a-single-process-truth-design.md`  
+**Design addendum:** `docs/superpowers/specs/2026-08-31-alunos-01a-single-process-truth-design.md`
 **SDD plan:** `docs/superpowers/plans/2026-08-31-alunos-01a-single-process-truth.md`
 
 ### Why this tranche exists

@@ -5,11 +5,11 @@ const failures: string[] = [];
 let assertions = 0;
 const expect = (condition: unknown, message: string) => { assertions += 1; if (!condition) failures.push(message); };
 
-expect(source.includes('currentStage: string'), 'Process drawer must consume the server-owned current stage.');
-expect(source.includes('progress: { completed: number; applicable: number; percent: number }'), 'Process drawer must consume server-owned progress.');
-expect(source.includes('evidence: { summary: string; source: string }'), 'Process drawer must retain stage evidence.');
-expect(source.includes('blockers: Array<'), 'Process drawer must retain server-provided blockers.');
-expect(source.includes('nextAction: ProcessAction | null'), 'Process drawer must retain the next available action.');
+expect(source.includes('process.currentStage'), 'Process drawer must consume the server-owned current stage.');
+expect(source.includes('process.progress.percent') && source.includes('process.progress.completed') && source.includes('process.progress.applicable'), 'Process drawer must consume server-owned progress.');
+expect(source.includes('currentStage?.evidence.summary') && source.includes('stage.evidence.summary'), 'Process drawer must retain stage evidence.');
+expect(source.includes('process.blockers.length') && source.includes('process.blockers[0].message'), 'Process drawer must retain server-provided blockers.');
+expect(source.includes('process?.nextAction?.available') && source.includes('process.nextAction.label'), 'Process drawer must retain the next available action.');
 expect(source.includes('<EnrollmentLifecycleActions status={process.enrollmentStatus} light={light}'), 'Process drawer must retain the existing version-aware lifecycle action component.');
 expect(source.includes('Versão') && source.includes('process.version'), 'Process drawer must surface the confirmed process version.');
 expect(!source.includes('ID do processo'), 'Process drawer must not display an internal process identifier.');

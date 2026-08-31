@@ -1,7 +1,7 @@
 # ALUNOS-01A — Single Process Truth Design Addendum
 
-**Mission:** ALUNOS-01A — Enrollment-to-Student Continuity & Interaction  
-**Baseline:** `20cb0a998a16faf97914b9ed5ed9cd29cc9bb417`  
+**Mission:** ALUNOS-01A — Enrollment-to-Student Continuity & Interaction
+**Baseline:** `20cb0a998a16faf97914b9ed5ed9cd29cc9bb417`
 **Status:** APPROVED DESIGN ADDENDUM
 
 ## Purpose
