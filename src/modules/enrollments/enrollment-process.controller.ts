@@ -1,7 +1,7 @@
 import type { Application, Response } from 'express';
 import { pool } from '../../db/index.ts';
 import { requireAuth, type AuthRequest } from '../../middleware/auth.ts';
-import { assignEnrollmentProcess, EnrollmentProcessApiError, loadEnrollmentProcess } from './enrollment-process-api.ts';
+import { assignEnrollmentProcess, EnrollmentProcessApiError, loadEnrollmentProcess, loadEnrollmentProcesses } from './enrollment-process-api.ts';
 
 function reject(res: Response, status: number, error: string) { return res.status(status).json({ error }); }
 
@@ -17,6 +17,15 @@ function rejectProcessError(res: Response, error: unknown) {
 }
 
 export function registerEnrollmentProcessRoutes(app: Application) {
+  app.get('/api/enrollments/processes', requireAuth, async (req: AuthRequest, res: Response) => {
+    if (!req.institutionalContext) return reject(res, 401, 'Autenticação institucional necessária.');
+    try {
+      return res.json({ processes: await loadEnrollmentProcesses(pool, req.institutionalContext) });
+    } catch (error) {
+      return rejectProcessError(res, error);
+    }
+  });
+
   app.get('/api/enrollments/:id/process', requireAuth, async (req: AuthRequest, res: Response) => {
     if (!req.institutionalContext) return reject(res, 401, 'Autenticação institucional necessária.');
     try {

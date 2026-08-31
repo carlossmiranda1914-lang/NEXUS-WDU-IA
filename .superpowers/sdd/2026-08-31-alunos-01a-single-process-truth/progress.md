@@ -20,7 +20,7 @@ Ruling: No internal task contradiction was found. `Preparação` groups P02/P03 
 
 ## Task 1 — Single Process Truth Adapter
 
-- Status: IMPLEMENTED; pending independent review.
+- Status: IMPLEMENTED; fix round 1 complete; pending independent review.
 - RED: `tests/alunos-01a-single-process-truth-contract.test.ts` failed against the prior status-count adapter because it did not consume `EnrollmentProcessProjection`.
-- GREEN: the adapter groups only exact server projection membership (`P02`/`P03` → `Preparação`) and retains exact `enrollmentIds` for the later factual Journey filter. It does not alter the process API, schema, or server authority.
-- Regression handoff: `tests/alunos-01a-lifecycle-presentation.test.ts` remains a frozen pre-tranche assertion of list-status counts and synthetic zero preparation. It fails by design after Task 1; Tasks 2–3 must replace its UI/list assumptions while wiring canonical process projections before it is again a valid regression.
+- GREEN: the adapter groups only exact server projection membership (`P02`/`P03` → `Preparação`) and retains exact `enrollmentIds` for factual Journey filtering. It does not alter schema or server authority.
+- Fix round 1: the review-established P1 was resolved with the authorized read-only `/api/enrollments/processes` bulk projection. The workspace feeds those server projections to the Journey and filters exact `enrollmentIds`, not broad status counts. `tests/alunos-01a-lifecycle-presentation.test.ts` is GREEN with canonical P01–P06 and active-result fixtures; the focused contract covers the complete mapping and membership.
