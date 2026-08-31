@@ -22,6 +22,16 @@ Ruling: No internal task contradiction was found. `Preparação` groups P02/P03 
 
 Ruling: The existing lifecycle-presentation regression must be updated to assert the approved canonical-projection adapter rather than the superseded status-count behavior. Task 1 must not modify the Workspace or introduce a process-list HTTP route merely to satisfy that old test: the plan assigns factual selection/filtering to Task 3, and its Task 1 file scope limits production changes to the lifecycle adapter unless `enrollment-process-api.ts` is required by evidence. Cost if wrong: Task 3 may need an explicit server-read contract; that is preferable to silently expanding Task 1 without tenant/authorization proof.
 
+Task 1: complete — final checkpoint `f0184dee23d5c18f461602e657facc01828ca065`; RED/GREEN canonical projection adapter, lifecycle/process contracts and lint/diff green; independent review approved after two scoped fix rounds.
+
+Task 2: IMPLEMENTED — unified human terminology maps the frozen Task 1 process projection to Entrada, Preparação, Documentos, Verificação, Decisão and Ativação; Aluno ativo remains the distinct Active Students result. The Process Drawer uses the same mapper while retaining its server-provided substage label and evidence. No backend key, process authority, filter route or Task 3 rail behavior changed. Focused terminology, drawer and lifecycle contracts are GREEN.
+
+Task 2: complete — checkpoint `5682a9b4f46ad884d6470fea114643bd9c8048f0`; focused terminology/drawer/lifecycle contracts and lint/diff green; independent review approved with no findings.
+
+Task 3: complete — final checkpoint `5cf66124875ce8e1d7d4c802febb0d212bb2e900`; one factual Journey Rail replaces the metric-card process surface; focused workspace/Active Students/lifecycle contracts and lint/diff green; independent review approved after the legacy contract correction.
+
+Task 3: IMPLEMENTED — the Overview retains one responsive Journey Rail and removes the four large operational metric cards. The rail loads the existing, tenant-authorized per-enrollment process projection, retains exact canonical `enrollmentIds`, and filters list rows only by that membership. If any process projection cannot be confirmed, the rail fails closed with a refreshable message rather than a status-derived substitute. Active Students remains the existing distinct server projection.
+
 ## Task 1 — Single Process Truth Adapter
 
 - Status: IMPLEMENTED; fix round 2 complete; pending independent review.
