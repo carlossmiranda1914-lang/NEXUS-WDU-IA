@@ -168,7 +168,7 @@ export default function EnrollmentRegistrationPanel({ enrollmentId, enrollmentSt
           <TextField label="N.º do BI / identificação" value={student.nationalIdNumber} disabled={!editable} onChange={(nationalIdNumber) => setStudent((current) => ({ ...current, nationalIdNumber }))} className={inputClass} labelClass={labelClass} />
           <label className={labelClass}>Género *<select value={student.gender} disabled={!editable} onChange={(event) => setStudent((current) => ({ ...current, gender: event.target.value }))} className={inputClass}><option value="">Selecionar</option><option value="female">Feminino</option><option value="male">Masculino</option><option value="other">Outro</option><option value="unspecified">Prefere não indicar</option></select></label>
           <TextField label="Nacionalidade *" value={student.nationality} disabled={!editable} onChange={(nationality) => setStudent((current) => ({ ...current, nationality }))} className={inputClass} labelClass={labelClass} />
-          <TextField label="N.º interno do aluno" value={student.studentNumber} disabled={!editable} onChange={(studentNumber) => setStudent((current) => ({ ...current, studentNumber }))} className={inputClass} labelClass={labelClass} />
+          {editable && <TextField label="N.º interno do aluno" value={student.studentNumber} disabled={!editable} onChange={(studentNumber) => setStudent((current) => ({ ...current, studentNumber }))} className={inputClass} labelClass={labelClass} />}
         </div>
       </FormSection>
 
