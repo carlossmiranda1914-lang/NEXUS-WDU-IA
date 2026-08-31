@@ -38,3 +38,10 @@ Task 3: IMPLEMENTED — the Overview retains one responsive Journey Rail and rem
 - RED: `tests/alunos-01a-single-process-truth-contract.test.ts` failed against the prior status-count adapter because it did not consume `EnrollmentProcessProjection`.
 - GREEN: the adapter groups only exact server projection membership (`P02`/`P03` → `Preparação`) and retains exact `enrollmentIds` for factual Journey filtering. It does not alter schema or server authority.
 - Fix round 1 scope expansion was reverted under the controller ruling: Task 1 introduces no Workspace change, process-list HTTP route, or bulk API. `tests/alunos-01a-lifecycle-presentation.test.ts` is now a projection-only characterization with canonical P01–P06 and active-result fixtures; the focused contract covers the complete mapping and membership.
+
+## Task 4 — Drawer Continuity
+
+- Status: IMPLEMENTED; pending independent review.
+- RED: `tests/alunos-01a-drawer-continuity-contract.test.ts` identified the prior `Etapas do processo` grid as a competing drawer lifecycle.
+- GREEN: the drawer labels the server-derived human stage, presents factual backend substages as detail, and groups `P02`/`P03` only under `Preparação`. Existing blockers, next action, evidence, version/concurrency detail, lifecycle actions and document checklist remain in place.
+- No API, schema, authority or motion behavior changed. The activation HTTP regression is not executable in this isolated worktree because dependencies are absent; it fails module resolution before any test setup.
