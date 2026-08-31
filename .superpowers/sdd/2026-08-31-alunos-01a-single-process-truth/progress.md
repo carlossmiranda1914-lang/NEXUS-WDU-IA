@@ -30,6 +30,8 @@ Task 2: complete — checkpoint `5682a9b4f46ad884d6470fea114643bd9c8048f0`; focu
 
 Task 3: complete — final checkpoint `5cf66124875ce8e1d7d4c802febb0d212bb2e900`; one factual Journey Rail replaces the metric-card process surface; focused workspace/Active Students/lifecycle contracts and lint/diff green; independent review approved after the legacy contract correction.
 
+Task 4: complete — canonical checkpoint `493ac6bead7855c980c7eef61a0e3b908e30163c`; Drawer continuity contract, document/terminology/Journey regressions and canonical activation HTTP regression are GREEN. Independent review confirmed scope/invariants; the temporary-worktree dependency gap was closed by the canonical activation run (`exit 0`).
+
 Task 3: IMPLEMENTED — the Overview retains one responsive Journey Rail and removes the four large operational metric cards. The rail loads the existing, tenant-authorized per-enrollment process projection, retains exact canonical `enrollmentIds`, and filters list rows only by that membership. If any process projection cannot be confirmed, the rail fails closed with a refreshable message rather than a status-derived substitute. Active Students remains the existing distinct server projection.
 
 ## Task 1 — Single Process Truth Adapter
