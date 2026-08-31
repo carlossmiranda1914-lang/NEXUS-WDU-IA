@@ -32,6 +32,8 @@ Task 3: complete — final checkpoint `5cf66124875ce8e1d7d4c802febb0d212bb2e900`
 
 Task 4: complete — canonical checkpoint `493ac6bead7855c980c7eef61a0e3b908e30163c`; Drawer continuity contract, document/terminology/Journey regressions and canonical activation HTTP regression are GREEN. Independent review confirmed scope/invariants; the temporary-worktree dependency gap was closed by the canonical activation run (`exit 0`).
 
+Task 5: complete — canonical visual/motion checkpoint `a7de5918b705da8e1120ecf93be8500f46446ad0`; RED/GREEN semantic Journey motion contract, visual/motion, Journey Rail and drawer continuity proofs plus canonical lint/build are GREEN. Independent review approved after two reduced-motion fixes: stage and Chevron hover transforms/transitions are `motion-safe`, while selection, server-confirmed feedback, focus-visible, dark/light and drawer dialog continuity remain within the existing authority and design system. No backend, schema, API or lifecycle authority changed.
+
 Task 3: IMPLEMENTED — the Overview retains one responsive Journey Rail and removes the four large operational metric cards. The rail loads the existing, tenant-authorized per-enrollment process projection, retains exact canonical `enrollmentIds`, and filters list rows only by that membership. If any process projection cannot be confirmed, the rail fails closed with a refreshable message rather than a status-derived substitute. Active Students remains the existing distinct server projection.
 
 ## Task 1 — Single Process Truth Adapter
