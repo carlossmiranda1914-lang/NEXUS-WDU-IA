@@ -42,3 +42,12 @@
 - Review correction (P1): the initial Task 4 delta did not establish latest-request ownership for whole-workspace process batches, so an older batch could overwrite a later retry. `load` now aborts its predecessor, carries a monotonic request sequence through context/list/students and process reads, and permits state writes/final loading completion only for the latest sequence.
 - Review correction (P2): replaced the synchronous helper with the production-used asynchronous `createLatestEnrollmentJourneyBatchCommitter`. The focused test uses real deferred Promises: A starts and remains unresolved; B starts, resolves and commits; A then resolves and its awaited commit is rejected, retaining B's committed fulfilled/unresolved batch.
 - Independent review: PASS. The reviewer verified the true deferred A→B race, abort/monotonic production guard, partial/all/retry composition, Journey and Drawer continuity, focused operations contracts and TypeScript lint; no P0/P1/P2 finding remains.
+
+## Task 5 — Identity Review Continuity
+
+- Status: BLOCKED — genuine prerequisite.
+- Audit: `LOCAL_MATCH` and `NO_MATCH` already have direct safe next actions. `MULTIPLE_MATCHES`, `REVIEW_REQUIRED`, `RESTRICTED_POSSIBLE_MATCH` and `REUSABLE_MATCH` require institutional identity adjudication; the existing proposal and outcome commands are membership/tenant scoped but do not provide a safe product path for an independent authority.
+- Blocking authority: a tenant-scoped, privacy-minimized identity-decision work-queue/read boundary with a browser-safe public reference and a server-confirmed approved-intake handoff is absent. The existing `POST /identity-decisions` only creates a proposal; `POST /identity-decisions/:id/outcome` requires an undiscoverable internal decision id, and there is no queue/read API or UI. `REVIEW_REQUIRED` is explicitly non-executable (`needs_more_information`).
+- Safety ruling: no browser candidate/person selection, internal decision id, protected candidate disclosure or client-created Person/Student may be fabricated to bridge this gap. The partial Task 5 UI/API delta was discarded after independent review because it acknowledged a proposal as if it resolved the product journey.
+- Additional privacy finding: `/person-resolution` currently serializes `candidatePersonId` for local/reusable outcomes. This must be addressed by the prerequisite boundary; hiding the field in a component is not a privacy proof.
+- Independent review: FAIL by design of the current authority surface; no product checkpoint is created for Task 5.
