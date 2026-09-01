@@ -29,8 +29,8 @@ const visibleToAuthority: VisibleAuthority[] = [
 ];
 
 assert.equal(visibleToAuthority.length, 9, 'Task 2 must inventory every currently visible Student Record fact.');
-assert.match(workspace, /request\(`\/api\/student-context\/\$\{studentRef\}`\)/, 'one opaque reference must feed the visible Student Record.');
-assert.match(workspace, /setLoading\(true\); setError\(null\);[\s\S]*?\}, \[studentRef\]\);[\s\S]*?useEffect\(\(\) => \{ void load\(\); \}, \[load\]\);/, 'a changed opaque reference must reload before a new record is rendered, preventing stale student data.');
+assert.match(workspace, /request\(`\/api\/student-context\/\$\{studentRef\}`, controller\.signal\)/, 'one opaque reference must feed the visible Student Record through an abortable read.');
+assert.match(workspace, /studentRequestSequence\.current[\s\S]*contextStudentRef === studentRef/, 'a changed opaque reference must invalidate late reads and cannot render another student while it reloads.');
 assert.match(controller, /app\.get\('\/api\/student-context\/:studentRef'/, 'the Student Record HTTP contract must be server-owned.');
 
 for (const field of [

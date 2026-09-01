@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   AlertCircle,
   ArrowRight,
@@ -372,23 +372,47 @@ function OperationalNote({ icon, title, body, light }: { icon: ReactNode; title:
 
 function ProcessDrawer({ record, light, onClose, onTransition }: { record: EnrollmentOperationalRecord; light: boolean; onClose: () => void; onTransition: (toStatus: EnrollmentOperationalStatus) => Promise<void> }) {
   const [process, setProcess] = useState<ProcessProjection | null>(null);
+  const [processEnrollmentId, setProcessEnrollmentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [processErrorEnrollmentId, setProcessErrorEnrollmentId] = useState<string | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const processRequestSequence = useRef(0);
+  const processRequestController = useRef<AbortController | null>(null);
   const loadProcess = useCallback(async () => {
+    const requestId = ++processRequestSequence.current;
+    processRequestController.current?.abort();
+    const controller = new AbortController();
+    processRequestController.current = controller;
+    setProcess(null);
+    setProcessEnrollmentId(null);
     setLoading(true);
     setError(null);
+    setProcessErrorEnrollmentId(null);
     try {
-      const result = await request(`/api/enrollments/${record.id}/process`);
+      const result = await request(`/api/enrollments/${record.id}/process`, { signal: controller.signal });
+      if (requestId !== processRequestSequence.current) return;
       setProcess(result.process);
+      setProcessEnrollmentId(record.id);
+      setProcessErrorEnrollmentId(null);
     } catch (cause) {
+      if (requestId !== processRequestSequence.current) return;
+      setProcess(null);
+      setProcessEnrollmentId(null);
       setError(cause instanceof Error ? cause.message : 'Não foi possível carregar as etapas do processo.');
+      setProcessErrorEnrollmentId(record.id);
     } finally {
-      setLoading(false);
+      if (requestId === processRequestSequence.current) setLoading(false);
     }
   }, [record.id]);
-  useEffect(() => { void loadProcess(); }, [loadProcess]);
+  useEffect(() => {
+    void loadProcess();
+    return () => {
+      processRequestSequence.current += 1;
+      processRequestController.current?.abort();
+    };
+  }, [loadProcess]);
   useEffect(() => {
     const frame = requestAnimationFrame(() => setDrawerVisible(true));
     return () => cancelAnimationFrame(frame);
@@ -435,8 +459,8 @@ function ProcessDrawer({ record, light, onClose, onTransition }: { record: Enrol
     <aside role="dialog" aria-modal="true" className={`h-full w-full max-w-2xl overflow-y-auto border-l p-4 shadow-2xl transition-transform duration-300 motion-reduce:transition-none sm:p-6 ${drawerVisible ? 'translate-x-0' : 'translate-x-full'} ${light ? 'border-zinc-200 bg-white' : 'border-zinc-700/70 bg-zinc-950'}`} aria-label="Processo selecionado de matrícula">
       <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="break-words text-[10px] font-bold uppercase leading-5 tracking-[0.14em] text-emerald-600">Processo de matrícula</p><h2 className={`mt-1 line-clamp-2 break-words text-xl font-bold leading-7 ${light ? 'text-zinc-900' : 'text-white'}`}>{record.student_name}</h2><p className={`mt-1 break-words text-sm leading-6 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{record.offer_name} · {record.academic_year_name}</p></div><button type="button" aria-label="Fechar processo" onClick={requestClose} className={`min-h-11 min-w-11 shrink-0 rounded-lg p-2 ${light ? 'hover:bg-zinc-100' : 'hover:bg-white/5'}`}><X className="h-5 w-5" /></button></div>
       {loading && <div className={`mt-6 flex min-h-40 items-center justify-center gap-2 rounded-2xl border ${light ? 'border-zinc-200 bg-slate-50 text-zinc-500' : 'border-white/10 bg-zinc-950/60 text-zinc-400'}`}><LoaderCircle className="h-4 w-4 animate-spin" /> A carregar etapas reais…</div>}
-      {error && <div role="alert" className="mt-6 flex gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-500"><AlertCircle className="h-5 w-5 shrink-0" />{error}<button type="button" onClick={() => void loadProcess()} className="ml-auto underline">Tentar novamente</button></div>}
-      {process && !loading && <>
+      {error && processErrorEnrollmentId === record.id && <div role="alert" className="mt-6 flex gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-500"><AlertCircle className="h-5 w-5 shrink-0" />{error}<button type="button" onClick={() => void loadProcess()} className="ml-auto underline">Tentar novamente</button></div>}
+      {process && processEnrollmentId === record.id && !loading && <>
         <section className={`mt-6 rounded-2xl border p-4 transition-colors duration-200 motion-reduce:transition-none ${light ? 'border-emerald-200 bg-emerald-50/60' : 'border-emerald-500/30 bg-gradient-to-br from-emerald-500/[0.12] via-zinc-950 to-blue-500/[0.08]'}`} aria-label="Resumo do processo">
           <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><span className={`inline-flex max-w-full whitespace-normal rounded-full border px-2.5 py-1 text-xs font-semibold leading-5 ${STATUS_TONE[process.enrollmentStatus]}`}>{STATUS_LABELS[process.enrollmentStatus]}</span><p className={`mt-3 text-[10px] font-bold uppercase leading-5 tracking-[0.14em] text-emerald-700 ${light ? '' : 'text-emerald-400'}`}>Etapa atual do percurso</p><p className={`mt-1 break-words text-base font-bold leading-6 ${light ? 'text-zinc-900' : 'text-white'}`}>{selectedJourneyStage}</p><p className={`mt-1 break-words text-xs font-semibold leading-5 ${light ? 'text-zinc-600' : 'text-zinc-300'}`}>{currentStage?.label}</p><p className={`mt-1 break-words text-xs leading-5 ${light ? 'text-zinc-600' : 'text-zinc-300'}`}>{currentStage?.evidence.summary}</p></div><div className={`shrink-0 rounded-xl border px-3 py-2 text-right ${light ? 'border-emerald-200 bg-white/80' : 'border-blue-400/20 bg-blue-500/10'}`}><p className="text-2xl font-bold tabular-nums text-emerald-600">{process.progress.percent}%</p><p className={`text-[11px] leading-5 ${light ? 'text-zinc-500' : 'text-zinc-300'}`}>{process.progress.completed} de {process.progress.applicable} etapas</p></div></div>
           <div className={`mt-4 h-2 max-w-full overflow-hidden rounded-full ${light ? 'bg-emerald-100' : 'bg-zinc-800'}`}><div className="h-full rounded-full bg-emerald-600 transition-[width] duration-500 ease-out motion-reduce:transition-none" style={{ width: `${process.progress.percent}%` }} /></div>
