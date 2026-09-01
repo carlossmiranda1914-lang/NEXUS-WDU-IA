@@ -17,6 +17,42 @@ export type EnrollmentLifecycleStep = {
   statuses: EnrollmentOperationalRecord['status'][];
 };
 
+export function composeEnrollmentJourneyProcesses(
+  enrollmentIds: readonly string[],
+  results: readonly PromiseSettledResult<EnrollmentJourneyProcessProjection>[],
+): { fulfilledProcesses: EnrollmentJourneyProcessProjection[]; unresolvedEnrollmentIds: string[] } {
+  const fulfilledProcesses = results
+    .filter((result): result is PromiseFulfilledResult<EnrollmentJourneyProcessProjection> => result.status === 'fulfilled')
+    .map((result) => result.value);
+  const unresolvedEnrollmentIds = results.flatMap((result, index) => result.status === 'rejected' && enrollmentIds[index] ? [enrollmentIds[index]] : []);
+  return { fulfilledProcesses, unresolvedEnrollmentIds };
+}
+
+export type EnrollmentJourneyProcessBatch = ReturnType<typeof composeEnrollmentJourneyProcesses>;
+
+/**
+ * Async ordering guard for a browser read batch. This does not decide any
+ * Enrollment state; it only rejects a completed batch that is no longer the
+ * latest request before it reaches the rendered server projection.
+ */
+export function createLatestEnrollmentJourneyBatchCommitter() {
+  let latestRequestSequence = 0;
+  let committedBatch: EnrollmentJourneyProcessBatch | null = null;
+
+  return {
+    startRequest() {
+      latestRequestSequence += 1;
+      return latestRequestSequence;
+    },
+    async commit(requestSequence: number, completedBatch: Promise<EnrollmentJourneyProcessBatch>) {
+      const batch = await completedBatch;
+      if (requestSequence !== latestRequestSequence) return { committed: false, batch: committedBatch };
+      committedBatch = batch;
+      return { committed: true, batch };
+    },
+  };
+}
+
 type EnrollmentJourneyStage = Exclude<EnrollmentLifecycleStep['key'], 'active_student'>;
 
 const JOURNEY_STAGE_BY_PROCESS_STAGE: Record<EnrollmentProcessStageKey, EnrollmentJourneyStage> = {

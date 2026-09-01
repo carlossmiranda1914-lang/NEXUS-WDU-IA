@@ -30,3 +30,15 @@
 - Environment note: the standalone `enrollment-activation-postgres.test.ts` remains host-blocked because its configured `nexus_test_runner` DB hostname cannot resolve here; no configuration was changed. The focused HTTP integration uses the authorized local disposable PostgreSQL target and passed.
 - Scope: no schema migration, activation service/controller semantic change, client-owned eligibility, post-activation mutation, or Task 4 work.
 - Independent review: PASS. The reviewer reran the focused continuity and operations contracts plus authorized local activation HTTP/PostgreSQL, Active Students and TypeScript checks; no P0/P1/P2 finding remained.
+
+## Task 4 — Journey Partial-Failure Resilience
+
+- Status: GREEN — independently reviewed.
+- Baseline: `4af79857a03ac106b9af414ccb9311fe7d0a38f0`; preflight `READY` with zero blockers (database check skipped because `DATABASE_URL` is not configured; no DB change is in scope).
+- Scope/ruling: client-only composition in `EnrollmentOperationsWorkspace`; existing per-Enrollment `/process` server projections remain the sole Journey authority. No schema, backend, role, tenant or process-policy change was required.
+- RED: `npx tsx tests/alunos-01a3-journey-partial-failure.test.ts` exited `1`: no separate unresolved projection state existed, and the all-settled rejection branch erased every fulfilled process projection.
+- Minimal implementation: retain fulfilled projections, track rejected request Enrollment references separately, leave the single Journey Rail visible with a bounded count-only warning and retry. Counts and exact selection continue to derive only from fulfilled server projections; no failed stage is inferred. An all-process failure safely renders zero confirmed process facts plus the warning; retry replaces the projection set, so recovered projections cannot duplicate.
+- GREEN: focused partial-failure contract, Journey Rail, human-review lifecycle, drawer continuity/interaction, motion, Enrollment Operations UI, S03 process contract, Task 2 stale-state contract, `npm run lint`, and `git diff --check` PASS.
+- Review correction (P1): the initial Task 4 delta did not establish latest-request ownership for whole-workspace process batches, so an older batch could overwrite a later retry. `load` now aborts its predecessor, carries a monotonic request sequence through context/list/students and process reads, and permits state writes/final loading completion only for the latest sequence.
+- Review correction (P2): replaced the synchronous helper with the production-used asynchronous `createLatestEnrollmentJourneyBatchCommitter`. The focused test uses real deferred Promises: A starts and remains unresolved; B starts, resolves and commits; A then resolves and its awaited commit is rejected, retaining B's committed fulfilled/unresolved batch.
+- Independent review: PASS. The reviewer verified the true deferred A→B race, abort/monotonic production guard, partial/all/retry composition, Journey and Drawer continuity, focused operations contracts and TypeScript lint; no P0/P1/P2 finding remains.

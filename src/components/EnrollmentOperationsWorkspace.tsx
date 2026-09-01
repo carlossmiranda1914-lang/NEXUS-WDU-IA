@@ -31,7 +31,7 @@ import {
   type EnrollmentOperationalStatus,
   type OperationalView,
 } from '../modules/enrollments/enrollment-operations-model.ts';
-import { buildEnrollmentLifecyclePresentation, getEnrollmentJourneyLabel, type EnrollmentJourneyProcessProjection } from '../modules/enrollments/enrollment-lifecycle-presentation.ts';
+import { buildEnrollmentLifecyclePresentation, composeEnrollmentJourneyProcesses, createLatestEnrollmentJourneyBatchCommitter, getEnrollmentJourneyLabel, type EnrollmentJourneyProcessProjection } from '../modules/enrollments/enrollment-lifecycle-presentation.ts';
 
 type Theme = 'light' | 'dark';
 type Offer = { id: string; name: string; code: string; academic_year_id: string; academic_year_name: string };
@@ -142,23 +142,33 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
   const [notice, setNotice] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [journeyEnrollmentIds, setJourneyEnrollmentIds] = useState<string[] | null>(null);
-  const [journeyError, setJourneyError] = useState<string | null>(null);
+  const [unresolvedProcessEnrollmentIds, setUnresolvedProcessEnrollmentIds] = useState<string[]>([]);
   const [selected, setSelected] = useState<EnrollmentOperationalRecord | null>(null);
   const [activeStudentError, setActiveStudentError] = useState<string | null>(null);
   const [selectedLifecycleLabel, setSelectedLifecycleLabel] = useState<string | null>(null);
   const [newEntryOpen, setNewEntryOpen] = useState(false);
+  const loadRequestSequence = useRef(0);
+  const loadRequestController = useRef<AbortController | null>(null);
+  const journeyBatchCommitter = useRef(createLatestEnrollmentJourneyBatchCommitter());
 
   const load = useCallback(async () => {
+    loadRequestController.current?.abort();
+    const controller = new AbortController();
+    loadRequestController.current = controller;
+    const requestSequence = ++loadRequestSequence.current;
+    const journeyRequestSequence = journeyBatchCommitter.current.startRequest();
+    const isLatestRequest = () => requestSequence === loadRequestSequence.current;
     setLoading(true);
     setError(null);
     setActiveStudentError(null);
-    setJourneyError(null);
+    setUnresolvedProcessEnrollmentIds([]);
     try {
       const [context, list, students] = await Promise.allSettled([
-        request('/api/enrollments/context'),
-        request('/api/enrollments'),
-        request('/api/active-students'),
+        request('/api/enrollments/context', { signal: controller.signal }),
+        request('/api/enrollments', { signal: controller.signal }),
+        request('/api/active-students', { signal: controller.signal }),
       ]);
+      if (!isLatestRequest()) return;
       if (context.status === 'rejected') throw context.reason;
       if (list.status === 'rejected') throw list.reason;
       setOffers(Array.isArray(context.value.offers) ? context.value.offers : []);
@@ -167,25 +177,32 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
       const enrollmentRecords = Array.isArray(list.value.enrollments) ? list.value.enrollments as EnrollmentOperationalRecord[] : [];
       setRecords(enrollmentRecords);
       const processResults = await Promise.allSettled(enrollmentRecords.map(async (record) => {
-        const result = await request(`/api/enrollments/${record.id}/process`);
+        const result = await request(`/api/enrollments/${record.id}/process`, { signal: controller.signal });
         return result.process as EnrollmentJourneyProcessProjection;
       }));
-      if (processResults.every((result) => result.status === 'fulfilled')) {
-        setProcesses(processResults.map((result) => (result as PromiseFulfilledResult<EnrollmentJourneyProcessProjection>).value));
-      } else {
-        setProcesses([]);
-        setJourneyError('Não foi possível confirmar o percurso de todos os processos. Atualize para tentar novamente.');
-      }
+      if (!isLatestRequest()) return;
+      const { fulfilledProcesses, unresolvedEnrollmentIds } = composeEnrollmentJourneyProcesses(enrollmentRecords.map((record) => record.id), processResults);
+      const completedBatch = { fulfilledProcesses, unresolvedEnrollmentIds };
+      const commit = await journeyBatchCommitter.current.commit(journeyRequestSequence, Promise.resolve(completedBatch));
+      if (!isLatestRequest() || !commit.committed || !commit.batch) return;
+      setProcesses(commit.batch.fulfilledProcesses);
+      setUnresolvedProcessEnrollmentIds(commit.batch.unresolvedEnrollmentIds);
       if (students.status === 'fulfilled') setActiveStudents(Array.isArray(students.value.students) ? students.value.students : []);
       else { setActiveStudents([]); setActiveStudentError(students.reason instanceof Error ? students.reason.message : 'Não foi possível carregar os alunos ativos.'); }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar a operação de matrículas.');
+      if (isLatestRequest()) setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar a operação de matrículas.');
     } finally {
-      setLoading(false);
+      if (isLatestRequest()) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    return () => {
+      loadRequestController.current?.abort();
+      loadRequestSequence.current += 1;
+    };
+  }, [load]);
 
   const attention = useMemo(() => getAttentionQueue(records), [records]);
   const lifecycle = useMemo(() => buildEnrollmentLifecyclePresentation(processes, activeStudents.length), [processes, activeStudents.length]);
@@ -241,7 +258,8 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
             <div className="flex flex-col gap-6">
               <div className={`rounded-2xl border p-5 ${surface}`}>
                 <div className="mb-4 flex items-start justify-between gap-3"><div><h2 className={`font-semibold ${text}`}>Percurso de alunos e matrículas</h2><p className={`mt-1 text-xs ${muted}`}>Acompanhe o percurso institucional. Cada etapa abre apenas uma vista existente; o estado continua a ser confirmado pelo servidor.</p></div><ShieldCheck className="h-5 w-5 text-emerald-700" /></div>
-                {journeyError ? <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-700">{journeyError}</div> : <div className="grid max-w-full snap-x snap-mandatory grid-flow-col auto-cols-[minmax(168px,78vw)] gap-2 overflow-x-auto overscroll-x-contain pb-2 sm:auto-cols-[minmax(176px,42vw)] lg:auto-cols-[minmax(176px,24vw)] xl:auto-cols-[minmax(168px,1fr)]">
+                {unresolvedProcessEnrollmentIds.length > 0 && <div role="alert" className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-5 text-amber-700">Não foi possível confirmar o percurso de {unresolvedProcessEnrollmentIds.length} processo{unresolvedProcessEnrollmentIds.length === 1 ? '' : 's'}. Os indicadores mostram apenas processos confirmados. <button type="button" onClick={() => void load()} className="ml-1 font-semibold underline">Tentar novamente</button></div>}
+                <div className="grid max-w-full snap-x snap-mandatory grid-flow-col auto-cols-[minmax(168px,78vw)] gap-2 overflow-x-auto overscroll-x-contain pb-2 sm:auto-cols-[minmax(176px,42vw)] lg:auto-cols-[minmax(176px,24vw)] xl:auto-cols-[minmax(168px,1fr)]">
                   {lifecycle.map((stage, index) => {
                     const journeySelected = selectedLifecycleLabel === stage.label;
                     return <button key={stage.key} type="button" aria-label={`Abrir etapa ${stage.label}`} aria-pressed={journeySelected} data-journey-selected={journeySelected ? 'true' : 'false'} onClick={() => { setSelectedLifecycleLabel(stage.label); setJourneyEnrollmentIds(stage.enrollmentIds); setView(stage.selectedView); }} className={`group relative flex min-h-24 min-w-0 snap-start flex-col rounded-xl border p-3 text-left motion-safe:transition-[transform,box-shadow,border-color,background-color] motion-safe:duration-200 motion-reduce:transition-none ${journeySelected ? light ? 'border-emerald-500 bg-emerald-50 shadow-[0_10px_28px_rgba(5,150,105,0.12)]' : 'border-emerald-400/70 bg-gradient-to-br from-emerald-500/[0.18] via-zinc-950 to-blue-500/[0.12] shadow-[0_12px_32px_rgba(16,185,129,0.12)]' : mutedSurface} cursor-pointer motion-safe:hover:-translate-y-0.5 hover:border-emerald-500/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 ${light ? 'focus-visible:ring-offset-slate-50' : 'focus-visible:ring-offset-zinc-950'}`}>
@@ -258,7 +276,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
                       </div>
                     </button>;
                   })}
-                </div>}
+                </div>
               </div>
 
               <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] 2xl:gap-6">
