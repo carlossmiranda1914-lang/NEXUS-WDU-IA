@@ -51,3 +51,12 @@
 - Safety ruling: no browser candidate/person selection, internal decision id, protected candidate disclosure or client-created Person/Student may be fabricated to bridge this gap. The partial Task 5 UI/API delta was discarded after independent review because it acknowledged a proposal as if it resolved the product journey.
 - Additional privacy finding: `/person-resolution` currently serializes `candidatePersonId` for local/reusable outcomes. This must be addressed by the prerequisite boundary; hiding the field in a component is not a privacy proof.
 - Independent review: FAIL by design of the current authority surface; no product checkpoint is created for Task 5.
+
+## Task 5A — Public Identity Decision Boundary
+
+- Status: GREEN — independently reviewed.
+- Scope: the minimum server-owned prerequisite only; no Task 5 continuity UI, browser-owned person selection, new identity authority or Enrollment authority rewrite.
+- RED: `tests/alunos-01a3-identity-decision-postgres-http.test.ts` first reproduced repeated `request_more_information` changing the public decision version; a second RED proved that the first narrow replay fix incorrectly prevented a later authorized rejection.
+- GREEN: migration `0025_identity_decision_public_refs.sql` creates a CSPRNG public decision reference. The tenant-scoped director/institution-admin queue and read routes return privacy-minimized decision DTOs only. Outcome and approved intake use the opaque `decisionRef`; the server resolves internal IDs exclusively after tenant/role validation. Same terminal outcome and same `request_more_information` replay are idempotent, while a later leadership rejection remains available.
+- Operational proof: authorized disposable PostgreSQL + actual HTTP router passes for public reference generation/resolution, leadership queue/read/outcome, Secretariat `403`, foreign-tenant and random-ref non-disclosing `404`, public payload privacy, replay idempotency, approved canonical intake by `decisionRef`, no duplicate Person/StudentProfile, and tenant isolation.
+- Independent review: PASS after two P1 corrections. It confirmed the CSPRNG opaque migration, server-only internal resolution, privacy-minimized contract, role/tenant behavior, safe approved handoff and correct nonterminal `needs_more_information` semantics.

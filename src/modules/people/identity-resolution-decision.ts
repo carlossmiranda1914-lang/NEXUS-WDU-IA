@@ -119,6 +119,7 @@ export interface DecideIdentityDecisionInput {
 
 export interface IdentityDecisionRecord {
   id: string;
+  publicRef: string;
   institutionId: string;
   caseKey: string;
   riskLevel: 'B' | 'C';
@@ -130,6 +131,20 @@ export interface IdentityDecisionRecord {
   approvedByPersonId: string | null;
   version: number;
   replayed?: boolean;
+}
+
+/** The only shape permitted outside the server decision authority. */
+export type PublicIdentityDecision = {
+  decisionRef: string;
+  status: IdentityDecisionStatus;
+  riskLevel: 'B' | 'C';
+  proposedAction: IdentityDecisionAction;
+  reasonCode: IdentityDecisionReasonCode;
+  version: number;
+};
+
+export function isPublicIdentityDecisionRef(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-f0-9]{36}$/i.test(value);
 }
 
 export class IdentityDecisionError extends Error {
@@ -242,6 +257,7 @@ async function resolveAuthorityRole(
 function mapRow(row: any, replayed = false): IdentityDecisionRecord {
   return {
     id: row.id,
+    publicRef: row.public_ref,
     institutionId: row.institution_id,
     caseKey: row.case_key,
     riskLevel: row.risk_level,
@@ -254,6 +270,41 @@ function mapRow(row: any, replayed = false): IdentityDecisionRecord {
     version: row.version,
     replayed,
   };
+}
+
+export function toPublicIdentityDecision(row: any): PublicIdentityDecision {
+  return {
+    decisionRef: row.public_ref,
+    status: row.status,
+    riskLevel: row.risk_level,
+    proposedAction: row.proposed_action,
+    reasonCode: row.reason_code,
+    version: row.version,
+  };
+}
+
+export async function listPublicIdentityDecisions(pool: IdentityDecisionPool, institutionId: string, actorPersonId: string): Promise<PublicIdentityDecision[]> {
+  const client = await pool.connect();
+  try {
+    const role = await resolveAuthorityRole(client, institutionId, actorPersonId);
+    if (role !== 'director' && role !== 'institution_admin') throw new IdentityDecisionError('UNAUTHORIZED_DECISION', 'Leadership access is required to review identity decisions.');
+    const result = await client.query<any>(`SELECT public_ref, status, risk_level, proposed_action, reason_code, version
+      FROM identity_resolution_decisions WHERE institution_id = $1 AND status NOT IN ('approved', 'rejected') ORDER BY created_at ASC`, [institutionId]);
+    return result.rows.map(toPublicIdentityDecision);
+  } finally { client.release(); }
+}
+
+export async function getPublicIdentityDecision(pool: IdentityDecisionPool, institutionId: string, actorPersonId: string, decisionRef: string): Promise<PublicIdentityDecision> {
+  if (!isPublicIdentityDecisionRef(decisionRef)) throw new IdentityDecisionError('DECISION_NOT_FOUND', 'Identity decision was not found in this institution.');
+  const client = await pool.connect();
+  try {
+    const role = await resolveAuthorityRole(client, institutionId, actorPersonId);
+    if (role !== 'director' && role !== 'institution_admin') throw new IdentityDecisionError('UNAUTHORIZED_DECISION', 'Leadership access is required to review identity decisions.');
+    const result = await client.query<any>(`SELECT public_ref, status, risk_level, proposed_action, reason_code, version
+      FROM identity_resolution_decisions WHERE institution_id = $1 AND public_ref = $2`, [institutionId, decisionRef]);
+    if (!result.rowCount) throw new IdentityDecisionError('DECISION_NOT_FOUND', 'Identity decision was not found in this institution.');
+    return toPublicIdentityDecision(result.rows[0]);
+  } finally { client.release(); }
 }
 
 export async function proposeIdentityDecision(
@@ -349,7 +400,14 @@ export async function decideIdentityDecision(
     const row = existing.rows[0];
     const policy = POLICY[row.reason_code as IdentityDecisionReasonCode];
     if (row.status === 'approved' || row.status === 'rejected') {
+      const sameOutcome = (row.status === 'approved' && input.outcome === 'approve')
+        || (row.status === 'rejected' && input.outcome === 'reject');
+      if (sameOutcome) { await client.query('COMMIT'); return mapRow(row, true); }
       throw new IdentityDecisionError('DECISION_ALREADY_FINAL', 'Identity decision is already final.');
+    }
+    if (row.status === 'needs_more_information' && input.outcome === 'request_more_information') {
+      await client.query('COMMIT');
+      return mapRow(row, true);
     }
     if (row.status === 'needs_more_information' && input.outcome === 'approve') {
       throw new IdentityDecisionError('INVALID_DECISION_INPUT', 'A review-only decision cannot be approved into a bypass.');

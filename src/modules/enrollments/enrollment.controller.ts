@@ -5,10 +5,13 @@ import { IdentityDecisionError } from '../people/identity-resolution-decision.ts
 import {
   assertNoClientAuthority,
   decideEnrollmentIdentityDecision,
+  listEnrollmentIdentityDecisionQueue,
+  readEnrollmentIdentityDecision,
   EnrollmentIntakeApiError,
   parseEnrollmentStudentInput,
   proposeEnrollmentIdentityDecision,
   resolveStudentForEnrollment,
+  toPublicEnrollmentResolution,
   startEnrollmentIntake,
 } from './enrollment-intake-api.ts';
 import { EnrollmentIntakeError } from './enrollment-intake.ts';
@@ -123,7 +126,7 @@ export function registerEnrollmentRoutes(
       assertNoClientAuthority(req.body);
       const student = parseEnrollmentStudentInput(req.body?.student);
       const resolution = await resolveStudentForEnrollment(enrollmentPool, context, student);
-      return res.json({ resolution });
+      return res.json({ resolution: toPublicEnrollmentResolution(resolution) });
     } catch (error) {
       return rejectDomainError(res, error);
     }
@@ -135,21 +138,24 @@ export function registerEnrollmentRoutes(
       assertNoClientAuthority(req.body);
       const student = parseEnrollmentStudentInput(req.body?.student);
       const proposedAction = req.body?.proposedAction;
-      if (proposedAction !== 'REUSE_PERSON' && proposedAction !== 'CREATE_PERSON') {
+      if (proposedAction !== 'REUSE_PERSON' && proposedAction !== 'CREATE_PERSON' && proposedAction !== 'REVIEW_REQUIRED') {
         return reject(res, 400, 'Ação de decisão de identidade inválida.');
+      }
+      if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'candidatePersonId')) {
+        return reject(res, 400, 'A seleção de uma Pessoa é uma autoridade exclusiva do servidor.');
       }
       const decision = await proposeEnrollmentIdentityDecision(enrollmentPool, context, {
         offerId: req.body?.offerId,
         student,
         proposedAction,
-        candidatePersonId: req.body?.candidatePersonId ?? null,
+        candidatePersonId: null,
         evidenceTypes: Array.isArray(req.body?.evidenceTypes) ? req.body.evidenceTypes : [],
         requestId: typeof req.headers['x-request-id'] === 'string' ? req.headers['x-request-id'] : null,
         correlationId: typeof req.headers['x-correlation-id'] === 'string' ? req.headers['x-correlation-id'] : null,
       });
       return res.status(201).json({
         decision: {
-          id: decision.id,
+          decisionRef: decision.publicRef,
           status: decision.status,
           riskLevel: decision.riskLevel,
           proposedAction: decision.proposedAction,
@@ -163,7 +169,17 @@ export function registerEnrollmentRoutes(
     }
   });
 
-  app.post('/api/enrollments/identity-decisions/:id/outcome', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
+  app.get('/api/enrollments/identity-decisions', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
+    const context = enrollmentActor(req, res); if (!context) return;
+    try { return res.json({ decisions: await listEnrollmentIdentityDecisionQueue(enrollmentPool, context) }); } catch (error) { return rejectDomainError(res, error); }
+  });
+
+  app.get('/api/enrollments/identity-decisions/:ref', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
+    const context = enrollmentActor(req, res); if (!context) return;
+    try { return res.json({ decision: await readEnrollmentIdentityDecision(enrollmentPool, context, req.params.ref) }); } catch (error) { return rejectDomainError(res, error); }
+  });
+
+  app.post('/api/enrollments/identity-decisions/:ref/outcome', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
     try {
       assertNoClientAuthority(req.body ?? {});
@@ -171,10 +187,13 @@ export function registerEnrollmentRoutes(
       if (outcome !== 'approve' && outcome !== 'reject' && outcome !== 'request_more_information') {
         return reject(res, 400, 'Resultado de decisão inválido.');
       }
-      const decision = await decideEnrollmentIdentityDecision(enrollmentPool, context, req.params.id, outcome);
+      await readEnrollmentIdentityDecision(enrollmentPool, context, req.params.ref);
+      const privateDecision = await (enrollmentPool as any).query('SELECT id FROM identity_resolution_decisions WHERE institution_id = $1 AND public_ref = $2', [context.institutionId, req.params.ref]);
+      if (!privateDecision.rowCount) return reject(res, 404, 'Decisão de identidade não encontrada nesta instituição.');
+      const decision = await decideEnrollmentIdentityDecision(enrollmentPool, context, privateDecision.rows[0].id, outcome);
       return res.json({
         decision: {
-          id: decision.id,
+          decisionRef: req.params.ref,
           status: decision.status,
           riskLevel: decision.riskLevel,
           proposedAction: decision.proposedAction,
@@ -198,13 +217,11 @@ export function registerEnrollmentRoutes(
         offerId: req.body?.offerId,
         student,
         idempotencyKey: idempotencyKeyHeader,
-        decisionId: req.body?.decisionId ?? null,
+        decisionRef: req.body?.decisionRef ?? null,
       });
       return res.status(result.replayed ? 200 : 201).json({
         enrollment: {
           id: result.enrollmentApplicationId,
-          studentPersonId: result.studentPersonId,
-          studentProfileId: result.studentProfileId,
           replayed: result.replayed,
         },
       });
