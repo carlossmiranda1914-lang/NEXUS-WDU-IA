@@ -1,31 +1,35 @@
 # NEXUS Agent Operating Contract
 
-This is the mandatory operating contract for any coding agent working in this repository, including Codex. It is an execution contract, not a substitute for product, architecture, audit or Mission Pack documentation.
+This is the mandatory operating contract for any coding agent working in this repository, including Codex and Antigravity. It is an execution contract, not a substitute for product, architecture, audit or Mission Pack documentation.
 
 ## 1. Non-negotiable rule
 
 **No agent may implement from chat context alone.**
 
-Implementation authority comes from the repository's current canonical documentation + the explicitly active Mission Pack + repository evidence. If the Mission Pack is not `READY`, implementation is not authorized.
+Implementation authority comes from the repository's current canonical documentation + the explicitly active Mission Pack + repository evidence. Never treat planned work as implemented. Verify code, migrations, tests and CI.
 
-Never treat planned work as implemented. Verify code, migrations, tests and CI.
+A unit of code/domain authority has **one implementation owner at a time**. Codex and Antigravity are complementary engineers; neither may silently create a parallel implementation or authority for work owned by the other.
 
 ## 2. Canonical reading order before any code change
 
 Read in this order:
 
 1. `AGENTS.md`
-2. `docs/README.md` — documentation authority hierarchy
-3. `docs/operations/PROJECT_STATE.md` — current factual phase/baseline
-4. `docs/product/NEXUS_MASTER_PLAN_V2.md` — product/market decisions
-5. `docs/architecture/NEXUS_ARCHITECTURE_TO_BE_V2.md` — target architecture and domain authority
-6. `docs/audit/AUDIT_01_TECHNICAL_BASELINE.md` — factual AS-IS risks
-7. `docs/audit/LEGACY_REPLACEMENT_MAP.md` — preserve/refactor/replace/remove decisions
-8. `docs/roadmap/IMPLEMENTATION_PLAN_VNEXT_V2.md` — implementation order/dependencies
+2. `docs/README.md`
+3. `docs/operations/PROJECT_STATE.md`
+4. `docs/operations/NEXUS_ENGINEERING_CONFIG.yaml`
+5. `docs/product/NEXUS_MASTER_PLAN_V2.md`
+6. `docs/architecture/NEXUS_ARCHITECTURE_TO_BE_V2.md`
+7. current audit/legacy evidence required by the active work
+8. `docs/roadmap/IMPLEMENTATION_PLAN_VNEXT_V2.md`
 9. the **single active Mission Pack** under `docs/roadmap/missions/`
-10. any evidence/ADR/domain contract explicitly referenced by that Mission Pack
+10. Mission-referenced spec/plan/ADR/domain contracts
 11. `docs/DEFINITION_READY_DONE_EVIDENCE.md`
-12. `docs/operations/ENGINEERING_PLAYBOOK.md`
+12. `docs/operations/NEXUS_ENGINEERING_OPERATING_SYSTEM.md`
+13. `docs/operations/ENGINEERING_PLAYBOOK.md`
+14. the applicable execution adapter:
+   - Codex → `docs/operations/CODEX_EXECUTION_ADAPTER.md`
+   - Antigravity → `docs/operations/ANTIGRAVITY_EXECUTION_ADAPTER.md`
 
 Supporting/historical documents may clarify context but may not override this chain.
 
@@ -37,231 +41,257 @@ When sources conflict:
 2. current TO-BE Architecture and accepted ADRs;
 3. current roadmap and active Mission Pack;
 4. security/tenancy/data-authority contracts;
-5. current AUDIT/project-state evidence;
+5. current project-state/audit evidence;
 6. issue/PR evidence;
 7. current code as AS-IS evidence;
-8. supporting/historical/archive material.
+8. supporting Drive/reference/archive material.
 
-Code proves what exists. It does not automatically prove what should exist.
-
-If precedence does not resolve a contradiction, **STOP** and report the conflict. Do not pick the easiest implementation.
+Code proves what exists. It does not automatically prove what should exist. If precedence does not resolve a material contradiction, **STOP** and report the conflict.
 
 ## 4. Mission state gate
 
-The canonical state model is defined by `docs/DEFINITION_READY_DONE_EVIDENCE.md`. Only these mission states are valid:
+The canonical state model is defined by `docs/DEFINITION_READY_DONE_EVIDENCE.md`. Use only official mission states. Invented states may appear as task/checkpoint descriptors, but must not replace official mission state.
 
-- `BACKLOG`;
-- `PREPARATION`;
-- `BLOCKED`;
-- `READY`;
-- `IMPLEMENTING`;
-- `VALIDATING`;
-- `DONE`;
-- `CANCELLED`;
-- `SUPERSEDED`.
+`READY` means DoR is satisfied; production-code editing still requires explicit implementation authorization. Commit, push, PR, merge and deploy are separate gates unless the active mission/config explicitly authorizes them.
 
-No alternate/conditional mission states are allowed. In particular, `READY WITH CONDITIONS`, `IN PROGRESS` and `PARTIAL-NOT-DONE` must not be used as mission states. If a required condition is unresolved, remain `PREPARATION` or `BLOCKED`.
+## 5. Engineering Configurator
 
-`READY` means DoR is satisfied; production-code editing still requires explicit implementation authorization. Commit, push, PR, merge and deploy remain separate authorization gates.
+`docs/operations/NEXUS_ENGINEERING_CONFIG.yaml` is the operational selector for current work. It declares the active mission/task, owner, reviewer, baseline, branch/worktree, risk, authorized/forbidden scope, evidence gates and resource policy.
 
-## 5. Mandatory preflight
+The configurator **cannot override** product/architecture/Mission/spec authority. If it conflicts with those sources, stop and reconcile the config.
+
+Before editing, verify that the agent is the declared owner for the code/authority being changed. A reviewer begins read-only unless correction ownership is explicitly transferred.
+
+## 6. Mandatory preflight
 
 Before any production-code edit:
 
-- inspect branch/ref and working state;
-- verify the active Mission Pack and its state;
-- run `npm run nexus:preflight`;
-- for identity, enrollment, schema, migrations, documents, finance or other persistence-critical work, run the applicable DB preflight required by the Mission Pack;
+- inspect branch/ref, HEAD and working state;
+- verify active Mission Pack, task ownership and authorization;
+- run `npm run nexus:preflight` when required by the repo/mission;
+- for identity, enrollment, schema, migrations, documents, finance or persistence-critical work, run the applicable DB preflight;
 - inspect relevant existing tests and migration history;
 - identify unrelated changes and preserve them.
 
-Preflight is diagnostic/read-only unless the Mission Pack explicitly authorizes a migration/test setup action.
+A factual `BLOCKED` preflight blocks implementation. Do not work around it by changing authority, disabling safeguards or moving work to an unapproved path.
 
-A `BLOCKED` result blocks implementation.
+## 7. Professional delivery pipeline
 
-## 6. Mission execution algorithm
+Relevant Nexus work follows:
 
-For every authorized mission execute exactly this sequence:
+`Discovery → Product Decision → Design/Authority → Mission Pack → Implementation Plan → Execution → Independent Review → Adversarial Product Review → Human UAT → Integration → Project State Update`
 
-`read canonical sources → restate objective/invariants → inspect AS-IS → prove DoR → create failing/contract test where applicable → minimal implementation → focused tests → negative/security/tenant tests → regression → migration verification → static checks → build → UX validation when applicable → evidence pack → DoD review → project-state update`
+Do not jump directly from requirement to editing when the work is architectural or authority-changing.
 
-Do not jump directly from requirement to editing.
+For implementation use TDD/contract-first evidence where applicable:
 
-## 7. Scope control
+`RED → minimal correct implementation → GREEN → affected regressions → checkpoint`.
 
-Before editing, write a compact scope statement containing:
+## 8. Scope control
 
-- mission ID;
+Before editing, know:
+
+- mission/task ID;
 - objective;
 - invariants being changed/protected;
 - expected files/domains;
-- explicitly OUT-of-scope areas;
+- OUT-of-scope areas;
 - required tests/evidence;
 - stop rules.
 
 Rules:
 
-- one mission at a time;
-- no opportunistic UX cleanup;
-- no unrelated refactor;
+- one implementation owner per same authority/code unit;
+- no opportunistic refactor/UX cleanup;
 - no new module because it is convenient;
-- no architecture rewrite unless explicitly required by the Mission Pack;
-- discovered adjacent defects are recorded, not silently fixed, unless they block the mission and are within approved scope.
+- no architecture rewrite unless explicitly required;
+- discovered adjacent defects are classified, not silently absorbed.
 
-If the smallest correct change requires expanding scope, STOP and report why.
+If the smallest correct change requires material scope expansion, classify it and stop for the applicable authority decision.
 
-## 8. Root-cause discipline
+## 9. Discovery classification
 
-Do not patch symptoms when the mission identifies an authority/invariant problem.
+Classify implementation discoveries as:
+
+- `NORMAL_DEFECT` — in-scope implementation bug; fix and continue.
+- `IMPLEMENTATION_DETAIL` — resolve without changing product/architecture intent.
+- `ENVIRONMENT_BLOCKER` — preserve state and report exact recovery action.
+- `GENUINE_PREREQUISITE` — dependent work stops; define the smallest missing authority/dependency.
+- `SCOPE_EXPANSION` — requires explicit authorization.
+- `PRODUCT_DECISION` — Product Owner decision required.
+- `ARCHITECTURE_CHANGE` — governance/ADR decision required.
+
+Missing backend authority must never be disguised as UI behavior. Missing UI must never be solved by duplicating server authority in the browser.
+
+## 10. Root-cause discipline
 
 For every critical defect, answer:
 
 - what state/path allows the defect?
 - which authority should own the decision?
-- can the same defect occur through another route/tool/UI path?
-- what test proves recurrence is blocked?
+- can the same defect recur through another route/tool/UI path?
+- what test/evidence proves recurrence is blocked?
 
 A green UI is not evidence that the domain invariant is fixed.
 
-## 9. Data and schema rules
+## 11. Data and schema rules
 
-- PostgreSQL migrations are the target single persistent schema-evolution authority.
-- Runtime startup must not silently act as a migration engine.
-- Never mutate an applied historical migration to make the current branch pass.
+- PostgreSQL migrations are canonical schema evolution for vNext domains.
+- Never mutate an applied historical migration to make current work pass.
 - Migration order must be deterministic and tested.
-- Shared-environment migration requires the Mission Pack's preflight/recovery contract.
+- Shared-environment migration requires the mission/preflight contract.
 - Ambiguous tenant ownership or destructive data conversion = STOP.
-- A schema model declaration is not proof that a migration creates it.
-- Test-only DDL is not allowed to masquerade as migration coverage.
+- Test-only DDL is not migration coverage.
+- Additive schema expansion must still define compatibility/fail-closed behavior for legacy records where required.
 
-## 10. Identity, authorization and tenancy
+## 12. Identity, authorization and tenancy
 
 - Authentication identity and institutional Membership are distinct concerns.
 - Institutional context is resolved server-side.
-- Client-supplied institution/person/role values are never authority by themselves.
+- Client-supplied institution/person/role/decision/case identifiers are never authority by themselves.
 - Every institutional read/write must be tenant-safe.
 - New cross-tenant behavior requires explicit negative tests.
-- AI/tool selection never grants permission; every use case/tool requires its own authorization and tenant checks.
+- AI/tool selection never grants permission.
 
-## 11. Transactions, concurrency and idempotency
+## 13. Transactions, concurrency and idempotency
 
 For retryable or multi-write critical operations:
 
 - define transaction boundary;
 - define duplicate/idempotency behavior;
-- define concurrency behavior (lock/version/constraint as appropriate);
-- prove rollback on partial failure;
+- define concurrency behavior;
+- prove rollback/fail-closed behavior on partial failure;
 - do not convert partial success into full success.
 
 Reuse proven vNext patterns rather than inventing weaker local variants.
 
-## 12. Product truth
+## 14. Product truth
 
-Never present these as operational success without real evidence:
+Never present operational success without real evidence for persistence, payment, synchronization, signature/certificate issuance, message delivery, backup/restore, authorization/security state, AI execution or data import.
 
-- persistence;
-- payment;
-- synchronization;
-- signature/certificate issuance;
-- message delivery;
-- backup/restore;
-- authorization/security state;
-- AI execution;
-- data import.
+Mocks, demos and prototypes remain explicitly isolated from operational truth.
 
-Mocks, demos and prototypes must remain clearly isolated from operational truth.
+## 15. Frontend/UX implementation
 
-## 13. Audit truth
-
-Audit must state what actually happened, by whom/system, with the correct tenant/context/outcome. Presentation may translate technical labels but must not invent receipts, approvals, signatures or actions absent from the underlying event.
-
-## 14. Frontend/UX implementation
-
-When a Mission Pack includes user-facing work:
+When a Mission includes user-facing work:
 
 - preserve entity/context continuity;
 - prefer task-first flows;
-- do not create unnecessary menu → button-panel → operation chains;
-- long workflows do not belong in large modals;
-- tables are acceptable for dense administration when justified;
-- loading, empty, error, conflict, forbidden and confirmed states are explicit;
-- mobile/tablet/desktop behavior is validated;
-- backend authorization remains authoritative.
+- explicit loading/empty/error/conflict/forbidden/confirmed states;
+- mobile/tablet/desktop behavior validated where applicable;
+- backend authorization remains authoritative;
+- no client-owned domain state advancement masquerading as server truth.
 
-Do not redesign unrelated surfaces in a backend/foundation mission.
+Do not redesign unrelated surfaces in backend/foundation work.
 
-## 15. Testing hierarchy
+## 16. Testing and evidence budget
 
-Use the smallest test that proves the invariant, then widen:
+Use the smallest evidence that proves the current invariant, then widen:
 
-1. policy/domain/unit contract;
-2. persistence/PostgreSQL test when relevant;
-3. API/integration contract;
-4. negative tenant/security/concurrency tests;
-5. relevant historical regressions;
-6. migration isolation/schema verification;
+1. targeted policy/domain/UI contract;
+2. persistence/PostgreSQL when relevant;
+3. API/integration;
+4. negative tenant/security/concurrency;
+5. affected historical regressions;
+6. migration/schema verification;
 7. TypeScript/static checks;
 8. production build;
-9. visual/user-flow validation when applicable.
+9. visual/user-flow validation;
+10. aggregate/final gate at the mission checkpoint.
 
-Never weaken/remove a failing critical test merely to obtain green CI.
+Evidence classes:
 
-## 16. Evidence required before DONE
+- `FRESH` — must run for the current delta.
+- `REUSABLE` — remains valid because current delta does not affect it.
+- `INVALIDATED` — current delta may affect it; rerun required.
 
-The final mission evidence must state:
+Never rerun expensive unrelated proof only for ceremony, and never reuse evidence after its authority has been invalidated.
 
-- mission ID and official final state;
-- baseline/head refs;
-- files/areas changed;
-- invariants implemented;
-- schema/data changes and recovery behavior;
-- focused tests and results;
-- negative/security/tenant tests and results;
-- regression results;
-- migration/static/build results;
-- UI validation where applicable;
-- known residual risks;
-- explicit DoD checklist;
-- `PROJECT_STATE.md` update when factual project state changed.
+## 17. Four GREEN gates and DONE
 
-If a blocker remains, state is not DONE.
+Where applicable, track separately:
 
-## 17. Stop conditions
+- `ENGINEERING_GREEN` — code/tests/build/security/tenant/regression evidence.
+- `INTEGRITY_GREEN` — coherent states, authority and data semantics.
+- `PRODUCT_GREEN` — supported workflow works end-to-end without scripts/devtools/hidden prerequisites.
+- `HUMAN_UAT_GREEN` — observed and accepted product behavior.
 
-Stop implementation and report evidence when any of these occurs:
+A task may be GREEN in its own scope while the mission remains not PRODUCT_GREEN. `DONE` requires every applicable gate, integration evidence and truthful `PROJECT_STATE` update.
 
-- canonical sources conflict materially;
-- Mission Pack is not READY/authorized;
-- production/staging dependency is unknown and required by the mission;
-- destructive migration/data conversion is not explicitly approved;
-- tenant ownership cannot be proven;
-- a required domain authority does not yet exist;
-- solving the issue requires unrelated redesign;
-- tests reveal a broader invariant break outside mission scope;
-- required secret/credential/environment is unavailable.
+## 18. Multi-agent ownership and review
 
-Do not silently work around a stop condition.
+Codex and Antigravity may both implement and review, but:
 
-## 18. Git safety
+- the same code/authority has one owner at a time;
+- parallelism is allowed only for independent work or a frozen shared contract;
+- reviewer begins read-only;
+- findings are classified before correction;
+- correction ownership stays with the implementer unless explicitly transferred;
+- the implementer cannot be the sole approver of its own integration.
+
+Reviewer findings use `P0`, `P1`, `P2`, `OBSERVATION`, `FALSE_POSITIVE` (or an equivalent mission-defined taxonomy).
+
+## 19. Resource/context discipline
+
+Use progressive context from the engineering config:
+
+- L0 Project State + Config;
+- L1 active Mission/Task;
+- L2 directly affected files;
+- L3 required contracts/dependencies;
+- L4 historical evidence;
+- L5 broad repository investigation.
+
+Expand only with evidence. Avoid duplicate investigations and broad rereads. Use the minimum subagents necessary for independent uncertainty/review. SIU/resource skills are optional accelerators, never dependencies.
+
+Resource savings may never remove TDD, security, tenant isolation, integrity, independent/adversarial review or mandatory final gates.
+
+## 20. Git and integration safety
 
 - Preserve unrelated changes.
 - Never `git reset --hard`, `git clean`, force push or rewrite shared history without explicit authorization and recovery justification.
-- Use a dedicated branch/PR for implementation missions.
-- Do not mix documentation-governance cleanup with product implementation unless the active mission explicitly requires the documentation update.
+- Use dedicated branches/worktrees for implementation and governance work.
+- Do not mix governance cleanup with product implementation unless explicitly authorized.
+- Dirty or unidentified worktrees are not valid integration inputs.
 
-## 19. Session recovery
+Integration has two levels:
 
-A new agent must be able to resume without prior chat history:
+1. **Technical task checkpoint** — applicable implementation evidence + independent review before entering a mission branch.
+2. **Mission/product integration to `main`** — applicable aggregate gates + adversarial product review + Human UAT + PR review.
 
-1. read the canonical chain in §2;
-2. verify active branch/PR and `PROJECT_STATE.md`;
-3. run preflight;
-4. verify Mission Pack state;
-5. compare documented AS-IS assumptions against code;
-6. continue only the active mission.
+A commit/push does not itself mean integration or DONE.
 
-If repository reality contradicts `PROJECT_STATE.md`, correct/report the factual state; do not rewrite product/architecture intent based on implementation accidents.
+## 21. Handoff and session recovery
 
-## 20. Codex adapter
+A recoverable handoff records:
 
-When Codex is the implementation agent, it must also read `docs/operations/CODEX_EXECUTION_ADAPTER.md`. That file may translate this contract into Codex execution behavior but **cannot override** canonical product, architecture, audit, roadmap, Mission Pack, DoR/DoD or this contract.
+```text
+MISSION=
+TASK=
+OWNER=
+REVIEWER=
+BASE_SHA=
+HEAD_SHA=
+BRANCH=
+IMPLEMENTED=
+AUTHORITY_CHANGED=
+SCHEMA_CHANGED=
+TESTS=
+KNOWN_LIMITATIONS=
+REVIEW_TARGET=
+CANONICAL_DOCS=
+WORKTREE_CLEAN=
+REMOTE_SYNC=
+NEXT_ACTION=
+```
+
+When credits/context/session end, preserve this factual state in Git/ledger. Do not replay a full historical conversation to resume.
+
+A new agent recovers by reading the canonical chain in §2, verifying Git reality, then continuing only the selected task.
+
+## 22. Agent adapters
+
+- Codex must read `docs/operations/CODEX_EXECUTION_ADAPTER.md`.
+- Antigravity must read `docs/operations/ANTIGRAVITY_EXECUTION_ADAPTER.md`.
+
+Adapters translate this contract into tool-specific execution behavior but **cannot override** product, architecture, Mission Pack, DoR/DoD, engineering configurator constraints or this contract.
