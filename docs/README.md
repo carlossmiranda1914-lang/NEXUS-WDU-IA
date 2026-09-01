@@ -1,13 +1,13 @@
 # Nexus Edu IA — Documentation Index
 
 **Status:** CANONICAL documentation entrypoint  
-**Implementation:** FROZEN. Documentation does not authorize product-code changes.
+**Implementation:** Documentation does not authorize product-code changes by itself.
 
 ## 1. Mandatory entrypoint
 
-Anyone — human or agent — planning, reviewing or implementing Nexus work starts here. Never let an old mission, chat handoff, prototype, Codex prompt or legacy code path become authority merely because it was found first.
+Anyone — human or agent — planning, reviewing or implementing Nexus work starts here. Never let an old mission, chat handoff, prototype, agent prompt or legacy code path become authority merely because it was found first.
 
-For coding-agent execution, `AGENTS.md` is mandatory. When Codex is the implementation agent, also read `docs/operations/CODEX_EXECUTION_ADAPTER.md`; the adapter never overrides canonical product/architecture/mission sources.
+For coding-agent execution, `AGENTS.md` is mandatory. All agents also read `docs/operations/PROJECT_STATE.md` and `docs/operations/NEXUS_ENGINEERING_CONFIG.yaml`. Codex additionally reads `docs/operations/CODEX_EXECUTION_ADAPTER.md`; Antigravity additionally reads `docs/operations/ANTIGRAVITY_EXECUTION_ADAPTER.md`. Adapters never override canonical product/architecture/mission sources.
 
 ## 2. Authority hierarchy
 
@@ -20,7 +20,7 @@ When sources conflict, stop and resolve the conflict explicitly. Authority order
 5. **Current factual state/audit:** `docs/operations/PROJECT_STATE.md`, `docs/audit/AUDIT_01_TECHNICAL_BASELINE.md` and `LEGACY_REPLACEMENT_MAP.md`.
 6. **Active GitHub issue/PR evidence.**
 7. **Current code/schema/tests as AS-IS evidence.**
-8. **Supporting Drive/reference documents** when a canonical repository document points to them for normative detail.
+8. **Supporting Drive/reference documents** when a canonical repository document points to them for source evidence or normative detail.
 9. **Archived/superseded missions, plans, tool workflows and historical conversations.**
 
 Code proves what exists; it does not automatically define what should exist. A benchmark proves an observed pattern; it does not automatically authorize a Nexus feature.
@@ -30,6 +30,8 @@ Code proves what exists; it does not automatically define what should exist. A b
 | Need | Source |
 |---|---|
 | Coding-agent operating contract | `AGENTS.md` |
+| Engineering operating system | `docs/operations/NEXUS_ENGINEERING_OPERATING_SYSTEM.md` |
+| Current execution selector | `docs/operations/NEXUS_ENGINEERING_CONFIG.yaml` |
 | Product direction + market decisions | `docs/product/NEXUS_MASTER_PLAN_V2.md` |
 | Target architecture | `docs/architecture/NEXUS_ARCHITECTURE_TO_BE_V2.md` |
 | Accepted institutional-context ADR | `docs/architecture/ADR-001-institutional-context.md` |
@@ -37,26 +39,38 @@ Code proves what exists; it does not automatically define what should exist. A b
 | Legacy replacement decisions | `docs/audit/LEGACY_REPLACEMENT_MAP.md` |
 | Documentation classification | `docs/audit/DOCUMENTATION_REGISTER.md` |
 | Implementation order | `docs/roadmap/IMPLEMENTATION_PLAN_VNEXT_V2.md` |
-| Prepared Foundation missions | `docs/roadmap/missions/FND-01.md` … `FND-06.md` |
+| Mission Packs | `docs/roadmap/missions/` |
 | Ready/Done/evidence gates | `docs/DEFINITION_READY_DONE_EVIDENCE.md` |
 | Engineering workflow | `docs/operations/IMPLEMENTATION_WORKFLOW.md` + `ENGINEERING_PLAYBOOK.md` |
-| Codex execution translation | `docs/operations/CODEX_EXECUTION_ADAPTER.md` (SUPPORTING only) |
+| Codex execution translation | `docs/operations/CODEX_EXECUTION_ADAPTER.md` (SUPPORTING) |
+| Antigravity execution translation | `docs/operations/ANTIGRAVITY_EXECUTION_ADAPTER.md` (SUPPORTING) |
 | Current factual project state | `docs/operations/PROJECT_STATE.md` |
 | Historical evidence | `docs/archive/` |
 
-`docs/ARCHITECTURE_V4.md` remains SUPPORTING during reconciliation; Architecture TO-BE v2 is primary. External Drive sources remain important references, but implementation authority is summarized/versioned in the repository so work does not depend on undocumented chat/tool availability.
+External Drive sources remain important evidence, but implementation authority derived from them must be summarized/versioned in the repository so execution never depends on undocumented chat/tool availability.
 
-## 4. Mandatory traceability
+## 4. Information authority
+
+Each information class has one durable home:
+
+- GitHub/repository — technical/executable truth and approved implementation intent.
+- Drive — original business/external source material.
+- ChatGPT — direction, reasoning and coordination, not durable authority alone.
+- Codex/Antigravity sessions — engineering workspaces, not durable authority alone.
+
+Important discoveries are promoted to the correct canonical source and then referenced rather than duplicated.
+
+## 5. Mandatory traceability
 
 No mission is READY unless it can trace:
 
-`market/institutional evidence → ADOPT/ADAPT/KEEP/REJECT/INVESTIGATE → product requirement → architecture/domain authority → AS-IS finding/gap → mission scope → tests/evidence → DONE`.
+`market/institutional evidence → product decision → architecture/domain authority → AS-IS gap → mission scope → tests/evidence → DONE`.
 
 Every implementation agent must additionally prove:
 
 `Mission state → explicit scope → invariants → AS-IS verification → tests/evidence plan → minimal change → negative/regression gates → DoD`.
 
-## 5. Documentation states
+## 6. Documentation states
 
 - **CANONICAL** — may govern implementation.
 - **SUPPORTING** — useful detail; cannot override canonical sources.
@@ -64,18 +78,20 @@ Every implementation agent must additionally prove:
 - **SUPERSEDED** — replaced; must not guide new work.
 - **PROTOTYPE** — exploratory; no operational authority.
 
-## 6. ADR rule
+## 7. ADR rule
 
-ADR identifiers are unique. The accepted `ADR-001` is institutional context (2026-08-10). The earlier duplicate identity/membership proposal has been preserved as `ADR-000-institutional-identity-membership-proposal.md` with SUPERSEDED PROPOSAL status so its reasoning remains available without ambiguous authority.
+ADR identifiers are unique. The accepted `ADR-001` is institutional context. A later architectural decision must receive its own ADR or explicit superseding status; do not overload an existing ADR identifier.
 
-## 7. Archive/delete rule
+## 8. Archive/delete rule
 
 Classify before moving or deleting. Historical evidence is archived when it explains prior decisions or implementation. Permanent deletion is limited to exact redundancy, generated/transient artifacts or content proven to have no historical/operational value.
 
-## 8. Current freeze and first mission gate
+## 9. Current execution and recovery
 
-The frozen enrollment checkpoint and prior implementation remain AS-IS evidence. Do not continue S04, merge PR #65, start a new module or perform opportunistic UX/code cleanup.
+Current factual work is never hard-coded in this index. Read:
 
-The first planned implementation mission is `FND-01 — Schema Authority`, but its current state is **BLOCKED — EXTERNAL EVIDENCE ONLY**. Internal repository investigation is closed; implementation cannot start until staging/production migration/deployment reality is confirmed or those environments are explicitly recorded as not yet provisioned and a future deployment contract is approved.
+1. `docs/operations/PROJECT_STATE.md` for where the project is now;
+2. `docs/operations/NEXUS_ENGINEERING_CONFIG.yaml` for the selected active mission/task/owner/reviewer/gates;
+3. the active Mission Pack/spec/plan for implementation authority.
 
-Implementation resumes only through an individually `READY` Mission Pack plus explicit authorization.
+A new agent must be able to recover from those sources plus Git state without previous chat history.
