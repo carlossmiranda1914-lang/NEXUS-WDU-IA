@@ -19,6 +19,8 @@ export interface EnrollmentOperationalRecord {
   academic_year_name: string;
   created_at: string;
   updated_at: string;
+  lifecycle_version?: string;
+  registration_version?: string;
 }
 
 export interface OperationalMetric {

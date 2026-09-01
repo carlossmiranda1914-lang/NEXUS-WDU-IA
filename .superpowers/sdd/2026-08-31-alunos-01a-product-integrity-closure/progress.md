@@ -19,3 +19,14 @@
 - Focused/static evidence: `npx tsx tests/alunos-01a3-stale-state-contract.test.ts`, Student Record contracts, Student Experience truth/product contracts, Student Context policy, system-student write fence, Active Students, Enrollment workspace, registration privacy, single Journey, drawer interaction/continuity and document drawer contracts all PASS.
 - Static evidence: `npm run lint` PASS. No schema, backend, authorization, cache, visual redesign or internal-reference change.
 - Independent review: PASS. The reviewer confirmed that A→B content and errors remain bound to the current opaque reference, superseded success/error/finally paths cannot win, refresh failure leaves no action-enabled Process Drawer state, writes remain server-confirmed, and no backend/schema/authority boundary changed.
+
+## Task 3 — Authorized Activation Continuity
+
+- Status: GREEN — independently reviewed.
+- RED: `npx tsx tests/alunos-01a3-activation-product-continuity.test.ts` exited `1` because the server-owned Enrollment context did not declare activation capability and the product exposed no canonical activation/handoff path.
+- Minimal change: `/api/enrollments/context` now returns only the server-derived `permissions.canActivateEnrollment` capability; the Enrollment read model supplies server-issued lifecycle/registration versions; the Process Drawer invokes the existing canonical `/activate` command with those versions plus a stable retry idempotency key. It waits for the response, refreshes Enrollment and Active Students, then enables `Abrir Registo do Aluno` using only the returned opaque `studentRef`.
+- Authority/privacy: the UI never calculates eligibility from role or advances domain state optimistically; Secretariat receives no activation action and canonical API authorization remains Administration/Direção only. No internal Person/StudentProfile identifier enters activation navigation.
+- GREEN: focused continuity contract, canonical activation HTTP/PostgreSQL integration (including Secretariat `403`, idempotent replay, same opaque handoff, single active projection and tenant/privacy checks), Active Students PostgreSQL/HTTP, Active Students UI, Enrollment Operations UI, stale-state contract, active-transition policy, Student Context policy, lint and `git diff --check` all PASS.
+- Environment note: the standalone `enrollment-activation-postgres.test.ts` remains host-blocked because its configured `nexus_test_runner` DB hostname cannot resolve here; no configuration was changed. The focused HTTP integration uses the authorized local disposable PostgreSQL target and passed.
+- Scope: no schema migration, activation service/controller semantic change, client-owned eligibility, post-activation mutation, or Task 4 work.
+- Independent review: PASS. The reviewer reran the focused continuity and operations contracts plus authorized local activation HTTP/PostgreSQL, Active Students and TypeScript checks; no P0/P1/P2 finding remained.

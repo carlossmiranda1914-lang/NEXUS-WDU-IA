@@ -39,6 +39,7 @@ type Resolution = {
   status: 'NO_MATCH' | 'LOCAL_MATCH' | 'REUSABLE_MATCH' | 'MULTIPLE_MATCHES' | 'RESTRICTED_POSSIBLE_MATCH' | 'REVIEW_REQUIRED';
   candidateCount: number;
 };
+type EnrollmentPermissions = { canActivateEnrollment: boolean };
 
 type ProcessProjection = EnrollmentJourneyProcessProjection & {
   assignedTo: { personId: string; name: string | null } | null;
@@ -134,6 +135,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
   const [activeStudents, setActiveStudents] = useState<ActiveStudent[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [institutionName, setInstitutionName] = useState('');
+  const [permissions, setPermissions] = useState<EnrollmentPermissions>({ canActivateEnrollment: false });
   const [view, setView] = useState<OperationalView>('overview');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -161,6 +163,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
       if (list.status === 'rejected') throw list.reason;
       setOffers(Array.isArray(context.value.offers) ? context.value.offers : []);
       setInstitutionName(context.value.institution?.name || 'Instituição atual');
+      setPermissions({ canActivateEnrollment: context.value.permissions?.canActivateEnrollment === true });
       const enrollmentRecords = Array.isArray(list.value.enrollments) ? list.value.enrollments as EnrollmentOperationalRecord[] : [];
       setRecords(enrollmentRecords);
       const processResults = await Promise.allSettled(enrollmentRecords.map(async (record) => {
@@ -292,7 +295,7 @@ export default function EnrollmentOperationsWorkspace({ theme = 'dark', onOpenSt
         </>
       )}
 
-      {selected && <ProcessDrawer record={selected} light={light} onClose={() => setSelected(null)} onTransition={async (toStatus) => { await request(`/api/enrollments/${selected.id}/transitions`, { method: 'POST', body: JSON.stringify({ toStatus }) }); await load(); setNotice('Estado da matrícula confirmado pelo servidor.'); }} />}
+      {selected && <ProcessDrawer record={selected} light={light} canActivate={permissions.canActivateEnrollment} onOpenStudentRecord={onOpenStudentRecord} onClose={() => setSelected(null)} onActivationConfirmed={async () => { await load(); setNotice('Ativação confirmada pelo servidor.'); }} onTransition={async (toStatus) => { await request(`/api/enrollments/${selected.id}/transitions`, { method: 'POST', body: JSON.stringify({ toStatus }) }); await load(); setNotice('Estado da matrícula confirmado pelo servidor.'); }} />}
       {newEntryOpen && <EnrollmentNewEntryDrawer offers={offers} light={light} onClose={() => setNewEntryOpen(false)} onCreated={async () => { setNewEntryOpen(false); setNotice('Processo de matrícula iniciado com segurança e adicionado à fila institucional.'); await load(); setView('enrollments'); }} />}
     </section>
   );
@@ -370,7 +373,7 @@ function OperationalNote({ icon, title, body, light }: { icon: ReactNode; title:
   return <div className="flex gap-3"><div className={`mt-0.5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{icon}</div><div><p className={`text-xs font-semibold ${light ? 'text-zinc-800' : 'text-zinc-200'}`}>{title}</p><p className={`mt-1 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{body}</p></div></div>;
 }
 
-function ProcessDrawer({ record, light, onClose, onTransition }: { record: EnrollmentOperationalRecord; light: boolean; onClose: () => void; onTransition: (toStatus: EnrollmentOperationalStatus) => Promise<void> }) {
+function ProcessDrawer({ record, light, onClose, onTransition, canActivate, onActivationConfirmed, onOpenStudentRecord }: { record: EnrollmentOperationalRecord; light: boolean; onClose: () => void; onTransition: (toStatus: EnrollmentOperationalStatus) => Promise<void>; canActivate: boolean; onActivationConfirmed: () => Promise<void>; onOpenStudentRecord: (studentRef: string) => void }) {
   const [process, setProcess] = useState<ProcessProjection | null>(null);
   const [processEnrollmentId, setProcessEnrollmentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -378,6 +381,8 @@ function ProcessDrawer({ record, light, onClose, onTransition }: { record: Enrol
   const [error, setError] = useState<string | null>(null);
   const [processErrorEnrollmentId, setProcessErrorEnrollmentId] = useState<string | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [activatedStudentRef, setActivatedStudentRef] = useState<string | null>(null);
+  const activationIdempotencyKey = useRef<string | null>(null);
   const processRequestSequence = useRef(0);
   const processRequestController = useRef<AbortController | null>(null);
   const loadProcess = useCallback(async () => {
@@ -448,6 +453,23 @@ function ProcessDrawer({ record, light, onClose, onTransition }: { record: Enrol
     }
   }
 
+  async function activate() {
+    const idempotencyKey = activationIdempotencyKey.current ?? (globalThis.crypto?.randomUUID?.() || `activation-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    activationIdempotencyKey.current = idempotencyKey;
+    const result = await request(`/api/enrollments/${record.id}/activate`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify({ expectedLifecycleVersion: record.lifecycle_version, expectedRegistrationVersion: record.registration_version }),
+    });
+    const studentRef = result.activation?.studentRef;
+    if (typeof studentRef !== 'string' || !/^stu_[A-Za-z0-9_-]{22}$/.test(studentRef)) throw new Error('A ativação não devolveu uma referência de aluno segura.');
+    await onActivationConfirmed();
+    await loadProcess();
+    setActivatedStudentRef(studentRef);
+    activationIdempotencyKey.current = null;
+    return studentRef;
+  }
+
   const currentStage = process?.stages.find((stage) => stage.key === process.currentStage);
   const selectedJourneyStage = process ? getEnrollmentJourneyLabel(process) : null;
   const factualSubstages = process && currentStage
@@ -468,7 +490,7 @@ function ProcessDrawer({ record, light, onClose, onTransition }: { record: Enrol
         </section>
         {process.blockers.length > 0 && <section className="mt-4 min-w-0 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4" aria-label="Bloqueio principal"><p className="text-xs font-bold uppercase tracking-wide text-amber-600">Pendência principal</p><p className={`mt-1 break-words text-sm leading-6 ${light ? 'text-amber-900' : 'text-amber-200'}`}>{process.blockers[0].message}</p></section>}
         <section className="mt-6" aria-label="Subetapas factuais da etapa atual"><p className={`text-xs font-semibold ${light ? 'text-zinc-800' : 'text-zinc-100'}`}>Subetapas factuais</p><p className={`mt-1 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Evidência confirmada pelo servidor para {selectedJourneyStage}.</p><div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">{factualSubstages.map((stage) => <article key={stage.key} aria-current={stage.key === process.currentStage ? 'step' : undefined} className={`min-w-0 rounded-xl border p-3 transition-colors duration-200 motion-reduce:transition-none ${stage.key === process.currentStage ? light ? 'border-blue-300 bg-blue-50 shadow-sm' : 'border-blue-400/50 bg-blue-500/[0.12] shadow-[0_0_0_1px_rgba(59,130,246,0.08)]' : stage.status === 'completed' ? light ? 'border-emerald-200 bg-emerald-50/40' : 'border-emerald-500/20 bg-emerald-500/[0.05]' : stage.status === 'blocked' ? light ? 'border-amber-300 bg-amber-50/60' : 'border-amber-500/30 bg-amber-500/[0.08]' : light ? 'border-zinc-200 bg-white' : 'border-zinc-800 bg-zinc-900/70'}`}><div className="flex min-w-0 items-center gap-2"><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${stage.status === 'completed' ? 'bg-emerald-600 text-white' : stage.status === 'blocked' ? 'bg-amber-500 text-zinc-950' : stage.key === process.currentStage ? 'bg-blue-600 text-white' : light ? 'bg-zinc-100 text-zinc-600' : 'bg-zinc-800 text-zinc-300'}`}>{stage.status === 'completed' ? '✓' : stage.key.slice(1)}</span><p className={`min-w-0 break-words text-xs font-semibold leading-5 ${light ? 'text-zinc-900' : 'text-white'}`}>{stage.label}</p></div><p className={`mt-2 break-words text-[11px] leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{stage.evidence.summary}</p></article>)}</div></section>
-        <details className={`mt-5 rounded-xl border px-4 ${light ? 'border-zinc-200' : 'border-white/10'}`}><summary className={`cursor-pointer py-3 text-xs font-semibold ${light ? 'text-zinc-700' : 'text-zinc-300'}`}>Outras alterações de estado autorizadas</summary><EnrollmentLifecycleActions status={process.enrollmentStatus} light={light} onTransition={async (toStatus) => { await onTransition(toStatus); await loadProcess(); }} /></details>
+        <details className={`mt-5 rounded-xl border px-4 ${light ? 'border-zinc-200' : 'border-white/10'}`}><summary className={`cursor-pointer py-3 text-xs font-semibold ${light ? 'text-zinc-700' : 'text-zinc-300'}`}>Outras alterações de estado autorizadas</summary><EnrollmentLifecycleActions status={process.enrollmentStatus} light={light} canActivate={canActivate} onActivate={activate} activatedStudentRef={activatedStudentRef} onOpenStudentRecord={onOpenStudentRecord} onTransition={async (toStatus) => { await onTransition(toStatus); await loadProcess(); }} /></details>
         <div id="enrollment-process-work"><EnrollmentDocumentChecklist enrollmentId={record.id} enrollmentStatus={process.enrollmentStatus} light={light} request={request} onChanged={loadProcess} /></div>
         <dl className="mt-6 grid gap-4 sm:grid-cols-2"><Detail label="Responsável operacional" value={process.assignedTo?.name || 'Equipa da Secretaria'} light={light} /><Detail label="Encarregado" value={record.guardian_name || 'Ainda não associado'} light={light} /><Detail label="Iniciado" value={formatDate(process.timestamps.startedAt)} light={light} /><Detail label="Último progresso" value={formatDate(process.timestamps.lastProgressAt)} light={light} /></dl>
         <details className={`mt-5 rounded-xl border px-4 ${light ? 'border-zinc-200' : 'border-white/10'}`}><summary className={`cursor-pointer py-3 text-xs font-semibold ${light ? 'text-zinc-600' : 'text-zinc-400'}`}>Detalhes técnicos</summary><dl className="grid gap-4 pb-4 sm:grid-cols-2"><Detail label="Versão" value={String(process.version)} light={light} /></dl></details>
