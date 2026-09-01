@@ -1,0 +1,132 @@
+version: 1
+status: CANONICAL_OPERATIONAL_SELECTOR
+
+project:
+  name: Nexus Edu IA
+  repository: carlossmiranda1914-lang/NEXUS-WDU-IA
+  integrated_baseline:
+    branch: main
+    sha: f945fe43d72e9f86078a184d557691e1c32d4b63
+
+active_work:
+  program: ALUNOS
+  mission: ALUNOS-01A.3
+  mission_branch: codex/alunos-01a-design
+  durable_remote_checkpoint: 1a5392ba04e8a0db317ff2791478839726c11026
+  task: T5B
+  task_name: Identity Evidence Revision & Server Re-resolution
+  state: PAUSED_FOR_GOVERNANCE_RECONCILIATION
+  owner: Codex
+  reviewer: Antigravity
+  risk: HIGH
+  resume_rule: >-
+    Reconcile this governance change first, then resume T5B from the existing
+    ALUNOS worktree/branch without rerunning proven Tasks 1-4 or T5A unless
+    the T5B delta invalidates their evidence.
+
+execution:
+  one_code_owner_per_unit: true
+  reviewer_starts_read_only: true
+  parallelism: INDEPENDENT_WORK_OR_FROZEN_CONTRACT_ONLY
+  self_approval_of_integration: false
+  implementation_pipeline:
+    - DISCOVERY
+    - PRODUCT_DECISION
+    - DESIGN_AUTHORITY
+    - MISSION_PACK
+    - IMPLEMENTATION_PLAN
+    - EXECUTION
+    - INDEPENDENT_REVIEW
+    - ADVERSARIAL_PRODUCT_REVIEW
+    - HUMAN_UAT
+    - INTEGRATION
+    - PROJECT_STATE_UPDATE
+
+scope:
+  authorized:
+    - ALUNOS-01A.3 T5B after governance reconciliation
+  forbidden:
+    - Task 5 UI before T5B is independently GREEN
+    - Task 6 before Task 5 is independently GREEN
+    - Finance or another module while ALUNOS-01A.3 remains product-blocking
+    - browser-owned Person, tenant, role, decision or case authority
+    - destructive Git reconciliation without explicit authorization
+
+gates:
+  task_green_requires:
+    - focused RED_GREEN proof where applicable
+    - directly affected regressions
+    - independent review
+  mission_product_exit_requires:
+    engineering_green: true
+    integrity_green: true
+    product_green: true
+    adversarial_review: PASS
+    human_uat_green: true
+  done_requires:
+    - applicable gates satisfied
+    - integration evidence
+    - canonical project state updated
+
+resource_policy:
+  mode: EFFICIENT_WITHOUT_RIGOR_LOSS
+  progressive_context:
+    - L0_PROJECT_STATE_AND_CONFIG
+    - L1_ACTIVE_MISSION_TASK
+    - L2_DIRECTLY_AFFECTED_FILES
+    - L3_REQUIRED_CONTRACTS_DEPENDENCIES
+    - L4_HISTORICAL_EVIDENCE
+    - L5_BROAD_REPOSITORY_INVESTIGATION
+  evidence_classes:
+    - FRESH
+    - REUSABLE
+    - INVALIDATED
+  test_cost_ladder:
+    - TARGETED_RED_GREEN
+    - AFFECTED_TESTS
+    - AFFECTED_REGRESSIONS
+    - CHECKPOINT_GATE
+    - AGGREGATE_FINAL_GATE
+  max_default_parallel_implementers_same_authority: 1
+  avoid_duplicate_investigation: true
+  siu_optional: true
+  never_trade_for_savings:
+    - TDD
+    - security
+    - tenant_isolation
+    - data_integrity
+    - independent_review
+    - adversarial_review
+    - required_quality_gates
+
+handoff:
+  required_fields:
+    - MISSION
+    - TASK
+    - OWNER
+    - REVIEWER
+    - BASE_SHA
+    - HEAD_SHA
+    - BRANCH
+    - IMPLEMENTED
+    - AUTHORITY_CHANGED
+    - SCHEMA_CHANGED
+    - TESTS
+    - KNOWN_LIMITATIONS
+    - REVIEW_TARGET
+    - CANONICAL_DOCS
+
+integration:
+  technical_task_checkpoint: IMPLEMENTATION_PLUS_INDEPENDENT_REVIEW
+  mission_to_main: AGGREGATE_GATES_PLUS_ADVERSARIAL_REVIEW_PLUS_HUMAN_UAT_PLUS_PR_REVIEW
+  dirty_worktree_allowed: false
+
+recovery:
+  minimum_checkpoint:
+    - mission
+    - official_state
+    - branch
+    - base_sha
+    - head_sha
+    - completed_evidence
+    - blocker_or_next_action
