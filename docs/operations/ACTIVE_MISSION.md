@@ -1,4 +1,16 @@
-# Active Mission
+# Historical Mission Record: STUDENT-EXPERIENCE-02
+
+**Status:** SUPERSEDED / HISTORICAL RECORD  
+**Authority:** none for current execution. Current active mission and operational execution selector are governed exclusively by `docs/operations/NEXUS_ENGINEERING_CONFIG.yaml` and `docs/operations/PROJECT_STATE.md`.  
+**Original date:** 2026-08-30  
+
+## Notice
+
+This file is preserved for historical traceability of the completed `STUDENT-EXPERIENCE-02` closeout. It is **SUPERSEDED** and must not be used as active operational authority by any human or agent.
+
+---
+
+## Preserved Historical Content
 
 - Mission: ALUNOS-01A — Enrollment-to-Student Continuity & Interaction
 - Canonical branch: `codex/alunos-01a-design`

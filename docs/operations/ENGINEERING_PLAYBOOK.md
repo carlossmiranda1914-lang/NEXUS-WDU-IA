@@ -1,7 +1,7 @@
 # NEXUS Engineering Playbook
 
 This playbook defines the durable execution standard for engineering work in NEXUS.
-It complements, rather than replaces, the existing architecture, mission, product and Definition-of-Done documentation.
+It complements, rather than replaces, the existing architecture, mission, product, Engineering Operating System and Definition-of-Done documentation.
 
 ## 1. Operating principle
 
@@ -79,9 +79,9 @@ A critical-path change is releasable only when all applicable gates pass:
 
 - focused test for the bug/feature;
 - relevant previous-stage tests;
-- migration isolation test;
+- migration isolation test where applicable;
 - TypeScript/lint/static checks;
-- production build.
+- production build when invalidated/required by the checkpoint.
 
 ### UX gate
 
@@ -100,11 +100,11 @@ The operational application must never rely on an assumption that the database i
 Rules:
 
 - Migrations are the canonical schema evolution mechanism for vNext domains.
-- Server startup logs are not proof of migration parity unless the startup process explicitly verifies that parity.
+- Server startup logs are not proof of migration parity unless startup explicitly verifies it.
 - A migration runner must fail clearly when prerequisites are absent.
 - Never silently skip a failed migration and continue into operational traffic.
 - Isolated migration tests must start from a clean schema and apply the complete ordered chain.
-- Production/local operational checks should be read-only when diagnosing schema state unless the migration action is explicit and reviewed.
+- Production/local operational checks should be read-only when diagnosing schema state unless migration action is explicit and reviewed.
 - Migration filenames remain ordered and deterministic.
 - Avoid BOM/encoding artifacts in SQL files.
 
@@ -116,7 +116,7 @@ Identity/enrollment rules are non-negotiable:
 - New-student intake must not require an artificial search when the user knows the student is new.
 - Existing-student intake must not silently create a new Person after `NO_MATCH` or ambiguous resolution without the intended workflow.
 - Strong identifier conflicts require explicit review/decision policy.
-- Local safe matches may be reused only under the defined server rules.
+- Local safe matches may be reused only under defined server rules.
 - Cross-institution information must not leak through identity resolution.
 - Enrollment creation is idempotent.
 - Duplicate enrollment/student/person creation is a release blocker.
@@ -179,11 +179,11 @@ Minimum evidence summary:
 - focused tests and result;
 - regression tests and result;
 - database/migration evidence if applicable;
-- build/static result;
+- build/static result when applicable;
 - visual validation result if applicable;
 - known remaining risks.
 
-If a known blocker remains, the task is not DONE.
+If a known blocker remains, the task/mission is not DONE in the scope that blocker affects.
 
 ## 11. Session recovery and handoff
 
@@ -192,13 +192,14 @@ A new coding agent must be able to recover without old chat history.
 Recovery procedure:
 
 1. Read `AGENTS.md`.
-2. Read `docs/operations/PROJECT_STATE.md`.
-3. Read this playbook.
-4. Inspect current Git state and recent commits.
-5. Read only the relevant existing architecture/product/mission docs for the active task.
-6. Reconcile documented state with code reality.
-7. Update `PROJECT_STATE.md` if stale.
-8. Continue only the active priority.
+2. Read `docs/README.md`.
+3. Read `docs/operations/PROJECT_STATE.md`.
+4. Read `docs/operations/NEXUS_ENGINEERING_CONFIG.yaml`.
+5. Read this playbook plus the applicable agent adapter.
+6. Inspect current Git state and recent commits.
+7. Read only the relevant architecture/product/mission/spec/plan docs for the active task.
+8. Reconcile documented state with code reality.
+9. Continue only the selected active priority.
 
 Do not paste large historical conversations into prompts when the needed facts can be maintained in repository documentation.
 
@@ -221,7 +222,7 @@ Keep manual approval for:
 - destructive Git operations;
 - production data mutation;
 - irreversible migrations;
-- security/authority policy changes;
+- security/authority policy changes outside approved mission scope;
 - release decisions with unresolved risk.
 
 ## 13. Senior review checklist
@@ -240,3 +241,62 @@ Before approving a critical change, ask:
 - Is the documentation state still truthful?
 
 If any answer is unknown, investigate before release.
+
+## 14. Canonical delivery pipeline
+
+For relevant product/authority work use:
+
+`Discovery -> Product Decision -> Design/Authority -> Mission Pack -> Implementation Plan -> Execution -> Independent Review -> Adversarial Product Review -> Human UAT -> Integration -> Project State Update`.
+
+Do not use implementation to discover decisions that should have been resolved by product/architecture analysis when a bounded discovery can establish them first.
+
+## 15. Four GREEN gates
+
+Track applicable gates independently:
+
+- `ENGINEERING_GREEN`: code/tests/build/security/tenant/regression evidence.
+- `INTEGRITY_GREEN`: no contradictory state, authority or data semantics.
+- `PRODUCT_GREEN`: supported workflow works end-to-end without scripts, devtools or hidden prerequisites.
+- `HUMAN_UAT_GREEN`: observed and accepted real product behavior.
+
+A technical task can be GREEN while the mission remains not PRODUCT_GREEN. `DONE` requires all applicable gates plus integration and truthful state documentation.
+
+## 16. Resource and evidence invalidation
+
+Use progressive context and evidence classes from `NEXUS_ENGINEERING_CONFIG.yaml`.
+
+Do not reread/retest the entire project for every micro-change. Classify prior proof as:
+
+- `FRESH` — required now;
+- `REUSABLE` — current delta does not touch its authority;
+- `INVALIDATED` — rerun because current delta may affect it.
+
+Use the test-cost ladder:
+
+`targeted RED/GREEN -> affected tests -> affected regressions -> checkpoint gate -> aggregate/final gate`.
+
+This is a resource optimization rule, not permission to omit mandatory security/integrity/DoD evidence.
+
+## 17. Multi-agent collaboration
+
+Codex and Antigravity are complementary engineering agents. Every task names an owner and reviewer.
+
+- Same code/authority: one implementer owner at a time.
+- Parallelism: only independent work or a frozen shared contract.
+- Reviewer starts read-only.
+- Reviewer reports findings before modifying owner code.
+- Ownership transfer is explicit.
+- Implementer cannot be sole approver of its integration.
+
+Use duplicate investigations only when independent verification materially improves confidence (for example a security/adversarial review).
+
+## 18. Integration protocol
+
+Distinguish:
+
+1. **Technical task integration** — independently reviewed task checkpoint into its mission branch.
+2. **Product integration** — mission/PR into `main` only after applicable aggregate gates, adversarial product review, Human UAT and PR review.
+
+Every handoff identifies mission/task/owner/reviewer/base/head/branch, authority/schema impact, tests, limitations, clean-worktree state and next action.
+
+A commit or push proves recoverability; it does not by itself prove GREEN, product acceptance or integration.
