@@ -300,3 +300,26 @@ Distinguish:
 Every handoff identifies mission/task/owner/reviewer/base/head/branch, authority/schema impact, tests, limitations, clean-worktree state and next action.
 
 A commit or push proves recoverability; it does not by itself prove GREEN, product acceptance or integration.
+
+## 19. Canonical implementation prompt and proof selection
+
+Every implementation prompt is a compact execution contract. It must state:
+
+```text
+MISSION=
+TASK=
+HEAD SHA=
+WRITE_OWNER=
+REVIEWER=
+INVARIANTS=
+RISK CLASS=
+AUTHORIZED_SCOPE=
+FORBIDDEN_SCOPE=
+REQUIRED_PROOF=
+STOP_CONDITIONS=
+COMMIT/PUSH/MERGE AUTHORIZATION=
+```
+
+It also identifies evidence that is reusable and evidence invalidated by the proposed delta. A new finding never authorizes automatic scope expansion.
+
+Proof is selected by risk: static contracts for structure, domain tests for policy, HTTP tests for authorization, PostgreSQL scenarios for persistence/concurrency, and ordered interaction or browser proof for stateful user workflows. Static/source tests are complementary only. They cannot be the sole proof for stateful critical flows. Stateful user flows require behavioral/state-transition proof that exercises the relevant ordered transitions; when automation is unavailable, the required manual/Human UAT evidence is explicit rather than inferred from CI.

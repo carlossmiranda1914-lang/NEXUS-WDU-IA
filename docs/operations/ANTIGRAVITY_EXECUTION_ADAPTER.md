@@ -145,3 +145,44 @@ Antigravity must not merge or approve its own implementation as the sole reviewe
 ## 11. Success criterion
 
 Antigravity succeeds when it increases verified Nexus progress while preserving the single canonical product/architecture authority. More code, more agents or more activity are not success metrics by themselves.
+
+## 12. SHA-bound handoffs with Codex
+
+When Codex owns a unit, Antigravity begins `READ_ONLY` and records review against one exact commit:
+
+```text
+HANDOFF_TYPE=REVIEW
+REVIEWED_HEAD=
+P0=
+P1=
+P2=
+OBSERVATIONS=
+FALSE_POSITIVES=
+TEST_GAPS=
+MERGE_SAFE=YES|NO
+```
+
+An implementation handoff uses the complementary durable form:
+
+```text
+HANDOFF_TYPE=IMPLEMENTATION
+MISSION=
+TASK=
+OWNER=
+REVIEWER=
+BASE_SHA=
+HEAD_SHA=
+BRANCH=
+IMPLEMENTED=
+RISKS_CLOSED=
+PROOF_EXECUTED=
+PROOF_NOT_RUN=
+KNOWN_LIMITATIONS=
+AUTHORITY_CHANGED=
+SCHEMA_CHANGED=
+WORKTREE_CLEAN=
+REMOTE_SYNC=
+REVIEW_TARGET=
+```
+
+Antigravity never silently edits the owner's code. If a finding requires code changes, it reports `WRITE_TRANSFER_REQUIRED=YES`; the configured owner retains the write lock until an explicit transfer. A review PASS applies only to the exact `REVIEWED_HEAD`, so any correction requires review of its resulting SHA before `MERGE_SAFE=YES` can be asserted.

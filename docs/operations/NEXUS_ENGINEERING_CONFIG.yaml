@@ -12,17 +12,20 @@ active_work:
   program: ALUNOS
   mission: ALUNOS-01A.3
   mission_branch: codex/alunos-01a-design
-  durable_remote_checkpoint: 1a5392ba04e8a0db317ff2791478839726c11026
-  task: T5
-  task_name: Identity Review Continuity
+  durable_remote_checkpoint: c6aa28c0a0b799642960daec9abdc0b77269b680
+  activity: FINAL_HARDENING/CLOSEOUT
+  task: ENGINEERING-GOVERNANCE-HARDENING
+  task_name: Execution Governance Hardening
   state: IMPLEMENTING
   owner: Codex
-  reviewer: Antigravity
+  write_owner: CODEX
+  reviewer: ANTIGRAVITY
+  reviewer_mode: READ_ONLY
   risk: HIGH
   resume_rule: >-
-    T5A and T5B are independently GREEN. Resume Task 5 from the existing
-    ALUNOS worktree/branch without rerunning proven Tasks 1-4/T5A/T5B unless
-    the Task 5 delta invalidates their evidence.
+    Execute only the approved engineering governance hardening plan, then
+    independently review the exact resulting HEAD before any ALUNOS product
+    hardening or integration decision.
 
 execution:
   one_code_owner_per_unit: true
@@ -44,11 +47,17 @@ execution:
 
 scope:
   authorized:
-    - ALUNOS-01A.3 Task 5 Identity Review Continuity using T5A/T5B
+    - ALUNOS-01A.3 engineering governance hardening plan
   forbidden:
-    - Task 6 before Task 5 is independently GREEN
-    - Finance or another module while ALUNOS-01A.3 remains product-blocking
-    - browser-owned Person, tenant, role, decision or case authority
+    - no new module
+    - no unrelated refactor
+    - no historical migration modification
+    - no parallel writer
+    - no automatic scope expansion
+    - no ALUNOS runtime or product fix
+    - no product code under src
+    - no migration change
+    - no new PR or branch
     - destructive Git reconciliation without explicit authorization
 
 gates:

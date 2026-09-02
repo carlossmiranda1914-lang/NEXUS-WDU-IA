@@ -192,3 +192,42 @@ Commit/push/PR/merge/deploy remain separate side effects unless explicitly autho
 ## 13. Success criterion
 
 Codex succeeds by producing **verified, recoverable Nexus progress per unit of resource**, not by maximizing code volume, tool calls, subagents or prose. A truthful `BLOCKED` with the exact prerequisite is preferable to a fabricated `DONE` or an architecture-breaking workaround.
+
+## 14. SHA-bound handoffs with Antigravity
+
+Codex records one of the following durable handoffs for every independently reviewed unit:
+
+```text
+HANDOFF_TYPE=IMPLEMENTATION
+MISSION=
+TASK=
+OWNER=Codex
+REVIEWER=Antigravity
+BASE_SHA=
+HEAD_SHA=
+BRANCH=
+IMPLEMENTED=
+RISKS_CLOSED=
+PROOF_EXECUTED=
+PROOF_NOT_RUN=
+KNOWN_LIMITATIONS=
+AUTHORITY_CHANGED=
+SCHEMA_CHANGED=
+WORKTREE_CLEAN=
+REMOTE_SYNC=
+REVIEW_TARGET=
+```
+
+```text
+HANDOFF_TYPE=REVIEW
+REVIEWED_HEAD=
+P0=
+P1=
+P2=
+OBSERVATIONS=
+FALSE_POSITIVES=
+TEST_GAPS=
+MERGE_SAFE=YES|NO
+```
+
+The reviewer starts `READ_ONLY` and reviews the exact `REVIEWED_HEAD`. Codex must not treat a review of an earlier SHA as approval for a correction. A reviewer that needs to change Codex-owned work records `WRITE_TRANSFER_REQUIRED=YES`; no edit occurs until the transfer is explicit. Codex remains the writer unless that transfer is recorded.

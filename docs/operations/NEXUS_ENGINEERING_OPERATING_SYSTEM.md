@@ -122,3 +122,43 @@ A new human/agent must be able to resume Nexus without prior chat history by rea
 6. applicable execution adapter
 
 Then verify actual Git state before editing.
+
+## 7. Risk -> Proof -> Tool -> DONE
+
+Every executable task declares its material risk or invariant, the minimum proof class that can close that risk, the tool/evidence that will produce it, and whether the result is eligible for `DONE`. A lower proof class can complement but never replace a higher one: a static/source contract cannot by itself close a stateful workflow risk.
+
+| Risk class | Required proof | Primary tool/evidence |
+| --- | --- | --- |
+| Static structure | Deterministic source or contract check | Static/AST/source test |
+| Domain policy | Executable policy behavior | Unit/domain test |
+| Stateful user workflow | Ordered behavioral state-transition proof | Interaction/component/browser test, or explicit Human UAT where automation is unavailable |
+| HTTP/authorization | Allow and negative request/response proof | HTTP integration test |
+| Persistence, concurrency or idempotency | Disposable persisted scenario | PostgreSQL integration test |
+| Migration/schema | Ordered clean-chain proof | Isolated migration/bootstrap check |
+| Tenant/privacy | Same-tenant allow plus cross-role/cross-tenant denial | HTTP/PostgreSQL security regression |
+| Governance | Canonical-source consistency | Governance contract plus independent review |
+
+Task reports record `RISKS`, `REQUIRED_PROOF`, `TOOLS`, `EVIDENCE_RESULT`, `RESIDUAL_RISK` and `DONE_ELIGIBLE`. A stateful critical flow requires ordered behavioral proof of its relevant transition; static/source tests remain complementary only.
+
+## 8. Write lock, review and merge eligibility
+
+Before implementation, the owner records a write-lock header:
+
+```text
+MISSION=
+TASK=
+WRITE_OWNER=
+REVIEWER=
+BASE_SHA=
+AUTHORIZED_HEAD=
+BRANCH=
+WRITE_SCOPE=
+FORBIDDEN_SCOPE=
+REVIEWER_MODE=READ_ONLY|WRITE_TRANSFERRED
+```
+
+One code or authority unit has one `WRITE_OWNER` at a time. The reviewer begins in `REVIEWER_MODE=READ_ONLY` and must not silently edit owner code. A fix outside the agreed unit requires `WRITE_TRANSFER_REQUIRED=YES` and an explicit transfer before writing.
+
+Every independent review is bound to the exact `REVIEWED_HEAD` and records `MERGE_SAFE=YES|NO`. A correction creates a new head and requires review of that head before merge eligibility can be claimed.
+
+For critical-path work, `MERGE_SAFE=YES` requires applicable quality gates, current-head review, zero unresolved P0/P1 findings, adjudicated P2 findings, and stateful behavioral proof where the risk is stateful. An unresolved review-thread finding concerning product integrity, authority, security, data or governance is a critical merge gate until adjudicated; CI green alone never establishes merge safety.
