@@ -6,27 +6,27 @@ project:
   repository: carlossmiranda1914-lang/NEXUS-WDU-IA
   integrated_baseline:
     branch: main
-    sha: f945fe43d72e9f86078a184d557691e1c32d4b63
+    sha: f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e
 
 active_work:
-  program: ALUNOS
-  mission: ALUNOS-01A.3
-  mission_branch: codex/alunos-01a-design
-  durable_remote_checkpoint: aa5dc956d82e6ad941377f75f6144a642c64f6a6
-  activity: INTEGRATION
-  task: ALUNOS-01A.3-CLOSEOUT
-  task_name: Final Integration Closeout
-  state: DONE_READY_FOR_INTEGRATION
+  program: GOVERNANCE
+  mission: POST-ALUNOS-CLOSEOUT
+  mission_branch: docs/post-alunos-closeout
+  durable_remote_checkpoint: f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e
+  activity: PROJECT_STATE_UPDATE
+  task: POST-ALUNOS-CANONICAL-TRUTH
+  task_name: Record ALUNOS integration and clear active product mission
+  state: IMPLEMENTING
   owner: Product Owner
-  write_owner: NONE
-  reviewer: ANTIGRAVITY
+  write_owner: CHATGPT
+  reviewer: NONE_REQUIRED_FOR_DOC_ONLY_TRUTH_RECONCILIATION
   reviewer_mode: READ_ONLY
-  risk: HIGH
+  risk: LOW
   resume_rule: >-
-    Do not reopen ALUNOS product implementation. F2-F5 and the final F2/F3 runtime
-    evidence gap are closed at aa5dc956d82e6ad941377f75f6144a642c64f6a6.
-    Independent review, affected UAT, remote CI and all five review threads are green/adjudicated.
-    Only documentation-closeout CI verification and PR #87 integration into main remain authorized.
+    PR #87 is already merged into main at f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e.
+    Do not reopen ALUNOS. Reconcile canonical post-merge truth only, prove the governance
+    contract remains coherent, integrate this micro-closeout, then Finance may enter
+    PREPARATION/DISCOVERY. Finance implementation remains unauthorized.
 
 execution:
   one_code_owner_per_unit: true
@@ -48,49 +48,53 @@ execution:
 
 scope:
   authorized:
-    - documentation-only canonical closeout truth
-    - verify remote CI on the documentation closeout HEAD
-    - integrate PR #87 into main when exact-head gates remain green
+    - documentation-only post-merge canonical truth reconciliation
+    - governance contract alignment required by the selector transition
+    - remote CI verification for this micro-closeout
+    - integration of this micro-closeout after green evidence
   forbidden:
-    - no further ALUNOS product changes in this tranche
-    - no new module
+    - no ALUNOS product changes
+    - no Finance production code
+    - no new product module implementation
     - no unrelated refactor
     - no historical migration modification
     - no parallel writer
     - no automatic scope expansion
-    - no Finance or unrelated module work
     - no broad UI redesign
     - no CI or workflow weakening
-    - no new PR or branch
     - no force push
     - destructive Git reconciliation without explicit authorization
 
 protected_invariants:
+  - merged main is the integrated capability authority
   - browser never owns institution, Person, role, decision or case authority
-  - decisionRef remains opaque and non-authoritative by itself
   - tenant boundaries fail closed and remain non-disclosing
-  - activation remains Administration/Direcao server authority
-  - activation remains transactional and idempotent
   - historical applied migrations remain immutable
-  - Single Process Truth and Journey Rail remain canonical product model
   - exactly one active StudentProfile invariant remains intact
   - no duplicate Person, StudentProfile or Enrollment creation
-  - document validation cannot be weakened
   - no hidden manual database dependency
+  - completed ALUNOS evidence remains historical and must not be rewritten as new execution
 
 gates:
-  final_product_checkpoint: aa5dc956d82e6ad941377f75f6144a642c64f6a6
+  alunos_final_product_checkpoint: aa5dc956d82e6ad941377f75f6144a642c64f6a6
+  alunos_merge_commit: f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e
+  alunos_integrated: true
   engineering_green: true
   integrity_green: true
   product_green: true
-  adversarial_review: PASS
   human_uat_green: true
   unresolved_p0: 0
   unresolved_p1: 0
   unresolved_p2: 0
   review_threads_resolved: 5
-  remote_ci_on_product_checkpoint: PASS
-  closeout_head_remote_ci_required: true
+  post_merge_truth_ci_required: true
+
+next_program:
+  program: FINANCE
+  roadmap_priority: 6
+  state: NOT_STARTED
+  authorized_phase_after_closeout: PREPARATION_DISCOVERY
+  implementation_authorized: false
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -115,8 +119,8 @@ resource_policy:
     - required_quality_gates
 
 integration:
-  technical_task_checkpoint: COMPLETE
-  mission_to_main: READY_AFTER_CLOSEOUT_HEAD_CI
+  technical_task_checkpoint: DOCUMENTATION_ONLY
+  mission_to_main: READY_AFTER_REMOTE_CI
   dirty_worktree_allowed: false
 
 recovery:
