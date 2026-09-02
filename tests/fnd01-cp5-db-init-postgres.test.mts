@@ -64,5 +64,3 @@ try {
   if (client) { try { await client.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`); } finally { client.release(); } }
   await pool.end();
 }
-
-

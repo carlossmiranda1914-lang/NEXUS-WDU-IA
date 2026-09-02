@@ -156,6 +156,3 @@ try {
   }
   await adminPool.end();
 }
-
-
-

@@ -8,4 +8,3 @@ ALTER TABLE identity_resolution_decisions
 
 CREATE INDEX identity_resolution_decisions_public_queue_idx
   ON identity_resolution_decisions (institution_id, status, public_ref);
-

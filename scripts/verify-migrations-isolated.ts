@@ -208,5 +208,3 @@ verifyMigrationsIsolated().catch((error) => {
   console.error('[MIGRATION-VERIFY]', error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });
-
-
