@@ -12,22 +12,21 @@ active_work:
   program: ALUNOS
   mission: ALUNOS-01A.3
   mission_branch: codex/alunos-01a-design
-  durable_remote_checkpoint: 068dbcbd8b43eca8ae37ef96d6e008185fb67bd7
-  activity: FINAL_HARDENING/CLOSEOUT
-  task: ALUNOS-FINAL-HARDENING
-  task_name: Final Continuity and Integrity Hardening
-  state: IMPLEMENTING
-  owner: Codex
-  write_owner: CODEX
+  durable_remote_checkpoint: aa5dc956d82e6ad941377f75f6144a642c64f6a6
+  activity: INTEGRATION
+  task: ALUNOS-01A.3-CLOSEOUT
+  task_name: Final Integration Closeout
+  state: DONE_READY_FOR_INTEGRATION
+  owner: Product Owner
+  write_owner: NONE
   reviewer: ANTIGRAVITY
   reviewer_mode: READ_ONLY
   risk: HIGH
   resume_rule: >-
-    Execute only the bounded ALUNOS-01A.3 final hardening against the four
-    accepted product risk classes F2-F5, starting from checkpoint
-    068dbcbd8b43eca8ae37ef96d6e008185fb67bd7. Use RED -> root cause ->
-    minimal correction -> GREEN for each class, then independently review the
-    exact resulting HEAD before review-thread resolution, UAT or integration.
+    Do not reopen ALUNOS product implementation. F2-F5 and the final F2/F3 runtime
+    evidence gap are closed at aa5dc956d82e6ad941377f75f6144a642c64f6a6.
+    Independent review, affected UAT, remote CI and all five review threads are green/adjudicated.
+    Only documentation-closeout CI verification and PR #87 integration into main remain authorized.
 
 execution:
   one_code_owner_per_unit: true
@@ -49,13 +48,11 @@ execution:
 
 scope:
   authorized:
-    - F2 state continuity: registration save -> refreshed versions -> same-drawer activation
-    - F3 lifecycle continuity: activation -> active -> reachable Student Record handoff
-    - F4 document policy continuity: supported ad-hoc document -> canonical policy capture/materialization
-    - F5 identity contract continuity: canonical resolver match reasons -> identity review queue
-    - focused regression tests required to prove F2-F5 with behavioral, PostgreSQL, HTTP, tenant and idempotency evidence
-    - final closeout truth updates to PROJECT_STATE, Mission Pack and this selector after independent review
+    - documentation-only canonical closeout truth
+    - verify remote CI on the documentation closeout HEAD
+    - integrate PR #87 into main when exact-head gates remain green
   forbidden:
+    - no further ALUNOS product changes in this tranche
     - no new module
     - no unrelated refactor
     - no historical migration modification
@@ -82,32 +79,18 @@ protected_invariants:
   - no hidden manual database dependency
 
 gates:
-  task_green_requires:
-    - focused RED_GREEN behavioral proof for each affected risk class
-    - directly affected regressions
-    - PostgreSQL proof where persistence is involved
-    - HTTP/tenant/security proof where authority is involved
-    - idempotency/concurrency proof where invalidated by the delta
-    - migration-isolation integrity proof
-    - independent review of the exact resulting HEAD
-  mission_product_exit_requires:
-    engineering_green: true
-    integrity_green: true
-    product_green: true
-    adversarial_review: PASS
-    human_uat_green: true
-    unresolved_p0: 0
-    unresolved_p1: 0
-    review_threads_adjudicated: true
-  done_requires:
-    - all accepted F2-F5 root causes closed
-    - same-class variants audited
-    - applicable gates satisfied
-    - current-head independent review
-    - affected Human UAT rerun where invalidated
-    - remote CI PASS
-    - integration evidence
-    - canonical project state updated
+  final_product_checkpoint: aa5dc956d82e6ad941377f75f6144a642c64f6a6
+  engineering_green: true
+  integrity_green: true
+  product_green: true
+  adversarial_review: PASS
+  human_uat_green: true
+  unresolved_p0: 0
+  unresolved_p1: 0
+  unresolved_p2: 0
+  review_threads_resolved: 5
+  remote_ci_on_product_checkpoint: PASS
+  closeout_head_remote_ci_required: true
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -122,44 +105,18 @@ resource_policy:
     - FRESH
     - REUSABLE
     - INVALIDATED
-  test_cost_ladder:
-    - TARGETED_RED_GREEN
-    - AFFECTED_TESTS
-    - AFFECTED_REGRESSIONS
-    - CHECKPOINT_GATE
-    - AGGREGATE_FINAL_GATE
   max_default_parallel_implementers_same_authority: 1
   avoid_duplicate_investigation: true
-  siu_optional: true
   never_trade_for_savings:
-    - TDD
     - security
     - tenant_isolation
     - data_integrity
     - independent_review
-    - adversarial_review
     - required_quality_gates
 
-handoff:
-  required_fields:
-    - MISSION
-    - TASK
-    - OWNER
-    - REVIEWER
-    - BASE_SHA
-    - HEAD_SHA
-    - BRANCH
-    - IMPLEMENTED
-    - AUTHORITY_CHANGED
-    - SCHEMA_CHANGED
-    - TESTS
-    - KNOWN_LIMITATIONS
-    - REVIEW_TARGET
-    - CANONICAL_DOCS
-
 integration:
-  technical_task_checkpoint: IMPLEMENTATION_PLUS_INDEPENDENT_REVIEW
-  mission_to_main: AGGREGATE_GATES_PLUS_ADVERSARIAL_REVIEW_PLUS_HUMAN_UAT_PLUS_PR_REVIEW
+  technical_task_checkpoint: COMPLETE
+  mission_to_main: READY_AFTER_CLOSEOUT_HEAD_CI
   dirty_worktree_allowed: false
 
 recovery:
@@ -167,7 +124,6 @@ recovery:
     - mission
     - official_state
     - branch
-    - base_sha
     - head_sha
     - completed_evidence
     - blocker_or_next_action
