@@ -1,6 +1,6 @@
 ﻿# ALUNOS-01A.3 — Product Integrity & Closure
 
-**Status:** DONE — READY FOR INTEGRATION
+**Status:** DONE — INTEGRATED
 **Baseline:** `cd288ccfafaf6a25634ca0d785536586c0cef3ec`
 **Parent mission:** `docs/roadmap/missions/ALUNOS-01A.md`
 **Design authority:** `docs/superpowers/specs/2026-08-31-alunos-01a-product-integrity-closure-design.md`
@@ -8,10 +8,13 @@
 **Execution branch:** `codex/alunos-01a-design`
 **Historical Accepted Checkpoint:** `c6aa28c0a0b799642960daec9abdc0b77269b680`
 **Final Product/Evidence Checkpoint:** `aa5dc956d82e6ad941377f75f6144a642c64f6a6`
+**Final Documentation Closeout Checkpoint:** `136a1f9150ad541a974139aafae9ca6dc0eb5509`
+**Integration PR:** `#87`
+**Integration Commit:** `f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e`
 
 ## Final Gate Summary
 
-Pre-merge review reopened only bounded F2–F5 continuity/integrity risks. Those risk classes are now closed with risk-appropriate executable evidence and independent review. The additional F2/F3 evidence-only tranche changed no product files and proved the real same-drawer interaction path.
+Pre-merge review reopened only bounded F2–F5 continuity/integrity risks. Those risk classes were closed with risk-appropriate executable evidence and independent review. The additional F2/F3 evidence-only tranche changed no product files and proved the real same-drawer interaction path. PR #87 subsequently passed its final exact-head CI and was merged into `main`.
 
 ```text
 ENGINEERING_GREEN=YES
@@ -20,12 +23,13 @@ PRODUCT_GREEN=YES
 ADVERSARIAL_REVIEW=PASS
 HUMAN_UAT_GREEN=YES
 MISSION_STATUS=DONE
-MERGE_SAFE=YES
 P0=0
 P1=0
 P2=0
 REVIEW_THREADS=5/5_RESOLVED
-REMOTE_CI=PASS
+FINAL_PR_CI=SUCCESS
+PR_87=MERGED
+MAIN_INTEGRATION=COMPLETE
 ```
 
 ## Final hardening results
@@ -60,7 +64,7 @@ Affected UAT is green:
 - Dead ends: none.
 - Duplicate side effects: none.
 
-All five material PR review threads were adjudicated against the current implementation/evidence and are resolved.
+All five material PR review threads were adjudicated and resolved before merge.
 
 ## Protected invariants preserved
 
@@ -75,9 +79,9 @@ All five material PR review threads were adjudicated against the current impleme
 - no duplicate Person/StudentProfile/Enrollment creation path introduced;
 - historical applied migrations remain unchanged.
 
-## Integration rule
+## Closure rule
 
-No further ALUNOS product implementation is authorized in this tranche. After this documentation-only canonical closeout HEAD itself receives applicable remote CI PASS, PR #87 may be integrated into `main`. If the closeout documentation delta causes a required gate failure, integration stops until that specific failure is adjudicated.
+ALUNOS-01A.3 is closed and integrated. No further ALUNOS product implementation is authorized under this mission. Any future ALUNOS change requires a new explicit mission/task and must not mutate this historical completion record into an active implementation authority.
 
 ## Non-blocking product/visual debt
 
