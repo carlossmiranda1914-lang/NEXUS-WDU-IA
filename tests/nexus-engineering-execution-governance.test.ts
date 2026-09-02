@@ -32,14 +32,17 @@ assert.match(playbook, /Stateful user flows require behavioral\/state-transition
 assert.match(definitionOfDone, /REVIEWED_HEAD/, 'The Definition of Done must require current-head review.');
 assert.match(definitionOfDone, /review-thread[\s\S]{0,240}adjudic/i, 'The Definition of Done must require review-thread adjudication.');
 
-assert.match(engineeringConfig, /mission:\s*ALUNOS-01A\.3/, 'The selector must retain the ALUNOS-01A.3 mission.');
-assert.match(engineeringConfig, /activity:\s*FINAL_HARDENING\/CLOSEOUT/, 'The selector must state the current closeout activity rather than a completed Task 5.');
-assert.match(engineeringConfig, /write_owner:\s*CODEX/, 'The selector must name Codex as the single governance writer.');
-assert.match(engineeringConfig, /reviewer:\s*ANTIGRAVITY/, 'The selector must name Antigravity as reviewer.');
-assert.match(engineeringConfig, /reviewer_mode:\s*READ_ONLY/, 'The selector must require a read-only reviewer.');
-assert.match(engineeringConfig, /mission_branch:\s*codex\/alunos-01a-design/, 'The selector must keep the canonical ALUNOS branch.');
-for (const prohibition of ['no new module', 'no unrelated refactor', 'no historical migration modification', 'no parallel writer', 'no automatic scope expansion']) {
+assert.match(engineeringConfig, /mission:\s*POST-ALUNOS-CLOSEOUT/, 'The selector must identify the post-ALUNOS canonical closeout.');
+assert.match(engineeringConfig, /activity:\s*PROJECT_STATE_UPDATE/, 'The selector must restrict the active activity to project-state reconciliation.');
+assert.match(engineeringConfig, /write_owner:\s*CHATGPT/, 'The selector must name the current single writer for this bounded closeout.');
+assert.match(engineeringConfig, /mission_branch:\s*docs\/post-alunos-closeout/, 'The selector must bind the closeout to its dedicated branch.');
+assert.match(engineeringConfig, /alunos_integrated:\s*true/, 'The selector must record ALUNOS as integrated rather than integration-pending.');
+assert.match(engineeringConfig, /alunos_merge_commit:\s*f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e/, 'The selector must bind ALUNOS integration to the actual merge commit.');
+assert.match(engineeringConfig, /program:\s*FINANCE[\s\S]{0,160}state:\s*NOT_STARTED/, 'Finance must be the next roadmap program but remain NOT_STARTED.');
+assert.match(engineeringConfig, /authorized_phase_after_closeout:\s*PREPARATION_DISCOVERY/, 'Only Finance preparation/discovery may follow this closeout.');
+assert.match(engineeringConfig, /implementation_authorized:\s*false/, 'Finance implementation must remain unauthorized until its own gates pass.');
+for (const prohibition of ['no ALUNOS product changes', 'no Finance production code', 'no unrelated refactor', 'no historical migration modification', 'no parallel writer', 'no automatic scope expansion']) {
   assert.match(engineeringConfig, new RegExp(prohibition), `The selector must prohibit ${prohibition}.`);
 }
 
-console.log('[NEXUS] engineering execution governance Task 1 contract: PASS.');
+console.log('[NEXUS] engineering execution governance post-ALUNOS closeout contract: PASS.');
