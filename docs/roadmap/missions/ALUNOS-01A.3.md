@@ -1,124 +1,84 @@
 ﻿# ALUNOS-01A.3 — Product Integrity & Closure
 
-**Status:** IMPLEMENTING — BOUNDED FINAL HARDENING
+**Status:** DONE — READY FOR INTEGRATION
 **Baseline:** `cd288ccfafaf6a25634ca0d785536586c0cef3ec`
 **Parent mission:** `docs/roadmap/missions/ALUNOS-01A.md`
 **Design authority:** `docs/superpowers/specs/2026-08-31-alunos-01a-product-integrity-closure-design.md`
 **Implementation plan:** `docs/superpowers/plans/2026-08-31-alunos-01a-product-integrity-closure.md`
 **Execution branch:** `codex/alunos-01a-design`
 **Historical Accepted Checkpoint:** `c6aa28c0a0b799642960daec9abdc0b77269b680`
-**Final-hardening authority checkpoint:** `068dbcbd8b43eca8ae37ef96d6e008185fb67bd7`
+**Final Product/Evidence Checkpoint:** `aa5dc956d82e6ad941377f75f6144a642c64f6a6`
 
-## Current Gate Summary
+## Final Gate Summary
 
-The previous Product Owner acceptance and UAT remain historical evidence. Pre-merge review subsequently found bounded continuity/integrity defects in affected paths, so the final DONE/merge-safe claim is withdrawn until those paths are revalidated.
+Pre-merge review reopened only bounded F2–F5 continuity/integrity risks. Those risk classes are now closed with risk-appropriate executable evidence and independent review. The additional F2/F3 evidence-only tranche changed no product files and proved the real same-drawer interaction path.
 
 ```text
-ENGINEERING_GREEN=REVALIDATING_AFFECTED_EVIDENCE
-INTEGRITY_GREEN=REVALIDATING_AFFECTED_EVIDENCE
-PRODUCT_GREEN=REVALIDATING_AFFECTED_EVIDENCE
-ADVERSARIAL_REVIEW=PENDING_CURRENT_HEAD
-HUMAN_UAT_GREEN=REUSE_UNAFFECTED; RERUN_AFFECTED_FLOWS
-MISSION_STATUS=IMPLEMENTING_FINAL_HARDENING
-MERGE_SAFE=NO
+ENGINEERING_GREEN=YES
+INTEGRITY_GREEN=YES
+PRODUCT_GREEN=YES
+ADVERSARIAL_REVIEW=PASS
+HUMAN_UAT_GREEN=YES
+MISSION_STATUS=DONE
+MERGE_SAFE=YES
+P0=0
+P1=0
+P2=0
+REVIEW_THREADS=5/5_RESOLVED
+REMOTE_CI=PASS
 ```
 
-## Historical completed work
+## Final hardening results
 
-Tasks 1–6 remain historical completed work and are not reopened wholesale. Their evidence is reusable unless the final-hardening delta invalidates it.
+### F2 — State continuity — PASS
 
-- Task 1 — Post-Activation Integrity: historical GREEN.
-- Task 2 — Async & Stale-State Safety: historical GREEN.
-- Task 3 — Authorized Activation Continuity: historical GREEN.
-- Task 4 — Journey Partial-Failure Resilience: historical GREEN.
-- Task 5A — Public Identity Decision Boundary: historical GREEN (Migration `0025`).
-- Task 5B — Identity Evidence Revision & Server Re-resolution: historical GREEN (Migration `0026`).
-- Task 5 — Identity Review Continuity: historical GREEN.
-- Task 6 — Adversarial Product Gate & Real UAT: historical GREEN; affected flows require current-head revalidation.
+Registration save refreshes the canonical enrollment versions while the process drawer remains open. Runtime/component interaction proof confirms activation then submits the refreshed lifecycle and registration versions and does not regress to stale V1 values.
 
-## Final-hardening authority — F2–F5 only
+### F3 — Lifecycle continuity — PASS
 
-Codex is the single writer. Antigravity is the independent read-only reviewer until explicit transfer. The current product correction scope is exactly these four risk classes:
+After activation, terminal `active` state retains the reachable `Abrir Registo do Aluno` handoff even without generic lifecycle transitions. Runtime proof confirms the handoff uses exactly the server-returned opaque `studentRef`.
 
-### F2 — State continuity
+### F4 — Document policy continuity — PASS
 
-Prove and close the complete class for registration save → refreshed lifecycle/registration versions → same-drawer activation. A static source contract is not sufficient. The required proof executes the ordered state transition and confirms activation uses current server-authoritative versions after a mutation.
+Supported pre-existing ad-hoc documents do not block canonical policy capture. Matching evidence is preserved, unrelated ad-hoc material remains intact, canonical sourced requirements are not duplicated, policy-backed snapshots remain immutable and replay remains idempotent. PostgreSQL/HTTP proof is green.
 
-### F3 — Lifecycle continuity
+### F5 — Identity contract continuity — PASS
 
-Prove and close activation → active → reachable Student Record handoff using the returned opaque `studentRef`. The active-state handoff must remain reachable even when no generic lifecycle transition targets remain. Behavioral/render-state proof is required.
+The complete canonical resolver producer reason set and decision-boundary allowlist are aligned, including `national_id_number`. Conflicting national-ID evidence reaches the authorized opaque review queue without `INVALID_DECISION_INPUT`, duplicate Person creation or cross-tenant disclosure. PostgreSQL/HTTP proof is green.
 
-### F4 — Document policy continuity
+## Independent review and UAT
 
-Prove and close supported pre-existing ad-hoc/unsourced enrollment documents → canonical requirement policy capture/materialization. Policy-backed immutable snapshots must remain immutable; arbitrary historical documents must not be deleted; canonical requirements must not be duplicated; validation must continue to use sourced canonical requirements. Real PostgreSQL proof is required.
+Independent Antigravity review of `aa5dc956d82e6ad941377f75f6144a642c64f6a6` confirmed the F2/F3 runtime proof is real, regression-sensitive and non-circular; `react-test-renderer` is test/dev-only; F4/F5 evidence was not invalidated; P0/P1/P2 are zero.
 
-### F5 — Identity contract continuity
+Affected UAT is green:
 
-Compare the complete producer set of canonical resolver-generated match reasons with the decision-boundary consumer allowlist and close every genuine contract mismatch in that producer/consumer class. At minimum, prove the `national_id_number` conflict/review path reaches an authorized opaque decision queue without `INVALID_DECISION_INPUT`, without exposing internal candidate/Person IDs, and with foreign-tenant non-disclosure preserved. PostgreSQL/HTTP boundary proof is required.
+- F2 same-drawer registration save → activation: PASS.
+- F3 activation → active → Student Record: PASS.
+- F4 manual scenario: not manufactured; existing PostgreSQL proof reused and PASS.
+- F5 manual scenario: not manufactured; existing PostgreSQL/HTTP proof reused and PASS.
+- Console errors: none.
+- Dead ends: none.
+- Duplicate side effects: none.
 
-## Required execution method
+All five material PR review threads were adjudicated against the current implementation/evidence and are resolved.
 
-For F2–F5:
+## Protected invariants preserved
 
-1. reproduce the defect/current contract gap;
-2. record root cause and affected class;
-3. create a focused executable regression and prove RED for the correct reason;
-4. implement the smallest complete architecture-preserving correction;
-5. prove GREEN;
-6. audit same-class variants;
-7. run directly affected regression/security/idempotency/migration evidence;
-8. run aggregate required gates once focused evidence is green;
-9. push one coherent final-hardening checkpoint;
-10. stop writes and obtain independent Antigravity review of the exact resulting HEAD.
+- Single Process Truth and Journey Rail remain canonical;
+- document policy-backed snapshots remain immutable;
+- activation remains server-authorized, transactional and idempotent;
+- activation → opaque `studentRef` continuity remains intact;
+- Firebase Identity → Person → active Membership → server-derived institutional authority remains canonical;
+- tenant/privacy boundaries remain fail-closed and non-disclosing;
+- browser does not own Person, institution, role, decision or candidate authority;
+- exactly one active StudentProfile invariant remains intact;
+- no duplicate Person/StudentProfile/Enrollment creation path introduced;
+- historical applied migrations remain unchanged.
 
-No product correction may be declared closed solely because a source string/regex exists.
+## Integration rule
 
-## Protected invariants
-
-- Canonical Enrollment process projection and Single Process Truth;
-- Journey Rail and Process Drawer information architecture;
-- document-requirement policy-backed snapshot immutability;
-- document status authority (`pending/submitted/verified/rejected` metadata only);
-- canonical activation transaction and idempotency ledger;
-- activation → opaque `studentRef` correlation;
-- Active Students server projection;
-- Student Record server read model;
-- Firebase Identity → Person → active Membership → server-derived institutional authority;
-- tenant/auth/privacy boundaries and foreign-tenant non-disclosure;
-- browser never owns Person, institution, role, decision or candidate authority;
-- exactly one active StudentProfile per canonical student context;
-- no duplicate Person/StudentProfile/Enrollment creation;
-- historical applied migrations remain byte-immutable.
-
-## Forbidden scope
-
-- new module or Finance work;
-- unrelated refactor or broad UI redesign;
-- historical migration modification;
-- CI/workflow weakening;
-- parallel writer over the same authority;
-- automatic scope expansion after a new unrelated finding;
-- new branch, new PR or force push for this correction unit.
-
-A newly discovered P0/P1 or architecture/security/data-authority issue outside F2–F5 must stop implementation and be adjudicated before any scope expansion.
-
-## Final exit criteria
-
-ALUNOS-01A.3 may return to `DONE` and become merge-safe only when:
-
-- F2, F3, F4 and F5 root causes are closed with risk-appropriate executable proof;
-- same-class variants are audited;
-- historical migrations remain unchanged;
-- affected tenant/auth/privacy/idempotency evidence is green;
-- local aggregate quality gate is green;
-- exact resulting HEAD receives independent review;
-- unresolved P0 = 0 and unresolved P1 = 0;
-- P2 findings are adjudicated;
-- applicable GitHub review threads are adjudicated/resolved with evidence;
-- remote CI for the exact reviewed HEAD is green;
-- Human UAT is rerun for flows invalidated by the correction delta;
-- `PROJECT_STATE.md`, this Mission Pack and `NEXUS_ENGINEERING_CONFIG.yaml` are reconciled to the same final truth.
+No further ALUNOS product implementation is authorized in this tranche. After this documentation-only canonical closeout HEAD itself receives applicable remote CI PASS, PR #87 may be integrated into `main`. If the closeout documentation delta causes a required gate failure, integration stops until that specific failure is adjudicated.
 
 ## Non-blocking product/visual debt
 
-Existing visual identity, motion-language and optional operational-polish debt remains backlog. It is not authorized by this hardening and must not reopen the mission.
+Existing visual identity, motion-language and optional operational-polish debt remains backlog. It is not part of ALUNOS-01A.3 closure and must not reopen the mission without a new authorized task.
