@@ -28,7 +28,7 @@ type Policy = {
   requireInstitutionAdminAmongApprovers: boolean;
 };
 
-const MATCH_REASON_ALLOWLIST = new Set(['student_number', 'legacy_student_id', 'name', 'birth_date', 'phone']);
+const MATCH_REASON_ALLOWLIST = new Set(['student_number', 'legacy_student_id', 'national_id_number', 'name', 'birth_date', 'phone']);
 const EVIDENCE_TYPE_ALLOWLIST = new Set([
   'civil_document_presented',
   'school_record',

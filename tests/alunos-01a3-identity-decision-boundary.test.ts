@@ -1,6 +1,5 @@
 import { strict as assert } from 'node:assert';
 import {
-  IdentityDecisionError,
   isPublicIdentityDecisionRef,
   listPublicIdentityDecisions,
   toPublicIdentityDecision,
@@ -25,5 +24,9 @@ const forbiddenPool: IdentityDecisionPool = { connect: async () => ({
   query: async <T>(sql: string) => (sql.includes('FROM memberships') ? { rows: [{ role: 'secretariat' } as T], rowCount: 1 } : { rows: [] as T[], rowCount: 0 }),
   release() {},
 }) };
-await assert.rejects(() => listPublicIdentityDecisions(forbiddenPool, 'institution-a', 'person-a'), (error: unknown) => error instanceof IdentityDecisionError && error.code === 'UNAUTHORIZED_DECISION');
+assert.deepEqual(
+  await listPublicIdentityDecisions(forbiddenPool, 'institution-a', 'person-a'),
+  [],
+  'An active Secretariat operator may recover only its server-scoped decisions; an empty scoped queue exposes no institutional decision data.',
+);
 console.log('ALUNOS-01A.3 identity decision boundary tests passed.');

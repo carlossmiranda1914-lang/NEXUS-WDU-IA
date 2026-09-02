@@ -43,12 +43,14 @@ function membershipResult(personId: unknown) {
   return { rows: [], rowCount: 0 };
 }
 
+let proposalInsertValues: readonly unknown[] | undefined;
 const proposalClient = new ScriptedClient((sql, values) => {
   if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [], rowCount: null };
   if (sql.startsWith('SELECT pg_advisory_xact_lock')) return { rows: [{}], rowCount: 1 };
   if (sql.startsWith('SELECT role FROM memberships')) return membershipResult(values?.[1]);
   if (sql.startsWith('SELECT * FROM identity_resolution_decisions')) return { rows: [], rowCount: 0 };
   if (sql.startsWith('INSERT INTO identity_resolution_decisions')) {
+    proposalInsertValues = values;
     return {
       rows: [{
         id: 'decision-b', institution_id: instA, case_key: 'case:multi:0001', risk_level: 'B',
@@ -70,13 +72,14 @@ const proposedB = await proposeIdentityDecision(poolFor(proposalClient), {
   reasonCode: 'MULTIPLE_CANDIDATES_RESOLVED',
   proposedCandidatePersonId: candidate1,
   candidatePersonIds: [candidate1, candidate2],
-  matchReasons: ['name', 'birth_date'],
+  matchReasons: ['name', 'birth_date', 'national_id_number'],
   evidenceTypes: ['civil_document_presented'],
 });
 expect(proposedB.status === 'pending_confirmation', 'Secretariat may propose a level B resolution but not finalize it.');
 expect(proposalClient.statements.some((s) => s.startsWith('SELECT role FROM memberships')), 'Proposal authority must be resolved from memberships.');
 expect(!proposalClient.statements.some((s) => /INSERT INTO (people|student_profiles|enrollment_applications)/.test(s)), 'T5 must not create Person/Profile/Enrollment.');
 expect(proposalClient.released, 'Proposal client must be released.');
+expect(JSON.stringify(proposalInsertValues?.[9] ?? '').includes('national_id_number'), 'A match reason produced by the canonical resolver must survive the decision boundary without exposing the identifier itself.');
 
 const approveBClient = new ScriptedClient((sql, values) => {
   if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(sql)) return { rows: [], rowCount: null };

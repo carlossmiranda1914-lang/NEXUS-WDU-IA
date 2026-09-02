@@ -83,11 +83,21 @@ try {
   expect(forbidden.status === 403, 'Unauthorized role must not configure requirements over HTTP.'); noLeak(await forbidden.json());
   const foreign = await fetch(`http://127.0.0.1:${address.port}/api/enrollments/${enrollmentB}/document-requirements`, { method: 'POST', headers: { Authorization: 'Bearer docs-director-b', 'Content-Type': 'application/json' }, body: JSON.stringify({ requirements: ['BI'] }) });
   expect(foreign.status === 404, 'Foreign institution configuration must be non-disclosing.'); noLeak(await foreign.json());
+  await service.query(
+    `INSERT INTO enrollment_documents (institution_id,enrollment_application_id,document_type,required,status,evidence_reference)
+     VALUES ($1,$2,'BI',false,'submitted','Protocolo anterior BI-01')`,
+    [institutionA, enrollmentB],
+  );
   const httpConfigured = await fetch(url, { method: 'POST', headers: { Authorization: 'Bearer docs-director-a', 'Content-Type': 'application/json' }, body: JSON.stringify({ requirements: ['BI'] }) });
-  expect(httpConfigured.status === 201, 'Authorized HTTP configuration must materialize the selected enrollment.');
+  expect(httpConfigured.status === 201, 'An authorized configuration must reconcile a legitimate pre-policy document instead of treating it as an immutable policy snapshot.');
   const configuredBody = await httpConfigured.json();
   expect(Object.keys(configuredBody).length === 1 && Object.keys(configuredBody.configuration ?? {}).sort().join(',') === 'replayed,requirementsCaptured', 'Configuration success must expose only the public replay and captured-count contract.');
   noLeak(configuredBody);
+  const reconciled = await service.query<{ required: boolean; status: string; source_requirement_id: string | null; evidence_reference: string | null }>(
+    'SELECT required,status,source_requirement_id,evidence_reference FROM enrollment_documents WHERE enrollment_application_id=$1 AND document_type=$2',
+    [enrollmentB, 'BI'],
+  );
+  expect(reconciled.rowCount === 1 && reconciled.rows[0].required && reconciled.rows[0].source_requirement_id !== null && reconciled.rows[0].status === 'submitted' && reconciled.rows[0].evidence_reference === 'Protocolo anterior BI-01', 'Policy materialization must bind the matching ad-hoc document without losing its legitimate evidence or creating a duplicate.');
   const preservedSnapshot = await service.query<{document_type: string; count: string}>("SELECT document_type, count(*) OVER ()::text AS count FROM enrollment_documents WHERE enrollment_application_id=$1 ORDER BY document_type", [enrollmentA]);
   expect(preservedSnapshot.rows.length === 2 && preservedSnapshot.rows[0].count === '2', 'A newer offer policy must not rewrite the already captured enrollment snapshot.');
   console.log(`[ALUNOS-01A-DOCUMENTS] PostgreSQL + HTTP configuration/materialization: PASS (${assertions} assertions).`);

@@ -54,6 +54,7 @@ const ids = {
   adminA: randomUUID(),
   localStudent: randomUUID(),
   reusableStudent: randomUUID(),
+  nationalMatchStudent: randomUUID(),
   externalStudent: randomUUID(),
   yearA: randomUUID(),
   offerA: randomUUID(),
@@ -105,8 +106,9 @@ try {
       ($5, 'Aluno Local', '2013-02-10', '+244923111111'),
       ($6, 'Aluno Reutilizável', '2014-02-10', '+244923333333'),
       ($7, 'Aluno Restrito', '2012-05-20', '+244923222222'),
-      ($8, 'Direção B', NULL, NULL)`,
-    [ids.secretariatA, ids.secretariatOtherA, ids.directorA, ids.adminA, ids.localStudent, ids.reusableStudent, ids.externalStudent, foreignDirector],
+      ($8, 'Aluno Correspondência Nacional', '2014-03-11', '+244923444444'),
+      ($9, 'Direção B', NULL, NULL)`,
+    [ids.secretariatA, ids.secretariatOtherA, ids.directorA, ids.adminA, ids.localStudent, ids.reusableStudent, ids.externalStudent, ids.nationalMatchStudent, foreignDirector],
   );
   await pool.query(
     `INSERT INTO memberships (person_id, institution_id, role, status) VALUES
@@ -131,9 +133,11 @@ try {
     `INSERT INTO student_profiles (institution_id, person_id, student_number, status) VALUES
       ($1, $2, 'ALU-A-001', 'active'),
       ($1, $3, 'ALU-A-002', 'inactive'),
-      ($4, $5, 'ALU-B-001', 'active')`,
-    [ids.institutionA, ids.localStudent, ids.reusableStudent, ids.institutionB, ids.externalStudent],
+      ($1, $4, 'ALU-A-003', 'inactive'),
+      ($5, $6, 'ALU-B-001', 'active')`,
+    [ids.institutionA, ids.localStudent, ids.reusableStudent, ids.nationalMatchStudent, ids.institutionB, ids.externalStudent],
   );
+  await pool.query('UPDATE people SET national_id_number = $1 WHERE id IN ($2, $3)', ['AO-1234567', ids.reusableStudent, ids.nationalMatchStudent]);
   await pool.query(
     `INSERT INTO academic_years (id, institution_id, name, starts_on, ends_on, status)
      VALUES ($1, $2, '2026/2027', '2026-09-01', '2027-07-31', 'active')`,
@@ -243,6 +247,20 @@ try {
     ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(init.headers ?? {}) },
   });
   const assertPublic = (body: unknown) => assert.doesNotMatch(JSON.stringify(body).toLowerCase(), /candidatepersonid|person_id|personid|decision_id|decisionid|membership_id|membershipid|provider_subject/);
+  const nationalInput = { name: 'Revisão de identidade nacional', nationalIdNumber: 'AO-1234567' };
+  const nationalResolution = await resolveStudentForEnrollment(pool, secretariatContext, nationalInput);
+  assert.equal(nationalResolution.status, 'MULTIPLE_MATCHES', 'Two local national-identifier matches must remain a server-owned review case.');
+  assert.equal(nationalResolution.matchReasons.includes('national_id_number'), true, 'The canonical resolver must report its national-identifier match reason internally.');
+  const nationalProposal = await proposeEnrollmentIdentityDecision(pool, secretariatContext, {
+    offerId: ids.offerA, student: nationalInput, proposedAction: 'REVIEW_REQUIRED', evidenceTypes: ['civil_document_presented'],
+  });
+  const nationalReasons = await pool.query<{ match_reasons: string[] }>('SELECT match_reasons FROM identity_resolution_decisions WHERE id=$1', [nationalProposal.id]);
+  assert.equal(nationalReasons.rows[0].match_reasons.includes('national_id_number'), true, 'The decision boundary must preserve every canonical resolver reason required for auditable review.');
+  const nationalRead = await request(`/api/enrollments/identity-decisions/${nationalProposal.publicRef}`, 'decision-secretariat-a');
+  assert.equal(nationalRead.status, 200, 'The requester must recover the opaque national-identifier review decision.');
+  const nationalReadBody = await nationalRead.json();
+  assertPublic(nationalReadBody);
+  assert.doesNotMatch(JSON.stringify(nationalReadBody), /AO-1234567/, 'The public review DTO must never disclose the national identifier itself.');
   assert.match(proposal.publicRef, /^[a-f0-9]{36}$/i, 'decisionRef must be a random public reference, not a UUID or Person handle.');
   assert.equal(proposal.publicRef.includes(ids.externalStudent), false, 'decisionRef cannot encode the candidate Person id.');
   const queue = await request('/api/enrollments/identity-decisions', 'decision-director-a');

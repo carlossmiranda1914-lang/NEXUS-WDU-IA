@@ -83,7 +83,8 @@ export async function configureEnrollmentDocumentRequirements(
         ORDER BY document_type`,
       [input.enrollmentId, context.institutionId],
     );
-    if (application.document_policy_id !== null || captured.rowCount) {
+    const hasCapturedPolicyRequirement = captured.rows.some((item) => item.source_requirement_id !== null);
+    if (application.document_policy_id !== null || hasCapturedPolicyRequirement) {
       if (application.document_policy_id !== null && captured.rows.every((item) => item.source_requirement_id !== null) && sameRequirements(captured.rows, requirements)) {
         await client.query('COMMIT');
         return { replayed: true, requirementsCaptured: captured.rows.length };
