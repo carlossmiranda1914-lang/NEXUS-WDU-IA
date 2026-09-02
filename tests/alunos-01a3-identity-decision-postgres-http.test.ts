@@ -1,4 +1,3 @@
-import { readApprovedTestTarget } from '../scripts/nexus-test-db-safety.mjs';
 import 'dotenv/config';
 import assert from 'node:assert/strict';
 import pg from 'pg';
@@ -25,7 +24,8 @@ import { EnrollmentIntakeError, executeEnrollmentIntake } from '../src/modules/e
 import { proposeIdentityDecision } from '../src/modules/people/identity-resolution-decision.ts';
 
 const { Pool } = pg;
-const { connectionString } = readApprovedTestTarget();
+const connectionString = process.env.TEST_DATABASE_URL?.trim();
+if (!connectionString) throw new Error('TEST_DATABASE_URL is required for T6 PostgreSQL integration test.');
 
 const migrationsDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations');
 const schemaName = `nexus_t6_${Date.now()}_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
@@ -81,8 +81,13 @@ let server: http.Server | undefined;
 
 try {
   const migrationFiles = (await readdir(migrationsDirectory)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
-  for (const filename of migrationFiles) {
-    await bootstrapPool.query(`SET search_path TO "${schemaName}"; ${await readFile(path.join(migrationsDirectory, filename), 'utf8')}`);
+  const migrationClient = await pool.connect();
+  try {
+    for (const filename of migrationFiles) {
+      await migrationClient.query(await readFile(path.join(migrationsDirectory, filename), 'utf8'));
+    }
+  } finally {
+    migrationClient.release();
   }
 
   await pool.query(

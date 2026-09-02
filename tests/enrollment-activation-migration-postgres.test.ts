@@ -20,12 +20,7 @@ function assert(condition: unknown, message: string): asserts condition { assert
 try {
   await bootstrap.query(`CREATE SCHEMA ${schemaIdentifier}`);
   const migrations = (await readdir(migrationsDirectory)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
-  const migrationPool = new Pool({ connectionString, options: `-c search_path=${schemaName}` });
-  try {
-    for (const filename of migrations) await migrationPool.query(await readFile(path.join(migrationsDirectory, filename), 'utf8'));
-  } finally {
-    await migrationPool.end();
-  }
+  for (const filename of migrations) await pool.query(await readFile(path.join(migrationsDirectory, filename), 'utf8'));
 
   const columns = await pool.query<{ table_name: string; column_name: string; is_nullable: string; data_type: string }>(
     `SELECT table_name, column_name, is_nullable, data_type

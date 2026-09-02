@@ -28,7 +28,7 @@ const noLeak = (value: unknown) => assert.doesNotMatch(JSON.stringify(value).toL
 try {
   await setup.query(`CREATE SCHEMA "${schema}"`);
   const migrations = (await readdir(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations'))).filter((file) => /^\d{4}_.+\.sql$/.test(file)).sort();
-  for (const migration of migrations) await setup.query(`SET search_path TO "${schema}"; ${await readFile(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations', migration), 'utf8')}`);
+  for (const migration of migrations) await setup.query(`SET search_path TO "${schema}", public; ${await readFile(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations', migration), 'utf8')}`);
   service = new pg.Pool({ connectionString, options: `-c search_path=${schema}`, max: 5 });
 
   const [institutionA, institutionB, directorA, directorB, secretariatA, studentA, studentB, yearA, offerA, enrollmentA, enrollmentB, membershipA, membershipB, membershipSecretariat] = Array.from({ length: 14 }, randomUUID);

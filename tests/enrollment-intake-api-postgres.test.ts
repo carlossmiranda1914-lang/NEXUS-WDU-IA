@@ -68,14 +68,13 @@ const adminContext = context(ids.adminA, 'institution_admin');
 
 try {
   const migrationFiles = (await readdir(migrationsDirectory)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
-  const migrationPool = new Pool({ connectionString, options: `-c search_path=${schemaName}` });
-  const migrationClient = await migrationPool.connect();
+  const migrationClient = await pool.connect();
   try {
     for (const filename of migrationFiles) {
       await migrationClient.query(await readFile(path.join(migrationsDirectory, filename), 'utf8'));
     }
   } finally {
-    migrationClient.release(); await migrationPool.end();
+    migrationClient.release();
   }
 
   await pool.query(

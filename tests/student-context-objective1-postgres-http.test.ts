@@ -23,7 +23,7 @@ let server: http.Server | undefined;
 async function applyMigrations(client: pg.PoolClient) {
   const migrations = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations');
   for (const file of (await readdir(migrations)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort()) {
-    await client.query(`SET search_path TO "${schema}"; ${await readFile(path.join(migrations, file), 'utf8')}`);
+    await client.query(`SET search_path TO "${schema}", public; ${await readFile(path.join(migrations, file), 'utf8')}`);
   }
 }
 

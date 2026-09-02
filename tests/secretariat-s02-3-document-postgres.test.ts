@@ -38,12 +38,7 @@ const contextB = context(ids.institutionB, ids.actorB, 'escola-b');
 
 try {
   const migrations = (await readdir(migrationsDirectory)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
-  const migrationPool = new Pool({ connectionString, options: `-c search_path=${schemaName}` });
-  try {
-    for (const filename of migrations) await migrationPool.query(await readFile(path.join(migrationsDirectory, filename), 'utf8'));
-  } finally {
-    await migrationPool.end();
-  }
+  for (const filename of migrations) await pool.query(await readFile(path.join(migrationsDirectory, filename), 'utf8'));
   await pool.query("INSERT INTO institutions (id,name,slug,status) VALUES ($1,'Escola A','escola-a','active'),($2,'Escola B','escola-b','active')", [ids.institutionA, ids.institutionB]);
   await pool.query("INSERT INTO people (id,name) VALUES ($1,'Secretaria A'),($2,'Secretaria B'),($3,'Aluno A')", [ids.actorA, ids.actorB, ids.studentA]);
   await pool.query("INSERT INTO academic_years (id,institution_id,name,starts_on,ends_on,status) VALUES ($1,$2,'2026/2027','2026-09-01','2027-07-31','active')", [ids.yearA, ids.institutionA]);

@@ -26,12 +26,7 @@ const assert = (condition: unknown, message: string) => { assertions += 1; if (!
 
 try {
   const migrations = (await readdir(migrationsDir)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
-  const migrationPool = new Pool({ connectionString, options: `-c search_path=${schema}` });
-  try {
-    for (const filename of migrations) await migrationPool.query(await readFile(path.join(migrationsDir, filename), 'utf8'));
-  } finally {
-    await migrationPool.end();
-  }
+  for (const filename of migrations) await pool.query(await readFile(path.join(migrationsDir, filename), 'utf8'));
 
   const institution = randomUUID();
   const actor = randomUUID();

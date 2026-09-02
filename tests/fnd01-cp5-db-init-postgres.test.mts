@@ -1,4 +1,4 @@
-﻿import { randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import pg from 'pg';
@@ -16,7 +16,7 @@ process.env.SQL_PORT = parsed.port || '5432';
 process.env.SQL_USER = decodeURIComponent(parsed.username);
 process.env.SQL_PASSWORD = decodeURIComponent(parsed.password);
 process.env.SQL_DB_NAME = decodeURIComponent(parsed.pathname.slice(1));
-process.env.SQL_OPTIONS = `-c search_path=${schema},public`;
+process.env.SQL_OPTIONS = `-c search_path=${schema}`;
 
 const pool = new pg.Pool({ connectionString: testUrl, connectionTimeoutMillis: 7000 });
 const migrationsDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations');

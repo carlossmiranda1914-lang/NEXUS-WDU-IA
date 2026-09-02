@@ -63,13 +63,8 @@ try {
   const migrationFiles = (await readdir('src/db/migrations'))
     .filter((name) => /^\d{4}_.+\.sql$/.test(name))
     .sort();
-  const migrationPool = new pg.Pool({ connectionString, options: `-c search_path=${schemaName}` });
-  try {
-    for (const filename of migrationFiles) {
-      await migrationPool.query(await readFile(path.join('src/db/migrations', filename), 'utf8'));
-    }
-  } finally {
-    await migrationPool.end();
+  for (const filename of migrationFiles) {
+    await pool.query(await readFile(path.join('src/db/migrations', filename), 'utf8'));
   }
 
   const ids = {
