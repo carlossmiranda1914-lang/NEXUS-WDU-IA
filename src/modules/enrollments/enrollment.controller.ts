@@ -169,7 +169,7 @@ export function registerEnrollmentRoutes(
 
   app.get('/api/enrollments/identity-decisions/:ref', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
-    try { return res.json({ decision: await readEnrollmentIdentityDecision(enrollmentPool, context, req.params.ref) }); } catch (error) { return rejectDomainError(res, error); }
+    try { return res.json({ decision: await readEnrollmentIdentityDecisionForActor(enrollmentPool, context, req.params.ref) }); } catch (error) { return rejectDomainError(res, error); }
   });
 
   app.post('/api/enrollments/identity-decisions/:ref/outcome', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {

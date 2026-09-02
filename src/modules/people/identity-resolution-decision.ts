@@ -417,9 +417,20 @@ export async function listPublicIdentityDecisions(pool: IdentityDecisionPool, in
   const client = await pool.connect();
   try {
     const role = await resolveAuthorityRole(client, institutionId, actorPersonId);
-    if (role !== 'director' && role !== 'institution_admin') throw new IdentityDecisionError('UNAUTHORIZED_DECISION', 'Leadership access is required to review identity decisions.');
-    const result = await client.query<any>(`SELECT public_ref, status, risk_level, proposed_action, reason_code, version, requested_by_person_id
-      FROM identity_resolution_decisions WHERE institution_id = $1 AND status NOT IN ('approved', 'rejected') ORDER BY created_at ASC`, [institutionId]);
+    if (!role) throw new IdentityDecisionError('UNAUTHORIZED_DECISION', 'Active institutional access is required.');
+    const leadership = role === 'director' || role === 'institution_admin';
+    if (role !== 'secretariat' && !leadership) throw new IdentityDecisionError('UNAUTHORIZED_DECISION', 'Identity review access is not available to the current role.');
+    // Leadership sees the open institutional queue. Secretariat can recover
+    // only decisions it originated, including a final approval to resume intake.
+    const result = leadership
+      ? await client.query<any>(`SELECT public_ref, status, risk_level, proposed_action, reason_code, version, requested_by_person_id
+          FROM identity_resolution_decisions
+          WHERE institution_id = $1 AND status NOT IN ('approved', 'rejected')
+          ORDER BY created_at ASC`, [institutionId])
+      : await client.query<any>(`SELECT public_ref, status, risk_level, proposed_action, reason_code, version, requested_by_person_id
+          FROM identity_resolution_decisions
+          WHERE institution_id = $1 AND requested_by_person_id = $2
+          ORDER BY updated_at DESC`, [institutionId, actorPersonId]);
     return Promise.all(result.rows.map((row) => toPublicIdentityDecisionForActor(client, row, institutionId, actorPersonId)));
   } finally { client.release(); }
 }

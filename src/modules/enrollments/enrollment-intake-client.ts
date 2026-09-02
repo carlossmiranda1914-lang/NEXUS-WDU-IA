@@ -83,6 +83,11 @@ export async function listIdentityReviewQueue(): Promise<{ decisions: PublicIden
   return request('/api/enrollments/identity-decisions');
 }
 
+/** Recover one decision only through its opaque public handle. */
+export async function getIdentityReviewDecision(decisionRef: string): Promise<{ decision: PublicIdentityDecision }> {
+  return request(`/api/enrollments/identity-decisions/${decisionRef}`);
+}
+
 export async function submitIdentityReviewEvidence(decisionRef: string, expectedVersion: number, student: EnrollmentStudentDraft, evidenceTypes: string[]): Promise<{ decision: PublicIdentityDecision }> {
   return request(`/api/enrollments/identity-decisions/${decisionRef}/evidence`, {
     method: 'POST',

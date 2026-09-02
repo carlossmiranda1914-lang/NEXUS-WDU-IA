@@ -249,7 +249,14 @@ try {
   assert.equal(queue.status, 200); const queueBody = await queue.json(); assertPublic(queueBody);
   assert.equal((queueBody as any).decisions.some((row: any) => row.decisionRef === proposal.publicRef), true, 'authorized leadership must resolve the generated opaque decisionRef.');
   const secretariatQueue = await request('/api/enrollments/identity-decisions', 'decision-secretariat-a');
-  assert.equal(secretariatQueue.status, 403, 'Secretariat must not access the decision queue.'); assertPublic(await secretariatQueue.json());
+  assert.equal(secretariatQueue.status, 200, 'Secretariat must recover only its own server-scoped identity decisions after reload.');
+  const secretariatQueueBody = await secretariatQueue.json() as any;
+  assert.equal(secretariatQueueBody.decisions.some((row: any) => row.decisionRef === proposal.publicRef), true, 'the requester must recover its opaque decision reference.');
+  assertPublic(secretariatQueueBody);
+  const requesterRead = await request(`/api/enrollments/identity-decisions/${proposal.publicRef}`, 'decision-secretariat-a');
+  assert.equal(requesterRead.status, 200, 'the requester must recover its own opaque identity decision.'); assertPublic(await requesterRead.json());
+  const otherSecretariatRead = await request(`/api/enrollments/identity-decisions/${proposal.publicRef}`, 'decision-secretariat-other-a');
+  assert.equal(otherSecretariatRead.status, 403, 'another Secretariat operator must not read a decision it did not originate.'); assertPublic(await otherSecretariatRead.json());
   const foreign = await request(`/api/enrollments/identity-decisions/${proposal.publicRef}`, 'decision-director-b');
   assert.equal(foreign.status, 404, 'a foreign institution must receive the same non-disclosing result as an unknown decisionRef.'); assertPublic(await foreign.json());
   const foreignOfferProposal = await request('/api/enrollments/identity-decisions', 'decision-director-b', {

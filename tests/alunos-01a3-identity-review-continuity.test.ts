@@ -8,7 +8,7 @@ const controller = await readFile(new URL('../src/modules/enrollments/enrollment
 assert.match(drawer, /RESTRICTED_POSSIBLE_MATCH/, 'Restricted results must have an explicit product path.');
 assert.match(drawer, /REVIEW_REQUIRED/, 'Ambiguous results must have an explicit product path.');
 assert.match(drawer, /Pedir revisão de identidade/, 'An operator must be able to ask for safe review rather than reach an informational dead end.');
-assert.match(drawer, /Revisar decisões pendentes/, 'Authorized reviewers must be able to reach server-confirmed pending decisions.');
+assert.match(drawer, /Consultar revisões de identidade/, 'Authorized reviewers must be able to reach server-confirmed identity decisions.');
 assert.match(drawer, /A aguardar revisão autorizada/, 'Waiting status must be understandable without internal terminology.');
 assert.match(drawer, /São necessárias mais informações/, 'More-information status must be understandable.');
 assert.match(drawer, /Decisão rejeitada/, 'Rejected status must be understandable.');
