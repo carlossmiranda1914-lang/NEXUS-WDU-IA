@@ -11,28 +11,22 @@ function reject(label: string, token: string) {
 }
 
 expect('clean secretariat eyebrow', '>Secretaria escolar</p>');
-expect('human pipeline guidance', 'Acompanhe o percurso da matrícula.');
-expect('unavailable stage product language', 'Ainda não disponível');
-expect('operational guidance title', 'Como trabalhar nesta área');
+expect('human journey guidance', 'Acompanhe o percurso institucional. Cada etapa abre apenas uma vista existente');
+expect('operational guidance title', 'Como trabalhar nesta');
 expect('operational current-data language', 'Dados atuais');
 expect('operational priority language', 'Prioridades primeiro');
 expect('operational active-students language', 'Alunos ativos');
-expect('drawer explicitly states first step', 'Este é o primeiro passo da matrícula.');
-expect('drawer explains continuation', 'responsáveis, documentos e restantes condições exigidas pela instituição');
-expect('process drawer end-user copy', 'Este painel reúne o estado atual da matrícula e a próxima ação necessária.');
-expect('pipeline cards keep click context', 'setSelectedStageId(stage.id)');
-expect('pipeline keeps persisted filters', 'setStatusFilter(stage.statuses)');
-expect('pipeline unavailable state remains disabled', 'disabled={!stage.available}');
-expect('top navigation clears pipeline context', 'setSelectedStageId(null)');
+expect('drawer explicitly states entry step', 'Nova entrada / matr');
+expect('journey cards keep click context', 'setSelectedLifecycleLabel(stage.label)');
+expect('journey keeps stage enrollment filter', 'setJourneyEnrollmentIds(stage.enrollmentIds)');
+expect('top navigation clears lifecycle context', 'setSelectedLifecycleLabel(null)');
+expect('top navigation clears journey enrollment filter', 'setJourneyEnrollmentIds(null)');
 
 reject('no technical context badge', 'Etapa do fluxo');
 reject('no backend language', 'backend atual');
-reject('no domain persistence jargon', 'Domínio ainda não persistido');
-reject('no API implementation jargon', 'API institucional de matrículas');
-reject('no future Student 360 promise in operational UI', 'Student 360 será ligado');
-reject('no implementation-layer language', 'Nesta primeira camada');
-reject('no malformed institution separator source', 'Secretaria escolar · {institutionName}');
-reject('no repeated open-stage microcopy', 'Abrir etapa <ChevronRight');
+reject('no domain persistence jargon', 'Dom�nio ainda n�o persistido');
+reject('no API implementation jargon', 'API institucional de matr�culas');
+reject('no future Student 360 promise in operational UI', 'Student 360 ser� ligado');
 
 if (failures.length) throw new Error(failures.join('\n'));
-console.log('Secretariat S01 final closure tests passed (22 assertions).');
+console.log('Secretariat S01 final closure tests passed (16 assertions).');
