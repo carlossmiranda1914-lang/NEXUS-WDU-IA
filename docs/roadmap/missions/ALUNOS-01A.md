@@ -1,6 +1,6 @@
-# ALUNOS-01A — Enrollment-to-Student Continuity & Interaction
+# ALUNOS-01A â€” Enrollment-to-Student Continuity & Interaction
 
-**State:** IMPLEMENTING
+**State:** DONE (Closed via ALUNOS-01A.3)
 **Design authority:** `docs/superpowers/specs/2026-08-30-alunos-01a-enrollment-student-continuity-design.md`
 **Implementation plan:** `docs/superpowers/plans/2026-08-30-alunos-01a-enrollment-student-continuity.md`
 **Baseline:** `main@f945fe43d72e9f86078a184d557691e1c32d4b63`
@@ -36,24 +36,24 @@ ANIMATION_CANNOT_ADVANCE_CANONICAL_STATE=YES
 
 The first six labels are the Enrollment process presentation. `Aluno ativo` is the authorized institutional outcome; `Registo do Aluno` is the longitudinal read destination. They are not competing client-owned pipelines.
 
-## Task 1 — AS-IS Lifecycle Truth and Preservation Gate
+## Task 1 â€” AS-IS Lifecycle Truth and Preservation Gate
 
 ### Repository-evidenced lifecycle matrix
 
 | USER STAGE | SERVER SOURCE | CURRENT UI SURFACE | CURRENT ACTION OWNER | SAFE PUBLIC NAV REF | KEEP/REFINE |
 | --- | --- | --- | --- | --- | --- |
 | Entrada | `enrollment_applications.status=draft`; process projection derives/persists `current_stage` | `EnrollmentOperationsWorkspace`: `Entrada` / `Entradas` | Enrollment intake and existing process commands, server-authorized | None for process; Enrollment API receives an internal enrollment id only | KEEP server lifecycle; REFINE presentation only |
-| Preparação | Existing draft/readiness facts and process projection; current UI calls the stage `Identificação` where applicable | Operational workspace process/detail drawer | Existing Enrollment process authority | None | KEEP authority; REFINE human lifecycle label without renaming backend keys |
+| PreparaÃ§Ã£o | Existing draft/readiness facts and process projection; current UI calls the stage `IdentificaÃ§Ã£o` where applicable | Operational workspace process/detail drawer | Existing Enrollment process authority | None | KEEP authority; REFINE human lifecycle label without renaming backend keys |
 | Documentos | `enrollment_documents` plus document requirements feed `calculateProjection` and registration readiness | Workspace `Documentos`; preserved process drawer checklist | Enrollment document controller/policy | No safe Student Record owner bridge | KEEP factual checklist; REFINE only process hierarchy |
-| Verificação | `under_review` application status and server process projection stages/evidence | Workspace `Verificação`; process drawer | Existing Enrollment process/decision commands | None | KEEP server fact and evidence |
-| Decisão | `validated` application status, readiness and authorized decision/activation eligibility | Workspace `Decisão`; process drawer | Existing authorized Enrollment command | None | KEEP concurrency/version protections |
-| Ativação | `activateEnrollment` transaction verifies role, readiness, documents and inactive profile, then atomically activates profile/application and records the command/event | Workspace activation stage and existing process drawer action | Canonical Enrollment activation controller/API | No safe student ref is returned by current activation result; Task 4 must prove a safe handoff before adding one | KEEP atomic activation and audit/idempotency; REFINE confirmed-only feedback |
+| VerificaÃ§Ã£o | `under_review` application status and server process projection stages/evidence | Workspace `VerificaÃ§Ã£o`; process drawer | Existing Enrollment process/decision commands | None | KEEP server fact and evidence |
+| DecisÃ£o | `validated` application status, readiness and authorized decision/activation eligibility | Workspace `DecisÃ£o`; process drawer | Existing authorized Enrollment command | None | KEEP concurrency/version protections |
+| AtivaÃ§Ã£o | `activateEnrollment` transaction verifies role, readiness, documents and inactive profile, then atomically activates profile/application and records the command/event | Workspace activation stage and existing process drawer action | Canonical Enrollment activation controller/API | No safe student ref is returned by current activation result; Task 4 must prove a safe handoff before adding one | KEEP atomic activation and audit/idempotency; REFINE confirmed-only feedback |
 | Aluno ativo | `student_profiles.status='active'`, authorized `loadActiveStudents` query scoped by institution | `Alunos ativos` view, distinct from Enrollment rows | Server read projection only | `student_profiles.public_ref` as opaque `studentRef` | KEEP one StudentProfile to one row and server tenant scope |
 | Registo do Aluno | `loadStudentContext` resolves `(institution_id, public_ref)` before its bounded read projection | `StudentRecordWorkspace`, five existing sections | Server read model only | Opaque `studentRef` in `/api/student-context/:studentRef` | KEEP read-only cross-domain projection and no internal IDs |
 
 ### Current label/key reconciliation
 
-The present operational model exposes status labels such as `Entrada iniciada`, `Em verificação`, `Aguardar documentos`, `Pronta para decisão`, `Requer atenção` and `Aluno ativo`; process records hold canonical `current_stage` values server-side. The current UI additionally has unavailable `Identificação` and `Financeiro` pipeline cards. Task 1 changes none of these backend labels or stage keys. Task 2 may present the approved human lifecycle only by mapping canonical facts, never by creating a second progress authority.
+The present operational model exposes status labels such as `Entrada iniciada`, `Em verificaÃ§Ã£o`, `Aguardar documentos`, `Pronta para decisÃ£o`, `Requer atenÃ§Ã£o` and `Aluno ativo`; process records hold canonical `current_stage` values server-side. The current UI additionally has unavailable `IdentificaÃ§Ã£o` and `Financeiro` pipeline cards. Task 1 changes none of these backend labels or stage keys. Task 2 may present the approved human lifecycle only by mapping canonical facts, never by creating a second progress authority.
 
 ### KEEP | REFINE | ADD | DEFER inventory
 
@@ -67,25 +67,25 @@ The present operational model exposes status labels such as `Entrada iniciada`, 
 | --- | --- | --- |
 | Baseline/worktree | Branch `codex/alunos-01a-design`, upstream `origin/codex/alunos-01a-design`, merge-base `f945fe4`, named worktree recorded above | PASS |
 | RED governance proof | `npx tsx tests/alunos-01a-lifecycle-authority-contract.test.ts` before this file existed | RED: `ENOENT` for this mission pack, exit 1 |
-| AS-IS Enrollment authority | `enrollment-process-api.ts`, `enrollment-activation-api.ts`, controllers and workspace inspected | PASS — server owns process/activation |
-| AS-IS Active Students authority | `active-students-api.ts` inspected | PASS — institution-scoped server projection with opaque reference |
-| AS-IS Student Record authority | `student-context-api.ts`, controller and workspace inspected | PASS — server resolves `studentRef` before read projection |
+| AS-IS Enrollment authority | `enrollment-process-api.ts`, `enrollment-activation-api.ts`, controllers and workspace inspected | PASS â€” server owns process/activation |
+| AS-IS Active Students authority | `active-students-api.ts` inspected | PASS â€” institution-scoped server projection with opaque reference |
+| AS-IS Student Record authority | `student-context-api.ts`, controller and workspace inspected | PASS â€” server resolves `studentRef` before read projection |
 | GREEN governance proof | `npx tsx tests/alunos-01a-lifecycle-authority-contract.test.ts`; `npm run lint`; `git diff --check` | PASS |
 
 ## Execution boundary
 
 Task 1 introduced no product code, schema, write, navigation, animation or user-visible lifecycle behavior. Tasks 2 and 3 subsequently passed their independent review gates; Task 4 is blocked by the safe-reference prerequisite below.
 
-## Task 4 stop-rule evidence — activation-to-Student-Record bridge
+## Task 4 stop-rule evidence â€” activation-to-Student-Record bridge
 
-**Status:** RESOLVED — server-owned opaque correlation implemented and independently reviewed.
+**Status:** RESOLVED â€” server-owned opaque correlation implemented and independently reviewed.
 
 The independent repository audit on `8f2298a` established:
 
 - `activateEnrollment` returns and the HTTP controller serializes only `{ enrollmentId, lifecycleVersion, status }`; `enrollmentId` is an internal command target and cannot enter browser navigation.
 - The authorized Active Students projection exposes opaque `studentRef`, but has no enrollment correlation reference. Its HTTP contract explicitly excludes enrollment and person internal identifiers.
 - Enrollment workspace records share only human display data with Active Students. Matching by a name, offer or academic year would be ambiguous and is prohibited.
-- The existing Process Drawer provides only the approved validation/review actions; it has no canonical activation action path. Activation remains reserved to the existing Administration/Direção authority.
+- The existing Process Drawer provides only the approved validation/review actions; it has no canonical activation action path. Activation remains reserved to the existing Administration/DireÃ§Ã£o authority.
 
 The approved prerequisite is now implemented in `49cbf13`: canonical activation resolves `student_profiles.public_ref` in the locked institutional transaction, returns and persists only the opaque `studentRef`, and normalizes legacy idempotency-ledger replays without exposing historical internal identifiers. PostgreSQL and HTTP proofs cover exact correlation, retry/idempotency, concurrency, one Active Students row, tenant fail-closed behavior and Student Record access. No internal-ID fallback, display-name matching, client mapping, schema change or new activation authority was introduced.
 
@@ -98,9 +98,9 @@ The approved prerequisite is now implemented in `49cbf13`: canonical activation 
 - Existing drawer enter/exit and progress transitions retain `motion-reduce` static fallbacks; no looping decorative animation or dashboard metric wall was introduced.
 - The contractual dark and light classes remain in the same component. Desktop, 768px, 390px and authenticated live interaction are deliberately not marked observed until the Task 6 UAT run.
 
-## P0 continuation — Document requirements & Enrollment continuity
+## P0 continuation â€” Document requirements & Enrollment continuity
 
-**State:** IMPLEMENTING — authorised P0 repair within the existing Enrollment Document authority.
+**State:** DONE (Closed via ALUNOS-01A.3) â€” authorised P0 repair within the existing Enrollment Document authority.
 
 ### Root cause
 
@@ -121,7 +121,7 @@ SNAPSHOT_STABILITY=CAPTURED_ENROLLMENTS_IMMUTABLE
 - The new command receives only the existing Enrollment internal command target; it resolves the offer and institution server-side.
 - A mutable enrollment with no prior policy snapshot may explicitly receive a newly configured or matching active offer policy and one materialized pending row per requirement.
 - A repeated equivalent command replays without duplicate policy/requirements/documents. A captured snapshot with different requirements returns conflict; later offer-policy changes do not rewrite it.
-- `pending → submitted → verified/rejected` remains the existing Enrollment Document transition authority. A submitted reference is evidence metadata only and never claims upload/storage.
+- `pending â†’ submitted â†’ verified/rejected` remains the existing Enrollment Document transition authority. A submitted reference is evidence metadata only and never claims upload/storage.
 - Configuration does not alter Enrollment activation, `studentRef`, Active Students, Student Record, schema migrations or browser-owned institutional authority.
 
 ### P0 evidence ledger
@@ -129,21 +129,21 @@ SNAPSHOT_STABILITY=CAPTURED_ENROLLMENTS_IMMUTABLE
 | Proof | Evidence | Result |
 | --- | --- | --- |
 | AS-IS root cause | Approved local PostgreSQL target: `policies_active=0`, `requirements_total=0`, `enrollments_uncaptured=1` | PASS |
-| RED | `npx tsx tests/alunos-01a-document-requirements-postgres-http.test.ts` before the boundary existed | PASS — missing module, exit 1 |
+| RED | `npx tsx tests/alunos-01a-document-requirements-postgres-http.test.ts` before the boundary existed | PASS â€” missing module, exit 1 |
 | PostgreSQL + HTTP | Same test after implementation: configuration, materialization, replay, required status truth, gate, 401/403/404, tenant isolation and exact public success shape | PASS (15 assertions) |
 | Drawer contract | `npx tsx tests/alunos-01a-document-requirements-drawer-contract.test.ts` | PASS |
 | Snapshot stability | Same PostgreSQL/HTTP test confirms a subsequent policy configuration does not rewrite the earlier enrollment snapshot | PASS |
 | Affected regressions | Document policy/PostgreSQL/HTTP/UX/integration, S03 process, Enrollment activation PostgreSQL/HTTP, Active Students PostgreSQL/HTTP and Student Context PostgreSQL/HTTP/policy | PASS |
 | Static + security | `npm run lint`, `npm run build`, `npm run test:secrets`, `git diff --check` | PASS |
-| Aggregate quality gate | `npm run quality-gate` with the authorised local test target | PASS — exit 0 |
-| Independent review | Read-only review of the complete P0 diff | PASS — no P0/P1; public success-shape P2 added and retested |
-| Local UAT runtime | `npm run dev:test` with external, approved `TEST_DATABASE_URL` | PASS — `http://localhost:3000` returns 200 |
+| Aggregate quality gate | `npm run quality-gate` with the authorised local test target | PASS â€” exit 0 |
+| Independent review | Read-only review of the complete P0 diff | PASS â€” no P0/P1; public success-shape P2 added and retested |
+| Local UAT runtime | `npm run dev:test` with external, approved `TEST_DATABASE_URL` | PASS â€” `http://localhost:3000` returns 200 |
 
 ### Human UAT entry condition
 
 The repair is technically validated and the local UAT server is prepared. The remaining acceptance is human validation of an authorised mutable Enrollment through the existing Process Drawer: configure factual requirements, observe the persisted checklist, record the existing metadata-only document transitions, verify the document stage advances only after all required rows are verified, and confirm a later policy configuration leaves the first captured snapshot unchanged. The official mission state remains `VALIDATING` until that human acceptance is recorded.
 
-## ALUNOS-01A.2 — Single Process Truth execution tranche
+## ALUNOS-01A.2 â€” Single Process Truth execution tranche
 
 **State:** AUTHORISED FOR SDD EXECUTION
 
@@ -152,7 +152,7 @@ The repair is technically validated and the local UAT server is prepared. The re
 
 ### Why this tranche exists
 
-Human review confirmed that the current Overview still presents multiple competing interpretations of the same process. The four large operational metric cards remain a second navigation/process surface, while the Journey presentation still derives several stages from broad Enrollment status counts and hardcodes `Preparação` to zero. This is not accepted as the final Nexus experience.
+Human review confirmed that the current Overview still presents multiple competing interpretations of the same process. The four large operational metric cards remain a second navigation/process surface, while the Journey presentation still derives several stages from broad Enrollment status counts and hardcodes `PreparaÃ§Ã£o` to zero. This is not accepted as the final Nexus experience.
 
 ### Frozen execution order
 
@@ -171,7 +171,7 @@ The following are frozen and must not be rebuilt during ALUNOS-01A.2:
 
 - P0 document requirements/materialization/checklist at `20cb0a9`;
 - canonical Enrollment activation authority;
-- activation → opaque `studentRef` bridge;
+- activation â†’ opaque `studentRef` bridge;
 - Active Students authority/projection;
 - Student Record authority/read model;
 - tenant/auth/privacy guarantees;
@@ -195,20 +195,20 @@ SCHEMA_CHANGE=NO
 MISSION_GATE=READY_FOR_HUMAN_UAT
 ```
 
-### ALUNOS-01A.2 Task 6 — engineering evidence
+### ALUNOS-01A.2 Task 6 â€” engineering evidence
 
 **State:** `VALIDATING`; the engineering gate is ready for human UAT. This is not mission completion or a merge decision.
 
 | Evidence | Result |
 | --- | --- |
-| Canonical local UAT bootstrap | PASS — authenticated institutional UAT session and local PostgreSQL fixture prepared through `npm run uat:bootstrap`; no frontend fixture used. |
-| Document gate in the real drawer | PASS — configuration materialized two required rows; `pending` and `submitted` remained blocking; each required row was verified and only then did the server move the process to `Decisão`. |
-| Server-confirmed transitions | PASS — the drawer refreshed from `Em verificação` to `Pronta para decisão` only after the canonical transition response. |
-| Activation and opaque handoff | PASS — `tests/enrollment-activation-postgres.test.ts` and `tests/enrollment-activation-http-operational.test.ts` prove the canonical, idempotent activation returns only the correct opaque `studentRef`, creates one Active Student row, and resolves the same-tenant Student Record. The Process Drawer deliberately does not invent this Administration/Direção-owned activation command. |
-| Active Students and Student Context | PASS — PostgreSQL/HTTP regressions prove one active row, opaque reference resolution, tenant fail-closed behavior, privacy and read-only projection. |
-| Read-only drawer privacy correction | PASS — live UAT found `student_profiles.student_number` rendered in the read-only registration view. `2ea45bb` makes that field visible only while the server has declared the registration editable; its editable payload and all backend authority remain unchanged. Focused RED/GREEN contract and independent review PASS. |
+| Canonical local UAT bootstrap | PASS â€” authenticated institutional UAT session and local PostgreSQL fixture prepared through `npm run uat:bootstrap`; no frontend fixture used. |
+| Document gate in the real drawer | PASS â€” configuration materialized two required rows; `pending` and `submitted` remained blocking; each required row was verified and only then did the server move the process to `DecisÃ£o`. |
+| Server-confirmed transitions | PASS â€” the drawer refreshed from `Em verificaÃ§Ã£o` to `Pronta para decisÃ£o` only after the canonical transition response. |
+| Activation and opaque handoff | PASS â€” `tests/enrollment-activation-postgres.test.ts` and `tests/enrollment-activation-http-operational.test.ts` prove the canonical, idempotent activation returns only the correct opaque `studentRef`, creates one Active Student row, and resolves the same-tenant Student Record. The Process Drawer deliberately does not invent this Administration/DireÃ§Ã£o-owned activation command. |
+| Active Students and Student Context | PASS â€” PostgreSQL/HTTP regressions prove one active row, opaque reference resolution, tenant fail-closed behavior, privacy and read-only projection. |
+| Read-only drawer privacy correction | PASS â€” live UAT found `student_profiles.student_number` rendered in the read-only registration view. `2ea45bb` makes that field visible only while the server has declared the registration editable; its editable payload and all backend authority remain unchanged. Focused RED/GREEN contract and independent review PASS. |
 | Responsive and interaction inspection | Desktop, 768px and 390px were inspected with no document overflow; dark drawer state and keyboard focus were observed. Light theme and reduced-motion contracts are automated/static PASS and remain explicit human-UAT checks, not claimed as observed. |
 | Console and requests | No fatal Student/Enrollment console error observed. The local portal still emits unrelated 503 warnings for legacy Finance, teachers, chat and bulletin-board lazy panels; they are outside this tranche and no Student/Enrollment failed request was observed. |
 | Final verification | `npm run quality-gate` with `TEST_DATABASE_LOCAL_AUTHORIZED=true` PASS, exit 0; committed-diff, migration isolation, lint, build, secret scan and artifact scan all included. |
 
-**Human UAT entry:** open `http://localhost:3000`, go to **Alunos & Matrículas → Visão Operacional**, open the enrollment process, and validate the factual Journey, drawer, documents and the separately authorized activation-owner handoff. Keep the documented browser checks for light theme and reduced motion as human verification; no unobserved visual state is recorded as PASS.
+**Human UAT entry:** open `http://localhost:3000`, go to **Alunos & MatrÃ­culas â†’ VisÃ£o Operacional**, open the enrollment process, and validate the factual Journey, drawer, documents and the separately authorized activation-owner handoff. Keep the documented browser checks for light theme and reduced motion as human verification; no unobserved visual state is recorded as PASS.

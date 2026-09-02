@@ -1,6 +1,6 @@
-# NEXUS Project State
+﻿# NEXUS Project State
 
-Updated: 2026-09-01
+Updated: 2026-09-02
 
 ## Integrated baseline
 
@@ -13,33 +13,44 @@ Updated: 2026-09-01
 
 ## Active product program
 
-**ALUNOS-01A.3 — Product Integrity & Closure** is the active non-merged product mission on `codex/alunos-01a-design`.
+**ALUNOS-01A.3 — Product Integrity & Closure** is **DONE** on `codex/alunos-01a-design` and ready for integration into `main`.
 
-Durable remote checkpoint: `1a5392ba04e8a0db317ff2791478839726c11026`.
+Accepted checkpoint: `c6aa28c0a0b799642960daec9abdc0b77269b680`.
 
-Proven on that branch:
+Final Gates:
+
+```text
+ENGINEERING_GREEN=YES
+INTEGRITY_GREEN=YES
+PRODUCT_GREEN=YES
+ADVERSARIAL_REVIEW=PASS
+HUMAN_UAT_GREEN=YES
+MISSION_STATUS=DONE
+```
+
+Proven and accepted:
 
 - Task 1 — Post-Activation Integrity: **GREEN**.
 - Task 2 — Async and Stale-State Safety: **GREEN**.
 - Task 3 — Authorized Activation Continuity: **GREEN**.
 - Task 4 — Journey Partial-Failure Resilience: **GREEN**.
-- Task 5A — Public Identity Decision Boundary: **GREEN**.
+- Task 5A — Public Identity Decision Boundary: **GREEN** (Migration `0025`).
+- Task 5B — Identity Evidence Revision & Server Re-resolution: **GREEN** (Migration `0026`).
+- Task 5 — Identity Review Continuity: **GREEN**.
+- Task 6 — Adversarial Product Gate & Real UAT: **GREEN** (Human UAT accepted by Product Owner).
 
-Current dependency chain:
+## Non-blocking visual/product debt (Backlog / Polish)
 
-- **T5B — Identity Evidence Revision & Server Re-resolution:** approved prerequisite; implementation is paused while the repository-wide engineering governance is reconciled.
-- **Task 5 — Identity Review Continuity:** depends on T5B.
-- **Task 6 — Adversarial Product Gate and Real UAT:** not started; depends on Task 5.
-
-ALUNOS-01A.3 is **not PRODUCT_GREEN, not HUMAN_UAT_GREEN and not DONE**. Non-merged branch capability is not integrated `main` capability.
+1. Nexus visual identity/palette still feels somewhat generic; further Aurora design-system token refinement is scheduled.
+2. Motion language can become more distinctive and intentional across state transitions.
+3. Continue future visual refinement in subsequent UX tracks without reopening domain/schema authority.
+4. Operational partial-failure messaging should continue to mature where applicable.
 
 ## Engineering governance transition
 
-Repository-wide engineering governance is being materialized on `codex/nexus-engineering-governance` from the integrated `main` baseline. Its purpose is to establish one durable operating model for Product Owner/ChatGPT coordination, Codex + Antigravity ownership/review, resource discipline, handoffs and integration.
+Repository-wide engineering governance is materialized on `codex/nexus-engineering-governance` from the integrated `main` baseline. Its purpose is to establish one durable operating model for Product Owner/ChatGPT coordination, Codex + Antigravity ownership/review, resource discipline, handoffs and integration.
 
 Canonical operational selector after governance integration: `docs/operations/NEXUS_ENGINEERING_CONFIG.yaml`.
-
-The governance change must not rewrite, cherry-pick over, reset or discard ALUNOS-01A.3 product work. After governance reconciliation, T5B resumes from the existing ALUNOS branch/worktree and reuses Tasks 1–4/T5A evidence unless T5B actually invalidates it.
 
 ## Deferred domains
 
@@ -48,7 +59,7 @@ Finance is **NOT STARTED**. Assessment, Attendance and physical document storage
 ## Canonical versus supporting work
 
 - Only merged `main` commits are integrated capability.
-- Mission branches may contain proven work, but remain non-integrated until reviewed/merged through their product gates.
+- Mission branches contain proven work, but remain non-integrated until reviewed/merged through their product gates.
 - Chat history, Codex sessions and Antigravity sessions are not canonical project memory.
 - Drive is source authority for business/external material; implementation authority derived from it must be promoted into canonical repository documentation.
 
@@ -67,4 +78,4 @@ Then verify Git reality before editing.
 
 ## Next authorised product action
 
-After governance reconciliation, resume **ALUNOS-01A.3 T5B only**. Do not start Task 5 before T5B is independently GREEN. Do not start Task 6 before Task 5 is independently GREEN. Do not start Finance while the current ALUNOS product-blocking mission remains open.
+Merge `codex/alunos-01a-design` into `main` upon Human Approval for Integration.
