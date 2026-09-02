@@ -21,8 +21,9 @@ Before engineering work:
 5. active Mission Pack
 6. referenced spec/plan/ADR/contracts
 7. `docs/DEFINITION_READY_DONE_EVIDENCE.md`
-8. `docs/operations/ENGINEERING_PLAYBOOK.md`
-9. this adapter
+8. `docs/operations/NEXUS_ENGINEERING_OPERATING_SYSTEM.md`
+9. `docs/operations/ENGINEERING_PLAYBOOK.md`
+10. this adapter
 
 Do not use chat history as authority over these sources.
 
