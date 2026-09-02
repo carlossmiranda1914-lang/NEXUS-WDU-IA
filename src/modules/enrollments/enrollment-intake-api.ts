@@ -1,4 +1,3 @@
-import crypto from 'crypto';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
 import {
   loadPersonResolutionCandidates,
@@ -7,15 +6,13 @@ import {
 } from '../people/person-resolution-access.ts';
 import {
   normalizeBirthDate,
-  normalizeIdentifier,
-  normalizePersonName,
-  normalizePhone,
   resolvePersonCandidates,
   type PersonResolutionInput,
   type PersonResolutionResult,
 } from '../people/person-resolution.ts';
 import {
   decideIdentityDecision,
+  buildEnrollmentIdentityCaseKey as buildDecisionCaseKey,
   getPublicIdentityDecision,
   isPublicIdentityDecisionRef,
   listPublicIdentityDecisions,
@@ -55,6 +52,11 @@ const FORBIDDEN_AUTHORITY_KEYS = new Set([
   'academic_year_id',
   'studentPersonId',
   'student_person_id',
+  // A case key is derived from server-owned intake binding and normalized
+  // evidence.  Accepting one from the browser would let a stale decision be
+  // redirected to a different identity case.
+  'caseKey',
+  'case_key',
 ]);
 
 function validUuid(value: unknown): value is string {
@@ -72,7 +74,7 @@ export function assertNoClientAuthority(body: unknown): void {
   }
   const student = (body as Record<string, any>).student;
   if (student && typeof student === 'object') {
-    for (const key of ['personId', 'person_id', 'institutionId', 'institution_id', 'role']) {
+    for (const key of ['personId', 'person_id', 'decisionId', 'decision_id', 'institutionId', 'institution_id', 'role', 'caseKey', 'case_key']) {
       if (Object.prototype.hasOwnProperty.call(student, key)) {
         throw new EnrollmentIntakeApiError('CLIENT_AUTHORITY_FORBIDDEN', 'A identidade do aluno não pode ser autorizada por um UUID fornecido pelo browser.');
       }
@@ -110,6 +112,7 @@ export function parseEnrollmentStudentInput(value: unknown): EnrollmentStudentIn
     phone: optionalText('phone', 40),
     studentNumber: optionalText('studentNumber', 80),
     legacyStudentId: optionalText('legacyStudentId', 80),
+    nationalIdNumber: optionalText('nationalIdNumber', 80),
   };
 }
 
@@ -118,17 +121,7 @@ export function buildEnrollmentIdentityCaseKey(
   offerId: string,
   student: EnrollmentStudentInput,
 ): string {
-  const canonical = JSON.stringify({
-    institutionId,
-    offerId,
-    name: normalizePersonName(student.name),
-    birthDate: normalizeBirthDate(student.birthDate),
-    phone: normalizePhone(student.phone),
-    studentNumber: normalizeIdentifier(student.studentNumber),
-    legacyStudentId: normalizeIdentifier(student.legacyStudentId),
-  });
-  const digest = crypto.createHash('sha256').update(canonical).digest('hex').slice(0, 48);
-  return `enrollment:${digest}`;
+  return buildDecisionCaseKey(institutionId, offerId, student);
 }
 
 function isPlausibleCandidate(student: EnrollmentStudentInput, candidate: any): boolean {
@@ -288,6 +281,21 @@ export async function proposeEnrollmentIdentityDecision(
   if (input.candidatePersonId && !validUuid(input.candidatePersonId)) {
     throw new EnrollmentIntakeApiError('INVALID_INPUT', 'Candidato de identidade inválido.');
   }
+  // The browser may identify the intake offer, but it never makes that offer
+  // authoritative. Bind only an offer the server has resolved as active in
+  // this institutional context, using the same availability rule as intake.
+  const offer = await pool.query<{ id: string }>(
+    `SELECT o.id
+       FROM enrollment_offers o
+       INNER JOIN academic_years y
+         ON y.id = o.academic_year_id AND y.institution_id = o.institution_id
+      WHERE o.id = $1 AND o.institution_id = $2
+        AND o.status = 'active' AND y.status = 'active'`,
+    [input.offerId, context.institutionId],
+  );
+  if (!offer.rowCount) {
+    throw new EnrollmentIntakeApiError('INVALID_INPUT', 'Oferta de matrícula indisponível nesta instituição.');
+  }
 
   const resolution = await resolvePersonForInstitution(pool, context.institutionId, input.student);
   if (resolution.status === 'NO_MATCH' || resolution.status === 'LOCAL_MATCH') {
@@ -312,6 +320,7 @@ export async function proposeEnrollmentIdentityDecision(
       evidenceTypes: input.evidenceTypes,
       requestId: input.requestId,
       correlationId: input.correlationId,
+      intakeBinding: { offerId: input.offerId, student: input.student },
     });
   }
 
@@ -327,6 +336,7 @@ export async function proposeEnrollmentIdentityDecision(
       evidenceTypes: input.evidenceTypes,
       requestId: input.requestId,
       correlationId: input.correlationId,
+      intakeBinding: { offerId: input.offerId, student: input.student },
     });
   }
 
@@ -363,6 +373,7 @@ export async function proposeEnrollmentIdentityDecision(
     evidenceTypes: input.evidenceTypes,
     requestId: input.requestId,
     correlationId: input.correlationId,
+    intakeBinding: { offerId: input.offerId, student: input.student },
   });
 }
 

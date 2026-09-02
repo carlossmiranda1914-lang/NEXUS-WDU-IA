@@ -1,7 +1,7 @@
 import { Application, RequestHandler, Response } from 'express';
 import { pool } from '../../db/index.ts';
 import { requireAuth, AuthRequest } from '../../middleware/auth.ts';
-import { IdentityDecisionError } from '../people/identity-resolution-decision.ts';
+import { IdentityDecisionError, submitIdentityDecisionEvidence } from '../people/identity-resolution-decision.ts';
 import {
   assertNoClientAuthority,
   decideEnrollmentIdentityDecision,
@@ -204,6 +204,25 @@ export function registerEnrollmentRoutes(
     } catch (error) {
       return rejectDomainError(res, error);
     }
+  });
+
+  app.post('/api/enrollments/identity-decisions/:ref/evidence', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
+    const context = enrollmentActor(req, res); if (!context) return;
+    try {
+      assertNoClientAuthority(req.body ?? {});
+      // Explicitly reject authority-shaped IDs even when nested outside student.
+      if (Object.keys(req.body ?? {}).some((key) => /(?:person|decision)[_-]?id/i.test(key))) return reject(res, 400, 'IDs internos não são aceites para evidência.');
+      const student = parseEnrollmentStudentInput(req.body?.student);
+      const expectedVersion = req.body?.expectedVersion;
+      if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return reject(res, 400, 'Versão de decisão inválida.');
+      const decision = await submitIdentityDecisionEvidence(enrollmentPool as any, {
+        institutionId: context.institutionId, actorPersonId: context.personId, decisionRef: req.params.ref, expectedVersion,
+        student, evidenceTypes: Array.isArray(req.body?.evidenceTypes) ? req.body.evidenceTypes : [],
+        requestId: typeof req.headers['x-request-id'] === 'string' ? req.headers['x-request-id'] : null,
+        correlationId: typeof req.headers['x-correlation-id'] === 'string' ? req.headers['x-correlation-id'] : null,
+      });
+      return res.json({ decision: { decisionRef: decision.publicRef, status: decision.status, riskLevel: decision.riskLevel, proposedAction: decision.proposedAction, reasonCode: decision.reasonCode, version: decision.version, replayed: decision.replayed ?? false } });
+    } catch (error) { return rejectDomainError(res, error); }
   });
 
   app.post('/api/enrollments/intake', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
