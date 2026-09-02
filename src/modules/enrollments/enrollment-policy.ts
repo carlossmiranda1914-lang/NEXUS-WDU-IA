@@ -9,7 +9,10 @@ const transitions: Record<EnrollmentStatus, EnrollmentStatus[]> = {
   awaiting_documents: ['under_review', 'blocked', 'cancelled'],
   validated: ['blocked', 'cancelled'],
   blocked: ['under_review', 'cancelled'],
-  active: ['cancelled'],
+  // Post-activation withdrawal/deactivation must be an explicit aggregate
+  // operation. A generic Enrollment transition cannot safely change an
+  // active StudentProfile at the same time.
+  active: [],
   cancelled: [],
 };
 

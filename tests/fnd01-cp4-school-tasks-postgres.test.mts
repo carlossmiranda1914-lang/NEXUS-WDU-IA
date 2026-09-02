@@ -35,7 +35,8 @@ async function proveAmbiguousLegacyOwnershipFailsClosed(): Promise<void> {
   const client = await adminPool.connect();
   try {
     await client.query(`CREATE SCHEMA ${legacySchemaIdentifier}`);
-    await client.query(`SET search_path TO ${legacySchemaIdentifier}, public`);
+    await client.query(`SET search_path TO ${legacySchemaIdentifier}`);
+    await client.query(`CREATE OR REPLACE FUNCTION ${legacySchemaIdentifier}.gen_random_bytes(integer) RETURNS bytea LANGUAGE sql AS 'SELECT public.gen_random_bytes($1)'`);
     const allMigrations = await discoverMigrations(migrationsDirectory);
     const preReconciliation = allMigrations.filter(({ filename }) => filename < '0018_');
     await assert((await runMigrations(client, preReconciliation)).length === 17, 'Expected canonical migrations 0001–0017 before the negative fixture.');
@@ -75,6 +76,7 @@ try {
   try {
     await admin.query(`CREATE SCHEMA ${schemaIdentifier}`);
     await admin.query(`SET search_path TO ${schemaIdentifier}`);
+    await admin.query(`CREATE OR REPLACE FUNCTION ${schemaIdentifier}.gen_random_bytes(integer) RETURNS bytea LANGUAGE sql AS 'SELECT public.gen_random_bytes($1)'`);
     const migrations = await discoverMigrations(migrationsDirectory);
     const applied = await runMigrations(admin, migrations);
     await assert(applied.length === migrations.length, `Expected ${migrations.length} canonical migrations; applied ${applied.length}.`);

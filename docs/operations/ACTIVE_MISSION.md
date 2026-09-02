@@ -12,13 +12,13 @@ This file is preserved for historical traceability of the completed `STUDENT-EXP
 
 ## Preserved Historical Content
 
-- Mission: STUDENT-EXPERIENCE-02 — Student Record Clarity & Operational Refinement
-- Canonical branch: `codex/student-experience-02-design`
-- Canonical worktree path: `D:\Soft\NEXUS-WDU-IA-student-experience-02`
-- Baseline: `f5b787789f61744ddb6c512ae5a0ab2c87f7c329`; Task 6 checkpoint `eaf4d62e759fa94acf094037b3a15c744305ec72`
-- Status: DONE
-- Closeout: `HUMAN_UAT=ACCEPTED`. Tasks 1–7 are complete and evidenced; Task 7 introduced no product feature, attention rule, owner route, schema or authority.
-- UAT data: two distinct fictitious Student fixtures are prepared through the canonical local bootstrap. Administrative identity and all credentials remain external/ignored.
-- Human gate: accepted for the authorised five-section read path, A/B replacement, responsive/theme/focus/back-navigation behavior, privacy and quiet normal state.
-- Deferred: higher-fidelity Nexus visual polish; attention rules remain `NONE`; Enrollment/Document actions lack a safe owner bridge; physical document lifecycle, Finance, Assessment, Attendance, Communication, guardian writes, photograph/identity media, cross-domain timeline and AI remain separate work.
-- Next gate: PR review. Do not merge until explicit integration approval.
+- Mission: ALUNOS-01A — Enrollment-to-Student Continuity & Interaction
+- Canonical branch: `codex/alunos-01a-design`
+- Canonical worktree path: `D:\Soft\NEXUS-WDU-IA-alunos-01a`
+- Baseline: `a858fa47b6393cabd600dc69151ebed90951939e`
+- Status: VALIDATING
+- Current tranche: ALUNOS-01A.2 Task 6 validates the server-owned Enrollment-to-Student Journey after Tasks 1–5 and the document-requirements P0. The engineering fence is green and the mission is ready for Human UAT; it is not DONE or merged.
+- UAT data: administrative identity and local PostgreSQL target remain external/ignored; no physical upload/storage is claimed.
+- Deferred: physical document lifecycle/storage, Finance, Assessment, Attendance, Communication, guardian writes, photograph/identity media, cross-domain timeline and AI remain outside this P0.
+- Evidence: document gate in the live drawer, activation/opaque-`studentRef` PostgreSQL+HTTP proof, Active Students and Student Context regressions, lint, build, secret scan, diff check and aggregate quality gate are PASS. The read-only drawer no longer exposes the internal student number; independent review found no P0/P1.
+- Next gate: Human UAT of the full Journey on `http://localhost:3000`: **Alunos & Matrículas → Visão Operacional → processo → documentos → authorized activation owner → Alunos ativos → Registo do Aluno**. The existing Drawer does not invent an activation action; the canonical owner and its tested handoff remain server-side.

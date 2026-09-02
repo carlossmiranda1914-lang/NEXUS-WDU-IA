@@ -1,14 +1,19 @@
 import { Application, RequestHandler, Response } from 'express';
 import { pool } from '../../db/index.ts';
 import { requireAuth, AuthRequest } from '../../middleware/auth.ts';
-import { IdentityDecisionError } from '../people/identity-resolution-decision.ts';
+import { IdentityDecisionError, submitIdentityDecisionEvidence } from '../people/identity-resolution-decision.ts';
 import {
   assertNoClientAuthority,
   decideEnrollmentIdentityDecision,
+  listEnrollmentIdentityDecisionQueue,
+  readEnrollmentIdentityDecision,
+  readEnrollmentIdentityDecisionForActor,
   EnrollmentIntakeApiError,
   parseEnrollmentStudentInput,
   proposeEnrollmentIdentityDecision,
   resolveStudentForEnrollment,
+  resumeApprovedIdentityDecisionIntake,
+  toPublicEnrollmentResolution,
   startEnrollmentIntake,
 } from './enrollment-intake-api.ts';
 import { EnrollmentIntakeError } from './enrollment-intake.ts';
@@ -40,6 +45,7 @@ function enrollmentActor(req: AuthRequest, res: Response) {
 
 function rejectDomainError(res: Response, error: unknown) {
   if (error instanceof EnrollmentIntakeApiError) {
+    if (error.code === 'IDENTITY_DECISION_NOT_FOUND') return reject(res, 404, error.message);
     if (error.code === 'IDENTITY_REVIEW_REQUIRED' || error.code === 'IDENTITY_DECISION_INVALID' || error.code === 'IDENTITY_DECISION_STALE') {
       return reject(res, 409, error.message);
     }
@@ -77,7 +83,7 @@ export function registerEnrollmentRoutes(
   const enrollmentRequireAuth = dependencies.requireAuth ?? requireAuth;
   registerAcademicYearRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
   registerAcademicStructureRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
-  registerEnrollmentDocumentRoutes(app);
+  registerEnrollmentDocumentRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
   registerEnrollmentRegistrationRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
   registerEnrollmentProcessRoutes(app);
   registerEnrollmentActivationRoutes(app, { pool: enrollmentPool, requireAuth: enrollmentRequireAuth });
@@ -100,7 +106,7 @@ export function registerEnrollmentRoutes(
     if (academicYearId !== undefined && !validUuid(academicYearId)) return reject(res, 400, 'Ano letivo inválido.');
     try {
       const result = await enrollmentPool.query(
-        `SELECT e.id, e.status, e.created_at, e.updated_at, student.name AS student_name,
+        `SELECT e.id, e.status, e.created_at, e.updated_at, e.lifecycle_version, e.registration_version, student.name AS student_name,
           guardian.name AS guardian_name, offer.name AS offer_name, year.name AS academic_year_name
          FROM enrollment_applications e
          INNER JOIN people student ON student.id = e.student_person_id
@@ -123,7 +129,7 @@ export function registerEnrollmentRoutes(
       assertNoClientAuthority(req.body);
       const student = parseEnrollmentStudentInput(req.body?.student);
       const resolution = await resolveStudentForEnrollment(enrollmentPool, context, student);
-      return res.json({ resolution });
+      return res.json({ resolution: toPublicEnrollmentResolution(resolution) });
     } catch (error) {
       return rejectDomainError(res, error);
     }
@@ -135,35 +141,38 @@ export function registerEnrollmentRoutes(
       assertNoClientAuthority(req.body);
       const student = parseEnrollmentStudentInput(req.body?.student);
       const proposedAction = req.body?.proposedAction;
-      if (proposedAction !== 'REUSE_PERSON' && proposedAction !== 'CREATE_PERSON') {
+      if (proposedAction !== 'REUSE_PERSON' && proposedAction !== 'CREATE_PERSON' && proposedAction !== 'REVIEW_REQUIRED') {
         return reject(res, 400, 'Ação de decisão de identidade inválida.');
+      }
+      if (Object.prototype.hasOwnProperty.call(req.body ?? {}, 'candidatePersonId')) {
+        return reject(res, 400, 'A seleção de uma Pessoa é uma autoridade exclusiva do servidor.');
       }
       const decision = await proposeEnrollmentIdentityDecision(enrollmentPool, context, {
         offerId: req.body?.offerId,
         student,
         proposedAction,
-        candidatePersonId: req.body?.candidatePersonId ?? null,
+        candidatePersonId: null,
         evidenceTypes: Array.isArray(req.body?.evidenceTypes) ? req.body.evidenceTypes : [],
         requestId: typeof req.headers['x-request-id'] === 'string' ? req.headers['x-request-id'] : null,
         correlationId: typeof req.headers['x-correlation-id'] === 'string' ? req.headers['x-correlation-id'] : null,
       });
-      return res.status(201).json({
-        decision: {
-          id: decision.id,
-          status: decision.status,
-          riskLevel: decision.riskLevel,
-          proposedAction: decision.proposedAction,
-          reasonCode: decision.reasonCode,
-          version: decision.version,
-          replayed: decision.replayed ?? false,
-        },
-      });
+      return res.status(201).json({ decision: { ...await readEnrollmentIdentityDecisionForActor(enrollmentPool, context, decision.publicRef), replayed: decision.replayed ?? false } });
     } catch (error) {
       return rejectDomainError(res, error);
     }
   });
 
-  app.post('/api/enrollments/identity-decisions/:id/outcome', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
+  app.get('/api/enrollments/identity-decisions', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
+    const context = enrollmentActor(req, res); if (!context) return;
+    try { return res.json({ decisions: await listEnrollmentIdentityDecisionQueue(enrollmentPool, context) }); } catch (error) { return rejectDomainError(res, error); }
+  });
+
+  app.get('/api/enrollments/identity-decisions/:ref', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
+    const context = enrollmentActor(req, res); if (!context) return;
+    try { return res.json({ decision: await readEnrollmentIdentityDecisionForActor(enrollmentPool, context, req.params.ref) }); } catch (error) { return rejectDomainError(res, error); }
+  });
+
+  app.post('/api/enrollments/identity-decisions/:ref/outcome', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
     const context = enrollmentActor(req, res); if (!context) return;
     try {
       assertNoClientAuthority(req.body ?? {});
@@ -171,20 +180,49 @@ export function registerEnrollmentRoutes(
       if (outcome !== 'approve' && outcome !== 'reject' && outcome !== 'request_more_information') {
         return reject(res, 400, 'Resultado de decisão inválido.');
       }
-      const decision = await decideEnrollmentIdentityDecision(enrollmentPool, context, req.params.id, outcome);
-      return res.json({
-        decision: {
-          id: decision.id,
-          status: decision.status,
-          riskLevel: decision.riskLevel,
-          proposedAction: decision.proposedAction,
-          reasonCode: decision.reasonCode,
-          version: decision.version,
-        },
-      });
+      await readEnrollmentIdentityDecision(enrollmentPool, context, req.params.ref);
+      const privateDecision = await (enrollmentPool as any).query('SELECT id FROM identity_resolution_decisions WHERE institution_id = $1 AND public_ref = $2', [context.institutionId, req.params.ref]);
+      if (!privateDecision.rowCount) return reject(res, 404, 'Decisão de identidade não encontrada nesta instituição.');
+      const decision = await decideEnrollmentIdentityDecision(enrollmentPool, context, privateDecision.rows[0].id, outcome);
+      return res.json({ decision: await readEnrollmentIdentityDecisionForActor(enrollmentPool, context, req.params.ref) });
     } catch (error) {
       return rejectDomainError(res, error);
     }
+  });
+
+  app.post('/api/enrollments/identity-decisions/:ref/evidence', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
+    const context = enrollmentActor(req, res); if (!context) return;
+    try {
+      assertNoClientAuthority(req.body ?? {});
+      // Explicitly reject authority-shaped IDs even when nested outside student.
+      if (Object.keys(req.body ?? {}).some((key) => /(?:person|decision)[_-]?id/i.test(key))) return reject(res, 400, 'IDs internos não são aceites para evidência.');
+      const student = parseEnrollmentStudentInput(req.body?.student);
+      const expectedVersion = req.body?.expectedVersion;
+      if (!Number.isInteger(expectedVersion) || expectedVersion < 1) return reject(res, 400, 'Versão de decisão inválida.');
+      const decision = await submitIdentityDecisionEvidence(enrollmentPool as any, {
+        institutionId: context.institutionId, actorPersonId: context.personId, decisionRef: req.params.ref, expectedVersion,
+        student, evidenceTypes: Array.isArray(req.body?.evidenceTypes) ? req.body.evidenceTypes : [],
+        requestId: typeof req.headers['x-request-id'] === 'string' ? req.headers['x-request-id'] : null,
+        correlationId: typeof req.headers['x-correlation-id'] === 'string' ? req.headers['x-correlation-id'] : null,
+      });
+      return res.json({ decision: { ...await readEnrollmentIdentityDecisionForActor(enrollmentPool, context, decision.publicRef), replayed: decision.replayed ?? false } });
+    } catch (error) { return rejectDomainError(res, error); }
+  });
+
+  app.post('/api/enrollments/identity-decisions/:ref/intake', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
+    const context = enrollmentActor(req, res); if (!context) return;
+    try {
+      assertNoClientAuthority(req.body ?? {});
+      const idempotencyKeyHeader = req.header('Idempotency-Key');
+      if (!idempotencyKeyHeader) return reject(res, 400, 'Idempotency-Key é obrigatório para retomar a matrícula.');
+      const result = await resumeApprovedIdentityDecisionIntake(enrollmentPool, context, {
+        decisionRef: req.params.ref,
+        idempotencyKey: idempotencyKeyHeader,
+      });
+      return res.status(result.replayed ? 200 : 201).json({
+        enrollment: { id: result.enrollmentApplicationId, replayed: result.replayed },
+      });
+    } catch (error) { return rejectDomainError(res, error); }
   });
 
   app.post('/api/enrollments/intake', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
@@ -198,13 +236,11 @@ export function registerEnrollmentRoutes(
         offerId: req.body?.offerId,
         student,
         idempotencyKey: idempotencyKeyHeader,
-        decisionId: req.body?.decisionId ?? null,
+        decisionRef: req.body?.decisionRef ?? null,
       });
       return res.status(result.replayed ? 200 : 201).json({
         enrollment: {
           id: result.enrollmentApplicationId,
-          studentPersonId: result.studentPersonId,
-          studentProfileId: result.studentProfileId,
           replayed: result.replayed,
         },
       });

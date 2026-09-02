@@ -1,4 +1,3 @@
-import crypto from 'crypto';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
 import {
   loadPersonResolutionCandidates,
@@ -7,15 +6,17 @@ import {
 } from '../people/person-resolution-access.ts';
 import {
   normalizeBirthDate,
-  normalizeIdentifier,
-  normalizePersonName,
-  normalizePhone,
   resolvePersonCandidates,
   type PersonResolutionInput,
   type PersonResolutionResult,
 } from '../people/person-resolution.ts';
 import {
   decideIdentityDecision,
+  buildEnrollmentIdentityCaseKey as buildDecisionCaseKey,
+  getPublicIdentityDecision,
+  getPublicIdentityDecisionForActor,
+  isPublicIdentityDecisionRef,
+  listPublicIdentityDecisions,
   proposeIdentityDecision,
   type IdentityDecisionPool,
 } from '../people/identity-resolution-decision.ts';
@@ -35,6 +36,7 @@ export class EnrollmentIntakeApiError extends Error {
       | 'CLIENT_AUTHORITY_FORBIDDEN'
       | 'IDENTITY_REVIEW_REQUIRED'
       | 'IDENTITY_DECISION_INVALID'
+      | 'IDENTITY_DECISION_NOT_FOUND'
       | 'IDENTITY_DECISION_STALE',
     message: string,
   ) {
@@ -52,6 +54,11 @@ const FORBIDDEN_AUTHORITY_KEYS = new Set([
   'academic_year_id',
   'studentPersonId',
   'student_person_id',
+  // A case key is derived from server-owned intake binding and normalized
+  // evidence.  Accepting one from the browser would let a stale decision be
+  // redirected to a different identity case.
+  'caseKey',
+  'case_key',
 ]);
 
 function validUuid(value: unknown): value is string {
@@ -69,7 +76,7 @@ export function assertNoClientAuthority(body: unknown): void {
   }
   const student = (body as Record<string, any>).student;
   if (student && typeof student === 'object') {
-    for (const key of ['personId', 'person_id', 'institutionId', 'institution_id', 'role']) {
+    for (const key of ['personId', 'person_id', 'decisionId', 'decision_id', 'institutionId', 'institution_id', 'role', 'caseKey', 'case_key']) {
       if (Object.prototype.hasOwnProperty.call(student, key)) {
         throw new EnrollmentIntakeApiError('CLIENT_AUTHORITY_FORBIDDEN', 'A identidade do aluno não pode ser autorizada por um UUID fornecido pelo browser.');
       }
@@ -107,6 +114,7 @@ export function parseEnrollmentStudentInput(value: unknown): EnrollmentStudentIn
     phone: optionalText('phone', 40),
     studentNumber: optionalText('studentNumber', 80),
     legacyStudentId: optionalText('legacyStudentId', 80),
+    nationalIdNumber: optionalText('nationalIdNumber', 80),
   };
 }
 
@@ -115,17 +123,7 @@ export function buildEnrollmentIdentityCaseKey(
   offerId: string,
   student: EnrollmentStudentInput,
 ): string {
-  const canonical = JSON.stringify({
-    institutionId,
-    offerId,
-    name: normalizePersonName(student.name),
-    birthDate: normalizeBirthDate(student.birthDate),
-    phone: normalizePhone(student.phone),
-    studentNumber: normalizeIdentifier(student.studentNumber),
-    legacyStudentId: normalizeIdentifier(student.legacyStudentId),
-  });
-  const digest = crypto.createHash('sha256').update(canonical).digest('hex').slice(0, 48);
-  return `enrollment:${digest}`;
+  return buildDecisionCaseKey(institutionId, offerId, student);
 }
 
 function isPlausibleCandidate(student: EnrollmentStudentInput, candidate: any): boolean {
@@ -154,10 +152,17 @@ export async function resolveStudentForEnrollment(
   return localCandidates.length ? { ...result, localCandidates } : result;
 }
 
+/** Browser resolution is deliberately status-only: candidate UUIDs are server authority. */
+export function toPublicEnrollmentResolution(result: PersonResolutionResult): Pick<PersonResolutionResult, 'status' | 'candidateCount' | 'matchReasons'> {
+  return { status: result.status, candidateCount: result.candidateCount, matchReasons: result.status === 'RESTRICTED_POSSIBLE_MATCH' ? [] : result.matchReasons };
+}
+
 export interface StartEnrollmentInput {
   offerId: string;
   student: EnrollmentStudentInput;
   idempotencyKey: string;
+  decisionRef?: string | null;
+  /** Internal-only compatibility for existing server callers; never accepted by HTTP. */
   decisionId?: string | null;
 }
 
@@ -167,12 +172,13 @@ export async function startEnrollmentIntake(
   input: StartEnrollmentInput,
 ) {
   if (!validUuid(input.offerId)) throw new EnrollmentIntakeApiError('INVALID_INPUT', 'Oferta de matrícula inválida.');
+  if (input.decisionRef && !isPublicIdentityDecisionRef(input.decisionRef)) throw new EnrollmentIntakeApiError('INVALID_INPUT', 'Referência de decisão de identidade inválida.');
   if (input.decisionId && !validUuid(input.decisionId)) throw new EnrollmentIntakeApiError('INVALID_INPUT', 'Decisão de identidade inválida.');
 
   const resolution = await resolvePersonForInstitution(pool, context.institutionId, input.student);
   const caseKey = buildEnrollmentIdentityCaseKey(context.institutionId, input.offerId, input.student);
 
-  if (!input.decisionId) {
+  if (!input.decisionRef && !input.decisionId) {
     if (resolution.status === 'NO_MATCH') {
       return executeEnrollmentIntake(pool, {
         institutionId: context.institutionId,
@@ -205,17 +211,21 @@ export async function startEnrollmentIntake(
   }>(
     `SELECT proposed_action, proposed_candidate_person_id
        FROM identity_resolution_decisions
-      WHERE id = $1
+      WHERE ${input.decisionRef ? 'public_ref' : 'id'} = $1
         AND institution_id = $2
         AND case_key = $3
         AND status = 'approved'`,
-    [input.decisionId, context.institutionId, caseKey],
+    [input.decisionRef ?? input.decisionId, context.institutionId, caseKey],
   );
   if (!decision.rowCount) {
     throw new EnrollmentIntakeApiError('IDENTITY_DECISION_INVALID', 'A decisão não está aprovada para este caso e instituição.');
   }
 
-  const authorization = { decisionId: input.decisionId, caseKey };
+  const resolvedDecision = input.decisionId
+    ? { rowCount: 1, rows: [{ id: input.decisionId }] }
+    : await pool.query<{ id: string }>('SELECT id FROM identity_resolution_decisions WHERE public_ref = $1 AND institution_id = $2', [input.decisionRef, context.institutionId]);
+  if (!resolvedDecision.rowCount) throw new EnrollmentIntakeApiError('IDENTITY_DECISION_INVALID', 'A decisão não está aprovada para este caso e instituição.');
+  const authorization = { decisionId: resolvedDecision.rows[0].id, caseKey };
   if (decision.rows[0].proposed_action === 'CREATE_PERSON') {
     return executeEnrollmentIntake(pool, {
       institutionId: context.institutionId,
@@ -254,10 +264,56 @@ export async function startEnrollmentIntake(
   throw new EnrollmentIntakeApiError('IDENTITY_DECISION_INVALID', 'A decisão aprovada não autoriza um intake executável.');
 }
 
+/**
+ * Resumes an approved review without accepting offer or identity inputs from
+ * the browser. The current evidence revision is the canonical intake input;
+ * legacy decisions without an intake binding remain deliberately fail-closed.
+ */
+export async function resumeApprovedIdentityDecisionIntake(
+  pool: EnrollmentApiPool,
+  context: InstitutionalContext,
+  input: { decisionRef: string; idempotencyKey: string },
+) {
+  if (!isPublicIdentityDecisionRef(input.decisionRef)) {
+    throw new EnrollmentIntakeApiError('INVALID_INPUT', 'Referência de decisão de identidade inválida.');
+  }
+  // This performs the same object-level policy used by the public decision
+  // read: leadership may act institution-wide; Secretariat only on its own
+  // decision. A public ref is navigation, never authority by itself.
+  await getPublicIdentityDecisionForActor(pool, context.institutionId, context.personId, input.decisionRef);
+  const result = await pool.query<{ enrollment_offer_id: string | null; current_identity_inputs: EnrollmentStudentInput | null }>(
+    `SELECT d.enrollment_offer_id,
+            COALESCE(
+              (SELECT r.submitted_identity_inputs
+                 FROM identity_resolution_decision_revisions r
+                WHERE r.decision_id = d.id
+                ORDER BY r.revision_number DESC
+                LIMIT 1),
+              d.initial_identity_inputs
+            ) AS current_identity_inputs
+       FROM identity_resolution_decisions d
+      WHERE d.institution_id = $1 AND d.public_ref = $2 AND d.status = 'approved'`,
+    [context.institutionId, input.decisionRef],
+  );
+  const binding = result.rows[0];
+  if (!binding) {
+    throw new EnrollmentIntakeApiError('IDENTITY_DECISION_NOT_FOUND', 'A decisão de identidade não foi encontrada nesta instituição.');
+  }
+  if (!binding.enrollment_offer_id || !binding.current_identity_inputs) {
+    throw new EnrollmentIntakeApiError('IDENTITY_DECISION_INVALID', 'A decisão aprovada não possui um vínculo de matrícula utilizável.');
+  }
+  return startEnrollmentIntake(pool, context, {
+    offerId: binding.enrollment_offer_id,
+    student: binding.current_identity_inputs,
+    idempotencyKey: input.idempotencyKey,
+    decisionRef: input.decisionRef,
+  });
+}
+
 export interface ProposeEnrollmentIdentityDecisionInput {
   offerId: string;
   student: EnrollmentStudentInput;
-  proposedAction: 'REUSE_PERSON' | 'CREATE_PERSON';
+  proposedAction: 'REUSE_PERSON' | 'CREATE_PERSON' | 'REVIEW_REQUIRED';
   candidatePersonId?: string | null;
   evidenceTypes?: readonly string[];
   requestId?: string | null;
@@ -273,6 +329,21 @@ export async function proposeEnrollmentIdentityDecision(
   if (input.candidatePersonId && !validUuid(input.candidatePersonId)) {
     throw new EnrollmentIntakeApiError('INVALID_INPUT', 'Candidato de identidade inválido.');
   }
+  // The browser may identify the intake offer, but it never makes that offer
+  // authoritative. Bind only an offer the server has resolved as active in
+  // this institutional context, using the same availability rule as intake.
+  const offer = await pool.query<{ id: string }>(
+    `SELECT o.id
+       FROM enrollment_offers o
+       INNER JOIN academic_years y
+         ON y.id = o.academic_year_id AND y.institution_id = o.institution_id
+      WHERE o.id = $1 AND o.institution_id = $2
+        AND o.status = 'active' AND y.status = 'active'`,
+    [input.offerId, context.institutionId],
+  );
+  if (!offer.rowCount) {
+    throw new EnrollmentIntakeApiError('INVALID_INPUT', 'Oferta de matrícula indisponível nesta instituição.');
+  }
 
   const resolution = await resolvePersonForInstitution(pool, context.institutionId, input.student);
   if (resolution.status === 'NO_MATCH' || resolution.status === 'LOCAL_MATCH') {
@@ -282,6 +353,24 @@ export async function proposeEnrollmentIdentityDecision(
   const candidates = await loadPersonResolutionCandidates(pool, context.institutionId, input.student);
   const plausible = candidates.filter((candidate) => isPlausibleCandidate(input.student, candidate));
   const caseKey = buildEnrollmentIdentityCaseKey(context.institutionId, input.offerId, input.student);
+
+  // An ambiguous case always has a safe next action: create a server-owned
+  // queue record. It intentionally carries no candidate selection and cannot
+  // be approved into a Person reuse/create authorization.
+  if (input.proposedAction === 'REVIEW_REQUIRED') {
+    return proposeIdentityDecision(pool, {
+      institutionId: context.institutionId,
+      actorPersonId: context.personId,
+      caseKey,
+      proposedAction: 'REVIEW_REQUIRED',
+      reasonCode: resolution.status === 'REVIEW_REQUIRED' ? 'CONFLICT_REQUIRES_REVIEW' : 'INSUFFICIENT_EVIDENCE',
+      matchReasons: resolution.status === 'RESTRICTED_POSSIBLE_MATCH' ? [] : resolution.matchReasons,
+      evidenceTypes: input.evidenceTypes,
+      requestId: input.requestId,
+      correlationId: input.correlationId,
+      intakeBinding: { offerId: input.offerId, student: input.student },
+    });
+  }
 
   if (input.proposedAction === 'CREATE_PERSON') {
     return proposeIdentityDecision(pool, {
@@ -295,6 +384,7 @@ export async function proposeEnrollmentIdentityDecision(
       evidenceTypes: input.evidenceTypes,
       requestId: input.requestId,
       correlationId: input.correlationId,
+      intakeBinding: { offerId: input.offerId, student: input.student },
     });
   }
 
@@ -331,6 +421,7 @@ export async function proposeEnrollmentIdentityDecision(
     evidenceTypes: input.evidenceTypes,
     requestId: input.requestId,
     correlationId: input.correlationId,
+    intakeBinding: { offerId: input.offerId, student: input.student },
   });
 }
 
@@ -347,4 +438,16 @@ export async function decideEnrollmentIdentityDecision(
     decisionId,
     outcome,
   });
+}
+
+export async function listEnrollmentIdentityDecisionQueue(pool: EnrollmentApiPool, context: InstitutionalContext) {
+  return listPublicIdentityDecisions(pool, context.institutionId, context.personId);
+}
+
+export async function readEnrollmentIdentityDecision(pool: EnrollmentApiPool, context: InstitutionalContext, decisionRef: string) {
+  return getPublicIdentityDecision(pool, context.institutionId, context.personId, decisionRef);
+}
+
+export async function readEnrollmentIdentityDecisionForActor(pool: EnrollmentApiPool, context: InstitutionalContext, decisionRef: string) {
+  return getPublicIdentityDecisionForActor(pool, context.institutionId, context.personId, decisionRef);
 }

@@ -8,10 +8,10 @@ const studentContext = readFileSync(resolve('src/modules/student-context/student
 const controller = readFileSync(resolve('src/modules/student-context/student-context.controller.ts'), 'utf8');
 
 // Characterization: Task 6 must not manufacture a RED when the existing read path is bounded.
-assert.equal((record.match(/request\(`\/api\/student-context\/\$\{studentRef\}`\)/g) ?? []).length, 1,
-  'one Student Context request must serve every Student Record section');
-assert.match(record, /useCallback\(async \(\) => \{[\s\S]*?\}, \[studentRef\]\);[\s\S]*?useEffect\(\(\) => \{ void load\(\); \}, \[load\]\);/,
-  'opening or changing a public student reference must load once through a stable callback');
+assert.equal((record.match(/request\(`\/api\/student-context\/\$\{studentRef\}`, controller\.signal\)/g) ?? []).length, 1,
+  'one abortable Student Context request must serve every Student Record section');
+assert.match(record, /useCallback\(async \(\) => \{[\s\S]*?\}, \[studentRef\]\);[\s\S]*?useEffect\(\(\) => \{[\s\S]*?void load\(\);[\s\S]*?studentRequestController\.current\?\.abort\(\);[\s\S]*?\}, \[load\]\);/,
+  'opening or changing a public student reference must load through a stable callback and abort on cleanup');
 assert.doesNotMatch(record, /setInterval|setTimeout|requestAnimationFrame|\bpoll(?:ing)?\b/i,
   'Student Record must not poll');
 assert.doesNotMatch(record, /localStorage|sessionStorage|indexedDB|CacheStorage/i,

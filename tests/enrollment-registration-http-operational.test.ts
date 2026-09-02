@@ -22,9 +22,9 @@ let server: http.Server | undefined;
 try {
   await setup.query(`CREATE SCHEMA "${schema}"`);
   const client = await setup.connect();
-  try { for (const file of (await readdir(migrations)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort()) await client.query(`SET search_path TO "${schema}"; ${await readFile(path.join(migrations, file), 'utf8')}`); }
+  try { for (const file of (await readdir(migrations)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort()) await client.query(`SET search_path TO "${schema}", public; ${await readFile(path.join(migrations, file), 'utf8')}`); }
   finally { client.release(); }
-  service = new pg.Pool({ connectionString, options: `-c search_path=${schema}`, max: 4 });
+  service = new pg.Pool({ connectionString, options: `-c search_path=${schema},public`, max: 4 });
   const institution = randomUUID(), actor = randomUUID(), student = randomUUID(), membership = randomUUID(), application = randomUUID(), year = randomUUID(), offer = randomUUID();
   await service.query("INSERT INTO institutions (id,name,slug,status) VALUES ($1,'HTTP EN01','http-en01','active')", [institution]);
   await service.query("INSERT INTO people (id,name,birth_date) VALUES ($1,'Secretaria HTTP','1980-01-01'),($2,'Aluno HTTP','2012-01-01')", [actor, student]);

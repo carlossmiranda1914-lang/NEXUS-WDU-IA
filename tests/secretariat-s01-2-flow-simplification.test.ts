@@ -10,29 +10,20 @@ function reject(label: string, token: string) {
   if (source.includes(token)) failures.push(`${label}: forbidden ${token}`);
 }
 
-expect('pipeline context state', "const [selectedStageId, setSelectedStageId] = useState<string | null>(null);");
-expect('pipeline context model', 'const PIPELINE_CONTEXT: Record<string, PipelineContext>');
-expect('pipeline click stores selected stage', 'setSelectedStageId(stage.id)');
-expect('top navigation clears selected stage', 'setSelectedStageId(null)');
-expect('available stage remains full-card action', 'disabled={!stage.available}');
-expect('pipeline keeps real persisted filters', 'setStatusFilter(stage.statuses)');
-expect('entry stage remains mapped to entries', "stage.id === 'entry' ? 'entries'");
-expect('activation stage remains mapped to students', "stage.id === 'activation' ? 'students'");
-expect('pipeline count remains real', "stage.available ? stage.count : '—'");
-expect('unavailable product language', 'Ainda não disponível');
-expect('selected stage contextual heading', 'selectedStage?.label');
-expect('selected stage contextual description', 'selectedStage?.description');
-expect('selected stage process count', 'processo{visible.length === 1');
-expect('pipeline typography remains legible without truncation', 'whitespace-normal break-normal text-sm font-semibold leading-5 [overflow-wrap:normal]');
-reject('pipeline labels must not be truncated', 'flex-1 truncate text-sm font-semibold');
-expect('whole card indicates navigation', 'group-hover:translate-x-0.5');
+expect('server-backed lifecycle presentation helper', 'buildEnrollmentLifecyclePresentation(processes, activeStudents.length)');
+expect('single journey rail header exists', 'Percurso de alunos e matr');
+expect('lifecycle click stores contextual heading', 'setSelectedLifecycleLabel(stage.label)');
+expect('top navigation clears lifecycle context', 'setSelectedLifecycleLabel(null)');
+expect('lifecycle click filters by stage enrollment IDs', 'setJourneyEnrollmentIds(stage.enrollmentIds)');
+expect('top navigation clears journey filter IDs', 'setJourneyEnrollmentIds(null)');
+expect('lifecycle click uses the helper-selected safe view', 'setView(stage.selectedView)');
+expect('active students remain a distinct view', "{view === 'students' && <ActiveStudentsView");
+expect('journey rail typography remains legible without truncation', 'whitespace-normal break-normal text-sm font-semibold leading-5 [overflow-wrap:normal]');
+reject('journey labels must not be truncated', 'flex-1 truncate text-sm font-semibold');
 
-reject('redundant selected-stage badge removed', 'Etapa do fluxo');
-reject('repeated open-stage label removed', 'Abrir etapa <ChevronRight');
-reject('technical backend language removed', 'Domínio ainda não persistido');
-reject('pipeline must not become separate top-level navigation', "{ id: 'documents', label: 'Documentos' }");
-reject('no fake document UI introduced', 'Documentos obrigatórios');
-reject('no fake finance UI introduced', 'Plano financeiro');
+reject('superseded pipeline helper', 'pipelineCounts(');
+reject('superseded pipeline context model', 'PIPELINE_CONTEXT');
+reject('superseded pipeline map', 'pipeline.map(');
 
 if (failures.length) throw new Error(failures.join('\n'));
-console.log('Secretariat S01.2 flow simplification contract tests passed (21 assertions).');
+console.log('Secretariat S01.2 flow simplification contract tests passed (13 assertions).');

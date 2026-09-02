@@ -77,6 +77,9 @@ export function registerAcademicYearRoutes(
       const temporal = await resolveEnrollmentTemporalContext(academicPool, context.institutionId);
       return res.json({
         institution: { id: context.institutionId, name: context.institutionName },
+        permissions: {
+          canActivateEnrollment: context.role === 'institution_admin' || context.role === 'director',
+        },
         academicYear: temporal.academicYear,
         offers: temporal.offers.map((offer) => ({
           id: offer.id,

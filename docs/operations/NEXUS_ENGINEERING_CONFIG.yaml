@@ -12,17 +12,21 @@ active_work:
   program: ALUNOS
   mission: ALUNOS-01A.3
   mission_branch: codex/alunos-01a-design
-  durable_remote_checkpoint: 1a5392ba04e8a0db317ff2791478839726c11026
-  task: T5B
-  task_name: Identity Evidence Revision & Server Re-resolution
-  state: PAUSED_FOR_GOVERNANCE_RECONCILIATION
-  owner: Codex
-  reviewer: Antigravity
+  durable_remote_checkpoint: aa5dc956d82e6ad941377f75f6144a642c64f6a6
+  activity: INTEGRATION
+  task: ALUNOS-01A.3-CLOSEOUT
+  task_name: Final Integration Closeout
+  state: DONE_READY_FOR_INTEGRATION
+  owner: Product Owner
+  write_owner: NONE
+  reviewer: ANTIGRAVITY
+  reviewer_mode: READ_ONLY
   risk: HIGH
   resume_rule: >-
-    Reconcile this governance change first, then resume T5B from the existing
-    ALUNOS worktree/branch without rerunning proven Tasks 1-4 or T5A unless
-    the T5B delta invalidates their evidence.
+    Do not reopen ALUNOS product implementation. F2-F5 and the final F2/F3 runtime
+    evidence gap are closed at aa5dc956d82e6ad941377f75f6144a642c64f6a6.
+    Independent review, affected UAT, remote CI and all five review threads are green/adjudicated.
+    Only documentation-closeout CI verification and PR #87 integration into main remain authorized.
 
 execution:
   one_code_owner_per_unit: true
@@ -44,29 +48,49 @@ execution:
 
 scope:
   authorized:
-    - ALUNOS-01A.3 T5B after governance reconciliation
+    - documentation-only canonical closeout truth
+    - verify remote CI on the documentation closeout HEAD
+    - integrate PR #87 into main when exact-head gates remain green
   forbidden:
-    - Task 5 UI before T5B is independently GREEN
-    - Task 6 before Task 5 is independently GREEN
-    - Finance or another module while ALUNOS-01A.3 remains product-blocking
-    - browser-owned Person, tenant, role, decision or case authority
+    - no further ALUNOS product changes in this tranche
+    - no new module
+    - no unrelated refactor
+    - no historical migration modification
+    - no parallel writer
+    - no automatic scope expansion
+    - no Finance or unrelated module work
+    - no broad UI redesign
+    - no CI or workflow weakening
+    - no new PR or branch
+    - no force push
     - destructive Git reconciliation without explicit authorization
 
+protected_invariants:
+  - browser never owns institution, Person, role, decision or case authority
+  - decisionRef remains opaque and non-authoritative by itself
+  - tenant boundaries fail closed and remain non-disclosing
+  - activation remains Administration/Direcao server authority
+  - activation remains transactional and idempotent
+  - historical applied migrations remain immutable
+  - Single Process Truth and Journey Rail remain canonical product model
+  - exactly one active StudentProfile invariant remains intact
+  - no duplicate Person, StudentProfile or Enrollment creation
+  - document validation cannot be weakened
+  - no hidden manual database dependency
+
 gates:
-  task_green_requires:
-    - focused RED_GREEN proof where applicable
-    - directly affected regressions
-    - independent review
-  mission_product_exit_requires:
-    engineering_green: true
-    integrity_green: true
-    product_green: true
-    adversarial_review: PASS
-    human_uat_green: true
-  done_requires:
-    - applicable gates satisfied
-    - integration evidence
-    - canonical project state updated
+  final_product_checkpoint: aa5dc956d82e6ad941377f75f6144a642c64f6a6
+  engineering_green: true
+  integrity_green: true
+  product_green: true
+  adversarial_review: PASS
+  human_uat_green: true
+  unresolved_p0: 0
+  unresolved_p1: 0
+  unresolved_p2: 0
+  review_threads_resolved: 5
+  remote_ci_on_product_checkpoint: PASS
+  closeout_head_remote_ci_required: true
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -81,44 +105,18 @@ resource_policy:
     - FRESH
     - REUSABLE
     - INVALIDATED
-  test_cost_ladder:
-    - TARGETED_RED_GREEN
-    - AFFECTED_TESTS
-    - AFFECTED_REGRESSIONS
-    - CHECKPOINT_GATE
-    - AGGREGATE_FINAL_GATE
   max_default_parallel_implementers_same_authority: 1
   avoid_duplicate_investigation: true
-  siu_optional: true
   never_trade_for_savings:
-    - TDD
     - security
     - tenant_isolation
     - data_integrity
     - independent_review
-    - adversarial_review
     - required_quality_gates
 
-handoff:
-  required_fields:
-    - MISSION
-    - TASK
-    - OWNER
-    - REVIEWER
-    - BASE_SHA
-    - HEAD_SHA
-    - BRANCH
-    - IMPLEMENTED
-    - AUTHORITY_CHANGED
-    - SCHEMA_CHANGED
-    - TESTS
-    - KNOWN_LIMITATIONS
-    - REVIEW_TARGET
-    - CANONICAL_DOCS
-
 integration:
-  technical_task_checkpoint: IMPLEMENTATION_PLUS_INDEPENDENT_REVIEW
-  mission_to_main: AGGREGATE_GATES_PLUS_ADVERSARIAL_REVIEW_PLUS_HUMAN_UAT_PLUS_PR_REVIEW
+  technical_task_checkpoint: COMPLETE
+  mission_to_main: READY_AFTER_CLOSEOUT_HEAD_CI
   dirty_worktree_allowed: false
 
 recovery:
@@ -126,7 +124,6 @@ recovery:
     - mission
     - official_state
     - branch
-    - base_sha
     - head_sha
     - completed_evidence
     - blocker_or_next_action

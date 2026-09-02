@@ -17,6 +17,7 @@ const schema = `nexus_s03_${Date.now()}_${randomUUID().replaceAll('-', '').slice
 const schemaId = `"${schema}"`;
 const bootstrap = new Pool({ connectionString });
 await bootstrap.query(`CREATE SCHEMA ${schemaId}`);
+await bootstrap.query(`CREATE OR REPLACE FUNCTION ${schemaId}.gen_random_bytes(integer) RETURNS bytea LANGUAGE sql AS 'SELECT public.gen_random_bytes($1)'`);
 let pool = new Pool({ connectionString, options: `-c search_path=${schema}`, max: 6 });
 const migrationsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations');
 let assertions = 0;

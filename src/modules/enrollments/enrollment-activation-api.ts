@@ -19,6 +19,8 @@ export class EnrollmentActivationError extends Error {
   ) { super(message); this.name = 'EnrollmentActivationError'; }
 }
 
+type ActivationResult = { lifecycleVersion: string; status: 'active'; studentRef: string };
+
 type ActivationInput = {
   expectedLifecycleVersion: unknown;
   expectedRegistrationVersion: unknown;
@@ -74,7 +76,8 @@ export async function activateEnrollment(
     );
     if (!enrollment.rowCount) throw new EnrollmentActivationError('NOT_FOUND', 'Matrícula não encontrada nesta instituição.');
 
-    const prior = await client.query<{ request_fingerprint: string; result: { enrollmentId: string; lifecycleVersion: string; status: 'active' } }>(
+    const current = enrollment.rows[0];
+    const prior = await client.query<{ request_fingerprint: string }>(
       `SELECT request_fingerprint, result
          FROM enrollment_activation_commands
         WHERE institution_id = $1 AND idempotency_key = $2
@@ -83,11 +86,15 @@ export async function activateEnrollment(
     );
     if (prior.rowCount) {
       if (prior.rows[0].request_fingerprint !== fingerprint) throw new EnrollmentActivationError('IDEMPOTENCY_CONFLICT', 'A chave de idempotência já foi usada para outro pedido.');
+      const replayProfile = await client.query<{ public_ref: string }>(
+        `SELECT public_ref FROM student_profiles WHERE institution_id = $1 AND person_id = $2 FOR UPDATE`,
+        [context.institutionId, current.student_person_id],
+      );
+      if (!replayProfile.rowCount) throw new EnrollmentActivationError('NOT_FOUND', 'Matrícula não encontrada nesta instituição.');
       await client.query('COMMIT');
-      return { ...prior.rows[0].result, replayed: true };
+      return { studentRef: replayProfile.rows[0].public_ref, lifecycleVersion: current.lifecycle_version, status: 'active' as const, replayed: true };
     }
 
-    const current = enrollment.rows[0];
     if (BigInt(current.lifecycle_version) !== lifecycleVersion || BigInt(current.registration_version) !== registrationVersion) {
       throw new EnrollmentActivationError('STALE_VERSION', 'A matrícula foi alterada entretanto. Recarregue e reveja antes de ativar.');
     }
@@ -104,8 +111,8 @@ export async function activateEnrollment(
     const documentsReady = documentValidationGate(current.document_policy_id !== null, documents.rows.map((row) => ({ documentType: row.document_type, required: row.required, status: row.status, sourceRequirementId: row.source_requirement_id })));
     if (!documentsReady.ready) throw new EnrollmentActivationError('ACTIVATION_NOT_READY', 'A matrícula ainda não cumpre os requisitos documentais de ativação.');
 
-    const profile = await client.query<{ status: string }>(
-      `SELECT status FROM student_profiles WHERE institution_id = $1 AND person_id = $2 FOR UPDATE`,
+    const profile = await client.query<{ status: string; public_ref: string }>(
+      `SELECT status, public_ref FROM student_profiles WHERE institution_id = $1 AND person_id = $2 FOR UPDATE`,
       [context.institutionId, current.student_person_id],
     );
     if (!profile.rowCount) throw new EnrollmentActivationError('ACTIVATION_NOT_READY', 'Não existe perfil institucional elegível para ativação.');
@@ -120,7 +127,7 @@ export async function activateEnrollment(
       [context.personId, enrollmentId, context.institutionId, lifecycleVersion.toString()],
     );
     if (!activated.rowCount) throw new EnrollmentActivationError('STALE_VERSION', 'A matrícula foi alterada entretanto. Recarregue e reveja antes de ativar.');
-    const result = { enrollmentId: activated.rows[0].id, lifecycleVersion: activated.rows[0].lifecycle_version, status: activated.rows[0].status };
+    const result: ActivationResult = { studentRef: profile.rows[0].public_ref, lifecycleVersion: activated.rows[0].lifecycle_version, status: activated.rows[0].status };
     await client.query(
       `INSERT INTO enrollment_events (institution_id, enrollment_application_id, actor_kind, actor_person_id, correlation_id, event_type, from_status, to_status, metadata)
        VALUES ($1, $2, 'human', $3, $4, 'enrollment_activated', 'validated', 'active', $5::jsonb)`,

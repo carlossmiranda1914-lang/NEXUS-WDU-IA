@@ -10,6 +10,7 @@ import {
   type EnrollmentDocumentStatus,
 } from './enrollment-document-policy.ts';
 import { documentValidationGate } from './enrollment-document-requirement-policy.ts';
+import { canConfigureDocumentRequirements } from './enrollment-document-requirement-policy.ts';
 
 export interface EnrollmentDocumentQueryResult<T = any> { rows: T[]; rowCount: number | null }
 export interface EnrollmentDocumentClient {
@@ -38,7 +39,7 @@ function validUuid(value: unknown): value is string {
 export async function listEnrollmentDocuments(pool: EnrollmentDocumentPool, context: InstitutionalContext, enrollmentId: string) {
   if (!validUuid(enrollmentId)) throw new EnrollmentDocumentApiError('INVALID_INPUT', 'Matrícula inválida.');
   if (!canManageEnrollment(context.role)) throw new EnrollmentDocumentApiError('FORBIDDEN', 'O seu papel não pode consultar documentos de matrícula.');
-  const application = await pool.query<{ id: string; document_policy_id: string | null }>('SELECT id, document_policy_id FROM enrollment_applications WHERE id = $1 AND institution_id = $2', [enrollmentId, context.institutionId]);
+  const application = await pool.query<{ id: string; document_policy_id: string | null; status: EnrollmentStatus }>('SELECT id, document_policy_id, status FROM enrollment_applications WHERE id = $1 AND institution_id = $2', [enrollmentId, context.institutionId]);
   if (!application.rowCount) throw new EnrollmentDocumentApiError('NOT_FOUND', 'Matrícula não encontrada nesta instituição.');
   const result = await pool.query(
     `SELECT id, document_type, required, source_requirement_id, status, evidence_reference, verified_by, verified_at, created_at, updated_at
@@ -54,7 +55,13 @@ export async function listEnrollmentDocuments(pool: EnrollmentDocumentPool, cont
     status: document.status,
     sourceRequirementId: document.source_requirement_id,
   })));
-  return { documents, readiness };
+  return {
+    documents,
+    readiness,
+    configuration: {
+      allowed: canConfigureDocumentRequirements(context.role) && canManageEnrollmentDocuments(context.role, application.rows[0].status),
+    },
+  };
 }
 
 export async function addEnrollmentDocument(pool: EnrollmentDocumentPool, context: InstitutionalContext, input: { enrollmentId: string; documentType: unknown }) {

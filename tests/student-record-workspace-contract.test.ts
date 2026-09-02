@@ -8,7 +8,7 @@ const workspace = await readFile(new URL('../src/components/StudentRecordWorkspa
 assert.ok(app.includes('StudentRecordWorkspace'), 'The application shell must mount a dedicated Student Record workspace.');
 assert.ok(activeStudents.includes('onOpenStudentRecord'), 'Active Students must navigate to the dedicated workspace, not own the record presentation.');
 assert.equal(activeStudents.includes('{selectedStudentRef && <StudentRecordDrawer'), false, 'The primary Active Students action must not open the transitional preview drawer.');
-assert.ok(workspace.includes('request(`/api/student-context/${studentRef}`)'), 'The workspace must consume the canonical Student Context by opaque ref only.');
+assert.ok(workspace.includes('request(`/api/student-context/${studentRef}`, controller.signal)'), 'The workspace must consume the canonical Student Context by opaque ref only and cancel superseded reads.');
 assert.ok(workspace.includes('Alunos & Matrículas'), 'The workspace must retain a human breadcrumb back to Active Students.');
 assert.ok(workspace.includes('Registo do Aluno'), 'The workspace must identify the human record surface.');
 assert.ok(workspace.includes('Resumo'), 'The only operational section in Objective 2.1 is the Summary.');

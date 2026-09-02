@@ -39,7 +39,7 @@ try {
   const client = await pool.connect();
   try {
     await client.query(`CREATE SCHEMA ${quote(schema)}`);
-    await client.query(`SET search_path TO ${quote(schema)}`);
+    await client.query(`SET search_path TO ${quote(schema)}, public`);
     await runMigrations(client, await discoverMigrations(migrationsDirectory));
     const { initializeDatabase } = await import('../src/db/init.ts');
     const before = await fingerprint(client);

@@ -116,6 +116,8 @@ P0 = 0. P1 = 0 para DONE, salvo exceção formal explicitamente aprovada e docum
 ### Gate DONE
 Durante prova final, a missão está em `VALIDATING`. Qualquer AC obrigatório FAIL/BLOCKED/NOT RUN impede `DONE`; a missão retorna a `IMPLEMENTING` quando é necessária correção dentro do scope ou passa a `BLOCKED` quando existe impedimento externo/arquitetural.
 
+Para fluxos críticos stateful, contratos estáticos/de fonte são complementares e não substituem prova comportamental ordenada da transição de estado. A revisão independente tem de visar o `REVIEWED_HEAD` atual. Nenhuma conclusão de merge/DONE é válida enquanto existir um review-thread com finding de produto, integridade, segurança, dados ou governação não adjudicado; P2 exige correção ou aceitação/backlog explícito.
+
 ## 5. Classes de evidência
 
 | Código | Evidência |
