@@ -322,10 +322,14 @@ export async function submitIdentityDecisionEvidence(pool: IdentityDecisionPool,
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    if (!await resolveAuthorityRole(client, input.institutionId, input.actorPersonId)) throw new IdentityDecisionError('UNAUTHORIZED_DECISION', 'Actor is not authorized to submit identity evidence.');
+    const actorRole = await resolveAuthorityRole(client, input.institutionId, input.actorPersonId);
+    if (!actorRole) throw new IdentityDecisionError('UNAUTHORIZED_DECISION', 'Actor is not authorized to submit identity evidence.');
     const found = await client.query<any>('SELECT * FROM identity_resolution_decisions WHERE institution_id = $1 AND public_ref = $2 FOR UPDATE', [input.institutionId, input.decisionRef]);
     if (!found.rowCount) throw new IdentityDecisionError('DECISION_NOT_FOUND', 'Identity decision was not found in this institution.');
     const decision = found.rows[0];
+    if (actorRole === 'secretariat' && decision.requested_by_person_id !== input.actorPersonId) {
+      throw new IdentityDecisionError('UNAUTHORIZED_DECISION', 'This identity decision is not available to the current operator.');
+    }
     if (!decision.enrollment_offer_id || !decision.initial_identity_inputs) {
       throw new IdentityDecisionError('DECISION_BINDING_REQUIRED', 'Legacy identity decisions cannot be revised without their original intake binding.');
     }
@@ -373,14 +377,50 @@ export function toPublicIdentityDecision(row: any): PublicIdentityDecision {
   };
 }
 
+export type PublicIdentityDecisionCapabilities = {
+  canRequestMoreInformation: boolean;
+  canApprove: boolean;
+  canReject: boolean;
+  canSubmitEvidence: boolean;
+  canResumeIntake: boolean;
+};
+export type PublicIdentityDecisionForActor = PublicIdentityDecision & { capabilities: PublicIdentityDecisionCapabilities };
+
+async function capabilitiesForActor(client: IdentityDecisionQueryClient, row: any, institutionId: string, actorPersonId: string): Promise<PublicIdentityDecisionCapabilities> {
+  const role = await resolveAuthorityRole(client, institutionId, actorPersonId);
+  const leadership = role === 'director' || role === 'institution_admin';
+  const final = row.status === 'approved' || row.status === 'rejected';
+  const policy = POLICY[row.reason_code as IdentityDecisionReasonCode];
+  const independent = actorPersonId !== row.requested_by_person_id;
+  const proposerRole = policy?.requireInstitutionAdminAmongApprovers
+    ? await resolveAuthorityRole(client, institutionId, row.requested_by_person_id)
+    : null;
+  const approvalRoleMatches = policy?.requiredApprovalRole === 'institution_admin'
+    ? role === 'institution_admin'
+    : policy?.requiredApprovalRole === 'leadership' ? leadership : false;
+  const adminRequirementMatches = !policy?.requireInstitutionAdminAmongApprovers
+    || role === 'institution_admin' || proposerRole === 'institution_admin';
+  return {
+    canRequestMoreInformation: !final && leadership,
+    canApprove: !final && row.status !== 'needs_more_information' && Boolean(policy?.requiredApprovalRole) && independent && approvalRoleMatches && adminRequirementMatches,
+    canReject: !final && leadership,
+    canSubmitEvidence: row.status === 'needs_more_information' && Boolean(role),
+    canResumeIntake: row.status === 'approved',
+  };
+}
+
+async function toPublicIdentityDecisionForActor(client: IdentityDecisionQueryClient, row: any, institutionId: string, actorPersonId: string): Promise<PublicIdentityDecisionForActor> {
+  return { ...toPublicIdentityDecision(row), capabilities: await capabilitiesForActor(client, row, institutionId, actorPersonId) };
+}
+
 export async function listPublicIdentityDecisions(pool: IdentityDecisionPool, institutionId: string, actorPersonId: string): Promise<PublicIdentityDecision[]> {
   const client = await pool.connect();
   try {
     const role = await resolveAuthorityRole(client, institutionId, actorPersonId);
     if (role !== 'director' && role !== 'institution_admin') throw new IdentityDecisionError('UNAUTHORIZED_DECISION', 'Leadership access is required to review identity decisions.');
-    const result = await client.query<any>(`SELECT public_ref, status, risk_level, proposed_action, reason_code, version
+    const result = await client.query<any>(`SELECT public_ref, status, risk_level, proposed_action, reason_code, version, requested_by_person_id
       FROM identity_resolution_decisions WHERE institution_id = $1 AND status NOT IN ('approved', 'rejected') ORDER BY created_at ASC`, [institutionId]);
-    return result.rows.map(toPublicIdentityDecision);
+    return Promise.all(result.rows.map((row) => toPublicIdentityDecisionForActor(client, row, institutionId, actorPersonId)));
   } finally { client.release(); }
 }
 
@@ -394,6 +434,23 @@ export async function getPublicIdentityDecision(pool: IdentityDecisionPool, inst
       FROM identity_resolution_decisions WHERE institution_id = $1 AND public_ref = $2`, [institutionId, decisionRef]);
     if (!result.rowCount) throw new IdentityDecisionError('DECISION_NOT_FOUND', 'Identity decision was not found in this institution.');
     return toPublicIdentityDecision(result.rows[0]);
+  } finally { client.release(); }
+}
+
+/** Safe single-decision read for the requesting operator or institutional leadership. */
+export async function getPublicIdentityDecisionForActor(pool: IdentityDecisionPool, institutionId: string, actorPersonId: string, decisionRef: string): Promise<PublicIdentityDecisionForActor> {
+  if (!isPublicIdentityDecisionRef(decisionRef)) throw new IdentityDecisionError('DECISION_NOT_FOUND', 'Identity decision was not found in this institution.');
+  const client = await pool.connect();
+  try {
+    const role = await resolveAuthorityRole(client, institutionId, actorPersonId);
+    if (!role) throw new IdentityDecisionError('UNAUTHORIZED_DECISION', 'Active institutional access is required.');
+    const result = await client.query<any>(`SELECT public_ref, status, risk_level, proposed_action, reason_code, version, requested_by_person_id
+      FROM identity_resolution_decisions WHERE institution_id = $1 AND public_ref = $2`, [institutionId, decisionRef]);
+    if (!result.rowCount) throw new IdentityDecisionError('DECISION_NOT_FOUND', 'Identity decision was not found in this institution.');
+    if (role === 'secretariat' && result.rows[0].requested_by_person_id !== actorPersonId) {
+      throw new IdentityDecisionError('UNAUTHORIZED_DECISION', 'This identity decision is not available to the current operator.');
+    }
+    return toPublicIdentityDecisionForActor(client, result.rows[0], institutionId, actorPersonId);
   } finally { client.release(); }
 }
 

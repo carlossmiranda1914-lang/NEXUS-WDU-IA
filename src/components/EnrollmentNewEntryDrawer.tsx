@@ -3,7 +3,7 @@ import { CheckCircle2, X } from 'lucide-react';
 import EnrollmentEntryIntentSelector from './EnrollmentEntryIntentSelector.tsx';
 import EnrollmentEntryForm from './EnrollmentEntryForm.tsx';
 import EnrollmentRegistrationPanel from './EnrollmentRegistrationPanel.tsx';
-import { resolveExistingStudent, startProtectedEnrollment, type EnrollmentStudentDraft } from '../modules/enrollments/enrollment-intake-client.ts';
+import { listIdentityReviewQueue, requestIdentityReview, resolveExistingStudent, resumeApprovedIdentityReview, startProtectedEnrollment, submitIdentityReviewEvidence, submitIdentityReviewOutcome, type EnrollmentStudentDraft, type PublicIdentityDecision } from '../modules/enrollments/enrollment-intake-client.ts';
 import { enrollmentRegistrationRequest } from '../modules/enrollments/enrollment-registration-client.ts';
 
 type Offer = { id: string; name: string; academic_year_name: string };
@@ -19,16 +19,27 @@ export default function EnrollmentNewEntryDrawer({ offers, light, onClose, onCre
   const [legacyStudentId, setLegacyStudentId] = useState('');
   const [offerId, setOfferId] = useState(offers[0]?.id || '');
   const [resolution, setResolution] = useState<Resolution | null>(null);
+  const [identityDecision, setIdentityDecision] = useState<PublicIdentityDecision | null>(null);
+  const [reviewQueue, setReviewQueue] = useState<PublicIdentityDecision[] | null>(null);
+  const [evidenceType, setEvidenceType] = useState('civil_document_presented');
   const [createdEnrollmentId, setCreatedEnrollmentId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const student = useMemo<EnrollmentStudentDraft>(() => ({ name: name.trim(), ...(birthDate ? { birthDate } : {}), ...(phone.trim() ? { phone: phone.trim() } : {}), ...(studentNumber.trim() ? { studentNumber: studentNumber.trim() } : {}), ...(legacyStudentId.trim() ? { legacyStudentId: legacyStudentId.trim() } : {}) }), [name, birthDate, phone, studentNumber, legacyStudentId]);
-  const canStartExisting = resolution?.status === 'LOCAL_MATCH';
+  const canStartExisting = resolution?.status === 'LOCAL_MATCH' || (identityDecision?.status === 'approved' && identityDecision.capabilities?.canResumeIntake);
+  const requiresReview = resolution?.status === 'REVIEW_REQUIRED' || resolution?.status === 'RESTRICTED_POSSIBLE_MATCH' || resolution?.status === 'MULTIPLE_MATCHES';
+  const decisionStatus = identityDecision?.status === 'pending_confirmation' || identityDecision?.status === 'pending_second_approval'
+    ? 'A aguardar revisão autorizada'
+    : identityDecision?.status === 'needs_more_information' ? 'São necessárias mais informações'
+      : identityDecision?.status === 'approved' ? 'Decisão aprovada'
+        : identityDecision?.status === 'rejected' ? 'Decisão rejeitada' : null;
 
   function chooseIntent(next: EntryIntent) {
     setIntent(next);
     setResolution(null);
+    setIdentityDecision(null);
+    setReviewQueue(null);
     setError(null);
     if (next === 'new') { setStudentNumber(''); setLegacyStudentId(''); }
   }
@@ -38,7 +49,9 @@ export default function EnrollmentNewEntryDrawer({ offers, light, onClose, onCre
     if (intent === 'existing' && !canStartExisting) return;
     setBusy(true); setError(null);
     try {
-      const result = await startProtectedEnrollment(offerId, student);
+      const result = identityDecision?.status === 'approved'
+        ? await resumeApprovedIdentityReview(identityDecision.decisionRef)
+        : await startProtectedEnrollment(offerId, student);
       const enrollmentId = result?.enrollment?.id;
       if (!enrollmentId) throw new Error('O processo foi iniciado, mas o identificador da matrícula não foi devolvido.');
       setCreatedEnrollmentId(enrollmentId);
@@ -54,9 +67,49 @@ export default function EnrollmentNewEntryDrawer({ offers, light, onClose, onCre
     try {
       const result = await resolveExistingStudent(student);
       setResolution(result.resolution);
+      setIdentityDecision(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Não foi possível confirmar o aluno.');
     } finally { setBusy(false); }
+  }
+
+  async function requestReview() {
+    if (!offerId) return;
+    setBusy(true); setError(null);
+    try {
+      const result = await requestIdentityReview(offerId, student);
+      setIdentityDecision(result.decision);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Não foi possível pedir a revisão de identidade.'); }
+    finally { setBusy(false); }
+  }
+
+  async function submitEvidence() {
+    if (!identityDecision) return;
+    setBusy(true); setError(null);
+    try {
+      const result = await submitIdentityReviewEvidence(identityDecision.decisionRef, identityDecision.version, student, [evidenceType]);
+      setIdentityDecision(result.decision);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Não foi possível enviar as informações.'); }
+    finally { setBusy(false); }
+  }
+
+  async function decide(outcome: 'approve' | 'reject' | 'request_more_information') {
+    if (!identityDecision) return;
+    setBusy(true); setError(null);
+    try {
+      const result = await submitIdentityReviewOutcome(identityDecision.decisionRef, outcome);
+      setIdentityDecision(result.decision);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Não foi possível concluir a revisão.'); }
+    finally { setBusy(false); }
+  }
+
+  async function loadReviewQueue() {
+    setBusy(true); setError(null);
+    try {
+      const result = await listIdentityReviewQueue();
+      setReviewQueue(result.decisions);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Não foi possível abrir a fila de revisão.'); }
+    finally { setBusy(false); }
   }
 
   return <div className="fixed inset-0 z-[12000] flex justify-end bg-black/40" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><aside className={`h-full w-full max-w-2xl overflow-y-auto border-l p-5 shadow-2xl sm:p-6 ${light ? 'border-zinc-200 bg-white' : 'border-white/10 bg-zinc-900'}`}>
@@ -67,9 +120,11 @@ export default function EnrollmentNewEntryDrawer({ offers, light, onClose, onCre
       <EnrollmentRegistrationPanel enrollmentId={createdEnrollmentId} enrollmentStatus="draft" light={light} request={enrollmentRegistrationRequest} compact />
       <button type="button" onClick={() => void onCreated()} className={`mt-5 min-h-11 w-full rounded-lg border px-4 py-2.5 text-sm font-semibold ${light ? 'border-zinc-200 text-zinc-700 hover:bg-zinc-50' : 'border-white/10 text-zinc-200 hover:bg-white/5'}`}>Voltar à fila de matrículas</button>
     </> : <>
+      <button type="button" onClick={() => void loadReviewQueue()} disabled={busy} className={`mt-5 min-h-11 rounded-lg border px-4 py-2 text-sm font-semibold ${light ? 'border-zinc-200 text-zinc-700 hover:bg-zinc-50' : 'border-white/10 text-zinc-200 hover:bg-white/5'} disabled:opacity-50`}>Revisar decisões pendentes</button>
+      {reviewQueue && <section aria-label="Decisões pendentes" className={`mt-4 rounded-xl border p-4 ${light ? 'border-zinc-200 bg-slate-50' : 'border-white/10 bg-zinc-950/60'}`}><p className={`font-semibold ${light ? 'text-zinc-900' : 'text-white'}`}>Decisões de identidade pendentes</p>{reviewQueue.length === 0 ? <p className={`mt-2 text-sm ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>Não existem decisões pendentes nesta instituição.</p> : <div className="mt-3 space-y-2">{reviewQueue.map((decision) => <button key={decision.decisionRef} type="button" onClick={() => { setIntent('existing'); setIdentityDecision(decision); }} className={`block w-full rounded-lg border p-3 text-left text-sm ${light ? 'border-zinc-200 bg-white text-zinc-700 hover:border-indigo-300' : 'border-white/10 bg-zinc-900 text-zinc-200 hover:border-indigo-400/50'}`}>{decision.status === 'needs_more_information' ? 'São necessárias mais informações' : decision.status === 'pending_confirmation' || decision.status === 'pending_second_approval' ? 'A aguardar revisão autorizada' : 'Decisão pendente'}</button>)}</div>}</section>}
       {offers.length === 0 ? <div className="mt-6 rounded-xl border border-amber-500/30 p-4 text-sm text-amber-500">Não existe uma oferta de matrícula ativa.</div> : <><div className="mt-6"><EnrollmentEntryIntentSelector value={intent} onChange={chooseIntent} /></div>{intent && <EnrollmentEntryForm intent={intent} offers={offers} name={name} birthDate={birthDate} phone={phone} studentNumber={studentNumber} legacyStudentId={legacyStudentId} offerId={offerId} busy={busy} resolved={Boolean(resolution)} light={light} onSubmit={intent === 'existing' ? identify : (event) => { event.preventDefault(); void start(); }} setName={setName} setBirthDate={setBirthDate} setPhone={setPhone} setStudentNumber={setStudentNumber} setLegacyStudentId={setLegacyStudentId} setOfferId={setOfferId} />}</>}
       {error && <div role="alert" className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-500">{error}</div>}
-      {intent === 'existing' && resolution && <div className={`mt-6 rounded-xl border p-4 ${light ? 'border-zinc-200 bg-slate-50' : 'border-white/10 bg-zinc-950/60'}`}><p className={`font-semibold ${light ? 'text-zinc-900' : 'text-white'}`}>{resolution.status === 'LOCAL_MATCH' ? 'Registo local encontrado com segurança' : resolution.status === 'NO_MATCH' ? 'Nenhum aluno existente encontrado' : 'Confirmação adicional necessária'}</p><p className={`mt-2 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{resolution.status === 'LOCAL_MATCH' ? 'O Nexus pode reutilizar este registo sem criar uma pessoa duplicada.' : resolution.status === 'NO_MATCH' ? 'Os dados não correspondem a um aluno existente nesta instituição. Se a pessoa for realmente nova, continue pelo fluxo Aluno novo.' : 'Há conflito ou mais de uma correspondência possível. O Nexus não vai escolher automaticamente uma identidade.'}</p><div className="mt-4 flex flex-wrap gap-2">{canStartExisting && <button type="button" onClick={() => void start()} disabled={busy} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Iniciar processo</button>}{resolution.status === 'NO_MATCH' && <button type="button" onClick={() => chooseIntent('new')} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white">Tratar como aluno novo</button>}<button type="button" onClick={() => { setResolution(null); setError(null); }} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-semibold ${light ? 'border-zinc-200 text-zinc-700' : 'border-white/10 text-zinc-200'}`}>Rever dados</button></div></div>}
+      {(identityDecision || (intent === 'existing' && resolution)) && <div className={`mt-6 rounded-xl border p-4 ${light ? 'border-zinc-200 bg-slate-50' : 'border-white/10 bg-zinc-950/60'}`}><p className={`font-semibold ${light ? 'text-zinc-900' : 'text-white'}`}>{resolution?.status === 'LOCAL_MATCH' ? 'Registo local encontrado com segurança' : resolution?.status === 'NO_MATCH' ? 'Nenhum aluno existente encontrado' : decisionStatus || 'Confirmação adicional necessária'}</p><p className={`mt-2 text-xs leading-5 ${light ? 'text-zinc-500' : 'text-zinc-400'}`}>{resolution?.status === 'LOCAL_MATCH' ? 'O Nexus pode reutilizar este registo sem criar uma pessoa duplicada.' : resolution?.status === 'NO_MATCH' ? 'Os dados não correspondem a um aluno existente nesta instituição. Se a pessoa for realmente nova, continue pelo fluxo Aluno novo.' : identityDecision?.status === 'approved' ? 'A revisão foi confirmada. Pode agora retomar a matrícula com os dados revistos.' : identityDecision?.status === 'rejected' ? 'Esta identidade não foi aprovada. Reveja os dados ou peça orientação à direção.' : identityDecision?.status === 'needs_more_information' ? 'Atualize os dados e indique a evidência apresentada para uma nova verificação.' : 'Há conflito ou mais de uma correspondência possível. O Nexus não vai escolher automaticamente uma identidade.'}</p><div className="mt-4 flex flex-wrap gap-2">{canStartExisting && <button type="button" onClick={() => void start()} disabled={busy} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Iniciar processo</button>}{resolution?.status === 'NO_MATCH' && <button type="button" onClick={() => chooseIntent('new')} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white">Tratar como aluno novo</button>}{requiresReview && !identityDecision && <button type="button" onClick={() => void requestReview()} disabled={busy} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Pedir revisão de identidade</button>}{identityDecision?.status === 'needs_more_information' && identityDecision.capabilities?.canSubmitEvidence && <><select aria-label="Tipo de evidência" value={evidenceType} onChange={(event) => setEvidenceType(event.target.value)} className={`min-h-11 rounded-lg border px-3 text-sm ${light ? 'border-zinc-200 bg-white text-zinc-700' : 'border-white/10 bg-zinc-900 text-zinc-200'}`}><option value="civil_document_presented">Documento de identificação apresentado</option><option value="school_record">Registo escolar</option><option value="birth_date_confirmation">Confirmação da data de nascimento</option><option value="guardian_attestation">Declaração do encarregado</option></select><button type="button" onClick={() => void submitEvidence()} disabled={busy} className="min-h-11 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Enviar informações</button></>}{identityDecision?.capabilities?.canRequestMoreInformation && <button type="button" onClick={() => void decide('request_more_information')} disabled={busy} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-semibold ${light ? 'border-zinc-200 text-zinc-700' : 'border-white/10 text-zinc-200'}`}>Pedir mais informações</button>}{identityDecision?.capabilities?.canApprove && <button type="button" onClick={() => void decide('approve')} disabled={busy} className="min-h-11 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">Aprovar decisão</button>}{identityDecision?.capabilities?.canReject && <button type="button" onClick={() => void decide('reject')} disabled={busy} className="min-h-11 rounded-lg border border-rose-500/40 px-4 py-2 text-sm font-semibold text-rose-500 disabled:opacity-50">Rejeitar decisão</button>}<button type="button" onClick={() => { setResolution(null); setIdentityDecision(null); setError(null); }} className={`min-h-11 rounded-lg border px-4 py-2 text-sm font-semibold ${light ? 'border-zinc-200 text-zinc-700' : 'border-white/10 text-zinc-200'}`}>Rever dados</button></div></div>}
     </>}
   </aside></div>;
 }

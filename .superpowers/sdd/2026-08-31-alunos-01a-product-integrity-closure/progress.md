@@ -45,7 +45,12 @@
 
 ## Task 5 — Identity Review Continuity
 
-- Status: BLOCKED — genuine prerequisite.
+- Status: GREEN — independently reviewed.
+- Product continuity: `MULTIPLE_MATCHES`, `REVIEW_REQUIRED` and restricted outcomes can create a server-owned review through the existing opaque decision reference. The drawer presents quiet, human-readable waiting, more-information, rejected and approved states, without candidate disclosure or browser Person selection.
+- Server-owned resumption: approved review intake uses `POST /api/enrollments/identity-decisions/:ref/intake` with only the opaque reference plus normal idempotency key. The server loads the current canonical T5B binding and latest evidence revision, then reuses canonical intake; browser offer, case, identity input and Person references cannot redirect the result.
+- Object authorization: decision capabilities are derived server-side from the existing policy. Leadership can see the institution queue; Secretariat actions are restricted to the operator's own decision. Same-tenant other-Secretariat evidence/resume returns `403`; foreign decision references return non-disclosing `404`.
+- Focused GREEN: identity review continuity contract; disposable PostgreSQL + HTTP T5B contract (CREATE/REUSE, idempotent resume, current binding, same-tenant `403`, foreign-tenant `404`, privacy); identity decision and intake API regressions; TypeScript lint; `git diff --check`.
+- Independent review: PASS after two P0 fixes — server-owned approved intake resume and same-tenant object authorization on resume/evidence. No P0/P1 remains.
 - Audit: `LOCAL_MATCH` and `NO_MATCH` already have direct safe next actions. `MULTIPLE_MATCHES`, `REVIEW_REQUIRED`, `RESTRICTED_POSSIBLE_MATCH` and `REUSABLE_MATCH` require institutional identity adjudication; the existing proposal and outcome commands are membership/tenant scoped but do not provide a safe product path for an independent authority.
 - Blocking authority: a tenant-scoped, privacy-minimized identity-decision work-queue/read boundary with a browser-safe public reference and a server-confirmed approved-intake handoff is absent. The existing `POST /identity-decisions` only creates a proposal; `POST /identity-decisions/:id/outcome` requires an undiscoverable internal decision id, and there is no queue/read API or UI. `REVIEW_REQUIRED` is explicitly non-executable (`needs_more_information`).
 - Safety ruling: no browser candidate/person selection, internal decision id, protected candidate disclosure or client-created Person/Student may be fabricated to bridge this gap. The partial Task 5 UI/API delta was discarded after independent review because it acknowledged a proposal as if it resolved the product journey.

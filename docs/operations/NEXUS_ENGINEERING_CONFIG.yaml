@@ -13,16 +13,16 @@ active_work:
   mission: ALUNOS-01A.3
   mission_branch: codex/alunos-01a-design
   durable_remote_checkpoint: 1a5392ba04e8a0db317ff2791478839726c11026
-  task: T5B
-  task_name: Identity Evidence Revision & Server Re-resolution
-  state: PAUSED_FOR_GOVERNANCE_RECONCILIATION
+  task: T5
+  task_name: Identity Review Continuity
+  state: IMPLEMENTING
   owner: Codex
   reviewer: Antigravity
   risk: HIGH
   resume_rule: >-
-    Reconcile this governance change first, then resume T5B from the existing
-    ALUNOS worktree/branch without rerunning proven Tasks 1-4 or T5A unless
-    the T5B delta invalidates their evidence.
+    T5A and T5B are independently GREEN. Resume Task 5 from the existing
+    ALUNOS worktree/branch without rerunning proven Tasks 1-4/T5A/T5B unless
+    the Task 5 delta invalidates their evidence.
 
 execution:
   one_code_owner_per_unit: true
@@ -44,9 +44,8 @@ execution:
 
 scope:
   authorized:
-    - ALUNOS-01A.3 T5B after governance reconciliation
+    - ALUNOS-01A.3 Task 5 Identity Review Continuity using T5A/T5B
   forbidden:
-    - Task 5 UI before T5B is independently GREEN
     - Task 6 before Task 5 is independently GREEN
     - Finance or another module while ALUNOS-01A.3 remains product-blocking
     - browser-owned Person, tenant, role, decision or case authority

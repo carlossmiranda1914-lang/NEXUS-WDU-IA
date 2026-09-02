@@ -14,6 +14,7 @@ import {
   decideIdentityDecision,
   buildEnrollmentIdentityCaseKey as buildDecisionCaseKey,
   getPublicIdentityDecision,
+  getPublicIdentityDecisionForActor,
   isPublicIdentityDecisionRef,
   listPublicIdentityDecisions,
   proposeIdentityDecision,
@@ -35,6 +36,7 @@ export class EnrollmentIntakeApiError extends Error {
       | 'CLIENT_AUTHORITY_FORBIDDEN'
       | 'IDENTITY_REVIEW_REQUIRED'
       | 'IDENTITY_DECISION_INVALID'
+      | 'IDENTITY_DECISION_NOT_FOUND'
       | 'IDENTITY_DECISION_STALE',
     message: string,
   ) {
@@ -262,6 +264,52 @@ export async function startEnrollmentIntake(
   throw new EnrollmentIntakeApiError('IDENTITY_DECISION_INVALID', 'A decisão aprovada não autoriza um intake executável.');
 }
 
+/**
+ * Resumes an approved review without accepting offer or identity inputs from
+ * the browser. The current evidence revision is the canonical intake input;
+ * legacy decisions without an intake binding remain deliberately fail-closed.
+ */
+export async function resumeApprovedIdentityDecisionIntake(
+  pool: EnrollmentApiPool,
+  context: InstitutionalContext,
+  input: { decisionRef: string; idempotencyKey: string },
+) {
+  if (!isPublicIdentityDecisionRef(input.decisionRef)) {
+    throw new EnrollmentIntakeApiError('INVALID_INPUT', 'Referência de decisão de identidade inválida.');
+  }
+  // This performs the same object-level policy used by the public decision
+  // read: leadership may act institution-wide; Secretariat only on its own
+  // decision. A public ref is navigation, never authority by itself.
+  await getPublicIdentityDecisionForActor(pool, context.institutionId, context.personId, input.decisionRef);
+  const result = await pool.query<{ enrollment_offer_id: string | null; current_identity_inputs: EnrollmentStudentInput | null }>(
+    `SELECT d.enrollment_offer_id,
+            COALESCE(
+              (SELECT r.submitted_identity_inputs
+                 FROM identity_resolution_decision_revisions r
+                WHERE r.decision_id = d.id
+                ORDER BY r.revision_number DESC
+                LIMIT 1),
+              d.initial_identity_inputs
+            ) AS current_identity_inputs
+       FROM identity_resolution_decisions d
+      WHERE d.institution_id = $1 AND d.public_ref = $2 AND d.status = 'approved'`,
+    [context.institutionId, input.decisionRef],
+  );
+  const binding = result.rows[0];
+  if (!binding) {
+    throw new EnrollmentIntakeApiError('IDENTITY_DECISION_NOT_FOUND', 'A decisão de identidade não foi encontrada nesta instituição.');
+  }
+  if (!binding.enrollment_offer_id || !binding.current_identity_inputs) {
+    throw new EnrollmentIntakeApiError('IDENTITY_DECISION_INVALID', 'A decisão aprovada não possui um vínculo de matrícula utilizável.');
+  }
+  return startEnrollmentIntake(pool, context, {
+    offerId: binding.enrollment_offer_id,
+    student: binding.current_identity_inputs,
+    idempotencyKey: input.idempotencyKey,
+    decisionRef: input.decisionRef,
+  });
+}
+
 export interface ProposeEnrollmentIdentityDecisionInput {
   offerId: string;
   student: EnrollmentStudentInput;
@@ -398,4 +446,8 @@ export async function listEnrollmentIdentityDecisionQueue(pool: EnrollmentApiPoo
 
 export async function readEnrollmentIdentityDecision(pool: EnrollmentApiPool, context: InstitutionalContext, decisionRef: string) {
   return getPublicIdentityDecision(pool, context.institutionId, context.personId, decisionRef);
+}
+
+export async function readEnrollmentIdentityDecisionForActor(pool: EnrollmentApiPool, context: InstitutionalContext, decisionRef: string) {
+  return getPublicIdentityDecisionForActor(pool, context.institutionId, context.personId, decisionRef);
 }

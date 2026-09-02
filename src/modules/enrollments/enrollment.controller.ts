@@ -7,10 +7,12 @@ import {
   decideEnrollmentIdentityDecision,
   listEnrollmentIdentityDecisionQueue,
   readEnrollmentIdentityDecision,
+  readEnrollmentIdentityDecisionForActor,
   EnrollmentIntakeApiError,
   parseEnrollmentStudentInput,
   proposeEnrollmentIdentityDecision,
   resolveStudentForEnrollment,
+  resumeApprovedIdentityDecisionIntake,
   toPublicEnrollmentResolution,
   startEnrollmentIntake,
 } from './enrollment-intake-api.ts';
@@ -43,6 +45,7 @@ function enrollmentActor(req: AuthRequest, res: Response) {
 
 function rejectDomainError(res: Response, error: unknown) {
   if (error instanceof EnrollmentIntakeApiError) {
+    if (error.code === 'IDENTITY_DECISION_NOT_FOUND') return reject(res, 404, error.message);
     if (error.code === 'IDENTITY_REVIEW_REQUIRED' || error.code === 'IDENTITY_DECISION_INVALID' || error.code === 'IDENTITY_DECISION_STALE') {
       return reject(res, 409, error.message);
     }
@@ -153,17 +156,7 @@ export function registerEnrollmentRoutes(
         requestId: typeof req.headers['x-request-id'] === 'string' ? req.headers['x-request-id'] : null,
         correlationId: typeof req.headers['x-correlation-id'] === 'string' ? req.headers['x-correlation-id'] : null,
       });
-      return res.status(201).json({
-        decision: {
-          decisionRef: decision.publicRef,
-          status: decision.status,
-          riskLevel: decision.riskLevel,
-          proposedAction: decision.proposedAction,
-          reasonCode: decision.reasonCode,
-          version: decision.version,
-          replayed: decision.replayed ?? false,
-        },
-      });
+      return res.status(201).json({ decision: { ...await readEnrollmentIdentityDecisionForActor(enrollmentPool, context, decision.publicRef), replayed: decision.replayed ?? false } });
     } catch (error) {
       return rejectDomainError(res, error);
     }
@@ -191,16 +184,7 @@ export function registerEnrollmentRoutes(
       const privateDecision = await (enrollmentPool as any).query('SELECT id FROM identity_resolution_decisions WHERE institution_id = $1 AND public_ref = $2', [context.institutionId, req.params.ref]);
       if (!privateDecision.rowCount) return reject(res, 404, 'Decisão de identidade não encontrada nesta instituição.');
       const decision = await decideEnrollmentIdentityDecision(enrollmentPool, context, privateDecision.rows[0].id, outcome);
-      return res.json({
-        decision: {
-          decisionRef: req.params.ref,
-          status: decision.status,
-          riskLevel: decision.riskLevel,
-          proposedAction: decision.proposedAction,
-          reasonCode: decision.reasonCode,
-          version: decision.version,
-        },
-      });
+      return res.json({ decision: await readEnrollmentIdentityDecisionForActor(enrollmentPool, context, req.params.ref) });
     } catch (error) {
       return rejectDomainError(res, error);
     }
@@ -221,7 +205,23 @@ export function registerEnrollmentRoutes(
         requestId: typeof req.headers['x-request-id'] === 'string' ? req.headers['x-request-id'] : null,
         correlationId: typeof req.headers['x-correlation-id'] === 'string' ? req.headers['x-correlation-id'] : null,
       });
-      return res.json({ decision: { decisionRef: decision.publicRef, status: decision.status, riskLevel: decision.riskLevel, proposedAction: decision.proposedAction, reasonCode: decision.reasonCode, version: decision.version, replayed: decision.replayed ?? false } });
+      return res.json({ decision: { ...await readEnrollmentIdentityDecisionForActor(enrollmentPool, context, decision.publicRef), replayed: decision.replayed ?? false } });
+    } catch (error) { return rejectDomainError(res, error); }
+  });
+
+  app.post('/api/enrollments/identity-decisions/:ref/intake', enrollmentRequireAuth, async (req: AuthRequest, res: Response) => {
+    const context = enrollmentActor(req, res); if (!context) return;
+    try {
+      assertNoClientAuthority(req.body ?? {});
+      const idempotencyKeyHeader = req.header('Idempotency-Key');
+      if (!idempotencyKeyHeader) return reject(res, 400, 'Idempotency-Key é obrigatório para retomar a matrícula.');
+      const result = await resumeApprovedIdentityDecisionIntake(enrollmentPool, context, {
+        decisionRef: req.params.ref,
+        idempotencyKey: idempotencyKeyHeader,
+      });
+      return res.status(result.replayed ? 200 : 201).json({
+        enrollment: { id: result.enrollmentApplicationId, replayed: result.replayed },
+      });
     } catch (error) { return rejectDomainError(res, error); }
   });
 

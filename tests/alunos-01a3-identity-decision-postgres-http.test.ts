@@ -49,6 +49,7 @@ const ids = {
   institutionA: randomUUID(),
   institutionB: randomUUID(),
   secretariatA: randomUUID(),
+  secretariatOtherA: randomUUID(),
   directorA: randomUUID(),
   adminA: randomUUID(),
   localStudent: randomUUID(),
@@ -98,29 +99,32 @@ try {
   await pool.query(
     `INSERT INTO people (id, name, birth_date, phone) VALUES
       ($1, 'Secretaria A', NULL, NULL),
-      ($2, 'Direção A', NULL, NULL),
-      ($3, 'Admin A', NULL, NULL),
-      ($4, 'Aluno Local', '2013-02-10', '+244923111111'),
-      ($5, 'Aluno Reutilizável', '2014-02-10', '+244923333333'),
-      ($6, 'Aluno Restrito', '2012-05-20', '+244923222222'),
-      ($7, 'Direção B', NULL, NULL)`,
-    [ids.secretariatA, ids.directorA, ids.adminA, ids.localStudent, ids.reusableStudent, ids.externalStudent, foreignDirector],
+      ($2, 'Secretaria B', NULL, NULL),
+      ($3, 'Direção A', NULL, NULL),
+      ($4, 'Admin A', NULL, NULL),
+      ($5, 'Aluno Local', '2013-02-10', '+244923111111'),
+      ($6, 'Aluno Reutilizável', '2014-02-10', '+244923333333'),
+      ($7, 'Aluno Restrito', '2012-05-20', '+244923222222'),
+      ($8, 'Direção B', NULL, NULL)`,
+    [ids.secretariatA, ids.secretariatOtherA, ids.directorA, ids.adminA, ids.localStudent, ids.reusableStudent, ids.externalStudent, foreignDirector],
   );
   await pool.query(
     `INSERT INTO memberships (person_id, institution_id, role, status) VALUES
-      ($1, $4, 'secretariat', 'active'),
-      ($2, $4, 'director', 'active'),
-      ($3, $4, 'institution_admin', 'active')`,
-    [ids.secretariatA, ids.directorA, ids.adminA, ids.institutionA],
+      ($1, $5, 'secretariat', 'active'),
+      ($2, $5, 'secretariat', 'active'),
+      ($3, $5, 'director', 'active'),
+      ($4, $5, 'institution_admin', 'active')`,
+    [ids.secretariatA, ids.secretariatOtherA, ids.directorA, ids.adminA, ids.institutionA],
   );
   await pool.query(
     `INSERT INTO identities(person_id,provider,provider_subject) VALUES
       ($1,'firebase','decision-secretariat-a'),
-      ($2,'firebase','decision-director-a'),
-      ($3,'firebase','decision-admin-a'),
-      ($4,'firebase','decision-director-b'),
-      ($5,'firebase','decision-no-authority-a')`,
-    [ids.secretariatA, ids.directorA, ids.adminA, foreignDirector, ids.localStudent],
+      ($2,'firebase','decision-secretariat-other-a'),
+      ($3,'firebase','decision-director-a'),
+      ($4,'firebase','decision-admin-a'),
+      ($5,'firebase','decision-director-b'),
+      ($6,'firebase','decision-no-authority-a')`,
+    [ids.secretariatA, ids.secretariatOtherA, ids.directorA, ids.adminA, foreignDirector, ids.localStudent],
   );
   await pool.query("INSERT INTO memberships(person_id,institution_id,role,status) VALUES($1,$2,'director','active')", [foreignDirector, ids.institutionB]);
   await pool.query(
@@ -277,6 +281,8 @@ try {
   const evidencePayload = { expectedVersion: replayMoreBody.decision.version, student: restrictedInput, evidenceTypes: ['civil_document_presented', 'birth_date_confirmation'] };
   const unauthorizedEvidence = await request(`/api/enrollments/identity-decisions/${moreInformation.publicRef}/evidence`, 'decision-no-authority-a', { method: 'POST', body: JSON.stringify(evidencePayload) });
   assert.equal(unauthorizedEvidence.status, 403, 'a person without active decision authority must receive 403.'); assertPublic(await unauthorizedEvidence.json());
+  const otherSecretariatEvidence = await request(`/api/enrollments/identity-decisions/${moreInformation.publicRef}/evidence`, 'decision-secretariat-other-a', { method: 'POST', body: JSON.stringify(evidencePayload) });
+  assert.equal(otherSecretariatEvidence.status, 403, 'a Secretariat operator must not revise another operator\'s identity decision.'); assertPublic(await otherSecretariatEvidence.json());
   const evidence = await request(`/api/enrollments/identity-decisions/${moreInformation.publicRef}/evidence`, 'decision-secretariat-a', { method: 'POST', body: JSON.stringify(evidencePayload) });
   assert.equal(evidence.status, 200, 'active Secretariat may submit allowlisted evidence.'); const evidenceBody = await evidence.json() as any; assertPublic(evidenceBody);
   assert.equal(evidenceBody.decision.status, 'needs_more_information', 'restricted re-resolution must remain review-required.');
@@ -313,13 +319,17 @@ try {
   assert.equal(createEvidenceBody.decision.status, 'pending_second_approval'); assertPublic(createEvidenceBody);
   const createApproved = await request(`/api/enrollments/identity-decisions/${createReview.publicRef}/outcome`, 'decision-admin-a', { method: 'POST', body: JSON.stringify({ outcome: 'approve' }) });
   assert.equal(createApproved.status, 200); assert.equal((await createApproved.json() as any).decision.status, 'approved');
+  const foreignApprovedResume = await request(`/api/enrollments/identity-decisions/${createReview.publicRef}/intake`, 'decision-director-b', { method: 'POST', headers: { 'Idempotency-Key': 't5-create-foreign-resume' }, body: JSON.stringify({}) });
+  assert.equal(foreignApprovedResume.status, 404, 'a foreign approved decisionRef must fail closed without disclosing its existence.'); assertPublic(await foreignApprovedResume.json());
+  const otherSecretariatResume = await request(`/api/enrollments/identity-decisions/${createReview.publicRef}/intake`, 'decision-secretariat-other-a', { method: 'POST', headers: { 'Idempotency-Key': 't5-create-other-secretariat-resume' }, body: JSON.stringify({}) });
+  assert.equal(otherSecretariatResume.status, 403, 'a Secretariat operator must not resume another operator\'s identity decision.'); assertPublic(await otherSecretariatResume.json());
   const wrongOffer = await request('/api/enrollments/intake', 'decision-secretariat-a', { method: 'POST', headers: { 'Idempotency-Key': 't5b-create-wrong-offer' }, body: JSON.stringify({ offerId: ids.offerB, student: createRevised, decisionRef: createReview.publicRef }) });
   assert.equal(wrongOffer.status, 409, 'a stale or browser-substituted offer must not redirect a revised decision.'); assertPublic(await wrongOffer.json());
   const staleStudent = await request('/api/enrollments/intake', 'decision-secretariat-a', { method: 'POST', headers: { 'Idempotency-Key': 't5b-create-stale-student' }, body: JSON.stringify({ offerId: ids.offerA, student: createInitial, decisionRef: createReview.publicRef }) });
   assert.equal(staleStudent.status, 409, 'the old case key must not be accepted after a server-side rebind.'); assertPublic(await staleStudent.json());
-  const createIntake = await request('/api/enrollments/intake', 'decision-secretariat-a', { method: 'POST', headers: { 'Idempotency-Key': 't5b-create-approved' }, body: JSON.stringify({ offerId: ids.offerA, student: createRevised, decisionRef: createReview.publicRef }) });
-  assert.equal(createIntake.status, 201, 'approved CREATE_PERSON must resume intake through the opaque decisionRef.'); assertPublic(await createIntake.json());
-  const createReplay = await request('/api/enrollments/intake', 'decision-secretariat-a', { method: 'POST', headers: { 'Idempotency-Key': 't5b-create-approved' }, body: JSON.stringify({ offerId: ids.offerA, student: createRevised, decisionRef: createReview.publicRef }) });
+  const createIntake = await request(`/api/enrollments/identity-decisions/${createReview.publicRef}/intake`, 'decision-secretariat-a', { method: 'POST', headers: { 'Idempotency-Key': 't5b-create-approved' }, body: JSON.stringify({}) });
+  assert.equal(createIntake.status, 201, 'approved CREATE_PERSON must resume intake from the server-owned decision binding.'); assertPublic(await createIntake.json());
+  const createReplay = await request(`/api/enrollments/identity-decisions/${createReview.publicRef}/intake`, 'decision-secretariat-a', { method: 'POST', headers: { 'Idempotency-Key': 't5b-create-approved' }, body: JSON.stringify({}) });
   assert.equal(createReplay.status, 200, 'replaying approved CREATE_PERSON intake must be idempotent.'); assertPublic(await createReplay.json());
   const createdPerson = await pool.query<{ id: string }>(`SELECT id FROM people WHERE name = 'Revisão Criar Pessoa' AND birth_date = '2014-04-03'`);
   assert.equal(createdPerson.rowCount, 1, 'replayed CREATE_PERSON intake must create exactly one Person.');
@@ -342,9 +352,9 @@ try {
   assert.equal(reuseEvidenceBody.decision.proposedAction, 'REUSE_PERSON'); assert.equal(reuseEvidenceBody.decision.status, 'pending_confirmation'); assertPublic(reuseEvidenceBody);
   const reuseApproved = await request(`/api/enrollments/identity-decisions/${reuseReview.publicRef}/outcome`, 'decision-director-a', { method: 'POST', body: JSON.stringify({ outcome: 'approve' }) });
   assert.equal(reuseApproved.status, 200); assert.equal((await reuseApproved.json() as any).decision.status, 'approved');
-  const reuseIntake = await request('/api/enrollments/intake', 'decision-secretariat-a', { method: 'POST', headers: { 'Idempotency-Key': 't5b-reuse-approved' }, body: JSON.stringify({ offerId: ids.offerB, student: reuseRevised, decisionRef: reuseReview.publicRef }) });
-  assert.equal(reuseIntake.status, 201, 'approved REUSE_PERSON must resume canonical intake without a browser Person id.'); assertPublic(await reuseIntake.json());
-  const reuseReplay = await request('/api/enrollments/intake', 'decision-secretariat-a', { method: 'POST', headers: { 'Idempotency-Key': 't5b-reuse-approved' }, body: JSON.stringify({ offerId: ids.offerB, student: reuseRevised, decisionRef: reuseReview.publicRef }) });
+  const reuseIntake = await request(`/api/enrollments/identity-decisions/${reuseReview.publicRef}/intake`, 'decision-secretariat-a', { method: 'POST', headers: { 'Idempotency-Key': 't5b-reuse-approved' }, body: JSON.stringify({}) });
+  assert.equal(reuseIntake.status, 201, 'approved REUSE_PERSON must resume canonical intake without browser identity or offer inputs.'); assertPublic(await reuseIntake.json());
+  const reuseReplay = await request(`/api/enrollments/identity-decisions/${reuseReview.publicRef}/intake`, 'decision-secretariat-a', { method: 'POST', headers: { 'Idempotency-Key': 't5b-reuse-approved' }, body: JSON.stringify({}) });
   assert.equal(reuseReplay.status, 200, 'replaying approved REUSE_PERSON intake must be idempotent.'); assertPublic(await reuseReplay.json());
   const localProfileCount = await pool.query<{ count: number }>('SELECT count(*)::int AS count FROM student_profiles WHERE institution_id = $1 AND person_id = $2', [ids.institutionA, ids.reusableStudent]);
   assert.equal(localProfileCount.rows[0].count, 1, 'REUSE_PERSON must not duplicate the existing StudentProfile.');
