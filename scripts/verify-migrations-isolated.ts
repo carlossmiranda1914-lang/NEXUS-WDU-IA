@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises';
+﻿import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -22,7 +22,7 @@ async function verifyMigrationsIsolated(): Promise<void> {
 
   try {
     await client.query(`CREATE SCHEMA ${schemaIdentifier}`);
-    await client.query(`SET search_path TO ${schemaIdentifier}`);
+    await client.query(`SET search_path TO ${schemaIdentifier}, public`);
 
     const migrationFiles = (await readdir(migrationsDirectory))
       .filter((name) => /^\d{4}_.+\.sql$/.test(name))
@@ -208,3 +208,4 @@ verifyMigrationsIsolated().catch((error) => {
   console.error('[MIGRATION-VERIFY]', error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });
+

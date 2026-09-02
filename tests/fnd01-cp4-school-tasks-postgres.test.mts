@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+﻿import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import pg from 'pg';
@@ -22,7 +22,7 @@ process.env.SQL_PORT = parsedUrl.port || '5432';
 process.env.SQL_USER = decodeURIComponent(parsedUrl.username);
 process.env.SQL_PASSWORD = decodeURIComponent(parsedUrl.password);
 process.env.SQL_DB_NAME = decodeURIComponent(parsedUrl.pathname.slice(1));
-process.env.SQL_OPTIONS = `-c search_path=${schema}`;
+process.env.SQL_OPTIONS = `-c search_path=${schema},public`;
 
 const adminPool = new pg.Pool({ connectionString: testUrl, connectionTimeoutMillis: 7000 });
 const migrationsDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations');
@@ -38,11 +38,11 @@ async function proveAmbiguousLegacyOwnershipFailsClosed(): Promise<void> {
     await client.query(`SET search_path TO ${legacySchemaIdentifier}, public`);
     const allMigrations = await discoverMigrations(migrationsDirectory);
     const preReconciliation = allMigrations.filter(({ filename }) => filename < '0018_');
-    await assert((await runMigrations(client, preReconciliation)).length === 17, 'Expected canonical migrations 0001–0017 before the negative fixture.');
+    await assert((await runMigrations(client, preReconciliation)).length === 17, 'Expected canonical migrations 0001â€“0017 before the negative fixture.');
     const beforeLedger = await client.query("SELECT filename FROM nexus_schema_migrations WHERE filename = '0018_fnd01_school_tasks_reconciliation.sql'");
     await assert(beforeLedger.rowCount === 0, '0018 must not be present before the negative fixture.');
 
-    // historical pre-migration fixture — not schema authority
+    // historical pre-migration fixture â€” not schema authority
     // This is the minimum former runtime-created shape needed to reproduce an
     // unmappable legacy row; it intentionally supplies no ownership defaults.
     await client.query('CREATE TABLE school_tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL, due_date DATE NOT NULL, limit_date DATE NOT NULL)');
@@ -62,7 +62,7 @@ async function proveAmbiguousLegacyOwnershipFailsClosed(): Promise<void> {
       const ledger = await client.query("SELECT filename FROM nexus_schema_migrations WHERE filename = '0018_fnd01_school_tasks_reconciliation.sql'");
       await assert(ledger.rowCount === 0, 'Failed 0018 must not enter the migration ledger.');
       const preserved = await client.query('SELECT count(*)::int AS count FROM nexus_schema_migrations');
-      await assert(preserved.rows[0]?.count === 17, 'Failure must preserve only migrations 0001–0017 in the ledger.');
+      await assert(preserved.rows[0]?.count === 17, 'Failure must preserve only migrations 0001â€“0017 in the ledger.');
     }
   } finally {
     try { await client.query(`DROP SCHEMA IF EXISTS ${legacySchemaIdentifier} CASCADE`); } finally { client.release(); }
@@ -74,7 +74,7 @@ try {
   const admin = await adminPool.connect();
   try {
     await admin.query(`CREATE SCHEMA ${schemaIdentifier}`);
-    await admin.query(`SET search_path TO ${schemaIdentifier}`);
+    await admin.query(`SET search_path TO ${schemaIdentifier}, public`);
     const migrations = await discoverMigrations(migrationsDirectory);
     const applied = await runMigrations(admin, migrations);
     await assert(applied.length === migrations.length, `Expected ${migrations.length} canonical migrations; applied ${applied.length}.`);
@@ -95,8 +95,8 @@ try {
   const createdHistory = await SchoolTaskRepository.getTaskHistoryTimeline(task.id, tenantA);
   await assert(createdHistory.length === 1 && createdHistory[0].action === 'CREATE', 'Create must persist its first snapshot.');
 
-  const updated = await SchoolTaskRepository.update(task.id, { status: 'Concluída' }, tenantA, 'actor-a');
-  await assert(updated.status === 'Concluída', 'Tenant-scoped update failed.');
+  const updated = await SchoolTaskRepository.update(task.id, { status: 'ConcluÃ­da' }, tenantA, 'actor-a');
+  await assert(updated.status === 'ConcluÃ­da', 'Tenant-scoped update failed.');
   const history = await SchoolTaskRepository.getTaskHistoryTimeline(task.id, tenantA);
   await assert(history.length === 2 && history[0].action === 'UPDATE', 'Update must persist a factual snapshot.');
   await assert(await SchoolTaskRepository.findById(task.id, tenantB) === null, 'Tenant B must not read Tenant A task.');
@@ -121,7 +121,7 @@ try {
     id: `task-rollback-${randomUUID()}`, title: 'Rollback task', description: 'snapshot failure paths', dueDate: '2026-09-01', limitDate: '2026-09-02',
   }, tenantA, 'school-a', 'org-a', 'actor-a');
   let updateFailureObserved = false;
-  try { await SchoolTaskRepository.update(rollbackTask.id, { status: 'Concluída' }, tenantA, null as unknown as string); } catch { updateFailureObserved = true; }
+  try { await SchoolTaskRepository.update(rollbackTask.id, { status: 'ConcluÃ­da' }, tenantA, null as unknown as string); } catch { updateFailureObserved = true; }
   await assert(updateFailureObserved, 'Update snapshot failure must propagate.');
   await assert((await SchoolTaskRepository.findById(rollbackTask.id, tenantA))?.status === 'Pendente', 'Update snapshot failure must roll back the task mutation.');
 
@@ -156,3 +156,5 @@ try {
   }
   await adminPool.end();
 }
+
+
