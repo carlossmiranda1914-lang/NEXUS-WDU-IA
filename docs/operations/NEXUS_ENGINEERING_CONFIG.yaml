@@ -12,10 +12,10 @@ active_work:
   program: ALUNOS
   mission: ALUNOS-01A.3
   mission_branch: codex/alunos-01a-design
-  durable_remote_checkpoint: c6aa28c0a0b799642960daec9abdc0b77269b680
+  durable_remote_checkpoint: 068dbcbd8b43eca8ae37ef96d6e008185fb67bd7
   activity: FINAL_HARDENING/CLOSEOUT
-  task: ENGINEERING-GOVERNANCE-HARDENING
-  task_name: Execution Governance Hardening
+  task: ALUNOS-FINAL-HARDENING
+  task_name: Final Continuity and Integrity Hardening
   state: IMPLEMENTING
   owner: Codex
   write_owner: CODEX
@@ -23,9 +23,11 @@ active_work:
   reviewer_mode: READ_ONLY
   risk: HIGH
   resume_rule: >-
-    Execute only the approved engineering governance hardening plan, then
-    independently review the exact resulting HEAD before any ALUNOS product
-    hardening or integration decision.
+    Execute only the bounded ALUNOS-01A.3 final hardening against the four
+    accepted product risk classes F2-F5, starting from checkpoint
+    068dbcbd8b43eca8ae37ef96d6e008185fb67bd7. Use RED -> root cause ->
+    minimal correction -> GREEN for each class, then independently review the
+    exact resulting HEAD before review-thread resolution, UAT or integration.
 
 execution:
   one_code_owner_per_unit: true
@@ -47,32 +49,63 @@ execution:
 
 scope:
   authorized:
-    - ALUNOS-01A.3 engineering governance hardening plan
+    - F2 state continuity: registration save -> refreshed versions -> same-drawer activation
+    - F3 lifecycle continuity: activation -> active -> reachable Student Record handoff
+    - F4 document policy continuity: supported ad-hoc document -> canonical policy capture/materialization
+    - F5 identity contract continuity: canonical resolver match reasons -> identity review queue
+    - focused regression tests required to prove F2-F5 with behavioral, PostgreSQL, HTTP, tenant and idempotency evidence
+    - final closeout truth updates to PROJECT_STATE, Mission Pack and this selector after independent review
   forbidden:
     - no new module
     - no unrelated refactor
     - no historical migration modification
     - no parallel writer
     - no automatic scope expansion
-    - no ALUNOS runtime or product fix
-    - no product code under src
-    - no migration change
+    - no Finance or unrelated module work
+    - no broad UI redesign
+    - no CI or workflow weakening
     - no new PR or branch
+    - no force push
     - destructive Git reconciliation without explicit authorization
+
+protected_invariants:
+  - browser never owns institution, Person, role, decision or case authority
+  - decisionRef remains opaque and non-authoritative by itself
+  - tenant boundaries fail closed and remain non-disclosing
+  - activation remains Administration/Direcao server authority
+  - activation remains transactional and idempotent
+  - historical applied migrations remain immutable
+  - Single Process Truth and Journey Rail remain canonical product model
+  - exactly one active StudentProfile invariant remains intact
+  - no duplicate Person, StudentProfile or Enrollment creation
+  - document validation cannot be weakened
+  - no hidden manual database dependency
 
 gates:
   task_green_requires:
-    - focused RED_GREEN proof where applicable
+    - focused RED_GREEN behavioral proof for each affected risk class
     - directly affected regressions
-    - independent review
+    - PostgreSQL proof where persistence is involved
+    - HTTP/tenant/security proof where authority is involved
+    - idempotency/concurrency proof where invalidated by the delta
+    - migration-isolation integrity proof
+    - independent review of the exact resulting HEAD
   mission_product_exit_requires:
     engineering_green: true
     integrity_green: true
     product_green: true
     adversarial_review: PASS
     human_uat_green: true
+    unresolved_p0: 0
+    unresolved_p1: 0
+    review_threads_adjudicated: true
   done_requires:
+    - all accepted F2-F5 root causes closed
+    - same-class variants audited
     - applicable gates satisfied
+    - current-head independent review
+    - affected Human UAT rerun where invalidated
+    - remote CI PASS
     - integration evidence
     - canonical project state updated
 
