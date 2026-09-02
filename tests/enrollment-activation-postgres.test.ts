@@ -51,7 +51,12 @@ async function seedValidatedEnrollment(label: string) {
 try {
   await bootstrap.query(`CREATE SCHEMA ${schemaIdentifier}`);
   const migrations = (await readdir(migrationsDirectory)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
-  for (const filename of migrations) await pool.query(await readFile(path.join(migrationsDirectory, filename), 'utf8'));
+  const migrationPool = new Pool({ connectionString, options: `-c search_path=${schemaName}` });
+  try {
+    for (const filename of migrations) await migrationPool.query(await readFile(path.join(migrationsDirectory, filename), 'utf8'));
+  } finally {
+    await migrationPool.end();
+  }
 
   await pool.query("INSERT INTO institutions (id,name,slug,status) VALUES ($1,'Escola Activation','activation','active')", [ids.institution]);
   await pool.query(

@@ -74,7 +74,7 @@ try {
   const admin = await adminPool.connect();
   try {
     await admin.query(`CREATE SCHEMA ${schemaIdentifier}`);
-    await admin.query(`SET search_path TO ${schemaIdentifier}, public`);
+    await admin.query(`SET search_path TO ${schemaIdentifier}`);
     const migrations = await discoverMigrations(migrationsDirectory);
     const applied = await runMigrations(admin, migrations);
     await assert(applied.length === migrations.length, `Expected ${migrations.length} canonical migrations; applied ${applied.length}.`);
@@ -156,5 +156,6 @@ try {
   }
   await adminPool.end();
 }
+
 
 
