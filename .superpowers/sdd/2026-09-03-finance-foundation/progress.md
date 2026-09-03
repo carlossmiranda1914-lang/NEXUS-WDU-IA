@@ -207,6 +207,12 @@ No test result may be inferred from source inspection or GitHub connector writes
 - `REGRESSIONS=Journal after_outbox rollback, reversals, Task 5 idempotency and isolated 30-migration chain PASS.`
 - `TASK_8=NOT_STARTED`
 
+## Task 7 — P1 durable lease proof expansion
+
+- `POSTGRES_PROOF=fail persists TEMP, increments attempts exactly once and clears lease; a fresh pg.Pool recovers pending work; concurrent claim awards an id once; unexpired leases are skipped and expired leases are reclaimed.`
+- `REGRESSIONS=Task 7/schema/Journal/Reversal/Idempotency and isolated migrations PASS.`
+- `TASK_8=NOT_STARTED`
+
 ## Task 6 — P1 reversal negative coverage
 
 - `REVIEWED_HEAD=b9a6788c79c8aea006d5b6ad9bb97847688a05e9`
