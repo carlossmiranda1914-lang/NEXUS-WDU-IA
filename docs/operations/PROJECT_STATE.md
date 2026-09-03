@@ -4,118 +4,86 @@ Updated: 2026-09-03
 
 ## Integrated baseline
 
-`main @ f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e` remains the integrated capability authority. Foundation Authority Convergence, IAM/institutional access, Enrollment authority, Academic Core, Student 360 and ALUNOS Product Integrity are integrated. PR #87 is merged and ALUNOS must not be reopened by the Finance mission.
+`main @ f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e` remains the integrated capability authority. Existing Foundation/IAM/Enrollment/Academic/Student/ALUNOS capability remains unchanged. Finance Foundation is still branch-scoped and not integrated.
 
 ## Active product program
 
 **FINANCE FOUNDATION — IMPLEMENTING, mission-scoped and not yet integrated.**
 
-Product Owner approval has closed Finance Foundation design F0-F4 and approved the implementation specification and implementation plan.
-
-Accepted predecessor checkpoints:
+Accepted checkpoints:
 
 - Task 1 — Monetary Primitives: `8202dee1cdc7bb6878cf5b044ad2a17eb29b4798`, P0=0, P1=0.
 - Task 2 — Institution Financial Context: `49e5c06e9b5603cc814bffa047d9f009c2a10549`, P0=0, P1=0.
 - Task 3 — Canonical Finance Persistence Schema: `2f09580f7814da2fa8b15d063d83f6df53f328b1`, P0=0, P1=0.
+- Task 4 — Journal Domain + Atomic Repository: `2a84191c22abe31adb39af1e15748b0b48b4e9c8`, P0=0, P1=0.
 
-Task 3 persistence decision: PostgreSQL fixed-scale `NUMERIC(p,s)` was proven to silently round excessive fractional scale. The accepted physical mapping is exact `NUMERIC` plus explicit scale/magnitude CHECK constraints enforcing the F2 Money 30/12 and rate 30/18 envelopes. Future work must not revert this to a typmod that reintroduces silent rounding.
+Task 3 exactness decision remains canonical: exact PostgreSQL `NUMERIC` plus explicit scale/magnitude checks, not fixed-scale typmods that silently round excessive scale.
 
-The active executable mission is:
+Task 4 established real PostgreSQL atomic confirmation of Journal transaction, complete entries, audit, structural command-result linkage and outbox, including rollback failure injection. Its command-result `request_fingerprint` value is explicitly provisional: Task 5 owns final canonical fingerprint/idempotency semantics.
 
-- Mission: `FINANCE-FOUNDATION-04 — Journal Domain + Atomic Repository`
+## Active executable mission
+
+- Mission: `FINANCE-FOUNDATION-05 — Canonical Command Idempotency + Concurrency`
 - Branch: `codex/finance-foundation-01`
-- Mission Pack: `docs/roadmap/missions/FINANCE-FOUNDATION-04.md`
+- Mission Pack: `docs/roadmap/missions/FINANCE-FOUNDATION-05.md`
 - Spec: `docs/superpowers/specs/2026-09-03-finance-foundation-implementation-design.md`
 - Plan: `docs/superpowers/plans/2026-09-03-finance-foundation-implementation.md`
 - Writer: Codex
-- Reviewer: Antigravity, READ-ONLY on the exact implementation HEAD
+- Reviewer: Antigravity, READ-ONLY on exact implementation HEAD
 
-Implementation authorization remains limited to Task 4. Task 5+ and upper Finance domains remain unauthorized.
+Implementation authorization is limited to Task 5. Task 6+ and upper Finance remain unauthorized.
 
-## Task 4 schema adjudication
+## Current Task 5 objective
 
-Task 4 preflight correctly STOPped before RED because the accepted Task 3 `finance_journal_transactions` table could not preserve mandatory approved provenance from `ConfirmJournalInput`: `commandId`, `journalType`, `actorPersonId`, `financialProfileVersion`, and optional `reason`.
+Create one canonical command/idempotency authority that:
 
-This is adjudicated as a local persistence-contract gap, not a reopening of F0-F4 or Task 3 architecture.
+- scopes identity by institution + operation namespace + idempotency key;
+- uses deterministic SHA-256 fingerprint over server-canonical semantic input;
+- replays same identity/same fingerprint without duplicate economic fact;
+- rejects same identity/different fingerprint without duplicate economic fact;
+- relies on PostgreSQL uniqueness as final concurrency arbiter;
+- allows distinct keys with identical economic content as distinct legitimate commands;
+- recovers persisted result after lost response;
+- preserves Task 4 Journal atomicity.
 
-A single append-only migration is now explicitly authorized, provided migration preflight still finds `0029` as the next free number:
+Task 4's provisional use of `commandId` as `request_fingerprint` must not survive as final semantics or become a second authority.
 
-- `src/db/migrations/0029_finance_journal_provenance.sql`
+## Required sequence
 
-It may add only:
+`DB safety -> Task 5 PostgreSQL RED -> canonical fingerprint + command boundary -> sequential replay/conflict GREEN -> real concurrent same-identity proof -> distinct-key proof -> lost-response recovery -> Task 4 Journal regression -> schema/migration regressions -> lint -> build -> git diff --check -> checkpoint -> STOP before Task 6`.
 
-- `command_id TEXT NOT NULL`;
-- `journal_type TEXT NOT NULL` constrained to the two approved foundation Journal types;
-- `actor_person_id UUID NOT NULL` referencing canonical `people(id)` with `ON DELETE RESTRICT`;
-- `financial_profile_version INTEGER NOT NULL`;
-- nullable `reason TEXT`;
-- tenant-safe `(institution_id, financial_profile_version)` FK to `finance_profile_versions(institution_id, version)` with `ON DELETE RESTRICT`.
+## Protected invariants
 
-No Task 5 idempotency/replay uniqueness is authorized in this migration. Migrations `0027` and `0028` remain immutable.
-
-## Current authorized sequence
-
-`DB safety + migration preflight -> schema RED for missing provenance -> append-only 0029 -> schema GREEN -> Journal behavioral RED -> minimum Journal domain/repository -> PostgreSQL atomic happy path -> failure-injection rollback proofs -> tenant/currency/position/profile negatives -> Task 3 schema regression -> migration bootstrap/checksum regression -> lint -> build -> git diff --check -> checkpoint -> STOP before Task 5`.
-
-## Task 4 protected invariants
-
-- mandatory Journal provenance is stored authoritatively, not hidden only in audit metadata;
-- financial profile provenance is tenant-safe by institution + version;
-- confirmed Journal facts are append-only economic authority;
-- prepared/non-confirmed state has zero canonical financial effect;
-- confirmation is server-authoritative and atomic;
-- transaction, complete entries, required audit and mandatory outbox intent commit in one PostgreSQL transaction or none survive;
-- every entry has explicit economic position type;
-- implicit FX is forbidden;
-- Money remains exact and never crosses authoritative boundaries as JavaScript `number`;
-- institution ownership remains server-derived and tenant-safe;
-- destructive correction of confirmed facts is forbidden; correction is later append-only economic fact;
-- no provider/network call occurs inside the canonical DB transaction;
-- Task 4 does not implement Task 5 command replay/idempotency concurrency semantics.
-
-## Explicitly forbidden in the current task
-
-- Task 5 or later Finance Foundation implementation;
-- any migration beyond the explicitly adjudicated minimal Journal provenance amendment;
-- command-level idempotency/replay/concurrency behavior;
-- Payment, Allocation, Reconciliation, providers, fiscal/reporting or Finance UI;
-- implicit FX;
-- JavaScript-number or PostgreSQL floating-point monetary authority;
-- UPDATE/DELETE correction of confirmed economic facts;
-- external network/provider calls inside Finance DB transaction;
-- runtime business DDL or alternate migration authority;
-- unrelated IAM, Enrollment or ALUNOS refactor;
-- parallel writer or automatic scope expansion.
+- Tasks 1–4 remain closed unless new concrete evidence proves regression.
+- No broad re-audit or architecture reopening is authorized.
+- No migration is authorized by default in Task 5.
+- PostgreSQL uniqueness remains final concurrency arbiter; process memory cannot substitute.
+- Exactly one command-result authority may exist after integration.
+- Journal fact + entries + audit + command result + outbox remain atomic.
+- Money remains exact; no JavaScript-number or floating-point monetary authority.
+- Tenant boundaries remain institution-scoped and fail closed.
+- No provider/network call inside the canonical DB transaction.
+- Task 5 does not implement reversals, Payment, Allocation, Reconciliation, providers, fiscal/reporting or Finance UI.
 
 ## Engineering governance
 
-The canonical engineering operating model remains active: Risk -> Proof -> Tool -> DONE, one writer per authority unit, SHA-bound handoffs, TDD/stateful proof for implementation, independent review, root-cause discipline and truthful evidence.
+The operating standard remains: **priority clear, no useless cycles, no silent scope expansion, no false GREEN, advance immediately once sufficient evidence exists.**
 
-For Task 4, source inspection cannot substitute for schema or atomicity proof. The provenance FK and rollback behavior require real disposable PostgreSQL execution.
+For Task 5, concurrency/replay/lost-response claims require real disposable PostgreSQL evidence. Source inspection or AST/string tests cannot substitute for stateful proof.
 
-STOP conditions remain binding. A STOP must be resolved by root cause, concrete external dependency or actual architecture/product escalation; tests/configuration may not be weakened to force progress.
+A STOP must identify a concrete blocker/root cause. Do not weaken tests, safety or authority boundaries to force progress.
 
 ## Deferred domains
 
-- Finance Foundation: ACTIVE through `FINANCE-FOUNDATION-04`.
-- Finance Foundation Task 5+: NOT AUTHORIZED YET.
-- Finance product domains beyond the approved foundation: NOT STARTED.
-- Assessment: NOT STARTED.
-- Attendance: NOT STARTED.
-- Physical document storage/upload: separate future work.
+- Finance Foundation: ACTIVE through Task 5.
+- Task 6+: NOT AUTHORIZED YET.
+- Finance product domains beyond foundation: NOT STARTED.
+- Assessment/Attendance/other roadmap domains: unchanged.
 
 ## Canonical versus branch work
 
-Only merged `main` commits are integrated product capability. The Finance mission branch contains authorized implementation work but remains non-integrated until its gates and merge are complete. Chat/session history is not canonical project memory.
-
-## Recovery entrypoint
-
-Resume by reading, in order: `AGENTS.md`, `docs/README.md`, this file, `docs/operations/NEXUS_ENGINEERING_CONFIG.yaml`, the active Mission Pack/spec/plan and the applicable execution adapter. Then verify Git reality before editing.
+Only merged `main` is integrated product capability. Finance branch work remains non-integrated until the full approved Foundation gate and integration process complete.
 
 ## Next authorized action
 
-Resume `FINANCE-FOUNDATION-04` in the existing clean isolated worktree on branch `codex/finance-foundation-01`.
-
-Synchronize to current remote HEAD, run the canonical local PostgreSQL safety bootstrap, confirm `0029` remains next free, then extend the schema PostgreSQL test first and observe the provenance RED. Only then create the explicitly authorized `0029_finance_journal_provenance.sql`. After schema GREEN, proceed to the Journal behavioral RED and Task 4 implementation.
-
-Do not start Task 5.
+Synchronize the existing clean `worktrees/finance-foundation-01` to the current remote branch HEAD and execute `FINANCE-FOUNDATION-05.md` only. Observe a valid Task 5 RED before production implementation. Stop before Task 6.
