@@ -1,17 +1,15 @@
 # Nexus Edu IA — F3 Ledger Model Review & Proof Contract
 
-**State:** REVIEW — NOT IMPLEMENTATION AUTHORITY  
-**Scope:** approved F3-D01 through F3-D07, F0–F2 constraints, canonical Finance architecture, and Nexus engineering governance.
+**State:** DESIGN-CLOSED — NOT IMPLEMENTATION AUTHORITY  
+**Scope:** approved F3-D01 through F3-D08, F0–F2 constraints, canonical Finance architecture, and Nexus engineering governance.
 
 ## Executive determination
 
-F3-D01 through F3-D07 are internally coherent and sufficient to define the operational ledger boundary without introducing a statutory/general-ledger accounting system.
+F3-D01 through F3-D08 are approved and internally coherent. They define the operational ledger boundary without introducing a statutory/general-ledger accounting system.
 
 No additional P0/P1 architectural gap was found that justifies opening F3-D09 before the foundation implementation gate. Remaining persistence mechanics belong to F4; payment/allocation/reconciliation workflow details belong to later domain slices.
 
-F3 is **NOT YET DESIGN-CLOSED** until F3-D08 and Product Owner closure are explicitly approved.
-
-## Approved F3 decisions under review
+## Approved F3 decisions
 
 ### F3-D01 — Operational Financial Journal Authority
 The Nexus Finance Journal is institution-scoped, immutable/append-oriented operational economic authority. Confirmed economic events are represented by explicitly typed Journal Transactions and semantically typed positions/entries sufficient to reconstruct financial effect and provenance. The Journal is not a mutable balance store and FINANCE-01 does not thereby become a full statutory/general accounting ledger.
@@ -34,11 +32,8 @@ Journal facts and authoritative Finance aggregates are economic truth; balances,
 ### F3-D07 — Idempotency, Concurrency & Duplicate Economic Fact Law
 Every authoritative command capable of creating/compensating an economic fact has server-verifiable idempotency identity within institutional and operation scope. Repeated delivery of the same canonical intent returns/references the established result rather than creating another effect. Same idempotency identity with materially different canonical content fails closed. Provider/external identities are preserved in valid scope but never substitute for tenant authorization. Concurrency protection must reach the persistence boundary; check-then-write races are not an acceptable guarantee.
 
-# F3-D08 — Proof Contract & Closure Gate
-
-**Status: PROPOSED — awaiting explicit Product Owner approval.**
-
-F3 may be considered design-complete only if its future implementation plan carries the following blocking proof matrix. A lower proof class cannot substitute for the required higher proof class.
+### F3-D08 — Proof Contract & Closure Gate
+**APPROVED.** F3 implementation claims are valid only when the proof class matches the material risk. Lower proof classes cannot substitute for stateful persistence, concurrency, authorization or tenant proof. Failure of a blocking condition prevents DONE and prevents dependent Finance layers from treating the foundation as proven.
 
 | Material risk / invariant | Required proof | Primary tool/evidence | Blocking condition |
 | --- | --- | --- | --- |
@@ -66,7 +61,6 @@ F3 may be considered design-complete only if its future implementation plan carr
 
 ## Required evidence classes by Nexus governance
 
-Nexus engineering governance requires:
 - domain policy risks → executable unit/domain proof;
 - HTTP/authorization risks → positive and negative HTTP integration proof;
 - persistence/concurrency/idempotency risks → disposable PostgreSQL scenarios;
@@ -115,16 +109,15 @@ Cross-check against F0–F2 and the canonical roadmap found:
 - no contradiction with server-authoritative tenant/capability rules;
 - no need to introduce full double-entry statutory accounting at this foundation stage;
 - no need to define Payment/Allocation/Reconciliation workflow states inside F3;
-- no unresolved P0/P1 F3 design gap beyond approving this proof/closure contract.
+- no unresolved P0/P1 F3 design gap.
 
-## Candidate closure state
+## Closure
 
-If F3-D08 is explicitly approved by the Product Owner:
+**F3_STATUS=DESIGN-CLOSED**  
+**PRODUCT_OWNER_APPROVAL=YES**  
+**KNOWN_F3_P0_DESIGN_GAPS=0**  
+**KNOWN_F3_P1_DESIGN_GAPS=0**  
+**IMPLEMENTATION_AUTHORIZED=NO**  
+**NEXT_STAGE=F4_MINIMUM_TRANSACTION_AND_PERSISTENCE_DESIGN**
 
-`F3_STATUS=DESIGN-CLOSED`  
-`KNOWN_F3_P0_DESIGN_GAPS=0`  
-`KNOWN_F3_P1_DESIGN_GAPS=0`  
-`IMPLEMENTATION_AUTHORIZED=NO`  
-`NEXT_STAGE=F4_MINIMUM_TRANSACTION_AND_PERSISTENCE_DESIGN`
-
-F3 closure will authorize only the minimal F4 design needed to make F0–F3 implementable and testable. It will not authorize Payments, Allocation, Reconciliation, Reporting or the complete Finance module.
+F3 closure authorizes only the minimal F4 design needed to make F0–F3 implementable and testable. It does not authorize Payments, Allocation, Reconciliation, Reporting or the complete Finance module.
