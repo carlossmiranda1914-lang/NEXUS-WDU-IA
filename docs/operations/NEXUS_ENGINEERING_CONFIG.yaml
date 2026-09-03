@@ -10,26 +10,25 @@ project:
 
 active_work:
   program: FINANCE_FOUNDATION
-  mission: FINANCE-FOUNDATION-07
+  mission: FINANCE-FOUNDATION-08
   mission_branch: codex/finance-foundation-01
-  durable_remote_checkpoint: 3e738704a66f88105f10edb02f517ba965db0d9e
+  durable_remote_checkpoint: ff5b91e40d756dcf9f2363c487386f08c972c9e5
   activity: IMPLEMENTATION
-  task: TASK-7-PROJECTION-RECOVERY-DURABLE-OUTBOX
-  task_name: Projection recovery and durable outbox
-  state: READY_AFTER_SCHEMA_ADJUDICATION
+  task: TASK-8-LEGACY-AUTHORITY-FENCE-AGGREGATE-GATE
+  task_name: Legacy authority fence and aggregate Finance Foundation gate
+  state: READY
   owner: Product Owner
   write_owner: CODEX
   reviewer: ANTIGRAVITY
   reviewer_mode: READ_ONLY
   risk: HIGH
   resume_rule: >-
-    Resume only FINANCE-FOUNDATION-07 in the existing clean isolated worktree. The prior STOP is
-    adjudicated: if 0030 is still next free, first RED the schema proof then add only
-    0030_finance_outbox_recovery.sql with claimed_at, claim_expires_at and last_error_code plus
-    lease-consistency constraints. Then RED/GREEN the Task 7 projection/outbox behavior. Prove
-    confirmed-only rebuild, destroy/rebuild equivalence, historical reproducibility, mandatory
-    outbox rollback, fresh-process recovery, durable fail/retry, concurrent non-overlapping claims
-    and expired-lease recovery on real PostgreSQL. Stop before Task 8.
+    Resume only FINANCE-FOUNDATION-08 in the existing clean isolated worktree. Treat this as a
+    closure and verification task, not a new feature slice. Discover the real legacy mutable
+    Finance balance path, RED then prove that it cannot alter canonical Journal/projection truth.
+    Build one deterministic fail-fast aggregate Finance Foundation runner over Tasks 1 through 8,
+    run fresh PostgreSQL/migration/tenant/lint/build/diff gates, checkpoint and STOP for independent
+    exact-HEAD review. Do not merge and do not start upper Finance domains.
 
 execution:
   one_code_owner_per_unit: true
@@ -39,47 +38,41 @@ execution:
 
 scope:
   authorized:
-    - FINANCE-FOUNDATION-07 Task 7 only
-    - src/db/migrations/0030_finance_outbox_recovery.sql only if 0030 remains next free
-    - src/modules/finance/finance-projection.ts
-    - src/modules/finance/finance-outbox.ts
-    - tests/finance-projection-recovery-postgres.test.ts
-    - tests/finance-foundation-schema-postgres.test.ts narrow 0030 proof
-    - package.json narrow Task 7 test alias if required
-    - narrow existing Journal test adjustment only for mandatory-outbox rollback proof
+    - FINANCE-FOUNDATION-08 Task 8 only
+    - tests/finance-foundation-authority-fence.test.ts
+    - scripts/run-finance-foundation.mjs
+    - package.json narrow Finance test aliases and aggregate gate
     - execution record updates
+    - one narrowly-proved existing legacy adapter or service fence only if Task 8 RED proves it necessary
   forbidden:
-    - Task 8 or later Finance Foundation work
-    - any migration beyond the explicitly adjudicated 0030
-    - rewrite of migrations 0027 through 0029
-    - worker identity or provider-delivery product semantics
-    - second Journal idempotency projection or outbox authority
+    - new migration or Finance table
+    - reopen Tasks 1 through 7 without concrete regression evidence
+    - new Finance product behavior
     - Payment Allocation Reconciliation provider fiscal reporting or Finance UI
+    - import or conversion of legacy balances into confirmed Journal history
+    - second Finance balance projection or authority
+    - direct browser client AI Excel or provider write to Journal
     - implicit FX or JavaScript-number monetary authority
-    - process-local queue lock or lease as correctness authority
-    - destructive mutation of confirmed Journal facts
-    - current policy or FX reinterpretation of historical facts
-    - external network/provider delivery implementation
-    - runtime business DDL or alternate migration authority
     - unrelated IAM Enrollment ALUNOS refactor
     - parallel writer
     - automatic scope expansion
-    - CI or workflow weakening
+    - CI or safety-gate weakening
     - force push
+    - merge to main before independent review and Product Owner adjudication
 
 protected_invariants:
-  - Tasks 1 through 6 accepted behavior remains intact
-  - Journal remains canonical economic truth and projection remains rebuildable read authority
-  - prepared or non-confirmed data contributes zero to projection
-  - projection arithmetic uses exact Money and keeps currencies separate
-  - projection rebuild depends only on persisted historical authority not current policy FX browser or legacy balance
-  - mandatory outbox intent remains atomic with the Journal fact
-  - active outbox claim is a durable time-bounded PostgreSQL lease
-  - unexpired leased rows are not claimable and expired leases are recoverable
-  - attempts and last_error_code preserve durable failure retry state
-  - completion is idempotent and completed rows are never reclaimed
-  - consumer correctness cannot depend on process-local memory
-  - Task 7 does not implement provider delivery or upper Finance domains
+  - Tasks 1 through 7 accepted behavior remains intact
+  - Journal remains canonical economic truth
+  - projection remains confirmed-only rebuildable read authority
+  - legacy outstandingFees or equivalent mutable fields are not canonical Finance balance authority
+  - mutating legacy convenience balance cannot change canonical Finance position or Journal facts
+  - exact Money and currency separation remain enforced
+  - financial context remains server-authoritative and fail closed
+  - idempotency concurrency reversal and recovery contracts remain PostgreSQL-backed
+  - tenant isolation remains fail closed
+  - migration history remains immutable
+  - aggregate gate fails closed and preserves child failures
+  - branch GREEN does not equal integrated main
 
 gates:
   product_owner_finance_foundation_spec_approved: true
@@ -91,6 +84,7 @@ gates:
   task_4_accepted_head: 2a84191c22abe31adb39af1e15748b0b48b4e9c8
   task_5_accepted_head: 6222eabe69cb76322551ba8bcdaea3a0ec2646fd
   task_6_accepted_head: 3e738704a66f88105f10edb02f517ba965db0d9e
+  task_7_accepted_head: ff5b91e40d756dcf9f2363c487386f08c972c9e5
   task_1_unresolved_p0: 0
   task_1_unresolved_p1: 0
   task_2_unresolved_p0: 0
@@ -103,34 +97,31 @@ gates:
   task_5_unresolved_p1: 0
   task_6_unresolved_p0: 0
   task_6_unresolved_p1: 0
-  task_7_schema_red_required: true
-  task_7_0030_append_only_required: true
-  task_7_postgres_red_required: true
-  task_7_confirmed_only_projection_required: true
-  task_7_destroy_rebuild_required: true
-  task_7_historical_reproducibility_required: true
-  task_7_mandatory_outbox_rollback_required: true
-  task_7_restart_recovery_required: true
-  task_7_durable_retry_required: true
-  task_7_concurrent_claim_safety_required: true
-  task_7_expired_lease_recovery_required: true
-  task_6_reversal_regression_required: true
-  task_5_idempotency_regression_required: true
-  task_4_atomicity_regression_required: true
+  task_7_unresolved_p0: 0
+  task_7_unresolved_p1: 0
+  task_8_red_required: true
+  task_8_real_legacy_path_discovery_required: true
+  task_8_behavioral_legacy_fence_required: true
+  task_8_finance_import_fence_required: true
+  task_8_aggregate_fail_fast_required: true
+  finance_foundation_fresh_aggregate_required: true
   migration_schema_regression_required: true
+  fnd01_migration_regression_required: true
+  fnd03_tenant_regression_required: true
   lint_required: true
   build_required: true
   diff_check_required: true
+  exact_head_independent_review_required_after_checkpoint: true
   unresolved_p0: 0
   unresolved_p1: 0
 
 next_program:
   program: FINANCE_FOUNDATION
   roadmap_priority: 6
-  state: IMPLEMENTING
+  state: IMPLEMENTING_FINAL_GATE
   authorized_phase: EXECUTION
   implementation_authorized: true
-  authorization_scope: FINANCE-FOUNDATION-07_TASK_7_WITH_ADJUDICATED_0030_ONLY
+  authorization_scope: FINANCE-FOUNDATION-08_ONLY
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -144,7 +135,7 @@ resource_policy:
     - required_quality_gates
 
 integration:
-  technical_task_checkpoint: TASK_6_ACCEPTED_TASK_7_SCHEMA_ADJUDICATED
+  technical_task_checkpoint: TASK_7_ACCEPTED_TASK_8_READY
   mission_to_main: NOT_READY
   dirty_worktree_allowed: false
 
