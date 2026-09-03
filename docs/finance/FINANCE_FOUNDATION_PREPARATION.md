@@ -53,11 +53,9 @@ FINANCE-01 will not attempt full accounting-grade FX revaluation, automatic FX g
 ## F0-D01 — Authoritative Financial Journal + domain aggregates + derived projections
 **APPROVED.**
 
-Finance will not use full event sourcing as its default architecture and will not accept mutable financial tables plus an audit log as sufficient authority.
-
 > **Authority model: Authoritative Financial Journal + domain aggregates + derived projections.**
 
-A canonical financial fact is an economic event accepted by the server as valid and persisted atomically under authorized institutional context with enough provenance/evidence to be audited and, when necessary, compensated without destructive historical rewriting.
+Finance will not use full event sourcing as its default architecture and will not accept mutable financial tables plus an audit log as sufficient authority. A canonical financial fact is an economic event accepted by the server as valid and persisted atomically under authorized institutional context with enough provenance/evidence to be audited and, when necessary, compensated without destructive historical rewriting.
 
 A fact preserves as applicable: tenant/institution, fact type, cause/origin, domain references, monetary amount(s) with currency, economic effective time, recorded time, actor/system authority, idempotency/correlation identity, source/provider/evidence and reversal/compensation relationship.
 
@@ -72,72 +70,118 @@ The Journal is an operational financial subledger authority for Nexus, designed 
 
 > **Confirmed economic facts are immutable. Operational lifecycle may evolve only through explicit, authorized and auditable transitions that do not rewrite historical economic meaning. Material corrections use new compensating/reversal facts.**
 
-Consequences:
-- original confirmed amount/currency/cause/economic provenance cannot be silently overwritten;
-- destructive deletion is not a financial correction mechanism;
-- later settlement, reconciliation, overdue condition or workflow state does not mutate the original economic fact;
-- material correction creates linked compensating/reversal authority;
-- non-economic administrative metadata may be correctable only under an explicit policy and audit trail, and must never be used to smuggle a change to economic meaning;
-- aggregate lifecycle state is operational state, not replacement authority for the underlying facts.
+Original confirmed amount/currency/cause/economic provenance cannot be silently overwritten; destructive deletion is not a correction mechanism; settlement/reconciliation/overdue/workflow state does not mutate the original fact; material correction creates linked compensating/reversal authority. Non-economic metadata is correctable only under explicit policy/audit and cannot smuggle a change to economic meaning.
 
 ## F0-D03 — Derived Balance Law
 **APPROVED.**
 
 > **Balances and financial positions are deterministic derived projections, never independently editable authority. Persisted/materialized projections must be rebuildable and verifiable against canonical financial authority.**
 
-Consequences:
-- no new `balance`, `outstandingFees`, `amountDue` or equivalent mutable field may become a second source of truth;
-- a projection may be persisted for performance, but is disposable/rebuildable from canonical authority;
-- projection state must preserve sufficient checkpoint/provenance to support verification and controlled rebuild;
-- if a projection disagrees with canonical authority, the Journal/facts win and the mismatch is a detectable operational exception; Finance must not rewrite the Journal merely to make a dashboard match;
-- allocation matters: a confirmed payment does not automatically reduce a specific obligation unless the applicable allocation/settlement fact exists;
-- unapplied money remains an explicit financial position and cannot disappear into an aggregate total;
-- cross-currency balances cannot be silently combined without an explicit valid conversion/reporting policy;
-- Student 360, reports, XLSX, BI and operational dashboards consume authorized read models rather than recalculate independent balances.
+No new `balance`, `outstandingFees`, `amountDue` or equivalent mutable field may become a second source of truth. Materialized projections may exist for performance but are disposable/rebuildable and must carry sufficient checkpoint/provenance for verification. If a projection disagrees with canonical authority, the Journal/facts win and the mismatch is an operational exception.
 
-Example invariant: if an obligation is 300 EUR, a confirmed payment is 200 EUR, and only 150 EUR is validly allocated to that obligation, its outstanding position is 150 EUR; the remaining 50 EUR is represented separately as unapplied/available value according to the later allocation model.
+Allocation matters: confirmed payment does not automatically reduce a specific obligation. Unapplied money remains an explicit financial position. Different currencies cannot be silently aggregated without valid conversion/reporting policy. Student 360, reports, XLSX, BI and dashboards consume authorized read models.
+
+Example: obligation 300 EUR + confirmed payment 200 EUR + only 150 EUR validly allocated = obligation outstanding 150 EUR and 50 EUR represented separately as unapplied/available value under the later allocation model.
+
+## F0-D04 — Separation of Financial Authorities
+**APPROVED.**
+
+> **Obligation, Payment, Allocation, Financial Document and Reconciliation represent different truths. None may impersonate or silently mutate the authority of another. Their relationships must be explicit.**
+
+### Obligation
+Represents an authorized economic amount due because of a legitimate rule/cause/context. It answers **what is owed, why, by/for which financial context, in which currency and under which effective terms**. An obligation is not proof that money was received and is not itself a fiscal/payment document.
+
+### Payment
+Represents money/value whose receipt (or, for payables, outgoing settlement) has reached the server-authoritative confirmation threshold defined for its rail/provider/method. A browser click, UI status or generated receipt cannot alone create `PaymentConfirmed` authority.
+
+A confirmed payment may exist without being allocated to any obligation.
+
+### Allocation
+Represents the explicit application of confirmed financial value to one or more eligible obligations/positions. Allocation is the authority that links available payment/credit value to a particular obligation settlement effect.
+
+A payment does **not** automatically settle an obligation merely because amount, payer or timing appears to match. Deterministic auto-allocation may later be allowed only through an explicit policy that creates auditable allocation authority.
+
+Allocation must eventually enforce invariants such as no over-allocation beyond eligible available value, explicit currency/conversion semantics, tenant/context compatibility and idempotent/concurrency-safe application. Exact rules belong to later design.
+
+### Financial Document
+Invoice, receipt, credit/debit note, fiscal document and supporting evidence represent/document financial facts according to operational and jurisdictional requirements. A document is not automatically the authority for payment, allocation, reconciliation or balance.
+
+Document lifecycle may be legally/fiscally important and can constrain later operations, but it remains a distinct authority boundary. Country-specific fiscal semantics belong to jurisdiction adapters rather than being hard-coded into the canonical Finance Core.
+
+### Reconciliation
+Represents the verified relationship between Nexus financial records and an independent/external source of evidence such as provider settlement, bank movement, cash-close evidence or another approved reconciliation source.
+
+Reconciliation does not create payment merely because an external line exists, and payment confirmation does not by itself prove reconciliation. Matching, exception handling and deterministic reconciliation policy will be designed separately.
+
+### Failure-safe consequence
+The system must be able to represent legitimate intermediate states instead of forcing false success. For example:
+
+`Obligation = 300 EUR`
+
+`PaymentConfirmed = 300 EUR`
+
+`Allocation = not yet created because processing failed`
+
+Then the correct state is **300 EUR received/unapplied and the obligation still outstanding by 300 EUR**. The system must recover/retry the allocation idempotently; it must not silently mark the obligation paid merely because the amounts coincide.
+
+Similarly, a payment may be allocated but still await external reconciliation, and a financial document may exist without implying payment.
+
+### Authority relationship
+Conceptually:
+
+`Obligation -> amount legitimately due`
+
+`Payment -> value confirmed received/outgoing`
+
+`Allocation -> explicit application of value to obligation/position`
+
+`Financial Position -> derived from canonical facts + allocations/adjustments`
+
+`Reconciliation -> verified correspondence with independent evidence`
+
+`Financial Document -> jurisdiction-aware representation/evidence of applicable facts`
+
+These relationships must be represented by explicit references/facts and not by hidden status coupling.
 
 ## F0 constitutional laws accumulated so far
 1. Confirmed economic facts are append-only historical authority.
 2. Material corrections use compensating/reversal facts, never destructive rewrite/delete.
 3. Balance is derived and never independently editable authority.
-4. Obligation, invoice/document, payment, allocation and reconciliation are distinct concepts.
-5. Browser assertion alone cannot confirm a canonical financial fact.
-6. Institution/tenant authority is server-derived and fail-closed.
-7. No canonical financial operation may cross institution boundaries.
-8. Critical financial commands require idempotent semantics.
-9. Concurrency safety must be enforceable at PostgreSQL authority boundaries where applicable.
-10. Every monetary amount carries explicit currency semantics.
-11. Economic effective time and recorded time are distinct where both matter.
-12. Read models must be rebuildable/correctable without mutating historical economic facts.
-13. Reports, Excel, BI and Student 360 consume authorized projections rather than parallel financial truth.
-14. No new authority may be built on legacy mutable `outstandingFees`, browser state or similar transitional paths.
-15. Projection divergence is an exception to detect/reconcile, not permission to mutate historical authority.
+4. Obligation, Payment, Allocation, Financial Document and Reconciliation are distinct authorities with explicit relationships.
+5. Payment confirmation alone does not imply obligation settlement; allocation is required for the settlement effect.
+6. Allocation alone does not imply external reconciliation.
+7. A document does not create payment/balance truth merely by existing.
+8. Browser assertion alone cannot confirm a canonical financial fact.
+9. Institution/tenant authority is server-derived and fail-closed.
+10. No canonical financial operation may cross institution boundaries.
+11. Critical financial commands require idempotent semantics.
+12. Concurrency safety must be enforceable at PostgreSQL authority boundaries where applicable.
+13. Every monetary amount carries explicit currency semantics.
+14. Economic effective time and recorded time are distinct where both matter.
+15. Read models must be rebuildable/correctable without mutating historical economic facts.
+16. Reports, Excel, BI and Student 360 consume authorized projections rather than parallel financial truth.
+17. No new authority may be built on legacy mutable `outstandingFees`, browser state or similar transitional paths.
+18. Projection divergence is an exception to detect/reconcile, not permission to mutate historical authority.
+19. Legitimate intermediate/failure states must remain representable; the system must never manufacture a successful downstream state to hide an incomplete workflow.
 
 # Other accepted directions
 
 ## Financial Obligation
-A financial obligation is distinct from invoice/fiscal document, payment, allocation, balance/read model, Student and Enrollment. It represents a legitimate amount due because of an authorized cause/rule/context. Historical obligations preserve the economically relevant rule/version snapshot. Retry/concurrency must not duplicate the same economic cause. Exact idempotency/constraint design belongs to F4.
+Historical obligations preserve the economically relevant rule/version snapshot. Retry/concurrency must not duplicate the same economic cause. Exact idempotency/constraint design belongs to F4.
 
 ## International adaptation boundary
-Canonical Finance remains stable while configuration/adapters resolve payment rails/providers (including MULTICAIXA/MCX Express, KWiK, MB WAY, MULTIBANCO, cards, transfers, cash/POS and future rails), jurisdiction/compliance, currencies/locales and fiscal/document behavior. Payment confirmation will be server-authoritative; browser/user assertion alone never confirms payment.
+Canonical Finance remains stable while configuration/adapters resolve payment rails/providers (including MULTICAIXA/MCX Express, KWiK, MB WAY, MULTIBANCO, cards, transfers, cash/POS and future rails), jurisdiction/compliance, currencies/locales and fiscal/document behavior. Payment confirmation is server-authoritative.
 
 ## Reporting/export
-Reporting is downstream of authorized financial read models. Target flow:
-
-`authorized ledger/read model -> report dataset -> versioned institutional template -> PDF/XLSX`
-
-XLSX must be a professional workbook with institutional branding, correct monetary/date types, sizing, filters, useful frozen regions, totals/subtotals, print configuration, localization and audit/version metadata. Excel import, if supported, goes through staging/validation/preview and authorized commands; Excel is never authority. Power BI consumes authorized projections and cannot mutate Finance.
+Reporting is downstream of authorized financial read models. Target: `authorized ledger/read model -> report dataset -> versioned institutional template -> PDF/XLSX`. XLSX must be a professional workbook with institutional branding, correct monetary/date types, sizing, filters, useful frozen regions, totals/subtotals, print configuration, localization and audit/version metadata. Excel import, if supported, goes through staging/validation/preview and authorized commands; Excel is never authority. Power BI consumes authorized projections and cannot mutate Finance.
 
 ## Payables / institutional expenses
 Finance includes internal expenses/payables as well as receivables. They share the financial authority/ledger foundation while retaining distinct workflows/aggregates. Supplier/counterparty, supporting evidence, approval, outgoing payment, settlement/reconciliation and segregation of duties require later design. Finance is not automatically procurement, payroll or a generic accounting suite.
 
 # Implementation gate
-No Finance product implementation is authorized by this preparation document.
-
-Before implementation planning, design must close F0–F6, authority/ownership, money/ledger invariants, transactions/idempotency/concurrency, PostgreSQL strategy, IAM/tenant/segregation, integration contracts, legacy retirement, failure/recovery, `Risk -> Required Proof -> Tool -> DONE`, slice decomposition and explicit human approval.
+No Finance product implementation is authorized by this preparation document. Before implementation planning, design must close F0–F6, authority/ownership, money/ledger invariants, transactions/idempotency/concurrency, PostgreSQL strategy, IAM/tenant/segregation, integration contracts, legacy retirement, failure/recovery, `Risk -> Required Proof -> Tool -> DONE`, slice decomposition and explicit human approval.
 
 Future execution ownership remains: ChatGPT/Planner for architecture/adjudication; Codex as approved-slice writer; Antigravity as independent read-only-by-default reviewer; GitHub/CI as durable evidence; Product Owner for design/UAT/merge decisions. One writer owns an authority unit at a time; review is SHA-bound; CI green alone is not merge eligibility.
 
 # Next F0 design action
-Close the next constitutional boundary before schema/API/UI design: **obligation/payment/allocation/document/reconciliation separation and their authority relationships**, followed by reversal/compensation, temporal law, authorization/tenant law, audit/evidence minimum, write/read consistency, forbidden write paths and failure semantics.
+Close **reversal/compensation law**, then temporal/effective-date law, authorization/tenant law, audit/evidence minimum, write/read consistency, forbidden write paths and failure semantics before schema/API/UI design.
