@@ -104,6 +104,77 @@ The first Finance implementation will **not** attempt full accounting-grade fore
 
 Amounts in different currencies must never be silently added into a single total without an explicit, valid conversion policy.
 
+### F0-D01 — Authoritative Financial Journal + domain aggregates + derived projections
+The Finance Core will **not** use full event sourcing as its default architecture and will **not** treat mutable financial tables plus an audit log as sufficient financial authority.
+
+The approved model is:
+
+> **Authoritative Financial Journal + domain aggregates + derived projections**
+
+A **canonical financial fact** is an economic event accepted by the server as valid, persisted atomically under an authorized institutional context, and carrying enough provenance and evidence to be audited and, where necessary, compensated without destructive historical rewriting.
+
+A canonical financial fact must preserve, as applicable:
+
+- institution/tenant ownership;
+- fact type;
+- originating command/event/cause;
+- affected domain references;
+- monetary amount(s) and explicit currency;
+- effective economic time;
+- recorded/persisted time;
+- actor/system authority;
+- idempotency/correlation identity;
+- evidence/provider/source reference;
+- reversal/compensation relationship where applicable.
+
+Examples of candidate canonical financial facts include concepts such as:
+
+- `ObligationIssued`;
+- `PaymentConfirmed`;
+- `PaymentAllocated`;
+- `ExpenseRecognized`;
+- `OutgoingPaymentConfirmed`;
+- `CreditGranted`;
+- `AdjustmentPosted`;
+- `FinancialFactReversed`.
+
+Exact persisted names and schemas are **not** authorized yet; F3/F4 will define them.
+
+The following are **not** independent financial authority:
+
+- current balance;
+- total debt;
+- overdue dashboard totals;
+- family/account aggregate totals;
+- Student 360 financial widgets;
+- PDF/XLSX exports;
+- Power BI metrics;
+- browser-calculated amounts;
+- legacy `outstandingFees`-style mutable fields.
+
+They are projections/read models derived from canonical financial facts and authorized domain state.
+
+Invoices, receipts and other financial/fiscal documents are evidence/document representations tied to financial facts and jurisdictional rules; they are not automatically the source of payment or balance truth.
+
+Initial F0 constitutional laws approved with this decision:
+
+1. confirmed economic facts are append-only historical authority;
+2. corrections use compensating/reversal facts rather than destructive overwrite/delete;
+3. balance is derived and never an independently editable source of truth;
+4. obligation, invoice/document, payment, allocation and reconciliation are distinct concepts;
+5. the browser cannot confirm a canonical financial fact by assertion alone;
+6. institution/tenant authority is server-derived and fail-closed;
+7. no canonical financial operation may cross institution boundaries;
+8. critical financial commands require idempotent semantics;
+9. concurrency safety must be enforceable at the PostgreSQL authority boundary where applicable;
+10. every monetary amount carries explicit currency semantics;
+11. economic effective time and persisted/recorded time are distinct when both matter;
+12. read models must be rebuildable/correctable without mutating historical economic facts;
+13. reports, Excel, BI and Student 360 consume authorized projections rather than calculate parallel financial truth;
+14. no new Finance authority may be built on legacy mutable `outstandingFees`, browser state or similar transitional paths.
+
+The Journal is an **operational financial subledger authority for Nexus**, designed to remain compatible with future accounting/fiscal integration. FINANCE-01 is not thereby authorized to become a complete international general-ledger/ERP accounting system.
+
 ## 5. Financial Obligation direction already accepted for further design
 
 A financial obligation is conceptually distinct from:
@@ -198,15 +269,13 @@ One writer owns a code/authority unit at a time. Reviewer findings must be evide
 
 ## 11. Next design action
 
-Continue with **F0 — Financial Constitution** and close its non-negotiable laws before schema/API/UI design.
+Continue with **F0 — Financial Constitution** and close its remaining non-negotiable laws before schema/API/UI design.
 
 Open F0 subjects include:
 
-- exact definition of canonical financial fact;
-- operational ledger versus accounting-ledger boundary;
-- immutable versus correctable data classes;
+- immutable economic fact versus correctable operational state;
 - balance derivation laws;
-- obligation/payment/document separation;
+- obligation/payment/document separation details;
 - reversal/compensation laws;
 - temporal/effective-date rules;
 - authorization and tenant laws;
