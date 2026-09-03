@@ -141,3 +141,13 @@ No test result may be inferred from source inspection or GitHub connector writes
 - `COMMAND=npm run lint; npm run build; git diff --check`
 - `RESULT=PASS`
 - `TASK_4=NOT_STARTED`
+
+## Task 3 — P1 persistent precision correction
+
+- `REVIEWED_HEAD=503b6b5e351014f3767a5d70b7e2c952b3f72def`
+- `RED_COMMAND=TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-foundation-schema-postgres.test.ts`
+- `RED_RESULT=FAIL` — PostgreSQL accepted Money `0.1234567890123`; `NUMERIC(30,12)` silently rounded it before constraints could observe the original scale.`
+- `CORRECTION=Added append-only 0028_finance_exact_decimal_envelopes.sql. Authoritative numeric columns retain exact numeric representation without typmod rounding and enforce F2 envelopes through explicit scale/magnitude checks (Money <= 12; ExchangeRate <= 18).`
+- `GREEN_COMMANDS=TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-foundation-schema-postgres.test.ts; npm run test:migrations:isolated; TEST_DATABASE_LOCAL_AUTHORIZED=true npm run test:fnd01:cp2:local; npm run lint; npm run build; git diff --check`
+- `GREEN_RESULT=PASS`
+- `TASK_4=NOT_STARTED`

@@ -33,16 +33,16 @@ try {
     );
     assert.equal(tables.rowCount, expectedTables.length, 'Finance foundation tables must be created by the canonical migration');
 
-    const numeric = await client.query<{ numeric_precision: number; numeric_scale: number }>(
-      `SELECT numeric_precision, numeric_scale FROM information_schema.columns
+    const numeric = await client.query<{ data_type: string }>(
+      `SELECT data_type FROM information_schema.columns
        WHERE table_schema=$1 AND table_name='finance_journal_entries' AND column_name='amount'`, [schema],
     );
-    assert.deepEqual(numeric.rows[0], { numeric_precision: 30, numeric_scale: 12 });
-    const rate = await client.query<{ numeric_precision: number; numeric_scale: number }>(
-      `SELECT numeric_precision, numeric_scale FROM information_schema.columns
+    assert.deepEqual(numeric.rows[0], { data_type: 'numeric' });
+    const rate = await client.query<{ data_type: string }>(
+      `SELECT data_type FROM information_schema.columns
        WHERE table_schema=$1 AND table_name='finance_journal_transactions' AND column_name='exchange_rate'`, [schema],
     );
-    assert.deepEqual(rate.rows[0], { numeric_precision: 30, numeric_scale: 18 });
+    assert.deepEqual(rate.rows[0], { data_type: 'numeric' });
 
     const institutionA = '00000000-0000-0000-0000-000000000001';
     const institutionB = '00000000-0000-0000-0000-000000000002';
@@ -57,6 +57,8 @@ try {
     await rejects(() => client.query(`INSERT INTO finance_journal_entries (institution_id,transaction_id,currency,amount,position_type,source_ref) VALUES ($1,$2,'eur','1','received_value','currency')`, [institutionA, transactionA]), 'lowercase currency must be rejected');
     await rejects(() => client.query(`INSERT INTO finance_journal_entries (institution_id,transaction_id,currency,amount,position_type,source_ref) VALUES ($1,$2,'EURO','1','received_value','currency')`, [institutionA, transactionA]), 'non-three-letter currency must be rejected');
     await rejects(() => client.query(`INSERT INTO finance_journal_entries (institution_id,transaction_id,currency,amount,position_type,source_ref) VALUES ($1,$2,'EUR','1234567890123456789.123456789012','received_value','overflow')`, [institutionA, transactionA]), 'out-of-envelope amount must be rejected');
+    await rejects(() => client.query(`INSERT INTO finance_journal_entries (institution_id,transaction_id,currency,amount,position_type,source_ref) VALUES ($1,$2,'EUR','0.1234567890123','received_value','excessive-scale')`, [institutionA, transactionA]), 'Money with 13 decimal places must be rejected rather than rounded');
+    await rejects(() => client.query(`INSERT INTO finance_journal_transactions (institution_id,status,currency,amount,exchange_rate) VALUES ($1,'prepared','EUR','1','0.1234567890123456789')`, [institutionA]), 'ExchangeRate with 19 decimal places must be rejected rather than rounded');
     await rejects(() => client.query(`INSERT INTO finance_journal_transactions (institution_id,status,currency,amount,confirmed_at) VALUES ($1,'prepared','EUR','1',now())`, [institutionA]), 'prepared transaction cannot have confirmed_at');
     await rejects(() => client.query(`INSERT INTO finance_journal_transactions (institution_id,status,currency,amount) VALUES ($1,'confirmed','EUR','1')`, [institutionA]), 'confirmed transaction requires confirmed_at');
 
