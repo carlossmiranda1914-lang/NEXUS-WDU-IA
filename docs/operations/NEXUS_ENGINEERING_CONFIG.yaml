@@ -10,12 +10,12 @@ project:
 
 active_work:
   program: FINANCE_FOUNDATION
-  mission: FINANCE-FOUNDATION-03
+  mission: FINANCE-FOUNDATION-04
   mission_branch: codex/finance-foundation-01
-  durable_remote_checkpoint: 49e5c06e9b5603cc814bffa047d9f009c2a10549
+  durable_remote_checkpoint: 2f09580f7814da2fa8b15d063d83f6df53f328b1
   activity: IMPLEMENTATION
-  task: TASK-3-CANONICAL-FINANCE-PERSISTENCE-SCHEMA
-  task_name: Canonical Finance persistence schema
+  task: TASK-4-JOURNAL-DOMAIN-ATOMIC-REPOSITORY
+  task_name: Journal domain and atomic repository
   state: READY
   owner: Product Owner
   write_owner: CODEX
@@ -23,12 +23,12 @@ active_work:
   reviewer_mode: READ_ONLY
   risk: HIGH
   resume_rule: >-
-    Resume only FINANCE-FOUNDATION-03 in the existing clean isolated worktree. Re-run
-    migration-number preflight, use 0027_finance_foundation.sql only while 0027 remains
-    the next free canonical migration number, authorize the approved disposable PostgreSQL
-    target explicitly with TEST_DATABASE_LOCAL_AUTHORIZED=true for stateful tests, observe
-    and record a real PostgreSQL RED before the migration, implement only Task 3 schema,
-    execute migration/bootstrap/integrity plus lint/build/diff gates, then stop before Task 4.
+    Resume only FINANCE-FOUNDATION-04 in the existing clean isolated worktree. Preserve
+    the accepted Task 3 exact-decimal PostgreSQL implementation (NUMERIC plus explicit
+    envelope checks), run the approved local DB safety bootstrap, observe a real RED before
+    production Journal code, implement only the minimum Journal domain/repository, prove
+    same-transaction atomicity and rollback at all required failure points on real PostgreSQL,
+    execute regressions/lint/build/diff gates, then stop before Task 5.
 
 execution:
   one_code_owner_per_unit: true
@@ -50,20 +50,21 @@ execution:
 
 scope:
   authorized:
-    - FINANCE-FOUNDATION-03 Task 3 only
-    - src/db/migrations/0027_finance_foundation.sql if 0027 remains next free at execution preflight
-    - tests/finance-foundation-schema-postgres.test.ts
-    - package.json Finance test aliases required by Task 3 only
+    - FINANCE-FOUNDATION-04 Task 4 only
+    - src/modules/finance/journal-model.ts
+    - src/modules/finance/journal-repository.ts
+    - tests/finance-journal-postgres.test.ts
+    - package.json narrow Task 4 Finance test alias if required
     - execution record updates
-    - read-only use of canonical migration runner and approved PostgreSQL safety helpers
+    - read-only integration with accepted Task 1-3 Finance contracts and DB helpers
   forbidden:
-    - Task 4 or later Finance Foundation work
-    - Journal repository or Finance command implementation
+    - Task 5 or later Finance Foundation work
+    - new migration or schema mutation without STOP and adjudication
     - Payment Allocation Reconciliation provider fiscal reporting or Finance UI
-    - runtime business DDL
-    - alternate Finance migration runner
-    - historical migration modification or renumbering
-    - legacy Finance data reinterpretation
+    - implicit FX or JavaScript-number monetary authority
+    - destructive correction of confirmed Journal facts
+    - external network/provider call inside Finance DB transaction
+    - runtime business DDL or alternate migration authority
     - unrelated IAM Enrollment ALUNOS refactor
     - parallel writer
     - automatic scope expansion
@@ -75,11 +76,14 @@ protected_invariants:
   - institution identity for Finance comes only from resolved server InstitutionalContext
   - tenant boundaries fail closed and remain non-disclosing
   - historical applied migrations remain immutable
-  - canonical migration runner remains the sole Finance schema authority
-  - authoritative Money uses exact NUMERIC 30 12 and rates use exact NUMERIC 30 18 where persisted
-  - authoritative Finance money or rates never use REAL FLOAT or DOUBLE PRECISION
-  - tenant-safe child relationships are enforced at PostgreSQL boundary where structurally expressible
-  - Task 3 does not implement Journal commands Payment Allocation Reconciliation providers fiscal reporting or UI
+  - accepted Task 3 physical exactness is NUMERIC plus explicit scale and magnitude checks
+  - do not revert Finance money or rate columns to fixed-scale typmods that silently round excess scale
+  - authoritative Finance money or rates never use REAL FLOAT DOUBLE PRECISION or JavaScript number
+  - confirmed Journal facts are append-only economic authority
+  - prepared state has zero canonical financial effect
+  - confirmation commits transaction entries audit and mandatory outbox atomically
+  - economic correction is append-only not UPDATE DELETE of confirmed facts
+  - Task 4 does not implement Task 5 idempotency retry semantics or upper Finance domains
 
 gates:
   product_owner_finance_foundation_spec_approved: true
@@ -87,15 +91,17 @@ gates:
   finance_f0_f4_design_closed: true
   task_1_accepted_head: 8202dee1cdc7bb6878cf5b044ad2a17eb29b4798
   task_2_accepted_head: 49e5c06e9b5603cc814bffa047d9f009c2a10549
+  task_3_accepted_head: 2f09580f7814da2fa8b15d063d83f6df53f328b1
   task_1_unresolved_p0: 0
   task_1_unresolved_p1: 0
   task_2_unresolved_p0: 0
   task_2_unresolved_p1: 0
-  task_3_postgres_red_required: true
-  task_3_schema_green_required: true
-  clean_migration_bootstrap_required: true
-  migration_checksum_history_regression_required: true
-  postgres_tenant_integrity_negative_proof_required: true
+  task_3_unresolved_p0: 0
+  task_3_unresolved_p1: 0
+  task_4_postgres_red_required: true
+  task_4_atomicity_failure_injection_required: true
+  task_4_tenant_currency_position_negative_proof_required: true
+  task_3_schema_regression_required: true
   lint_required: true
   build_required: true
   diff_check_required: true
@@ -108,7 +114,7 @@ next_program:
   state: IMPLEMENTING
   authorized_phase: EXECUTION
   implementation_authorized: true
-  authorization_scope: FINANCE-FOUNDATION-03_TASK_3_ONLY
+  authorization_scope: FINANCE-FOUNDATION-04_TASK_4_ONLY
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -133,7 +139,7 @@ resource_policy:
     - required_quality_gates
 
 integration:
-  technical_task_checkpoint: TASK_2_ACCEPTED_TASK_3_READY
+  technical_task_checkpoint: TASK_3_ACCEPTED_TASK_4_READY
   mission_to_main: NOT_READY
   dirty_worktree_allowed: false
 
