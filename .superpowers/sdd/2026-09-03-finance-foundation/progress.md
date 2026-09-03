@@ -1,6 +1,6 @@
 # Finance Foundation Implementation — Execution Record
 
-**Status:** TASK_1_GREEN_CHECKPOINT
+**Status:** TASK_2_GREEN_CHECKPOINT
 **Plan:** `docs/superpowers/plans/2026-09-03-finance-foundation-implementation.md`
 **Spec:** `docs/superpowers/specs/2026-09-03-finance-foundation-implementation-design.md`
 
@@ -96,3 +96,26 @@ No test result may be inferred from source inspection or GitHub connector writes
 - `GREEN_COMMANDS=npx tsx tests/finance-money-model.test.ts; npm run lint; npm run build; git diff --check`
 - `GREEN_RESULT=PASS`
 - `TASK_2=NOT_STARTED`
+
+## Task 2 — TDD RED
+
+- `MISSION=FINANCE-FOUNDATION-02`
+- `COMMAND=npx tsx tests/finance-financial-context.test.ts`
+- `RESULT=RED`
+- `FAILURE=Error [ERR_MODULE_NOT_FOUND]: Cannot find module '.../src/modules/finance/financial-context.ts' imported from .../tests/finance-financial-context.test.ts`
+- `INTERPRETATION=Expected missing Task 2 financial-context module; no profile persistence or PostgreSQL work was attempted.`
+
+## Task 2 — GREEN and verification
+
+- `IMPLEMENTATION=Added the pure server-context FinancialProfileStore contract and requireFinancialContext validator; institution lookup derives only from institutionalContext.institutionId.`
+- `COMMAND=npx tsx tests/finance-financial-context.test.ts`
+- `RESULT=PASS` — missing/mismatched/ineffective profiles, unknown currencies and disabled required currency fail closed; valid effective profile returns unchanged; store is queried only for the resolved institution.`
+- `COMMAND=npm run test:fnd03`
+- `RESULT=PASS`
+- `COMMAND=npm run lint`
+- `RESULT=PASS`
+- `COMMAND=npm run build`
+- `RESULT=PASS` — existing chunk-size and direct-eval warnings are outside Task 2 scope.`
+- `COMMAND=git diff --check`
+- `RESULT=PASS`
+- `TASK_3=NOT_STARTED`
