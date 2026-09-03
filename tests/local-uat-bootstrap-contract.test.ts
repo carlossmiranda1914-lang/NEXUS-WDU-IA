@@ -10,6 +10,8 @@ for (const required of ['readApprovedTestTarget', 'runMigrations', 'provision-lo
 for (const required of ['UAT_STUDENTS', 'UAT-STUDENT-360-A', 'UAT-STUDENT-360-B', 'current-and-history-ready', 'fixtures: 2']) assert.ok(bootstrap.includes(required), `Missing two-student Human UAT fixture invariant: ${required}`);
 for (const forbidden of ['password', 'apiKey', 'users.role', 'localStorage']) assert.equal(bootstrap.toLowerCase().includes(forbidden.toLowerCase()), false, `Forbidden bootstrap content: ${forbidden}`);
 assert.ok(worktree.includes('HardLink') && worktree.includes('git check-ignore'));
+assert.ok(worktree.includes('SymbolicLink'), 'cross-volume external configuration must use a link type supported across volumes');
+assert.match(worktree, /GetPathRoot\(\$target\).*GetPathRoot\(\$ConfigSource\)/s, 'bootstrap must select the link type from the source and target volumes');
 assert.ok(!worktree.includes('codex/academic-01-temporal-structure'));
 const bootstrapPowerShell = await readFile(new URL('../scripts/bootstrap-local-uat.ps1', import.meta.url), 'utf8');
 assert.match(bootstrapPowerShell, /NEXUS_UAT_FIREBASE_UID/);
