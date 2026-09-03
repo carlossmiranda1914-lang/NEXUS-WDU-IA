@@ -10,12 +10,12 @@ project:
 
 active_work:
   program: FINANCE_FOUNDATION
-  mission: FINANCE-FOUNDATION-02
+  mission: FINANCE-FOUNDATION-03
   mission_branch: codex/finance-foundation-01
-  durable_remote_checkpoint: 8202dee1cdc7bb6878cf5b044ad2a17eb29b4798
+  durable_remote_checkpoint: 49e5c06e9b5603cc814bffa047d9f009c2a10549
   activity: IMPLEMENTATION
-  task: TASK-2-INSTITUTION-FINANCIAL-CONTEXT
-  task_name: Institution Financial Context minimum
+  task: TASK-3-CANONICAL-FINANCE-PERSISTENCE-SCHEMA
+  task_name: Canonical Finance persistence schema
   state: READY
   owner: Product Owner
   write_owner: CODEX
@@ -23,10 +23,12 @@ active_work:
   reviewer_mode: READ_ONLY
   risk: HIGH
   resume_rule: >-
-    Resume only FINANCE-FOUNDATION-02 in the existing clean isolated worktree. Read the
-    Task 2 Mission Pack and institutional-context authority, observe and record a valid
-    TDD RED, implement only the minimum financial-context contract, run the required
-    tenant/context regression plus lint build and diff gates, then stop before Task 3.
+    Resume only FINANCE-FOUNDATION-03 in the existing clean isolated worktree. Re-run
+    migration-number preflight, use 0027_finance_foundation.sql only while 0027 remains
+    the next free canonical migration number, authorize the approved disposable PostgreSQL
+    target explicitly with TEST_DATABASE_LOCAL_AUTHORIZED=true for stateful tests, observe
+    and record a real PostgreSQL RED before the migration, implement only Task 3 schema,
+    execute migration/bootstrap/integrity plus lint/build/diff gates, then stop before Task 4.
 
 execution:
   one_code_owner_per_unit: true
@@ -48,21 +50,21 @@ execution:
 
 scope:
   authorized:
-    - FINANCE-FOUNDATION-02 Task 2 only
-    - src/modules/finance/financial-context.ts
-    - tests/finance-financial-context.test.ts
-    - read-only integration with src/auth/institutional-context.ts
+    - FINANCE-FOUNDATION-03 Task 3 only
+    - src/db/migrations/0027_finance_foundation.sql if 0027 remains next free at execution preflight
+    - tests/finance-foundation-schema-postgres.test.ts
+    - package.json Finance test aliases required by Task 3 only
     - execution record updates
+    - read-only use of canonical migration runner and approved PostgreSQL safety helpers
   forbidden:
-    - Task 3 or later Finance Foundation work
-    - Finance PostgreSQL migrations or Financial Profile persistence
+    - Task 4 or later Finance Foundation work
     - Journal repository or Finance command implementation
     - Payment Allocation Reconciliation provider fiscal reporting or Finance UI
-    - legacy Finance data mutation
-    - client or browser institution authority
-    - unrelated IAM Enrollment ALUNOS refactor
     - runtime business DDL
-    - historical migration modification
+    - alternate Finance migration runner
+    - historical migration modification or renumbering
+    - legacy Finance data reinterpretation
+    - unrelated IAM Enrollment ALUNOS refactor
     - parallel writer
     - automatic scope expansion
     - CI or workflow weakening
@@ -71,23 +73,29 @@ scope:
 protected_invariants:
   - merged main remains integrated capability authority until Finance is merged
   - institution identity for Finance comes only from resolved server InstitutionalContext
-  - browser never owns institution Person role or financial authority
   - tenant boundaries fail closed and remain non-disclosing
-  - no jurisdiction currency timezone policy or provider default is invented
-  - functional and enabled currencies must be recognized by canonical Currency Registry
   - historical applied migrations remain immutable
-  - Task 2 does not create persistence Journal Payment Allocation Reconciliation or provider authority
+  - canonical migration runner remains the sole Finance schema authority
+  - authoritative Money uses exact NUMERIC 30 12 and rates use exact NUMERIC 30 18 where persisted
+  - authoritative Finance money or rates never use REAL FLOAT or DOUBLE PRECISION
+  - tenant-safe child relationships are enforced at PostgreSQL boundary where structurally expressible
+  - Task 3 does not implement Journal commands Payment Allocation Reconciliation providers fiscal reporting or UI
 
 gates:
   product_owner_finance_foundation_spec_approved: true
   product_owner_finance_foundation_plan_approved: true
   finance_f0_f4_design_closed: true
   task_1_accepted_head: 8202dee1cdc7bb6878cf5b044ad2a17eb29b4798
+  task_2_accepted_head: 49e5c06e9b5603cc814bffa047d9f009c2a10549
   task_1_unresolved_p0: 0
   task_1_unresolved_p1: 0
-  task_2_tdd_red_required: true
-  task_2_targeted_green_required: true
-  tenant_context_regression_required: true
+  task_2_unresolved_p0: 0
+  task_2_unresolved_p1: 0
+  task_3_postgres_red_required: true
+  task_3_schema_green_required: true
+  clean_migration_bootstrap_required: true
+  migration_checksum_history_regression_required: true
+  postgres_tenant_integrity_negative_proof_required: true
   lint_required: true
   build_required: true
   diff_check_required: true
@@ -100,7 +108,7 @@ next_program:
   state: IMPLEMENTING
   authorized_phase: EXECUTION
   implementation_authorized: true
-  authorization_scope: FINANCE-FOUNDATION-02_TASK_2_ONLY
+  authorization_scope: FINANCE-FOUNDATION-03_TASK_3_ONLY
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -125,7 +133,7 @@ resource_policy:
     - required_quality_gates
 
 integration:
-  technical_task_checkpoint: TASK_1_ACCEPTED_TASK_2_READY
+  technical_task_checkpoint: TASK_2_ACCEPTED_TASK_3_READY
   mission_to_main: NOT_READY
   dirty_worktree_allowed: false
 
