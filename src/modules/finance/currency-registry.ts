@@ -1,8 +1,8 @@
 export interface CurrencyDefinition {
-  code: string;
-  minorUnit: number;
-  status: 'active' | 'historical' | 'special';
-  registryVersion: string;
+  readonly code: string;
+  readonly minorUnit: number;
+  readonly status: 'active' | 'historical' | 'special';
+  readonly registryVersion: string;
 }
 
 export interface CurrencyRegistry {
@@ -10,11 +10,11 @@ export interface CurrencyRegistry {
 }
 
 const REGISTRY_VERSION = 'iso4217-foundation-v1';
-const definitions: ReadonlyMap<string, CurrencyDefinition> = new Map([
-  ['EUR', { code: 'EUR', minorUnit: 2, status: 'active', registryVersion: REGISTRY_VERSION }],
-  ['AOA', { code: 'AOA', minorUnit: 2, status: 'active', registryVersion: REGISTRY_VERSION }],
-  ['USD', { code: 'USD', minorUnit: 2, status: 'active', registryVersion: REGISTRY_VERSION }],
-  ['GBP', { code: 'GBP', minorUnit: 2, status: 'active', registryVersion: REGISTRY_VERSION }],
+const definitions: ReadonlyMap<string, CurrencyDefinition> = new Map<string, CurrencyDefinition>([
+  ['EUR', Object.freeze({ code: 'EUR', minorUnit: 2, status: 'active' as const, registryVersion: REGISTRY_VERSION })],
+  ['AOA', Object.freeze({ code: 'AOA', minorUnit: 2, status: 'active' as const, registryVersion: REGISTRY_VERSION })],
+  ['USD', Object.freeze({ code: 'USD', minorUnit: 2, status: 'active' as const, registryVersion: REGISTRY_VERSION })],
+  ['GBP', Object.freeze({ code: 'GBP', minorUnit: 2, status: 'active' as const, registryVersion: REGISTRY_VERSION })],
 ]);
 
 export const canonicalCurrencyRegistry: CurrencyRegistry = {

@@ -85,3 +85,14 @@ No test result may be inferred from source inspection or GitHub connector writes
 - `POST_RECOVERY_COMMANDS=npx tsx tests/finance-money-model.test.ts; npm run lint; npm run build; git diff --check`
 - `POST_RECOVERY_RESULT=PASS`
 - `TASK_2=NOT_STARTED`
+
+## Independent review correction — P1 registry immutability
+
+- `REVIEWED_HEAD=a3023c943ba9bebd8cf0df8494fa6628eac72948`
+- `RED_COMMAND=npx tsx tests/finance-money-model.test.ts`
+- `RED_RESULT=FAIL` — consumer assignment changed `canonicalCurrencyRegistry.require('EUR').code` from `EUR` to `USD`; the expected runtime `TypeError` was absent.
+- `CORRECTION=CurrencyDefinition fields are readonly and every seeded canonical definition is Object.freeze(...) protected.`
+- `ROUNDING_COVERAGE=Added explicit positive/negative tie and non-tie assertions for half_up, half_even, down and up.`
+- `GREEN_COMMANDS=npx tsx tests/finance-money-model.test.ts; npm run lint; npm run build; git diff --check`
+- `GREEN_RESULT=PASS`
+- `TASK_2=NOT_STARTED`

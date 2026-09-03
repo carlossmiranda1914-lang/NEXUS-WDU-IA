@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
+import { canonicalCurrencyRegistry } from '../src/modules/finance/currency-registry.ts';
 import { ExactDecimal } from '../src/modules/finance/exact-decimal.ts';
 import { Money } from '../src/modules/finance/money.ts';
 import { DecimalRatio, ExchangeRate, Percentage } from '../src/modules/finance/finance-rates.ts';
 import { distributeMoney, quantizeMoneyCandidate } from '../src/modules/finance/quantization.ts';
 
 const eur = (amount: string) => Money.parse(amount, 'EUR');
+
+// Registry definitions are canonical, shared authority and cannot be mutated by consumers.
+const eurDefinition = canonicalCurrencyRegistry.require('EUR') as { code: string };
+assert.throws(() => { eurDefinition.code = 'USD'; }, TypeError);
+assert.equal(canonicalCurrencyRegistry.require('EUR').code, 'EUR');
 
 // Canonical Money parsing and identity.
 assert.equal(eur('001.2300').canonicalAmount(), '1.23');
@@ -51,6 +57,26 @@ assert.equal(quantizeMoneyCandidate(candidate, 'EUR', 2, 'half_even').canonicalA
 assert.equal(quantizeMoneyCandidate(ExactDecimal.parse('1.225', 30, 18), 'EUR', 2, 'half_even').canonicalAmount(), '1.22');
 assert.equal(quantizeMoneyCandidate(ExactDecimal.parse('-1.234', 30, 18), 'EUR', 2, 'down').canonicalAmount(), '-1.23');
 assert.equal(quantizeMoneyCandidate(ExactDecimal.parse('-1.234', 30, 18), 'EUR', 2, 'up').canonicalAmount(), '-1.24');
+const rounded = (value: string, mode: 'half_up' | 'half_even' | 'down' | 'up') =>
+  quantizeMoneyCandidate(ExactDecimal.parse(value, 30, 18), 'EUR', 2, mode).canonicalAmount();
+
+// Every rounding mode has explicit tie and non-tie behavior for positive and negative values.
+assert.equal(rounded('1.225', 'half_up'), '1.23');
+assert.equal(rounded('1.225', 'half_even'), '1.22');
+assert.equal(rounded('1.225', 'down'), '1.22');
+assert.equal(rounded('1.225', 'up'), '1.23');
+assert.equal(rounded('-1.225', 'half_up'), '-1.23');
+assert.equal(rounded('-1.225', 'half_even'), '-1.22');
+assert.equal(rounded('-1.225', 'down'), '-1.22');
+assert.equal(rounded('-1.225', 'up'), '-1.23');
+assert.equal(rounded('1.234', 'half_up'), '1.23');
+assert.equal(rounded('1.234', 'half_even'), '1.23');
+assert.equal(rounded('1.234', 'down'), '1.23');
+assert.equal(rounded('1.234', 'up'), '1.24');
+assert.equal(rounded('-1.234', 'half_up'), '-1.23');
+assert.equal(rounded('-1.234', 'half_even'), '-1.23');
+assert.equal(rounded('-1.234', 'down'), '-1.23');
+assert.equal(rounded('-1.234', 'up'), '-1.24');
 
 const parts = distributeMoney(eur('100.00'), 3, 2, 'half_up');
 assert.deepEqual(parts.map((part) => part.canonicalAmount()), ['33.34', '33.33', '33.33']);
