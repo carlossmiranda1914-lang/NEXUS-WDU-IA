@@ -16,19 +16,19 @@ active_work:
   activity: IMPLEMENTATION
   task: TASK-4-JOURNAL-DOMAIN-ATOMIC-REPOSITORY
   task_name: Journal domain and atomic repository
-  state: READY
+  state: READY_AFTER_SCHEMA_ADJUDICATION
   owner: Product Owner
   write_owner: CODEX
   reviewer: ANTIGRAVITY
   reviewer_mode: READ_ONLY
   risk: HIGH
   resume_rule: >-
-    Resume only FINANCE-FOUNDATION-04 in the existing clean isolated worktree. Preserve
-    the accepted Task 3 exact-decimal PostgreSQL implementation (NUMERIC plus explicit
-    envelope checks), run the approved local DB safety bootstrap, observe a real RED before
-    production Journal code, implement only the minimum Journal domain/repository, prove
-    same-transaction atomicity and rollback at all required failure points on real PostgreSQL,
-    execute regressions/lint/build/diff gates, then stop before Task 5.
+    Resume only FINANCE-FOUNDATION-04 in the existing clean isolated worktree. A preflight
+    STOP proved missing mandatory Journal provenance in Task 3 schema. Re-check migration
+    ordering; if 0029 remains next free, first RED/GREEN the explicitly authorized append-only
+    0029_finance_journal_provenance.sql amendment, then RED/GREEN the Journal domain/repository,
+    prove atomic rollback on real PostgreSQL, run regressions/lint/build/diff gates, and stop
+    before Task 5. Preserve NUMERIC plus explicit envelope checks and never reintroduce silent rounding.
 
 execution:
   one_code_owner_per_unit: true
@@ -51,15 +51,18 @@ execution:
 scope:
   authorized:
     - FINANCE-FOUNDATION-04 Task 4 only
+    - src/db/migrations/0029_finance_journal_provenance.sql if 0029 remains next free at preflight
     - src/modules/finance/journal-model.ts
     - src/modules/finance/journal-repository.ts
     - tests/finance-journal-postgres.test.ts
+    - tests/finance-foundation-schema-postgres.test.ts provenance assertions only
     - package.json narrow Task 4 Finance test alias if required
     - execution record updates
     - read-only integration with accepted Task 1-3 Finance contracts and DB helpers
   forbidden:
     - Task 5 or later Finance Foundation work
-    - new migration or schema mutation without STOP and adjudication
+    - any migration beyond the explicitly authorized minimal Journal provenance amendment
+    - command-level idempotency replay/concurrency behavior
     - Payment Allocation Reconciliation provider fiscal reporting or Finance UI
     - implicit FX or JavaScript-number monetary authority
     - destructive correction of confirmed Journal facts
@@ -79,6 +82,8 @@ protected_invariants:
   - accepted Task 3 physical exactness is NUMERIC plus explicit scale and magnitude checks
   - do not revert Finance money or rate columns to fixed-scale typmods that silently round excess scale
   - authoritative Finance money or rates never use REAL FLOAT DOUBLE PRECISION or JavaScript number
+  - Journal transaction preserves command journal type actor financial profile version and optional reason provenance
+  - financial profile provenance is tenant-safe through institution plus version relationship
   - confirmed Journal facts are append-only economic authority
   - prepared state has zero canonical financial effect
   - confirmation commits transaction entries audit and mandatory outbox atomically
@@ -98,10 +103,13 @@ gates:
   task_2_unresolved_p1: 0
   task_3_unresolved_p0: 0
   task_3_unresolved_p1: 0
+  task_4_provenance_schema_red_required: true
+  task_4_provenance_schema_green_required: true
   task_4_postgres_red_required: true
   task_4_atomicity_failure_injection_required: true
   task_4_tenant_currency_position_negative_proof_required: true
   task_3_schema_regression_required: true
+  migration_bootstrap_checksum_regression_required: true
   lint_required: true
   build_required: true
   diff_check_required: true
@@ -114,7 +122,7 @@ next_program:
   state: IMPLEMENTING
   authorized_phase: EXECUTION
   implementation_authorized: true
-  authorization_scope: FINANCE-FOUNDATION-04_TASK_4_ONLY
+  authorization_scope: FINANCE-FOUNDATION-04_TASK_4_WITH_MINIMAL_PROVENANCE_MIGRATION
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -139,7 +147,7 @@ resource_policy:
     - required_quality_gates
 
 integration:
-  technical_task_checkpoint: TASK_3_ACCEPTED_TASK_4_READY
+  technical_task_checkpoint: TASK_3_ACCEPTED_TASK_4_SCHEMA_ADJUDICATED
   mission_to_main: NOT_READY
   dirty_worktree_allowed: false
 
