@@ -1,0 +1,5 @@
+import type { PoolClient } from 'pg';
+export async function rebuildFoundationProjection(client: PoolClient, institutionId: string): Promise<void> {
+  await client.query('BEGIN'); try { await client.query(`DELETE FROM finance_position_projection WHERE institution_id=$1`,[institutionId]); await client.query(`INSERT INTO finance_position_projection(institution_id,currency,amount) SELECT t.institution_id,e.currency,SUM(CASE WHEN e.position_type='received_value' THEN e.amount ELSE -e.amount END) FROM finance_journal_transactions t JOIN finance_journal_entries e ON e.institution_id=t.institution_id AND e.transaction_id=t.id WHERE t.institution_id=$1 AND t.status='confirmed' GROUP BY t.institution_id,e.currency`,[institutionId]); await client.query('COMMIT') } catch(error){await client.query('ROLLBACK');throw error}
+}
+export async function readFoundationPosition(client: PoolClient, institutionId: string): Promise<ReadonlyArray<{currency:string;amount:string}>> { const r=await client.query<{currency:string;amount:string}>(`SELECT currency,amount::text amount FROM finance_position_projection WHERE institution_id=$1 ORDER BY currency`,[institutionId]); return r.rows }

@@ -37,6 +37,11 @@ try {
       [schema, ['command_id', 'journal_type', 'actor_person_id', 'financial_profile_version', 'reason']],
     );
     assert.equal(provenance.rowCount, 5, 'Journal provenance columns must be migration-owned');
+    const outboxRecovery = await client.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name='finance_outbox' AND column_name = ANY($2::text[])`,
+      [schema, ['claimed_at', 'claim_expires_at', 'last_error_code']],
+    );
+    assert.equal(outboxRecovery.rowCount, 3, 'Outbox lease and failure provenance columns must be migration-owned');
 
     const numeric = await client.query<{ data_type: string }>(
       `SELECT data_type FROM information_schema.columns

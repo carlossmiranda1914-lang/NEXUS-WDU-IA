@@ -198,6 +198,15 @@ No test result may be inferred from source inspection or GitHub connector writes
 - `REGRESSIONS=Task 5/4/3 PostgreSQL, isolated migrations, FND01 CP2, FND03 and lint PASS.`
 - `TASK_7=NOT_STARTED`
 
+## Task 7 — projection and durable outbox recovery
+
+- `SCHEMA_RED=finance_outbox had none of claimed_at, claim_expires_at or last_error_code.`
+- `MIGRATION=0030_finance_outbox_recovery.sql adds only approved lease/failure provenance fields and pair/expiry constraints.`
+- `BEHAVIOR_RED=projection/outbox modules were absent.`
+- `GREEN=PostgreSQL proves confirmed-only exact EUR 100 - 30 = 70, USD separation, destroy/rebuild equivalence, and durable claim/fail/retry/complete.`
+- `REGRESSIONS=Journal after_outbox rollback, reversals, Task 5 idempotency and isolated 30-migration chain PASS.`
+- `TASK_8=NOT_STARTED`
+
 ## Task 6 — P1 reversal negative coverage
 
 - `REVIEWED_HEAD=b9a6788c79c8aea006d5b6ad9bb97847688a05e9`
