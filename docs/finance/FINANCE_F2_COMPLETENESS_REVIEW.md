@@ -1,172 +1,101 @@
 # Nexus Edu IA — F2 Money Model Completeness Review
 
-**State:** REVIEW — NOT IMPLEMENTATION AUTHORITY  
-**Reviewed scope:** approved F2-D01 through F2-D10, F0/F1 constraints, current Finance architecture/roadmap, and downstream requirements from Ledger, Payments, Allocation, Reconciliation, Reporting and PostgreSQL persistence.
+**State:** DESIGN-CLOSED — NOT IMPLEMENTATION AUTHORITY  
+**Reviewed scope:** F2-D01 through F2-D13, F0/F1 constraints, current Finance architecture/roadmap, and downstream requirements from Ledger, Payments, Allocation, Reconciliation, Reporting and PostgreSQL persistence.
 
-## Executive determination
+## Final determination
 
-F2 is **NOT YET DESIGN-CLOSED**.
+F2 is **DESIGN-CLOSED** by explicit Product Owner approval.
 
-The approved decisions establish the correct monetary foundation: exact decimal Money, bounded precision, currency registry, strict same-currency arithmetic, explicit FX evidence, transaction/functional duality, deterministic quantization/remainder, strict API parsing/serialization, sign/magnitude separation and executable proof obligations.
+The first completeness review found three material gaps: canonical decimal normalization/identity, exact equality versus reconciliation tolerance, and typed exact-decimal ratio/rate semantics. Those gaps were resolved and explicitly approved as F2-D11, F2-D12 and F2-D13. No approved F2-D01 through F2-D10 decision required reversal.
 
-However, completeness review found **three material gaps** that should be closed before F3 Ledger Model begins. These are not UI details and should not be deferred to implementation because they affect identity/idempotency, reconciliation semantics and the exact-decimal helper types already referenced by approved F2 decisions.
+The approved design now establishes:
+- exact-decimal, currency-explicit canonical Money;
+- bounded Money precision and separate higher-precision calculation/rate envelopes;
+- controlled/versioned Currency Registry;
+- strict same-currency arithmetic and no implicit FX;
+- explicit FX conversion evidence and transaction/functional Money duality;
+- deterministic quantization and remainder conservation;
+- strict canonical transport parsing/serialization;
+- operation-specific sign/magnitude validity;
+- executable proof obligations;
+- canonical decimal normalization and stable Money identity/hash material;
+- exact Money equality isolated from reconciliation tolerance;
+- typed DecimalRatio, Percentage and directional ExchangeRate semantics.
 
-## Evidence from canonical repository
+## Canonical F2 records
 
-The canonical roadmap requires Finance to establish authority/ledger first, followed by payments/allocations, reversals/refunds, reconciliation, financial read models and reports. It also states that legacy `outstandingFees` cannot remain balance authority. Therefore F2 must be stable enough to support those downstream semantics without redesign during coding.
+F2-D01 through F2-D04 are recorded in `FINANCE_F2_MONEY_MODEL_PREPARATION.md`.
 
-The architecture contract states that Finance is ledger-oriented, critical writes are idempotent and transactional, reconciliation/payment confirmation/reversal/refund/adjustment are explicit use cases, and balance is a projection over movements.
+F2-D05 through F2-D13 and the updated proof obligations are recorded in `FINANCE_F2_D05_D13_APPROVED_DECISIONS.md`.
 
-The Product Truth audit confirms the current Finance UI/API surface is not canonical: there is no canonical ledger/obligation/payment-allocation authority yet, and browser-only mutations are not financial facts. F2 therefore has no legacy monetary representation that should be preserved as new authority.
+This closure record must be read with both documents. The split is deliberate to avoid unsafe destructive replacement of the earlier large preparation record.
 
-## Coverage review
+## Final completeness findings
 
 ### Ledger readiness
-**Mostly covered, one gap.**
-
-Covered:
-- exact decimal Money;
-- explicit currency;
-- immutable Money value semantics;
-- no implicit cross-currency arithmetic;
-- sign does not replace economic meaning;
-- historical FX result preservation;
-- monetary proof requirements.
-
-Gap:
-- **canonical decimal identity/normalization is not yet defined.** The design must decide whether textual forms such as `1`, `1.0`, `1.00`, `01.00`, and `-0.00` represent the same canonical Money identity and what exact serialization is used for hashing/idempotency/checksums.
-
-Without this, two semantically equal Money values could produce different idempotency material or audit/checksum payloads.
+PASS at Money Model boundary. Money identity, exactness, currency semantics, normalization, sign separation and historical conversion behavior are sufficiently constrained for F3 to design ledger semantics without inventing monetary rules.
 
 ### Payments/provider readiness
-**Covered with one dependent type gap.**
-
-Covered:
-- provider-specific representations normalize before Finance Core;
-- payment amounts cannot use floating point authority;
-- provider-executed FX preserves applied rate/result;
-- unknown/institution-disabled currencies fail closed;
-- zero/negative validity is operation-specific.
-
-Gap:
-- the approved design references exact-decimal scalars/ratios and ExchangeRate but has not fully defined their canonical semantics, bounds and serialization.
+PASS at Money Model boundary. Provider representations must normalize before Finance Core; FX is explicit/evidenced; rates are directional typed exact decimals; provider/user action cannot create hidden monetary authority.
 
 ### Allocation readiness
-**Covered.**
-
-The approved same-currency arithmetic and deterministic remainder laws are sufficient foundation for later allocation policy. Multi-student ordering/priority remains correctly deferred to the Allocation domain, not Money.
+PASS at Money Model boundary. Same-currency arithmetic, explicit quantization and deterministic remainder conservation are defined. Allocation priority/order remains correctly deferred to the Allocation domain.
 
 ### Reconciliation readiness
-**One material gap.**
-
-Money equality is strict, but reconciliation may legitimately use a policy tolerance or classify differences caused by provider fees, FX or settlement behavior.
-
-F2 does not yet state the critical boundary:
-
-> approximate/tolerance matching must never become `Money.equals()` and must never silently mutate an amount.
-
-Without this law, future reconciliation code could introduce fuzzy monetary equality into the core Money type.
+PASS at Money Model boundary. `Money.equals()` is exact only; any tolerance is external, explicit, currency-aware and versioned, and cannot alter monetary facts.
 
 ### Reporting/read-model readiness
-**Covered at foundation level.**
+PASS at Money Model boundary. Transaction, Functional and Presentation Money concerns are separated and historical economic conversion is reproducible without current FX rates.
 
-Transaction Money, Functional Money and Presentation Currency are separated. Historical economic conversion is immutable; presentation conversion is non-authoritative. Detailed reporting rate selection/as-of policy belongs to Reporting, provided it preserves the F2 distinction.
+### PostgreSQL readiness
+PASS for architectural handoff to F4. F2 requires exact non-floating persistence and exact round-trip, while concrete `NUMERIC(p,s)` mappings remain intentionally deferred to persistence design.
 
-### PostgreSQL persistence readiness
-**Mostly covered, one gap shared with Ledger.**
+## Placeholder / ambiguity / contradiction adjudication
 
-Covered:
-- no floating-point monetary columns;
-- bounded decimal envelope;
-- exact round-trip requirement;
-- strict currency semantics.
+No unresolved placeholder is permitted to redefine F2 semantics during implementation. Items deliberately deferred are assigned to later Finance design boundaries rather than left as implicit TODOs.
 
-Gap:
-- canonical decimal normalization/identity is required before defining stable DB/API hashing, equality, unique/idempotency material and deterministic serialized evidence.
+No material contradiction was found across D01-D13 after D11-D13 closure. In particular:
+- D08 strict transport and D11 normalization are compatible: parsing is strict while equivalent accepted decimal lexical forms normalize to one economic identity;
+- D04 exact Money semantics and D12 reconciliation tolerance are compatible because tolerance is outside Money;
+- D05 conversion evidence and D13 ExchangeRate are compatible because mathematical rate identity is distinct from provenance/evidence;
+- D02 Money envelope and D13 ratio/rate envelope are intentionally distinct;
+- D07 quantization remains mandatory before calculation output becomes canonical Money.
 
-## Required additional F2 decisions
+## Proof obligations carried into implementation planning
 
-### F2-D11 — Canonical Decimal Normalization & Money Identity
-**REQUIRED — OPEN.**
+Future Money Model implementation must prove, at the appropriate proof level:
+1. no authoritative floating-point monetary path;
+2. exact decimal API/domain/PostgreSQL round-trip;
+3. same-currency arithmetic and cross-currency rejection;
+4. currency-registry and institution-policy enforcement;
+5. precision/scale/overflow boundaries;
+6. no silent rounding or implicit FX;
+7. deterministic quantization and exact remainder conservation;
+8. FX provenance and historical immutability;
+9. preservation of Transaction Money and required Functional Money;
+10. strict boundary parsing and canonical serialization;
+11. normalization idempotency and negative-zero elimination;
+12. equality/hash/idempotency consistency for equivalent Money;
+13. exact Money equality independent of reconciliation tolerance;
+14. typed ratio/percentage/rate non-interchangeability;
+15. ExchangeRate direction, positive economic rate and no implicit inversion;
+16. historical reproducibility under later registry/policy/rate changes;
+17. server-side tenant/institution policy enforcement.
 
-Must define:
-- numeric equality versus textual equality;
-- canonical treatment of leading zeros;
-- canonical treatment of trailing fractional zeros;
-- prohibition/normalization of negative zero;
-- canonical decimal serialization used for hashing, idempotency and evidence;
-- whether display scale is ever preserved separately from Money identity;
-- exact invariant for `serialize(parse(x))` and equality/hash consistency.
+Structural/source-string proof cannot substitute for economic behavior. Real disposable PostgreSQL proof is required where persistence behavior is claimed.
 
-Recommended direction: Money identity is numeric amount + currency, not user-entered lexical formatting. A single canonical decimal serialization should be generated server-side. Negative zero should normalize to zero. Display scale remains presentation metadata rather than Money identity.
+## Deliberately deferred — not F2 defects
 
-### F2-D12 — Exact Equality vs Reconciliation Tolerance
-**REQUIRED — OPEN.**
+Allocation priority across obligations/students, provider-fee accounting, tax models, cash denomination handling, settlement batching, reconciliation workflow/state machine, accounting FX gain/loss and revaluation, report-specific presentation-rate selection, fiscal-document-specific rounding, exact PostgreSQL schema mapping and concrete decimal-library selection remain later design responsibilities. They must preserve F2 laws and cannot silently reopen Money semantics.
 
-Must define:
-- `Money.equals()` is exact same-currency equality only;
-- no epsilon/floating tolerance exists inside Money;
-- reconciliation tolerance is an explicit versioned business policy;
-- a tolerance match produces a reconciliation classification/exception decision, not an altered Money amount;
-- fee/FX/settlement differences remain explicit financial facts or exceptions where applicable.
+## Closure
 
-Recommended direction: never introduce fuzzy equality into the canonical Money value object.
-
-### F2-D13 — Decimal Ratio / Percentage / ExchangeRate Type Contract
-**REQUIRED — OPEN.**
-
-Approved F2 decisions already rely on non-Money exact decimal types. Their contract must be closed before F2 is complete.
-
-Must define:
-- exact-decimal, non-floating representation;
-- bounded precision/scale;
-- canonical serialization/normalization;
-- `Percentage`/generic ratio semantics versus `ExchangeRate` semantics;
-- ExchangeRate requires explicit base currency, quote currency and direction;
-- no implicit rate inversion;
-- zero/negative rate validity rules;
-- multiplication with Money produces calculation output requiring explicit quantization before canonical Money;
-- source/effective-time evidence remains outside the numeric rate value where appropriate but bound to economic conversion evidence.
-
-Recommended direction: small immutable typed value objects (`DecimalRatio`, `Percentage` where useful, `ExchangeRate`) rather than one untyped decimal helper used everywhere.
-
-## Findings deliberately deferred — not F2 gaps
-
-The following are important but belong to later domains and should **not** inflate F2:
-
-- allocation priority across siblings/obligations;
-- provider fee accounting;
-- tax calculation models;
-- cash denomination handling;
-- bank settlement batching;
-- reconciliation workflow/state machine;
-- accounting FX gains/losses and revaluation;
-- report-specific presentation-rate/as-of selection;
-- invoice/fiscal rounding rules beyond the generic monetary-policy boundary;
-- exact PostgreSQL table/column definitions;
-- actual decimal-library selection.
-
-## Risk adjudication
-
-- **P0 design gaps before F3:** D11, D12, D13.
-- **P1:** none identified in F2 foundation after those three are closed.
-- **Premature implementation risk:** HIGH if F3/F4 begins before D11-D13, because normalization, equality/tolerance or rate semantics would otherwise be invented inside Ledger/Reconciliation implementation.
-- **Need to redesign approved D01-D10:** NO. The gaps extend them; no contradiction requiring reversal was found.
-
-## Closure gate
-
-F2 may be marked **DESIGN-CLOSED** only after:
-
-1. F2-D11 approved;
-2. F2-D12 approved;
-3. F2-D13 approved;
-4. D01-D13 consolidated into the canonical F2 document;
-5. internal contradiction/placeholder scan passes;
-6. proof obligations are updated to include canonicalization/hash consistency, strict-vs-tolerance behavior and ratio/rate serialization;
-7. Product Owner explicitly approves F2 closure.
-
-Until then:
-
-**F2_STATUS=OPEN**  
+**F2_STATUS=DESIGN-CLOSED**  
+**PRODUCT_OWNER_APPROVAL=YES**  
+**KNOWN_F2_P0_DESIGN_GAPS=0**  
+**KNOWN_F2_P1_DESIGN_GAPS=0**  
 **IMPLEMENTATION_AUTHORIZED=NO**  
-**F3_LEDGER_DESIGN_START=BLOCKED_BY_F2_D11_D12_D13**
+**NEXT_ARCHITECTURAL_STAGE=F3_LEDGER_MODEL**
+
+F2 closure authorizes opening F3 design only. It does not authorize Finance implementation, migrations, APIs, UI or Mission Packs.
