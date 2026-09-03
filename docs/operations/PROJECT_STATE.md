@@ -20,7 +20,7 @@ Accepted predecessor checkpoints:
 
 Task 3 persistence decision: PostgreSQL fixed-scale `NUMERIC(p,s)` was proven to silently round excessive fractional scale. The accepted physical mapping is exact `NUMERIC` plus explicit scale/magnitude CHECK constraints enforcing the F2 Money 30/12 and rate 30/18 envelopes. Future work must not revert this to a typmod that reintroduces silent rounding.
 
-The active executable mission is now:
+The active executable mission is:
 
 - Mission: `FINANCE-FOUNDATION-04 — Journal Domain + Atomic Repository`
 - Branch: `codex/finance-foundation-01`
@@ -30,20 +30,37 @@ The active executable mission is now:
 - Writer: Codex
 - Reviewer: Antigravity, READ-ONLY on the exact implementation HEAD
 
-Implementation authorization is limited to Task 4. Task 5+ and upper Finance domains remain unauthorized.
+Implementation authorization remains limited to Task 4. Task 5+ and upper Finance domains remain unauthorized.
 
-## Current authorized task
+## Task 4 schema adjudication
 
-Task 4 may create only the minimum Journal domain/repository and its real PostgreSQL behavioral test, plus a narrow package test alias if needed and the execution record update.
+Task 4 preflight correctly STOPped before RED because the accepted Task 3 `finance_journal_transactions` table could not preserve mandatory approved provenance from `ConfirmJournalInput`: `commandId`, `journalType`, `actorPersonId`, `financialProfileVersion`, and optional `reason`.
 
-The required sequence is:
+This is adjudicated as a local persistence-contract gap, not a reopening of F0-F4 or Task 3 architecture.
 
-`DB safety preflight -> behavioral PostgreSQL RED -> minimum Journal domain/repository -> PostgreSQL atomic happy path -> failure-injection rollback proofs -> tenant/currency/position negatives -> Task 3 schema regression -> lint -> build -> git diff --check -> checkpoint -> STOP before Task 5`.
+A single append-only migration is now explicitly authorized, provided migration preflight still finds `0029` as the next free number:
 
-No migration is authorized by default. If the accepted Task 3 schema cannot represent the approved Task 4 contract faithfully, execution must STOP and report the exact missing invariant before changing schema.
+- `src/db/migrations/0029_finance_journal_provenance.sql`
+
+It may add only:
+
+- `command_id TEXT NOT NULL`;
+- `journal_type TEXT NOT NULL` constrained to the two approved foundation Journal types;
+- `actor_person_id UUID NOT NULL` referencing canonical `people(id)` with `ON DELETE RESTRICT`;
+- `financial_profile_version INTEGER NOT NULL`;
+- nullable `reason TEXT`;
+- tenant-safe `(institution_id, financial_profile_version)` FK to `finance_profile_versions(institution_id, version)` with `ON DELETE RESTRICT`.
+
+No Task 5 idempotency/replay uniqueness is authorized in this migration. Migrations `0027` and `0028` remain immutable.
+
+## Current authorized sequence
+
+`DB safety + migration preflight -> schema RED for missing provenance -> append-only 0029 -> schema GREEN -> Journal behavioral RED -> minimum Journal domain/repository -> PostgreSQL atomic happy path -> failure-injection rollback proofs -> tenant/currency/position/profile negatives -> Task 3 schema regression -> migration bootstrap/checksum regression -> lint -> build -> git diff --check -> checkpoint -> STOP before Task 5`.
 
 ## Task 4 protected invariants
 
+- mandatory Journal provenance is stored authoritatively, not hidden only in audit metadata;
+- financial profile provenance is tenant-safe by institution + version;
 - confirmed Journal facts are append-only economic authority;
 - prepared/non-confirmed state has zero canonical financial effect;
 - confirmation is server-authoritative and atomic;
@@ -59,7 +76,8 @@ No migration is authorized by default. If the accepted Task 3 schema cannot repr
 ## Explicitly forbidden in the current task
 
 - Task 5 or later Finance Foundation implementation;
-- new migration/schema mutation without STOP and adjudication;
+- any migration beyond the explicitly adjudicated minimal Journal provenance amendment;
+- command-level idempotency/replay/concurrency behavior;
 - Payment, Allocation, Reconciliation, providers, fiscal/reporting or Finance UI;
 - implicit FX;
 - JavaScript-number or PostgreSQL floating-point monetary authority;
@@ -73,9 +91,9 @@ No migration is authorized by default. If the accepted Task 3 schema cannot repr
 
 The canonical engineering operating model remains active: Risk -> Proof -> Tool -> DONE, one writer per authority unit, SHA-bound handoffs, TDD/stateful proof for implementation, independent review, root-cause discipline and truthful evidence.
 
-For Task 4, source inspection cannot substitute for atomicity proof. Claims about rollback, complete economic state, tenant isolation and PostgreSQL transaction boundaries require real disposable PostgreSQL execution.
+For Task 4, source inspection cannot substitute for schema or atomicity proof. The provenance FK and rollback behavior require real disposable PostgreSQL execution.
 
-STOP conditions are binding. A STOP must be resolved by root cause, concrete external dependency or actual architecture/product escalation; tests/configuration may not be weakened to force progress.
+STOP conditions remain binding. A STOP must be resolved by root cause, concrete external dependency or actual architecture/product escalation; tests/configuration may not be weakened to force progress.
 
 ## Deferred domains
 
@@ -98,6 +116,6 @@ Resume by reading, in order: `AGENTS.md`, `docs/README.md`, this file, `docs/ope
 
 Resume `FINANCE-FOUNDATION-04` in the existing clean isolated worktree on branch `codex/finance-foundation-01`.
 
-Synchronize to the current remote HEAD, run the canonical local PostgreSQL safety bootstrap, create `tests/finance-journal-postgres.test.ts` first and observe a valid RED before creating Journal production code. Implement only Task 4 and prove atomic rollback behavior on real PostgreSQL.
+Synchronize to current remote HEAD, run the canonical local PostgreSQL safety bootstrap, confirm `0029` remains next free, then extend the schema PostgreSQL test first and observe the provenance RED. Only then create the explicitly authorized `0029_finance_journal_provenance.sql`. After schema GREEN, proceed to the Journal behavioral RED and Task 4 implementation.
 
 Do not start Task 5.
