@@ -32,6 +32,11 @@ try {
       [schema, expectedTables],
     );
     assert.equal(tables.rowCount, expectedTables.length, 'Finance foundation tables must be created by the canonical migration');
+    const provenance = await client.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name='finance_journal_transactions' AND column_name = ANY($2::text[])`,
+      [schema, ['command_id', 'journal_type', 'actor_person_id', 'financial_profile_version', 'reason']],
+    );
+    assert.equal(provenance.rowCount, 5, 'Journal provenance columns must be migration-owned');
 
     const numeric = await client.query<{ data_type: string }>(
       `SELECT data_type FROM information_schema.columns
@@ -49,7 +54,11 @@ try {
     const transactionA = '00000000-0000-0000-0000-000000000011';
     const transactionB = '00000000-0000-0000-0000-000000000012';
     await client.query(`INSERT INTO institutions (id,name,slug,status) VALUES ($1,'A','finance-a','active'),($2,'B','finance-b','active')`, [institutionA, institutionB]);
-    await client.query(`INSERT INTO finance_journal_transactions (id,institution_id,status,currency,amount) VALUES ($1,$2,'prepared','EUR','100.00'),($3,$4,'prepared','EUR','50.00')`, [transactionA, institutionA, transactionB, institutionB]);
+    const actorA = '00000000-0000-0000-0000-000000000021';
+    const actorB = '00000000-0000-0000-0000-000000000022';
+    await client.query(`INSERT INTO people (id,name) VALUES ($1,'Actor A'),($2,'Actor B')`, [actorA, actorB]);
+    await client.query(`INSERT INTO finance_profile_versions (institution_id,version,effective_from,primary_jurisdiction,functional_currency,financial_timezone,monetary_policy_version,enabled_currencies) VALUES ($1,1,now(),'PT','EUR','Europe/Lisbon','v1','["EUR"]'),($2,1,now(),'PT','EUR','Europe/Lisbon','v1','["EUR"]')`, [institutionA, institutionB]);
+    await client.query(`INSERT INTO finance_journal_transactions (id,institution_id,status,currency,amount,command_id,journal_type,actor_person_id,financial_profile_version) VALUES ($1,$2,'prepared','EUR','100.00','cmd-a','foundation_value_received',$3,1),($4,$5,'prepared','EUR','50.00','cmd-b','foundation_value_received',$6,1)`, [transactionA, institutionA, actorA, transactionB, institutionB, actorB]);
     await client.query(`INSERT INTO finance_journal_entries (institution_id,transaction_id,currency,amount,position_type,source_ref) VALUES ($1,$2,'EUR','100.00','received_value','fixture')`, [institutionA, transactionA]);
 
     await rejects(() => client.query(`INSERT INTO finance_journal_entries (institution_id,transaction_id,currency,amount,position_type,source_ref) VALUES ($1,$2,'EUR','1','received_value','orphan')`, [institutionA, randomUUID()]), 'orphan journal entry must be rejected');

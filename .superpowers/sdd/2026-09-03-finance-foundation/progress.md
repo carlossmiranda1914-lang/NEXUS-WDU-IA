@@ -1,6 +1,6 @@
 # Finance Foundation Implementation — Execution Record
 
-**Status:** TASK_3_GREEN_CHECKPOINT
+**Status:** TASK_4_GREEN_CHECKPOINT
 **Plan:** `docs/superpowers/plans/2026-09-03-finance-foundation-implementation.md`
 **Spec:** `docs/superpowers/specs/2026-09-03-finance-foundation-implementation-design.md`
 
@@ -151,3 +151,14 @@ No test result may be inferred from source inspection or GitHub connector writes
 - `GREEN_COMMANDS=TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-foundation-schema-postgres.test.ts; npm run test:migrations:isolated; TEST_DATABASE_LOCAL_AUTHORIZED=true npm run test:fnd01:cp2:local; npm run lint; npm run build; git diff --check`
 - `GREEN_RESULT=PASS`
 - `TASK_4=NOT_STARTED`
+
+## Task 4 — provenance schema and atomic Journal
+
+- `SCHEMA_RED=finance_journal_transactions had none of command_id, journal_type, actor_person_id, financial_profile_version or reason.`
+- `SCHEMA_MIGRATION=0029_finance_journal_provenance.sql` — append-only approved provenance fields and tenant-safe financial profile-version FK.
+- `JOURNAL_RED=ERR_MODULE_NOT_FOUND for journal-repository.ts before production Journal code.`
+- `JOURNAL_GREEN=Real PostgreSQL confirmation writes transaction, typed entries, audit and outbox in one transaction.`
+- `ROLLBACK_PROOF=after_transaction, after_entries, after_audit and after_outbox each left zero attempted transaction authority.`
+- `NEGATIVES=Cross-currency, unsupported position and foreign profile tenant attempts reject; prepared transactions are not returned as confirmed.`
+- `GATES=finance journal/schema PostgreSQL, migration bootstrap/checksum, FND03, lint, build and diff-check PASS.`
+- `TASK_5=NOT_STARTED`
