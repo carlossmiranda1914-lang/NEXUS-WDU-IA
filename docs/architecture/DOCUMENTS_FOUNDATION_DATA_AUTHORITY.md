@@ -115,6 +115,36 @@ Institutional policy may configure roles and permitted actions only within those
 
 No permission is inferred from a prior download, a previously generated link or a browser session. Each future file access must be evaluated against the current valid permission and institutional context.
 
+## 8. Global category-policy matrix
+
+### 8.1 Global safe-format catalogue
+
+The initial global safe catalogue is:
+
+- PDF;
+- JPG;
+- PNG;
+- modern Office documents without macros.
+
+Institutions select allowed formats for each category only from this catalogue. Executables, archives, legacy/unknown binary formats and macro-enabled Office files are outside the first cut. A file whose detected type differs from its declared type or extension is quarantined and blocked from access.
+
+### 8.2 Initial category rules
+
+| Category | Minimum classification | Allowed formats | File-size policy | Retention | Default transfer rule |
+|---|---|---|---|---|---|
+| Enrollment / identity | Restricted | Institution selects from global safe catalogue | Per category and institution, within central global ceiling | Global jurisdiction-and-category profile | Blocked until explicitly permitted |
+| Attendance justification | Confidential | Institution selects from global safe catalogue | Per category and institution, within central global ceiling | Global jurisdiction-and-category profile | Blocked until explicitly permitted |
+| Academic documents | Confidential | Institution selects from global safe catalogue | Per category and institution, within central global ceiling | Global jurisdiction-and-category profile | Blocked until explicitly permitted |
+| Administrative / financial | Restricted | PDF, JPG, PNG and modern Office without macros, subject to institutional category policy | Per category and institution, within central global ceiling | Global jurisdiction-and-category profile | Blocked until explicitly permitted |
+
+A category classified Confidential or Restricted never gains inter-institutional transfer merely by default. The earlier general default of transfer for non-restricted future categories does not apply to the four first-cut categories.
+
+### 8.3 Retention and size governance
+
+There is one global policy, approved centrally and versioned. It contains mandatory jurisdiction-and-category retention profiles. Institutions cannot independently choose retention periods.
+
+For file size, central governance defines a safe maximum ceiling for each category. Institutions may select a lower limit by category, but cannot exceed that ceiling. Exact numeric ceilings remain a centrally governed configuration decision, not a hard-coded domain rule.
+
 ## 8. Transfer rule
 
 Transfer is not sharing an original across institutions. When the global policy permits a category transfer, Documents Foundation creates a controlled destination copy and preserves immutable provenance to its origin. The policy must state the eligible category, actor, legal basis, destination condition and audit requirements.
