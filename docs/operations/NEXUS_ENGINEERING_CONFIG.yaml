@@ -16,20 +16,20 @@ active_work:
   activity: IMPLEMENTATION
   task: TASK-7-PROJECTION-RECOVERY-DURABLE-OUTBOX
   task_name: Projection recovery and durable outbox
-  state: READY
+  state: READY_AFTER_SCHEMA_ADJUDICATION
   owner: Product Owner
   write_owner: CODEX
   reviewer: ANTIGRAVITY
   reviewer_mode: READ_ONLY
   risk: HIGH
   resume_rule: >-
-    Resume only FINANCE-FOUNDATION-07 in the existing clean isolated worktree. Run DB safety,
-    write the Task 7 PostgreSQL recovery test first and observe RED, then implement the minimum
-    confirmed-only rebuildable projection and durable outbox claim/complete/fail primitives.
-    Prove destroy/rebuild equivalence, historical reproducibility, mandatory-outbox rollback,
-    fresh-process restart recovery and durable retry on real PostgreSQL. If truthful concurrent
-    claim ownership requires schema not currently present, STOP rather than emulate it in memory.
-    Run Tasks 6/5/4/schema/migration regressions plus lint/build/diff, then stop before Task 8.
+    Resume only FINANCE-FOUNDATION-07 in the existing clean isolated worktree. The prior STOP is
+    adjudicated: if 0030 is still next free, first RED the schema proof then add only
+    0030_finance_outbox_recovery.sql with claimed_at, claim_expires_at and last_error_code plus
+    lease-consistency constraints. Then RED/GREEN the Task 7 projection/outbox behavior. Prove
+    confirmed-only rebuild, destroy/rebuild equivalence, historical reproducibility, mandatory
+    outbox rollback, fresh-process recovery, durable fail/retry, concurrent non-overlapping claims
+    and expired-lease recovery on real PostgreSQL. Stop before Task 8.
 
 execution:
   one_code_owner_per_unit: true
@@ -40,19 +40,23 @@ execution:
 scope:
   authorized:
     - FINANCE-FOUNDATION-07 Task 7 only
+    - src/db/migrations/0030_finance_outbox_recovery.sql only if 0030 remains next free
     - src/modules/finance/finance-projection.ts
     - src/modules/finance/finance-outbox.ts
     - tests/finance-projection-recovery-postgres.test.ts
+    - tests/finance-foundation-schema-postgres.test.ts narrow 0030 proof
     - package.json narrow Task 7 test alias if required
     - narrow existing Journal test adjustment only for mandatory-outbox rollback proof
     - execution record updates
   forbidden:
     - Task 8 or later Finance Foundation work
-    - new migration unless STOP and explicit adjudication
+    - any migration beyond the explicitly adjudicated 0030
+    - rewrite of migrations 0027 through 0029
+    - worker identity or provider-delivery product semantics
     - second Journal idempotency projection or outbox authority
     - Payment Allocation Reconciliation provider fiscal reporting or Finance UI
     - implicit FX or JavaScript-number monetary authority
-    - process-local queue or lock as recovery/concurrency authority
+    - process-local queue lock or lease as correctness authority
     - destructive mutation of confirmed Journal facts
     - current policy or FX reinterpretation of historical facts
     - external network/provider delivery implementation
@@ -70,10 +74,11 @@ protected_invariants:
   - projection arithmetic uses exact Money and keeps currencies separate
   - projection rebuild depends only on persisted historical authority not current policy FX browser or legacy balance
   - mandatory outbox intent remains atomic with the Journal fact
-  - pending outbox work survives process restart in PostgreSQL
-  - outbox retry and completion are durable and tenant-safe
+  - active outbox claim is a durable time-bounded PostgreSQL lease
+  - unexpired leased rows are not claimable and expired leases are recoverable
+  - attempts and last_error_code preserve durable failure retry state
+  - completion is idempotent and completed rows are never reclaimed
   - consumer correctness cannot depend on process-local memory
-  - concurrent claim safety must be truthful under existing persistence or execution must STOP
   - Task 7 does not implement provider delivery or upper Finance domains
 
 gates:
@@ -98,6 +103,8 @@ gates:
   task_5_unresolved_p1: 0
   task_6_unresolved_p0: 0
   task_6_unresolved_p1: 0
+  task_7_schema_red_required: true
+  task_7_0030_append_only_required: true
   task_7_postgres_red_required: true
   task_7_confirmed_only_projection_required: true
   task_7_destroy_rebuild_required: true
@@ -106,6 +113,7 @@ gates:
   task_7_restart_recovery_required: true
   task_7_durable_retry_required: true
   task_7_concurrent_claim_safety_required: true
+  task_7_expired_lease_recovery_required: true
   task_6_reversal_regression_required: true
   task_5_idempotency_regression_required: true
   task_4_atomicity_regression_required: true
@@ -122,7 +130,7 @@ next_program:
   state: IMPLEMENTING
   authorized_phase: EXECUTION
   implementation_authorized: true
-  authorization_scope: FINANCE-FOUNDATION-07_TASK_7_ONLY
+  authorization_scope: FINANCE-FOUNDATION-07_TASK_7_WITH_ADJUDICATED_0030_ONLY
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -136,7 +144,7 @@ resource_policy:
     - required_quality_gates
 
 integration:
-  technical_task_checkpoint: TASK_6_ACCEPTED_TASK_7_READY
+  technical_task_checkpoint: TASK_6_ACCEPTED_TASK_7_SCHEMA_ADJUDICATED
   mission_to_main: NOT_READY
   dirty_worktree_allowed: false
 
