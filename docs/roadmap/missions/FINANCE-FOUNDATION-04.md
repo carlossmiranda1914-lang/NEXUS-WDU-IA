@@ -1,6 +1,6 @@
 # FINANCE-FOUNDATION-04 — Journal Domain + Atomic Repository
 
-**State:** READY_FOR_EXECUTION
+**State:** READY_FOR_EXECUTION_AFTER_SCHEMA_ADJUDICATION
 **Branch:** `codex/finance-foundation-01`
 **Accepted predecessor HEAD:** `2f09580f7814da2fa8b15d063d83f6df53f328b1`
 **Spec:** `docs/superpowers/specs/2026-09-03-finance-foundation-implementation-design.md`
@@ -11,11 +11,13 @@
 
 Implement only Task 4 from the approved Finance Foundation plan: the minimum Journal domain + PostgreSQL repository needed to prove canonical atomic confirmation and append-only economic authority.
 
-Tasks 1–3 are accepted predecessors. Do not start Task 5 idempotency/concurrency orchestration beyond the minimum existing command-result linkage structurally required by the already-approved Task 4 transaction boundary.
+Tasks 1–3 are accepted predecessors. A Task 4 preflight STOP proved that the accepted Task 3 schema cannot faithfully represent all mandatory `ConfirmJournalInput` provenance. This Mission Pack therefore explicitly authorizes one minimal append-only schema amendment before the Journal behavioral RED.
+
+Do not start Task 5 idempotency/concurrency orchestration beyond the minimum existing command-result linkage structurally required by the already-approved Task 4 transaction boundary.
 
 ## Accepted persistence note
 
-Task 3 established that PostgreSQL typmods such as `NUMERIC(30,12)` silently round excessive fractional scale before a constraint can observe the original value. The accepted physical implementation is therefore:
+Task 3 established that PostgreSQL typmods such as `NUMERIC(30,12)` silently round excessive fractional scale before a constraint can observe the original value. The accepted physical implementation remains:
 
 - exact PostgreSQL `NUMERIC` storage;
 - explicit scale/magnitude `CHECK` constraints preserving the F2 30/12 Money and 30/18 rate envelopes;
@@ -23,34 +25,68 @@ Task 3 established that PostgreSQL typmods such as `NUMERIC(30,12)` silently rou
 
 Do not revert these columns to fixed-scale typmods in Task 4.
 
+## Schema adjudication — explicitly authorized
+
+The current `finance_journal_transactions` structure cannot preserve mandatory Task 4 provenance fields `commandId`, `journalType`, `actorPersonId`, `financialProfileVersion`, and optional `reason`.
+
+If `0029` remains the next free migration number at execution preflight, create exactly:
+
+- `src/db/migrations/0029_finance_journal_provenance.sql`
+
+The migration may only add the minimum authoritative columns/constraints needed to represent the approved contract:
+
+```text
+command_id                TEXT NOT NULL
+journal_type              TEXT NOT NULL CHECK in ('foundation_value_received','foundation_reversal')
+actor_person_id            UUID NOT NULL REFERENCES people(id) ON DELETE RESTRICT
+financial_profile_version INTEGER NOT NULL
+reason                    TEXT NULL
+```
+
+and a tenant-safe profile-version relationship:
+
+```text
+FOREIGN KEY (institution_id, financial_profile_version)
+  REFERENCES finance_profile_versions(institution_id, version)
+  ON DELETE RESTRICT
+```
+
+Do not add command-level replay/uniqueness semantics here; Task 5 owns idempotency/concurrency behavior. Do not invent additional Journal fields. Do not rewrite migrations `0027` or `0028`.
+
+Before creating production Journal code, add/extend a real PostgreSQL schema regression proving the new provenance columns and profile FK behave correctly. This schema amendment is part of Task 4 prerequisite completion, not a reopening of Task 3 architecture.
+
 ## Required method
 
 Use strict TDD + real PostgreSQL stateful proof:
 
 1. Synchronize the existing clean worktree to the current remote HEAD.
 2. Re-run the approved local PostgreSQL safety preflight.
-3. Read the Task 4 section of the implementation plan plus the existing Task 3 schema.
-4. Write `tests/finance-journal-postgres.test.ts` first.
-5. Execute it and observe a valid RED because the Journal domain/repository implementation does not yet exist.
-6. Implement the minimum Journal domain and repository only.
-7. Prove atomicity with failure injection at each required stage on real PostgreSQL.
-8. Run targeted Finance/PostgreSQL regressions + lint/build/diff gates.
-9. Commit, push normally, record exact HEAD and stop before Task 5.
+3. Confirm `0029` is the next free migration number.
+4. Extend the PostgreSQL schema test first so it REDs on missing Task 4 provenance columns/constraints.
+5. Create only the authorized append-only `0029_finance_journal_provenance.sql` and prove the schema RED turns GREEN.
+6. Then write `tests/finance-journal-postgres.test.ts` before Journal production code.
+7. Execute it and observe a valid RED because the Journal domain/repository implementation does not yet exist.
+8. Implement the minimum Journal domain and repository only.
+9. Prove atomicity with failure injection at each required stage on real PostgreSQL.
+10. Run targeted Finance/PostgreSQL regressions + lint/build/diff gates.
+11. Commit, push normally, record exact HEAD and stop before Task 5.
 
 ## Authorized files
 
 Create:
 
+- `src/db/migrations/0029_finance_journal_provenance.sql` only if `0029` remains next free at preflight;
 - `src/modules/finance/journal-model.ts`
 - `src/modules/finance/journal-repository.ts`
 - `tests/finance-journal-postgres.test.ts`
 
 May update:
 
+- `tests/finance-foundation-schema-postgres.test.ts` only for the newly authorized provenance-schema proof;
 - `.superpowers/sdd/2026-09-03-finance-foundation/progress.md`
 - `package.json` only if one narrowly-scoped Task 4 Finance test alias is required by the approved plan.
 
-Read/integrate only unless a proved blocker requires adjudication:
+Read/integrate only unless another proved blocker requires adjudication:
 
 - `src/modules/finance/money.ts`
 - `src/modules/finance/exact-decimal.ts`
@@ -58,8 +94,6 @@ Read/integrate only unless a proved blocker requires adjudication:
 - `src/db/migrations/0027_finance_foundation.sql`
 - `src/db/migrations/0028_finance_exact_decimal_envelopes.sql`
 - canonical PostgreSQL safety/migration helpers.
-
-No migration is authorized by default in Task 4. If the accepted Task 3 schema is genuinely insufficient to implement the approved Task 4 contract, STOP and report the exact missing invariant before creating a migration.
 
 ## Required domain contract
 
@@ -99,7 +133,7 @@ export interface JournalRepository {
 }
 ```
 
-If existing schema fields cannot faithfully represent an approved field in this contract, STOP rather than silently dropping provenance or inventing a substitute.
+If the schema remains unable to faithfully represent this contract after the authorized `0029`, STOP rather than silently dropping provenance or inventing a substitute.
 
 ## Journal laws
 
@@ -118,7 +152,7 @@ If existing schema fields cannot faithfully represent an approved field in this 
 
 For the foundation confirmation command, the same PostgreSQL transaction must include every required piece of authoritative state needed by the approved schema/contract:
 
-- `finance_journal_transactions` row;
+- `finance_journal_transactions` row including mandatory provenance;
 - complete `finance_journal_entries` set;
 - required `finance_audit_records` row;
 - required `finance_command_results` linkage if the Task 4 repository contract uses the already-created structural authority;
@@ -149,11 +183,17 @@ For every failure point, PostgreSQL proof must show **zero surviving economic au
 Real PostgreSQL tests must prove at minimum:
 
 ```text
+missing Task 4 provenance schema
+=> valid schema RED before migration 0029
+
+valid provenance schema + tenant-safe profile version
+=> schema GREEN after migration 0029
+
 missing Journal implementation
-=> valid RED before production code
+=> valid behavioral RED before production code
 
 valid same-tenant confirmation
-=> one confirmed transaction + complete typed entry set + required audit/outbox state
+=> one confirmed transaction + mandatory provenance + complete typed entry set + required audit/outbox state
 
 prepared/non-confirmed row
 => no canonical confirmed read result
@@ -164,7 +204,7 @@ mixed currencies without conversion evidence
 untyped/unsupported position type
 => rejected
 
-foreign-tenant transaction/reference attempt
+foreign-tenant transaction/profile reference attempt
 => rejected/fail closed
 
 failure after transaction insert
@@ -202,33 +242,41 @@ Preflight:
 ```bash
 git status --short
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap-local-worktree.ps1 -ExpectedBranch codex/finance-foundation-01
+git ls-files "src/db/migrations/*.sql"
 ```
 
-RED:
+Schema RED/GREEN:
+
+```bash
+TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-foundation-schema-postgres.test.ts
+```
+
+Behavioral RED/GREEN:
 
 ```bash
 TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-journal-postgres.test.ts
 ```
 
-GREEN / proof:
+Final proof:
 
 ```bash
 TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-journal-postgres.test.ts
 TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-foundation-schema-postgres.test.ts
+npm run test:migrations:isolated
+npm run test:fnd01:cp2:local
 npm run test:fnd03
 npm run lint
 npm run build
 git diff --check
 ```
 
-If package aliases exist for these exact tests after Task 3/4, using those aliases is acceptable only when they execute the same commands.
-
 ## STOP conditions
 
 STOP and report without workaround if:
 
-- the accepted Task 3 schema cannot represent required Journal type/provenance atomically;
-- implementation requires a new migration or schema mutation not already authorized;
+- `0029` is no longer the next free migration number;
+- the minimum provenance amendment above still cannot represent the approved Task 4 contract;
+- implementing faithful provenance requires additional architecture beyond these approved fields/relationships;
 - exact Money would need conversion through JavaScript `number` or PostgreSQL floating-point;
 - mixed-currency confirmation would require implicit FX;
 - atomicity would require more than one independent database transaction;
@@ -241,12 +289,15 @@ STOP and report without workaround if:
 
 `FINANCE-FOUNDATION-04` is DONE only when:
 
-- valid RED was observed and recorded;
+- valid provenance-schema RED was observed and recorded;
+- append-only migration `0029` (or re-adjudicated next-free number) is GREEN and preserves migration history;
+- valid Journal behavioral RED was observed and recorded;
 - Journal domain/repository files remain within authorized scope;
-- real PostgreSQL happy-path confirmation passes;
+- real PostgreSQL happy-path confirmation preserves required provenance;
 - all required failure-injection rollback proofs pass;
-- tenant/currency/position negative proofs pass;
+- tenant/currency/position/profile negative proofs pass;
 - Task 3 exactness/schema regression remains GREEN;
+- migration bootstrap/checksum regression remains GREEN;
 - `npm run test:fnd03` PASS;
 - `npm run lint` PASS;
 - `npm run build` PASS;
