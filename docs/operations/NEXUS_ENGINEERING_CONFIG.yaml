@@ -9,24 +9,23 @@ project:
     sha: f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e
 
 active_work:
-  program: GOVERNANCE
-  mission: POST-ALUNOS-CLOSEOUT
-  mission_branch: docs/post-alunos-closeout
-  durable_remote_checkpoint: f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e
-  activity: PROJECT_STATE_UPDATE
-  task: POST-ALUNOS-CANONICAL-TRUTH
-  task_name: Record ALUNOS integration and clear active product mission
+  program: FINANCE_FOUNDATION
+  mission: FINANCE-FOUNDATION-01
+  mission_branch: codex/finance-foundation-01
+  durable_remote_checkpoint: a5757f93954f17559edc0fd9f889388c22a63ad4
+  activity: IMPLEMENTATION
+  task: TASK-1-MONETARY-PRIMITIVES
+  task_name: Exact decimal Money currency rates and quantization
   state: IMPLEMENTING
   owner: Product Owner
-  write_owner: CHATGPT
-  reviewer: NONE_REQUIRED_FOR_DOC_ONLY_TRUTH_RECONCILIATION
+  write_owner: CODEX
+  reviewer: ANTIGRAVITY
   reviewer_mode: READ_ONLY
-  risk: LOW
+  risk: HIGH
   resume_rule: >-
-    PR #87 is already merged into main at f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e.
-    Do not reopen ALUNOS. Reconcile canonical post-merge truth only, prove the governance
-    contract remains coherent, integrate this micro-closeout, then Finance may enter
-    PREPARATION/DISCOVERY. Finance implementation remains unauthorized.
+    Resume only FINANCE-FOUNDATION-01 in the clean isolated worktree. Observe and record
+    a valid TDD RED before production code. Implement only Task 1 authorized files,
+    execute targeted GREEN plus lint build and diff checks, then stop before Task 2.
 
 execution:
   one_code_owner_per_unit: true
@@ -48,53 +47,59 @@ execution:
 
 scope:
   authorized:
-    - documentation-only post-merge canonical truth reconciliation
-    - governance contract alignment required by the selector transition
-    - remote CI verification for this micro-closeout
-    - integration of this micro-closeout after green evidence
+    - FINANCE-FOUNDATION-01 Task 1 only
+    - exact decimal monetary primitives
+    - controlled currency registry foundation fixture
+    - typed decimal ratio percentage and directional exchange rate
+    - explicit quantization and deterministic remainder distribution
+    - finance money model behavior tests
+    - execution record updates
   forbidden:
-    - no ALUNOS product changes
-    - no Finance production code
-    - no new product module implementation
-    - no unrelated refactor
-    - no historical migration modification
-    - no parallel writer
-    - no automatic scope expansion
-    - no broad UI redesign
-    - no CI or workflow weakening
-    - no force push
-    - destructive Git reconciliation without explicit authorization
+    - Task 2 or later Finance Foundation work
+    - Finance PostgreSQL migrations
+    - Journal repository or Finance command implementation
+    - Financial Profile persistence
+    - Payment Allocation Reconciliation provider fiscal reporting or Finance UI
+    - legacy Finance data mutation
+    - server route changes
+    - runtime business DDL
+    - unrelated refactor
+    - historical migration modification
+    - parallel writer
+    - automatic scope expansion
+    - CI or workflow weakening
+    - force push
 
 protected_invariants:
-  - merged main is the integrated capability authority
-  - browser never owns institution, Person, role, decision or case authority
+  - merged main remains integrated capability authority until Finance is merged
+  - browser never owns institution Person role or financial authority
   - tenant boundaries fail closed and remain non-disclosing
   - historical applied migrations remain immutable
-  - exactly one active StudentProfile invariant remains intact
-  - no duplicate Person, StudentProfile or Enrollment creation
-  - no hidden manual database dependency
-  - completed ALUNOS evidence remains historical and must not be rewritten as new execution
+  - authoritative Money never uses binary floating point
+  - Money identity is normalized exact decimal plus canonical currency
+  - cross currency arithmetic has no implicit FX
+  - negative zero canonicalizes to zero
+  - Task 1 does not create Journal Payment Allocation Reconciliation or provider authority
 
 gates:
-  alunos_final_product_checkpoint: aa5dc956d82e6ad941377f75f6144a642c64f6a6
-  alunos_merge_commit: f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e
-  alunos_integrated: true
-  engineering_green: true
-  integrity_green: true
-  product_green: true
-  human_uat_green: true
+  product_owner_finance_foundation_spec_approved: true
+  product_owner_finance_foundation_plan_approved: true
+  finance_f0_f4_design_closed: true
+  task_1_tdd_red_required: true
+  task_1_targeted_green_required: true
+  lint_required: true
+  build_required: true
+  diff_check_required: true
   unresolved_p0: 0
   unresolved_p1: 0
-  unresolved_p2: 0
-  review_threads_resolved: 5
-  post_merge_truth_ci_required: true
 
 next_program:
-  program: FINANCE
+  program: FINANCE_FOUNDATION
   roadmap_priority: 6
-  state: NOT_STARTED
-  authorized_phase_after_closeout: PREPARATION_DISCOVERY
-  implementation_authorized: false
+  state: IMPLEMENTING
+  authorized_phase: EXECUTION
+  implementation_authorized: true
+  authorization_scope: FINANCE-FOUNDATION-01_TASK_1_ONLY
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -119,8 +124,8 @@ resource_policy:
     - required_quality_gates
 
 integration:
-  technical_task_checkpoint: DOCUMENTATION_ONLY
-  mission_to_main: READY_AFTER_REMOTE_CI
+  technical_task_checkpoint: TASK_1_NOT_YET_GREEN
+  mission_to_main: NOT_READY
   dirty_worktree_allowed: false
 
 recovery:
