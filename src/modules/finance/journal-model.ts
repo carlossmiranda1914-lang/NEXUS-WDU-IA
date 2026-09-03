@@ -12,9 +12,12 @@ export function validateConfirmation(input: ConfirmJournalInput): { currency: st
   if (!(input.effectiveAt instanceof Date) || Number.isNaN(input.effectiveAt.getTime()) || input.entries.length === 0) throw new Error('Journal confirmation is invalid');
   const first = input.entries[0];
   if (!['received_value', 'reversed_value'].includes(first.positionType) || !first.sourceRef) throw new Error('Journal entry is invalid');
+  const requiredPosition = input.journalType === 'foundation_value_received' ? 'received_value' : 'reversed_value';
+  if (first.positionType !== requiredPosition) throw new Error('Journal type and entry position are incompatible');
   let amount = first.money;
   for (const entry of input.entries) {
     if (!['received_value', 'reversed_value'].includes(entry.positionType) || !entry.sourceRef || entry.money.currency !== first.money.currency) throw new Error('Journal entries require one currency and typed positions');
+    if (entry.positionType !== requiredPosition) throw new Error('Journal type and entry position are incompatible');
   }
   for (const entry of input.entries.slice(1)) amount = amount.add(entry.money);
   return { currency: first.money.currency, amount };

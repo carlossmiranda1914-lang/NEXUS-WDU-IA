@@ -162,3 +162,15 @@ No test result may be inferred from source inspection or GitHub connector writes
 - `NEGATIVES=Cross-currency, unsupported position and foreign profile tenant attempts reject; prepared transactions are not returned as confirmed.`
 - `GATES=finance journal/schema PostgreSQL, migration bootstrap/checksum, FND03, lint, build and diff-check PASS.`
 - `TASK_5=NOT_STARTED`
+
+## Task 4 — P1 command-result atomicity and Foundation semantics correction
+
+- `REVIEWED_HEAD=4ccc1f95c45457de33382de2cecfa2261f9a4764`
+- `RED_COMMAND=TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-journal-postgres.test.ts`
+- `RED_RESULT=FAIL` — `confirmation must persist structural command-result linkage`; actual `0`, expected `1` in real PostgreSQL after a confirmed Journal.
+- `CORRECTION=Confirmation now inserts the existing finance_command_results linkage in the same PostgreSQL transaction, before outbox publication. The injected after_command_result failure proves both the command result and every attempted Journal authority roll back together; no migration was necessary because the approved structural table already existed.`
+- `DOMAIN_CORRECTION=Validation rejects mismatched Foundation journal/position pairs before BEGIN: foundation_value_received requires received_value and foundation_reversal requires reversed_value. Both accepted and inverse-rejected cases are covered.`
+- `READ_CLIENT=PostgresJournalRepository now receives an explicit immutable read client; getConfirmed no longer depends on mutable last-confirmation client state.`
+- `GREEN_COMMANDS=TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-journal-postgres.test.ts; TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-foundation-schema-postgres.test.ts; TEST_DATABASE_LOCAL_AUTHORIZED=true npm run test:migrations:isolated; TEST_DATABASE_LOCAL_AUTHORIZED=true npm run test:fnd01:cp2:local; npm run test:fnd03; npm run lint; npm run build; git diff --check`
+- `GREEN_RESULT=PASS` — build retains only existing chunk-size and direct-eval warnings outside this correction.`
+- `TASK_5=NOT_STARTED`

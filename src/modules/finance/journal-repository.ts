@@ -2,13 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { type ConfirmJournalInput, type JournalRepository, validateConfirmation } from './journal-model.ts';
 
-export type JournalFailurePoint = 'after_transaction' | 'after_entries' | 'after_audit' | 'after_outbox';
+export type JournalFailurePoint = 'after_transaction' | 'after_entries' | 'after_audit' | 'after_command_result' | 'after_outbox';
 
 export class PostgresJournalRepository implements JournalRepository {
-  private client?: PoolClient;
-  constructor(private readonly failurePoint?: JournalFailurePoint) {}
+  constructor(private readonly readClient: PoolClient, private readonly failurePoint?: JournalFailurePoint) {}
   async confirm(client: PoolClient, input: ConfirmJournalInput): Promise<{ transactionId: string }> {
-    this.client = client;
     const validated = validateConfirmation(input); const transactionId = randomUUID();
     await client.query('BEGIN');
     try {
@@ -18,14 +16,15 @@ export class PostgresJournalRepository implements JournalRepository {
       this.fail('after_entries');
       await client.query(`INSERT INTO finance_audit_records (institution_id,transaction_id,event_type,metadata) VALUES ($1,$2,'JOURNAL_CONFIRMED','{}')`, [input.institutionId,transactionId]);
       this.fail('after_audit');
+      await client.query(`INSERT INTO finance_command_results (institution_id,operation_namespace,idempotency_key,request_fingerprint,result_ref) VALUES ($1,'finance.journal.confirmation',$2,$2,$3)`, [input.institutionId,input.commandId,transactionId]);
+      this.fail('after_command_result');
       await client.query(`INSERT INTO finance_outbox (institution_id,transaction_id,topic,aggregate_id,payload) VALUES ($1,$2,'finance.journal.confirmed',$2,'{}')`, [input.institutionId,transactionId]);
       this.fail('after_outbox');
       await client.query('COMMIT'); return { transactionId };
     } catch (error) { await client.query('ROLLBACK'); throw error; }
   }
   async getConfirmed(institutionId: string, transactionId: string): Promise<unknown | null> {
-    if (!this.client) throw new Error('Journal repository has no active confirmation client');
-    const result = await this.client.query(`SELECT id,institution_id,status,currency,amount,command_id,journal_type,actor_person_id,financial_profile_version,reason FROM finance_journal_transactions WHERE institution_id=$1 AND id=$2 AND status='confirmed'`, [institutionId, transactionId]);
+    const result = await this.readClient.query(`SELECT id,institution_id,status,currency,amount,command_id,journal_type,actor_person_id,financial_profile_version,reason FROM finance_journal_transactions WHERE institution_id=$1 AND id=$2 AND status='confirmed'`, [institutionId, transactionId]);
     return result.rows[0] ?? null;
   }
   private fail(point: JournalFailurePoint) { if (this.failurePoint === point) throw new Error(`Injected failure: ${point}`); }
