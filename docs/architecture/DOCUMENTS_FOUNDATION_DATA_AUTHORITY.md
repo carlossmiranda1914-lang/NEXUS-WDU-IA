@@ -34,6 +34,15 @@ It is **not** an alternative source of truth for Student, Enrollment, Attendance
 | Cross-institution transfer | Global policy defines category-specific eligibility and conditions; destination receives a controlled copy with immutable provenance |
 | Audit | All actions, including denied access and quarantine |
 | After final deletion | Keep only a minimal technical event: date/time, reason and pseudonymised identifier |
+| Global-policy governance | Central platform governance approves and changes the global policy |
+| Policy traceability | Every access, retention and transfer decision records the applicable policy version |
+| Permission revocation | Future access is blocked immediately |
+| Download | Separate permission from viewing; decided by category and institutional role |
+| Early deletion | Defined by institutional policy where no legal hold exists |
+| Transfer initiation | Only an authorised institutional role may initiate it |
+| Learner/guardian self-submission | Allowed only where category policy permits |
+| Pre-review self-submission visibility | Submitter and authorised institutional roles |
+| Submitter withdrawal/replacement | Allowed only where category policy permits |
 
 ## 3. Authority model
 
@@ -82,11 +91,35 @@ A replacement never updates existing process evidence silently. While replacemen
 - Audit covers upload, verification, view, download, access denial, link/unlink, replacement, decision receipt, transfer, hold, quarantine, expiration and deletion.
 - Final deletion removes file bytes and functional/content metadata. The retained audit event is limited to timestamp, reason and pseudonymised identifier.
 
-## 7. Transfer rule
+## 7. Permission and policy-governance contract
+
+### 7.1 Policy hierarchy
+
+Central platform governance owns approval and change of the single global policy. The global policy is versioned and establishes mandatory boundaries, including category eligibility, retention, transfer controls and non-negotiable security rules.
+
+Institutional policy may configure roles and permitted actions only within those global boundaries. Every access, retention and transfer decision must retain the exact global-policy version that applied when it was made.
+
+### 7.2 Action rules
+
+| Action | Rule |
+|---|---|
+| View | Authorised by institutional role and category, in valid Institutional Context |
+| Download | Independent of view; authorised by role and category |
+| Upload | Institutional roles by policy; learner/guardian direct submission only for permitted categories |
+| Pre-review view of learner/guardian submission | Submitter and authorised institutional roles |
+| Replace or withdraw own submission | Only when category policy permits and before source-process decision |
+| Delete before retention end | Institutional policy, unless legal hold or mandatory retention prevents it |
+| Initiate cross-institution transfer | Authorised institutional role only |
+| Change global policy | Central platform governance only |
+| Revoke access | Future access is blocked immediately |
+
+No permission is inferred from a prior download, a previously generated link or a browser session. Each future file access must be evaluated against the current valid permission and institutional context.
+
+## 8. Transfer rule
 
 Transfer is not sharing an original across institutions. When the global policy permits a category transfer, Documents Foundation creates a controlled destination copy and preserves immutable provenance to its origin. The policy must state the eligible category, actor, legal basis, destination condition and audit requirements.
 
-## 8. Non-goals
+## 9. Non-goals
 
 - No document validity engine for Enrollment, Attendance, Academic or Finance.
 - No parallel student, guardian, enrollment, financial or academic datastore.
@@ -94,16 +127,15 @@ Transfer is not sharing an original across institutions. When the global policy 
 - No automatic cross-process reuse merely because hashes match.
 - No implementation authorisation.
 
-## 9. Remaining preparation work before implementation readiness
+## 10. Remaining preparation work before implementation readiness
 
-1. Global category-policy matrix: file types, size limits, retention rules, replacement, transfer and permitted actions.
-2. Permission matrix for upload, view, download, replace, decide, transfer, legal hold and delete.
-3. Upload/verification/quarantine technical contract, error handling and service-level expectations.
-4. Integration contracts with source domains and acceptance criteria.
-5. International legal/jurisdictional validation of retention, deletion, transfer and access policies.
-6. Mission pack, implementation plan and explicit implementation authorisation.
+1. Complete the global category-policy matrix: file types, size limits, retention, replacement and transfer rules.
+2. Define the upload/verification/quarantine technical contract, error handling and service-level expectations.
+3. Define source-domain integration contracts and acceptance criteria.
+4. Validate international legal/jurisdictional requirements for retention, deletion, transfer and access policies.
+5. Produce the mission pack, implementation plan and obtain explicit implementation authorisation.
 
-## 10. Readiness marker
+## 11. Readiness marker
 
 ```
 DESIGN_CLOSED = NO
