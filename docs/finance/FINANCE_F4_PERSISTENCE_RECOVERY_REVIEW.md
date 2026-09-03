@@ -1,17 +1,15 @@
 # Nexus Edu IA — F4 Persistence, Migration & Recovery Review
 
-**State:** REVIEW — NOT IMPLEMENTATION AUTHORITY  
-**Scope:** approved F4-D01 through F4-D03, F0–F3 constraints, canonical migration runner, current PostgreSQL proof practices and Nexus engineering governance.
+**State:** DESIGN-CLOSED_FOR_FOUNDATION_GATE — NOT IMPLEMENTATION AUTHORITY  
+**Scope:** approved F4-D01 through F4-D04, F0–F3 constraints, canonical migration runner, current PostgreSQL proof practices and Nexus engineering governance.
 
 ## Executive determination
 
-F4-D01 through F4-D03 are coherent and sufficient to define the minimum persistence boundary required to implement and test the Finance foundation.
+F4-D01 through F4-D04 are approved, coherent and sufficient to define the minimum persistence boundary required to implement and test the Finance foundation.
 
 No additional P0/P1 architectural gap was found that justifies opening F4-D05 before the Finance Foundation Implementation Plan. The remaining implementation-specific choices — exact table names, concrete indexes, lock syntax, isolation levels per command, decimal library and worker mechanics — belong to the implementation plan and approved missions as long as they preserve the laws below.
 
-F4 remains **OPEN** until F4-D04 and Product Owner closure are explicitly approved.
-
-## Approved F4 decisions under review
+## Approved F4 decisions
 
 ### F4-D01 — Canonical Financial Transaction Boundary
 Every authoritative Finance command has one PostgreSQL atomicity boundary for all state required to truthfully establish its economic result. Where applicable this includes authoritative aggregate mutation, complete Journal Transaction and Entries, scoped idempotency identity/fingerprint/result, required factual financial audit/provenance and durable outbox/event intent required for recoverable downstream processing. Either the complete authoritative set commits or none of it does. Reconstructible projections and external/network side effects do not determine whether an already committed economic fact exists.
@@ -22,11 +20,8 @@ PostgreSQL is a defense-in-depth authority for stable structural financial integ
 ### F4-D03 — Scoped Concurrency & Locking Law
 Concurrency protection is scoped to the smallest authoritative resource/identity required to preserve each invariant. PostgreSQL is the final arbiter through scoped uniqueness, aggregate version/CAS and explicit locking/isolation where necessary. Check-then-write without persistence protection is forbidden. Lock acquisition is deterministic when multiple resources are involved. Global Finance locks and blanket SERIALIZABLE are not defaults. External/provider/network calls are never made while canonical Finance locks/transactions are held open.
 
-# F4-D04 — Persistence, Migration & Recovery Proof Contract + Closure Gate
-
-**Status: PROPOSED — awaiting explicit Product Owner approval.**
-
-F4 may be considered design-complete only if the implementation plan and foundation mission preserve the following blocking contract.
+### F4-D04 — Persistence, Migration & Recovery Proof Contract + Closure Gate
+**APPROVED.** F4 implementation claims are valid only when the implementation plan and foundation mission preserve the blocking persistence, migration, recovery and concurrency proof contract below. Failure of any blocking condition prevents DONE and prevents dependent Finance layers from treating the foundation as proven.
 
 | Material risk / invariant | Enforcement expectation | Failure scenario to exercise | Required proof | Blocking condition |
 | --- | --- | --- | --- | --- |
@@ -119,22 +114,20 @@ Implementation must stop for architecture/adjudication rather than patch around 
 
 ## Completeness adjudication
 
-Cross-check of F4-D01 through F4-D03 against F0–F3 and the existing migration/runtime model found:
+Cross-check of F4-D01 through F4-D04 against F0–F3 and the existing migration/runtime model found:
 - no contradiction with current canonical migration authority;
 - no need for a second migration mechanism;
-- no unresolved P0/P1 persistence-design gap after this proof contract;
+- no unresolved P0/P1 persistence-design gap;
 - no need to choose concrete table names/index names/library implementation before writing the implementation plan;
 - no justification for opening F4-D05 solely to continue architectural planning.
 
-## Candidate closure state
+## Closure
 
-If F4-D04 is explicitly approved by the Product Owner:
-
-`F4_STATUS=DESIGN-CLOSED_FOR_FOUNDATION_GATE`  
-`PRODUCT_OWNER_APPROVAL=YES`  
-`KNOWN_F4_P0_DESIGN_GAPS=0`  
-`KNOWN_F4_P1_DESIGN_GAPS=0`  
-`IMPLEMENTATION_AUTHORIZED=NO`  
-`NEXT_STAGE=FINANCE_FOUNDATION_IMPLEMENTATION_SPEC_AND_PLAN`
+**F4_STATUS=DESIGN-CLOSED_FOR_FOUNDATION_GATE**  
+**PRODUCT_OWNER_APPROVAL=YES**  
+**KNOWN_F4_P0_DESIGN_GAPS=0**  
+**KNOWN_F4_P1_DESIGN_GAPS=0**  
+**IMPLEMENTATION_AUTHORIZED=NO**  
+**NEXT_STAGE=FINANCE_FOUNDATION_IMPLEMENTATION_SPEC_AND_PLAN**
 
 F4 closure ends the current foundation-design loop. The next step is not F5/F6 design. The next step is to consolidate F0–F4 into an implementation-ready Finance Foundation spec, self-review it, obtain Product Owner approval, and then write small bounded implementation missions/plans with Codex as writer and Antigravity as independent read-only reviewer.
