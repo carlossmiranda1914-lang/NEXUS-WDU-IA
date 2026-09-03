@@ -10,12 +10,12 @@ project:
 
 active_work:
   program: FINANCE_FOUNDATION
-  mission: FINANCE-FOUNDATION-06
+  mission: FINANCE-FOUNDATION-07
   mission_branch: codex/finance-foundation-01
-  durable_remote_checkpoint: 6222eabe69cb76322551ba8bcdaea3a0ec2646fd
+  durable_remote_checkpoint: 3e738704a66f88105f10edb02f517ba965db0d9e
   activity: IMPLEMENTATION
-  task: TASK-6-MINIMAL-REVERSAL-CONCURRENCY
-  task_name: Minimal reversal and remaining-reversible concurrency
+  task: TASK-7-PROJECTION-RECOVERY-DURABLE-OUTBOX
+  task_name: Projection recovery and durable outbox
   state: READY
   owner: Product Owner
   write_owner: CODEX
@@ -23,12 +23,13 @@ active_work:
   reviewer_mode: READ_ONLY
   risk: HIGH
   resume_rule: >-
-    Resume only FINANCE-FOUNDATION-06 in the existing clean isolated worktree. Run DB safety,
-    write the Task 6 PostgreSQL reversal test first and observe RED, then implement append-only
-    reversal through the accepted Journal and Task 5 command boundary. Lock the original confirmed
-    transaction row with SELECT FOR UPDATE, calculate confirmed reversal sum while the lock is held,
-    reject over-reversal exactly, prove sequential 30+40+reject31 and concurrent 70/60 on real
-    PostgreSQL, run Task 5/4/schema/migration regressions plus lint/build/diff, then stop before Task 7.
+    Resume only FINANCE-FOUNDATION-07 in the existing clean isolated worktree. Run DB safety,
+    write the Task 7 PostgreSQL recovery test first and observe RED, then implement the minimum
+    confirmed-only rebuildable projection and durable outbox claim/complete/fail primitives.
+    Prove destroy/rebuild equivalence, historical reproducibility, mandatory-outbox rollback,
+    fresh-process restart recovery and durable retry on real PostgreSQL. If truthful concurrent
+    claim ownership requires schema not currently present, STOP rather than emulate it in memory.
+    Run Tasks 6/5/4/schema/migration regressions plus lint/build/diff, then stop before Task 8.
 
 execution:
   one_code_owner_per_unit: true
@@ -38,22 +39,23 @@ execution:
 
 scope:
   authorized:
-    - FINANCE-FOUNDATION-06 Task 6 only
-    - src/modules/finance/journal-model.ts narrow reversal contract
-    - src/modules/finance/journal-repository.ts narrow reversal persistence/locking integration
-    - src/modules/finance/finance-command.ts narrow reversal command/fingerprint integration
-    - tests/finance-reversal-concurrency-postgres.test.ts
-    - package.json narrow Task 6 test alias if required
+    - FINANCE-FOUNDATION-07 Task 7 only
+    - src/modules/finance/finance-projection.ts
+    - src/modules/finance/finance-outbox.ts
+    - tests/finance-projection-recovery-postgres.test.ts
+    - package.json narrow Task 7 test alias if required
+    - narrow existing Journal test adjustment only for mandatory-outbox rollback proof
     - execution record updates
   forbidden:
-    - Task 7 or later Finance Foundation work
+    - Task 8 or later Finance Foundation work
     - new migration unless STOP and explicit adjudication
-    - second idempotency or command-result authority
+    - second Journal idempotency projection or outbox authority
     - Payment Allocation Reconciliation provider fiscal reporting or Finance UI
     - implicit FX or JavaScript-number monetary authority
-    - process-local lock as correctness mechanism
-    - UPDATE or DELETE correction of confirmed Journal facts
-    - external network/provider call while Finance DB transaction or reversal lock is held
+    - process-local queue or lock as recovery/concurrency authority
+    - destructive mutation of confirmed Journal facts
+    - current policy or FX reinterpretation of historical facts
+    - external network/provider delivery implementation
     - runtime business DDL or alternate migration authority
     - unrelated IAM Enrollment ALUNOS refactor
     - parallel writer
@@ -62,18 +64,17 @@ scope:
     - force push
 
 protected_invariants:
-  - Tasks 1 through 5 accepted behavior remains intact
-  - Task 5 is the single canonical idempotency and command-result authority
-  - reversal is an append-only confirmed Journal fact and never mutates the original
-  - reversal references the original through reverses_transaction_id
-  - original and reversal are same institution and currency
-  - reversal amount is strictly positive and never exceeds remaining reversible amount
-  - remaining reversible equals original amount minus exact sum of confirmed reversals
-  - original-row SELECT FOR UPDATE is the database concurrency arbiter for over-reversal
-  - no process-local lock is correctness authority
-  - canonical reversal fingerprint excludes idempotency key and includes material approved semantics
-  - Journal entries audit command-result and outbox remain atomic
-  - Task 6 does not implement recovery projection outbox consumer or upper Finance domains
+  - Tasks 1 through 6 accepted behavior remains intact
+  - Journal remains canonical economic truth and projection remains rebuildable read authority
+  - prepared or non-confirmed data contributes zero to projection
+  - projection arithmetic uses exact Money and keeps currencies separate
+  - projection rebuild depends only on persisted historical authority not current policy FX browser or legacy balance
+  - mandatory outbox intent remains atomic with the Journal fact
+  - pending outbox work survives process restart in PostgreSQL
+  - outbox retry and completion are durable and tenant-safe
+  - consumer correctness cannot depend on process-local memory
+  - concurrent claim safety must be truthful under existing persistence or execution must STOP
+  - Task 7 does not implement provider delivery or upper Finance domains
 
 gates:
   product_owner_finance_foundation_spec_approved: true
@@ -84,6 +85,7 @@ gates:
   task_3_accepted_head: 2f09580f7814da2fa8b15d063d83f6df53f328b1
   task_4_accepted_head: 2a84191c22abe31adb39af1e15748b0b48b4e9c8
   task_5_accepted_head: 6222eabe69cb76322551ba8bcdaea3a0ec2646fd
+  task_6_accepted_head: 3e738704a66f88105f10edb02f517ba965db0d9e
   task_1_unresolved_p0: 0
   task_1_unresolved_p1: 0
   task_2_unresolved_p0: 0
@@ -94,11 +96,17 @@ gates:
   task_4_unresolved_p1: 0
   task_5_unresolved_p0: 0
   task_5_unresolved_p1: 0
-  task_6_postgres_red_required: true
-  task_6_sequential_partial_reversal_required: true
-  task_6_over_reversal_rejection_required: true
-  task_6_concurrent_70_60_required: true
-  task_6_original_immutability_required: true
+  task_6_unresolved_p0: 0
+  task_6_unresolved_p1: 0
+  task_7_postgres_red_required: true
+  task_7_confirmed_only_projection_required: true
+  task_7_destroy_rebuild_required: true
+  task_7_historical_reproducibility_required: true
+  task_7_mandatory_outbox_rollback_required: true
+  task_7_restart_recovery_required: true
+  task_7_durable_retry_required: true
+  task_7_concurrent_claim_safety_required: true
+  task_6_reversal_regression_required: true
   task_5_idempotency_regression_required: true
   task_4_atomicity_regression_required: true
   migration_schema_regression_required: true
@@ -114,7 +122,7 @@ next_program:
   state: IMPLEMENTING
   authorized_phase: EXECUTION
   implementation_authorized: true
-  authorization_scope: FINANCE-FOUNDATION-06_TASK_6_ONLY
+  authorization_scope: FINANCE-FOUNDATION-07_TASK_7_ONLY
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -128,7 +136,7 @@ resource_policy:
     - required_quality_gates
 
 integration:
-  technical_task_checkpoint: TASK_5_ACCEPTED_TASK_6_READY
+  technical_task_checkpoint: TASK_6_ACCEPTED_TASK_7_READY
   mission_to_main: NOT_READY
   dirty_worktree_allowed: false
 
