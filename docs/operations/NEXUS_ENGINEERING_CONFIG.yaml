@@ -10,22 +10,23 @@ project:
 
 active_work:
   program: FINANCE_FOUNDATION
-  mission: FINANCE-FOUNDATION-01
+  mission: FINANCE-FOUNDATION-02
   mission_branch: codex/finance-foundation-01
-  durable_remote_checkpoint: a5757f93954f17559edc0fd9f889388c22a63ad4
+  durable_remote_checkpoint: 8202dee1cdc7bb6878cf5b044ad2a17eb29b4798
   activity: IMPLEMENTATION
-  task: TASK-1-MONETARY-PRIMITIVES
-  task_name: Exact decimal Money currency rates and quantization
-  state: IMPLEMENTING
+  task: TASK-2-INSTITUTION-FINANCIAL-CONTEXT
+  task_name: Institution Financial Context minimum
+  state: READY
   owner: Product Owner
   write_owner: CODEX
   reviewer: ANTIGRAVITY
   reviewer_mode: READ_ONLY
   risk: HIGH
   resume_rule: >-
-    Resume only FINANCE-FOUNDATION-01 in the clean isolated worktree. Observe and record
-    a valid TDD RED before production code. Implement only Task 1 authorized files,
-    execute targeted GREEN plus lint build and diff checks, then stop before Task 2.
+    Resume only FINANCE-FOUNDATION-02 in the existing clean isolated worktree. Read the
+    Task 2 Mission Pack and institutional-context authority, observe and record a valid
+    TDD RED, implement only the minimum financial-context contract, run the required
+    tenant/context regression plus lint build and diff gates, then stop before Task 3.
 
 execution:
   one_code_owner_per_unit: true
@@ -47,23 +48,20 @@ execution:
 
 scope:
   authorized:
-    - FINANCE-FOUNDATION-01 Task 1 only
-    - exact decimal monetary primitives
-    - controlled currency registry foundation fixture
-    - typed decimal ratio percentage and directional exchange rate
-    - explicit quantization and deterministic remainder distribution
-    - finance money model behavior tests
+    - FINANCE-FOUNDATION-02 Task 2 only
+    - src/modules/finance/financial-context.ts
+    - tests/finance-financial-context.test.ts
+    - read-only integration with src/auth/institutional-context.ts
     - execution record updates
   forbidden:
-    - Task 2 or later Finance Foundation work
-    - Finance PostgreSQL migrations
+    - Task 3 or later Finance Foundation work
+    - Finance PostgreSQL migrations or Financial Profile persistence
     - Journal repository or Finance command implementation
-    - Financial Profile persistence
     - Payment Allocation Reconciliation provider fiscal reporting or Finance UI
     - legacy Finance data mutation
-    - server route changes
+    - client or browser institution authority
+    - unrelated IAM Enrollment ALUNOS refactor
     - runtime business DDL
-    - unrelated refactor
     - historical migration modification
     - parallel writer
     - automatic scope expansion
@@ -72,21 +70,24 @@ scope:
 
 protected_invariants:
   - merged main remains integrated capability authority until Finance is merged
+  - institution identity for Finance comes only from resolved server InstitutionalContext
   - browser never owns institution Person role or financial authority
   - tenant boundaries fail closed and remain non-disclosing
+  - no jurisdiction currency timezone policy or provider default is invented
+  - functional and enabled currencies must be recognized by canonical Currency Registry
   - historical applied migrations remain immutable
-  - authoritative Money never uses binary floating point
-  - Money identity is normalized exact decimal plus canonical currency
-  - cross currency arithmetic has no implicit FX
-  - negative zero canonicalizes to zero
-  - Task 1 does not create Journal Payment Allocation Reconciliation or provider authority
+  - Task 2 does not create persistence Journal Payment Allocation Reconciliation or provider authority
 
 gates:
   product_owner_finance_foundation_spec_approved: true
   product_owner_finance_foundation_plan_approved: true
   finance_f0_f4_design_closed: true
-  task_1_tdd_red_required: true
-  task_1_targeted_green_required: true
+  task_1_accepted_head: 8202dee1cdc7bb6878cf5b044ad2a17eb29b4798
+  task_1_unresolved_p0: 0
+  task_1_unresolved_p1: 0
+  task_2_tdd_red_required: true
+  task_2_targeted_green_required: true
+  tenant_context_regression_required: true
   lint_required: true
   build_required: true
   diff_check_required: true
@@ -99,7 +100,7 @@ next_program:
   state: IMPLEMENTING
   authorized_phase: EXECUTION
   implementation_authorized: true
-  authorization_scope: FINANCE-FOUNDATION-01_TASK_1_ONLY
+  authorization_scope: FINANCE-FOUNDATION-02_TASK_2_ONLY
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -124,7 +125,7 @@ resource_policy:
     - required_quality_gates
 
 integration:
-  technical_task_checkpoint: TASK_1_NOT_YET_GREEN
+  technical_task_checkpoint: TASK_1_ACCEPTED_TASK_2_READY
   mission_to_main: NOT_READY
   dirty_worktree_allowed: false
 
