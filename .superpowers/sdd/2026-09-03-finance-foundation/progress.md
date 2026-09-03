@@ -1,6 +1,6 @@
 # Finance Foundation Implementation — Execution Record
 
-**Status:** TASK_2_GREEN_CHECKPOINT
+**Status:** TASK_3_GREEN_CHECKPOINT
 **Plan:** `docs/superpowers/plans/2026-09-03-finance-foundation-implementation.md`
 **Spec:** `docs/superpowers/specs/2026-09-03-finance-foundation-implementation-design.md`
 
@@ -119,3 +119,25 @@ No test result may be inferred from source inspection or GitHub connector writes
 - `COMMAND=git diff --check`
 - `RESULT=PASS`
 - `TASK_3=NOT_STARTED`
+
+## Task 3 — PostgreSQL TDD RED
+
+- `MISSION=FINANCE-FOUNDATION-03`
+- `MIGRATION_NUMBER=0027` — preflight found `0026_identity_decision_evidence_revisions.sql` as the latest existing migration and no `0027` file.
+- `COMMAND=TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-foundation-schema-postgres.test.ts`
+- `RESULT=RED`
+- `FAILURE=AssertionError: Finance foundation tables must be created by the canonical migration; actual 0, expected 7.`
+- `INTERPRETATION=Real approved disposable PostgreSQL schema completed the existing canonical migration chain and has no Finance foundation schema.`
+
+## Task 3 — PostgreSQL GREEN and verification
+
+- `MIGRATION=src/db/migrations/0027_finance_foundation.sql` — append-only canonical migration; no alternate runner or runtime DDL.
+- `COMMAND=TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-foundation-schema-postgres.test.ts`
+- `RESULT=PASS` — real PostgreSQL proves exact NUMERIC(30,12)/NUMERIC(30,18) types, required tables, orphan/cross-tenant entry rejection, currency checks, numeric envelope rejection, lifecycle consistency and scoped idempotency.`
+- `COMMAND=npm run test:migrations:isolated`
+- `RESULT=PASS` — 27 migrations bootstrap in a fresh isolated schema.`
+- `COMMAND=TEST_DATABASE_LOCAL_AUTHORIZED=true npm run test:fnd01:cp2:local`
+- `RESULT=PASS` — approved target safety gate plus canonical migration ordering, checksum and rollback regression.`
+- `COMMAND=npm run lint; npm run build; git diff --check`
+- `RESULT=PASS`
+- `TASK_4=NOT_STARTED`
