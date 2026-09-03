@@ -10,61 +10,49 @@ project:
 
 active_work:
   program: FINANCE_FOUNDATION
-  mission: FINANCE-FOUNDATION-04
+  mission: FINANCE-FOUNDATION-05
   mission_branch: codex/finance-foundation-01
-  durable_remote_checkpoint: 2f09580f7814da2fa8b15d063d83f6df53f328b1
+  durable_remote_checkpoint: 2a84191c22abe31adb39af1e15748b0b48b4e9c8
   activity: IMPLEMENTATION
-  task: TASK-4-JOURNAL-DOMAIN-ATOMIC-REPOSITORY
-  task_name: Journal domain and atomic repository
-  state: READY_AFTER_SCHEMA_ADJUDICATION
+  task: TASK-5-CANONICAL-COMMAND-IDEMPOTENCY-CONCURRENCY
+  task_name: Canonical command idempotency and concurrency
+  state: READY
   owner: Product Owner
   write_owner: CODEX
   reviewer: ANTIGRAVITY
   reviewer_mode: READ_ONLY
   risk: HIGH
   resume_rule: >-
-    Resume only FINANCE-FOUNDATION-04 in the existing clean isolated worktree. A preflight
-    STOP proved missing mandatory Journal provenance in Task 3 schema. Re-check migration
-    ordering; if 0029 remains next free, first RED/GREEN the explicitly authorized append-only
-    0029_finance_journal_provenance.sql amendment, then RED/GREEN the Journal domain/repository,
-    prove atomic rollback on real PostgreSQL, run regressions/lint/build/diff gates, and stop
-    before Task 5. Preserve NUMERIC plus explicit envelope checks and never reintroduce silent rounding.
+    Resume only FINANCE-FOUNDATION-05 in the existing clean isolated worktree. Run DB safety,
+    write the Task 5 PostgreSQL test first and observe RED, then implement deterministic SHA-256
+    canonical fingerprinting plus database-arbitrated idempotency/replay/concurrency. Integrate
+    Task 4's provisional command-result linkage into exactly one authority without weakening
+    Journal atomicity. Prove sequential replay, different-fingerprint conflict, same-identity
+    concurrency, distinct-key legitimacy and lost-response recovery on real PostgreSQL, run all
+    required regressions/lint/build/diff gates, then stop before Task 6.
 
 execution:
   one_code_owner_per_unit: true
   reviewer_starts_read_only: true
   parallelism: INDEPENDENT_WORK_OR_FROZEN_CONTRACT_ONLY
   self_approval_of_integration: false
-  implementation_pipeline:
-    - DISCOVERY
-    - PRODUCT_DECISION
-    - DESIGN_AUTHORITY
-    - MISSION_PACK
-    - IMPLEMENTATION_PLAN
-    - EXECUTION
-    - INDEPENDENT_REVIEW
-    - ADVERSARIAL_PRODUCT_REVIEW
-    - HUMAN_UAT
-    - INTEGRATION
-    - PROJECT_STATE_UPDATE
 
 scope:
   authorized:
-    - FINANCE-FOUNDATION-04 Task 4 only
-    - src/db/migrations/0029_finance_journal_provenance.sql if 0029 remains next free at preflight
-    - src/modules/finance/journal-model.ts
-    - src/modules/finance/journal-repository.ts
-    - tests/finance-journal-postgres.test.ts
-    - tests/finance-foundation-schema-postgres.test.ts provenance assertions only
-    - package.json narrow Task 4 Finance test alias if required
+    - FINANCE-FOUNDATION-05 Task 5 only
+    - src/modules/finance/finance-command.ts
+    - tests/finance-idempotency-concurrency-postgres.test.ts
+    - narrow Task 4 Journal integration required to remove provisional fingerprint semantics
+    - tests/finance-journal-postgres.test.ts corresponding regression updates only
+    - package.json narrow Task 5 test alias if required
     - execution record updates
-    - read-only integration with accepted Task 1-3 Finance contracts and DB helpers
   forbidden:
-    - Task 5 or later Finance Foundation work
-    - any migration beyond the explicitly authorized minimal Journal provenance amendment
-    - command-level idempotency replay/concurrency behavior
+    - Task 6 or later Finance Foundation work
+    - new migration unless STOP and explicit adjudication
+    - second command-result or idempotency authority
     - Payment Allocation Reconciliation provider fiscal reporting or Finance UI
     - implicit FX or JavaScript-number monetary authority
+    - process-local lock as correctness mechanism
     - destructive correction of confirmed Journal facts
     - external network/provider call inside Finance DB transaction
     - runtime business DDL or alternate migration authority
@@ -75,20 +63,18 @@ scope:
     - force push
 
 protected_invariants:
-  - merged main remains integrated capability authority until Finance is merged
-  - institution identity for Finance comes only from resolved server InstitutionalContext
-  - tenant boundaries fail closed and remain non-disclosing
-  - historical applied migrations remain immutable
-  - accepted Task 3 physical exactness is NUMERIC plus explicit scale and magnitude checks
-  - do not revert Finance money or rate columns to fixed-scale typmods that silently round excess scale
-  - authoritative Finance money or rates never use REAL FLOAT DOUBLE PRECISION or JavaScript number
-  - Journal transaction preserves command journal type actor financial profile version and optional reason provenance
-  - financial profile provenance is tenant-safe through institution plus version relationship
-  - confirmed Journal facts are append-only economic authority
-  - prepared state has zero canonical financial effect
-  - confirmation commits transaction entries audit and mandatory outbox atomically
-  - economic correction is append-only not UPDATE DELETE of confirmed facts
-  - Task 4 does not implement Task 5 idempotency retry semantics or upper Finance domains
+  - Tasks 1 through 4 accepted behavior remains intact
+  - exact Money persistence remains NUMERIC plus explicit scale and magnitude checks
+  - canonical command identity is institution plus operation namespace plus idempotency key
+  - canonical fingerprint is deterministic SHA-256 over server-canonical semantic input
+  - database uniqueness is final concurrency arbiter
+  - same identity and same fingerprint replays one persisted result and never duplicates economic fact
+  - same identity and different fingerprint conflicts and never duplicates economic fact
+  - distinct idempotency keys remain legitimate distinct commands
+  - lost response recovers persisted result without recreating Journal authority
+  - exactly one command-result authority exists after Task 5 integration
+  - Journal transaction entries audit command-result and outbox remain atomic
+  - Task 5 does not implement reversal behavior or upper Finance domains
 
 gates:
   product_owner_finance_foundation_spec_approved: true
@@ -97,19 +83,23 @@ gates:
   task_1_accepted_head: 8202dee1cdc7bb6878cf5b044ad2a17eb29b4798
   task_2_accepted_head: 49e5c06e9b5603cc814bffa047d9f009c2a10549
   task_3_accepted_head: 2f09580f7814da2fa8b15d063d83f6df53f328b1
+  task_4_accepted_head: 2a84191c22abe31adb39af1e15748b0b48b4e9c8
   task_1_unresolved_p0: 0
   task_1_unresolved_p1: 0
   task_2_unresolved_p0: 0
   task_2_unresolved_p1: 0
   task_3_unresolved_p0: 0
   task_3_unresolved_p1: 0
-  task_4_provenance_schema_red_required: true
-  task_4_provenance_schema_green_required: true
-  task_4_postgres_red_required: true
-  task_4_atomicity_failure_injection_required: true
-  task_4_tenant_currency_position_negative_proof_required: true
-  task_3_schema_regression_required: true
-  migration_bootstrap_checksum_regression_required: true
+  task_4_unresolved_p0: 0
+  task_4_unresolved_p1: 0
+  task_5_postgres_red_required: true
+  task_5_sequential_replay_required: true
+  task_5_fingerprint_conflict_required: true
+  task_5_concurrent_same_identity_required: true
+  task_5_distinct_key_legitimacy_required: true
+  task_5_lost_response_recovery_required: true
+  task_4_atomicity_regression_required: true
+  migration_schema_regression_required: true
   lint_required: true
   build_required: true
   diff_check_required: true
@@ -122,23 +112,12 @@ next_program:
   state: IMPLEMENTING
   authorized_phase: EXECUTION
   implementation_authorized: true
-  authorization_scope: FINANCE-FOUNDATION-04_TASK_4_WITH_MINIMAL_PROVENANCE_MIGRATION
+  authorization_scope: FINANCE-FOUNDATION-05_TASK_5_ONLY
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
-  progressive_context:
-    - L0_PROJECT_STATE_AND_CONFIG
-    - L1_ACTIVE_MISSION_TASK
-    - L2_DIRECTLY_AFFECTED_FILES
-    - L3_REQUIRED_CONTRACTS_DEPENDENCIES
-    - L4_HISTORICAL_EVIDENCE
-    - L5_BROAD_REPOSITORY_INVESTIGATION
-  evidence_classes:
-    - FRESH
-    - REUSABLE
-    - INVALIDATED
-  max_default_parallel_implementers_same_authority: 1
   avoid_duplicate_investigation: true
+  max_default_parallel_implementers_same_authority: 1
   never_trade_for_savings:
     - security
     - tenant_isolation
@@ -147,7 +126,7 @@ resource_policy:
     - required_quality_gates
 
 integration:
-  technical_task_checkpoint: TASK_3_ACCEPTED_TASK_4_SCHEMA_ADJUDICATED
+  technical_task_checkpoint: TASK_4_ACCEPTED_TASK_5_READY
   mission_to_main: NOT_READY
   dirty_worktree_allowed: false
 
