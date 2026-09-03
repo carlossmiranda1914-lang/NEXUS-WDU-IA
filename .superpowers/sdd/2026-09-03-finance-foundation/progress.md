@@ -198,6 +198,13 @@ No test result may be inferred from source inspection or GitHub connector writes
 - `REGRESSIONS=Task 5/4/3 PostgreSQL, isolated migrations, FND01 CP2, FND03 and lint PASS.`
 - `TASK_7=NOT_STARTED`
 
+## Task 6 — P1 reversal negative coverage
+
+- `REVIEWED_HEAD=b9a6788c79c8aea006d5b6ad9bb97847688a05e9`
+- `POSTGRES_PROOF=Added explicit no-authority assertions for nonexistent, foreign-tenant, prepared, currency mismatch, zero, negative and blank-reason reversals.`
+- `RESULT=PASS — every rejected case leaves zero new foundation_reversal Journal facts and zero finance.journal.reversal command results.`
+- `TASK_7=NOT_STARTED`
+
 ## Task 5 — P1 canonical Journal fingerprint correction
 
 - `REVIEWED_HEAD=96911c4500e676893075be1703ba4a30141ef8ba`
