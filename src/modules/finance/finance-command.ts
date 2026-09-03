@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { Money } from './money.ts';
+import type { ConfirmJournalInput } from './journal-model.ts';
 
 export interface FinanceCommandIdentity {
   institutionId: string;
@@ -10,9 +11,24 @@ export interface FinanceCommandIdentity {
 }
 
 type PersistedCommand = { request_fingerprint: string; result_ref: string };
+export type JournalConfirmationFingerprintInput = Omit<ConfirmJournalInput, 'commandId'>;
 
 export function createCanonicalFinanceFingerprint(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(canonicalize(value))).digest('hex');
+}
+
+export function createJournalConfirmationFingerprint(input: JournalConfirmationFingerprintInput): string {
+  if (Number.isNaN(input.effectiveAt.getTime())) throw new Error('Journal confirmation effectiveAt is invalid');
+  return createCanonicalFinanceFingerprint({
+    institutionId: input.institutionId,
+    journalType: input.journalType,
+    effectiveAt: input.effectiveAt.toISOString(),
+    entries: input.entries.map((entry) => ({ positionType: entry.positionType, money: entry.money.serialize(), sourceRef: entry.sourceRef })),
+    reversesTransactionId: input.reversesTransactionId ?? null,
+    reason: input.reason ?? null,
+    actorPersonId: input.actorPersonId,
+    financialProfileVersion: input.financialProfileVersion,
+  });
 }
 
 export async function executeIdempotentFinanceCommand<T>(input: {
@@ -64,6 +80,10 @@ function isUniqueConflict(error: unknown): boolean {
 
 function canonicalize(value: unknown): unknown {
   if (value instanceof Money) return value.serialize();
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) throw new Error('Canonical Finance fingerprint Date is invalid');
+    return value.toISOString();
+  }
   if (Array.isArray(value)) return value.map(canonicalize);
   if (value !== null && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([key, nested]) => [key, canonicalize(nested)]));

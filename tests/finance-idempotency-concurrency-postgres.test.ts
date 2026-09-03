@@ -4,8 +4,9 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import pg from 'pg';
 import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
-import { createCanonicalFinanceFingerprint, executeIdempotentFinanceCommand, type FinanceCommandIdentity } from '../src/modules/finance/finance-command.ts';
+import { createCanonicalFinanceFingerprint, createJournalConfirmationFingerprint, executeIdempotentFinanceCommand, type FinanceCommandIdentity } from '../src/modules/finance/finance-command.ts';
 import { PostgresJournalRepository } from '../src/modules/finance/journal-repository.ts';
+import type { ConfirmJournalInput } from '../src/modules/finance/journal-model.ts';
 import { Money } from '../src/modules/finance/money.ts';
 import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 
@@ -18,19 +19,25 @@ const operationNamespace = 'finance.journal.confirmation';
 const pool = new pg.Pool({ connectionString: process.env.TEST_DATABASE_URL, options: `-c search_path=${quote(schema)},public` });
 const migrations = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations');
 
+function journalInput(amount: string, overrides: Partial<ConfirmJournalInput> = {}): ConfirmJournalInput {
+  return {
+    institutionId,
+    commandId: 'not-fingerprint-content',
+    journalType: 'foundation_value_received',
+    effectiveAt: new Date('2026-09-03T00:00:00.000Z'),
+    entries: [{ positionType: 'received_value', money: Money.parse(amount, 'EUR'), sourceRef: 'task-5-fixture' }],
+    actorPersonId,
+    financialProfileVersion: 1,
+    ...overrides,
+  };
+}
+
 function identity(key: string, amount: string): FinanceCommandIdentity {
   return {
     institutionId,
     operationNamespace,
     idempotencyKey: key,
-    canonicalFingerprint: createCanonicalFinanceFingerprint({
-      institutionId,
-      journalType: 'foundation_value_received',
-      money: Money.parse(amount, 'EUR'),
-      actorPersonId,
-      financialProfileVersion: 1,
-      sourceRef: 'task-5-fixture',
-    }),
+    canonicalFingerprint: createJournalConfirmationFingerprint(journalInput(amount)),
   };
 }
 
@@ -47,15 +54,7 @@ async function run(identityInput: FinanceCommandIdentity, amount = '1.00') {
     pool,
     identity: identityInput,
     execute: async (client) => {
-      const journal = await new PostgresJournalRepository(client).confirmInTransaction(client, {
-        institutionId,
-        commandId: identityInput.idempotencyKey,
-        journalType: 'foundation_value_received',
-        effectiveAt: new Date('2026-09-03T00:00:00.000Z'),
-        entries: [{ positionType: 'received_value', money: Money.parse(amount, 'EUR'), sourceRef: 'task-5-fixture' }],
-        actorPersonId,
-        financialProfileVersion: 1,
-      });
+      const journal = await new PostgresJournalRepository(client).confirmInTransaction(client, { ...journalInput(amount), commandId: identityInput.idempotencyKey });
       return { resultRef: journal.transactionId, result: { transactionId: journal.transactionId } };
     },
     loadResult: async (client, resultRef) => {
@@ -77,6 +76,14 @@ try {
   } finally { setup.release(); }
 
   assert.equal(createCanonicalFinanceFingerprint({ money: Money.parse('1.0', 'EUR'), nested: { b: 'x', a: 'y' } }), createCanonicalFinanceFingerprint({ nested: { a: 'y', b: 'x' }, money: Money.parse('1.00', 'EUR') }), 'canonical fingerprint normalizes Money and object ordering');
+  const canonicalJournal = journalInput('1.00');
+  assert.equal(createJournalConfirmationFingerprint(canonicalJournal), createJournalConfirmationFingerprint({ ...canonicalJournal, effectiveAt: new Date('2026-09-03T00:00:00.000Z') }), 'the same instant has deterministic UTC fingerprint serialization');
+  assert.notEqual(createJournalConfirmationFingerprint(canonicalJournal), createJournalConfirmationFingerprint({ ...canonicalJournal, effectiveAt: new Date('2026-09-03T00:00:01.000Z') }), 'effectiveAt is material fingerprint content');
+  assert.notEqual(createJournalConfirmationFingerprint(canonicalJournal), createJournalConfirmationFingerprint({ ...canonicalJournal, reason: 'corrected rationale' }), 'reason is material fingerprint content');
+  assert.notEqual(createJournalConfirmationFingerprint(canonicalJournal), createJournalConfirmationFingerprint({ ...canonicalJournal, reversesTransactionId: '00000000-0000-0000-0000-000000000599' }), 'reversal linkage is material fingerprint content');
+  assert.notEqual(createJournalConfirmationFingerprint(canonicalJournal), createJournalConfirmationFingerprint({ ...canonicalJournal, entries: [{ ...canonicalJournal.entries[0], sourceRef: 'other-source' }] }), 'complete entry material is fingerprint content');
+  assert.equal(createJournalConfirmationFingerprint(canonicalJournal), createJournalConfirmationFingerprint({ ...canonicalJournal, entries: [{ ...canonicalJournal.entries[0], money: Money.parse('1.0', 'EUR') }] }), 'lexically equivalent Money has the same Journal fingerprint');
+  assert.notEqual(createCanonicalFinanceFingerprint({ effectiveAt: canonicalJournal.effectiveAt }), createCanonicalFinanceFingerprint({ effectiveAt: {} }), 'Date must not degrade to an empty object');
   assert.notEqual(identity('sensitivity', '1.00').canonicalFingerprint, identity('sensitivity', '2.00').canonicalFingerprint, 'material economic changes change the fingerprint');
 
   const sequentialIdentity = identity('sequential', '1.00');

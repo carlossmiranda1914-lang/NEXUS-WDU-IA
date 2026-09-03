@@ -189,3 +189,14 @@ No test result may be inferred from source inspection or GitHub connector writes
 - `REGRESSIONS=finance journal/schema PostgreSQL, isolated migration bootstrap/checksum, FND01 CP2 local, FND03, lint, build and diff-check PASS.`
 - `SCHEMA_CHANGED=NO; no migration was needed or created.`
 - `TASK_6=NOT_STARTED`
+
+## Task 5 — P1 canonical Journal fingerprint correction
+
+- `REVIEWED_HEAD=96911c4500e676893075be1703ba4a30141ef8ba`
+- `RED_COMMAND=TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-idempotency-concurrency-postgres.test.ts`
+- `RED_RESULT=SyntaxError: finance-command.ts did not export createJournalConfirmationFingerprint; callers could still construct incomplete generic fingerprint objects.`
+- `CORRECTION=Added the typed JournalConfirmationFingerprintInput builder. It includes institutionId, journalType, UTC effectiveAt, ordered complete entries (positionType + exact canonical Money + sourceRef), nullable reversal/reason, actorPersonId and financialProfileVersion; commandId/idempotency key is excluded.`
+- `DATE_GUARD=Canonical generic serialization recognizes valid Date as ISO UTC and rejects invalid Date, so Date cannot silently become {}.`
+- `GREEN_COMMANDS=TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-idempotency-concurrency-postgres.test.ts; TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-journal-postgres.test.ts; TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-foundation-schema-postgres.test.ts; TEST_DATABASE_LOCAL_AUTHORIZED=true npm run test:migrations:isolated; TEST_DATABASE_LOCAL_AUTHORIZED=true npm run test:fnd01:cp2:local; npm run test:fnd03; npm run lint; npm run build; git diff --check`
+- `GREEN_RESULT=PASS — effectiveAt/reason/reversal/entry changes alter fingerprints; equivalent Money and same instant remain deterministic.`
+- `TASK_6=NOT_STARTED`

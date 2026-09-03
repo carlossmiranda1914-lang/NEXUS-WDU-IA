@@ -5,7 +5,7 @@ import path from 'node:path';
 import pg from 'pg';
 import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
 import { Money } from '../src/modules/finance/money.ts';
-import { createCanonicalFinanceFingerprint, executeIdempotentFinanceCommand } from '../src/modules/finance/finance-command.ts';
+import { createJournalConfirmationFingerprint, executeIdempotentFinanceCommand } from '../src/modules/finance/finance-command.ts';
 import { PostgresJournalRepository } from '../src/modules/finance/journal-repository.ts';
 import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 
@@ -38,7 +38,7 @@ try {
     const repository = new PostgresJournalRepository(client);
     const result = await executeIdempotentFinanceCommand({
       pool,
-      identity: { institutionId: institution, operationNamespace: 'finance.journal.confirmation', idempotencyKey: input.commandId, canonicalFingerprint: createCanonicalFinanceFingerprint({ institutionId: institution, journalType: input.journalType, money: input.entries[0].money, actorPersonId: actor, financialProfileVersion: 1, sourceRef: 'fixture' }) },
+      identity: { institutionId: institution, operationNamespace: 'finance.journal.confirmation', idempotencyKey: input.commandId, canonicalFingerprint: createJournalConfirmationFingerprint({ institutionId: input.institutionId, journalType: input.journalType, effectiveAt: input.effectiveAt, entries: input.entries, actorPersonId: input.actorPersonId, financialProfileVersion: input.financialProfileVersion }) },
       execute: async (commandClient) => {
         const confirmed = await new PostgresJournalRepository(commandClient).confirmInTransaction(commandClient, input);
         return { resultRef: confirmed.transactionId, result: confirmed };
