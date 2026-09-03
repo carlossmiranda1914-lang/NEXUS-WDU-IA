@@ -207,6 +207,15 @@ No test result may be inferred from source inspection or GitHub connector writes
 - `REGRESSIONS=Journal after_outbox rollback, reversals, Task 5 idempotency and isolated 30-migration chain PASS.`
 - `TASK_8=NOT_STARTED`
 
+## Task 8 — legacy authority fence and aggregate gate
+
+- `BASE_SHA=ce24184aa246f2f925d28ddb0e1f8e56c4abc158`
+- `LEGACY_AUTHORITY=students.outstanding_fees; persisted in legacy students table, written by server.ts legacy invoice/payment paths and read by legacy UI/API.`
+- `FENCE=Real PostgreSQL mutation 10 -> 999 changes only students.outstanding_fees; confirmed Journal count and rebuilt canonical position remain unchanged.`
+- `AGGREGATE=Added deterministic fail-fast test:finance:foundation runner and Task 1-8 aliases; fresh sequence PASS through all Finance tests.`
+- `REGRESSIONS=migrations isolated, FND01 CP2 and FND03 PASS.`
+- `TASK_8=CHECKPOINT_COMPLETE; FOUNDATION_NOT_INTEGRATED; INDEPENDENT_REVIEW_NEXT.`
+
 ## Task 7 — P1 durable lease proof expansion
 
 - `POSTGRES_PROOF=fail persists TEMP, increments attempts exactly once and clears lease; a fresh pg.Pool recovers pending work; concurrent claim awards an id once; unexpired leases are skipped and expired leases are reclaimed.`
