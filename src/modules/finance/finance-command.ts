@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { Money } from './money.ts';
 import type { ConfirmJournalInput } from './journal-model.ts';
+import type { ReverseFoundationTransactionInput } from './journal-model.ts';
+import { PostgresJournalRepository } from './journal-repository.ts';
 
 export interface FinanceCommandIdentity {
   institutionId: string;
@@ -29,6 +31,12 @@ export function createJournalConfirmationFingerprint(input: JournalConfirmationF
     actorPersonId: input.actorPersonId,
     financialProfileVersion: input.financialProfileVersion,
   });
+}
+
+export async function executeFoundationReversal(input: { pool: Pool; identity: Omit<FinanceCommandIdentity, 'canonicalFingerprint'> & { canonicalFingerprint?: string }; reversal: ReverseFoundationTransactionInput }): Promise<{ replayed: boolean; result: { transactionId: string } }> {
+  const reversal = input.reversal;
+  const canonicalFingerprint = createJournalConfirmationFingerprint({ institutionId: reversal.institutionId, journalType: 'foundation_reversal', effectiveAt: reversal.effectiveAt, entries: [{ positionType: 'reversed_value', money: reversal.amount, sourceRef: reversal.originalTransactionId }], reversesTransactionId: reversal.originalTransactionId, reason: reversal.reason, actorPersonId: reversal.actorPersonId, financialProfileVersion: reversal.financialProfileVersion });
+  return executeIdempotentFinanceCommand({ pool: input.pool, identity: { ...input.identity, canonicalFingerprint }, execute: async (client) => { const confirmed = await new PostgresJournalRepository(client).reverseInTransaction(client, reversal, input.identity.idempotencyKey); return { resultRef: confirmed.transactionId, result: confirmed }; }, loadResult: async (client, resultRef) => { const result = await client.query(`SELECT id FROM finance_journal_transactions WHERE institution_id=$1 AND id=$2 AND status='confirmed'`, [reversal.institutionId, resultRef]); if (!result.rows[0]) throw new Error('Persisted reversal result is missing'); return { transactionId: result.rows[0].id as string }; } });
 }
 
 export async function executeIdempotentFinanceCommand<T>(input: {

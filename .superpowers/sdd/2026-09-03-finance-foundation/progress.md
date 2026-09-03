@@ -190,6 +190,14 @@ No test result may be inferred from source inspection or GitHub connector writes
 - `SCHEMA_CHANGED=NO; no migration was needed or created.`
 - `TASK_6=NOT_STARTED`
 
+## Task 6 — append-only reversal and concurrency
+
+- `RED=executeFoundationReversal export was absent.`
+- `GREEN=Real PostgreSQL proves 100 -> 30 -> 40, rejects 31 with no extra fact, leaves original unchanged, replays same reversal, conflicts changed semantics, and permits exactly one concurrent 70/60 reversal.`
+- `IMPLEMENTATION=Original row is SELECT FOR UPDATE locked inside the Task 5 transaction; remaining uses exact Money subtraction of confirmed reversal sum. No migration or process-local lock.`
+- `REGRESSIONS=Task 5/4/3 PostgreSQL, isolated migrations, FND01 CP2, FND03 and lint PASS.`
+- `TASK_7=NOT_STARTED`
+
 ## Task 5 — P1 canonical Journal fingerprint correction
 
 - `REVIEWED_HEAD=96911c4500e676893075be1703ba4a30141ef8ba`

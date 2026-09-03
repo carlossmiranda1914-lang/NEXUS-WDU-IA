@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { type ConfirmJournalInput, type JournalRepository, validateConfirmation } from './journal-model.ts';
+import { type ConfirmJournalInput, type JournalRepository, type ReverseFoundationTransactionInput, validateConfirmation } from './journal-model.ts';
+import { Money } from './money.ts';
 
 export type JournalFailurePoint = 'after_transaction' | 'after_entries' | 'after_audit' | 'after_outbox';
 
@@ -25,6 +26,16 @@ export class PostgresJournalRepository implements JournalRepository {
       await client.query(`INSERT INTO finance_outbox (institution_id,transaction_id,topic,aggregate_id,payload) VALUES ($1,$2,'finance.journal.confirmed',$2,'{}')`, [input.institutionId,transactionId]);
       this.fail('after_outbox');
       return { transactionId };
+  }
+  async reverseInTransaction(client: PoolClient, input: ReverseFoundationTransactionInput, commandId: string): Promise<{ transactionId: string }> {
+    if (!input.reason.trim() || input.amount.compare(Money.parse('0', input.amount.currency)) <= 0) throw new Error('Reversal amount and reason are required');
+    const original = await client.query<{ status: string; currency: string; amount: string }>(`SELECT status,currency,amount::text FROM finance_journal_transactions WHERE institution_id=$1 AND id=$2 FOR UPDATE`, [input.institutionId, input.originalTransactionId]);
+    const row = original.rows[0]; if (!row || row.status !== 'confirmed') throw new Error('Original confirmed transaction is required');
+    if (row.currency !== input.amount.currency) throw new Error('Reversal currency must match original');
+    const reversed = await client.query<{ amount: string }>(`SELECT coalesce(sum(amount),0)::text amount FROM finance_journal_transactions WHERE institution_id=$1 AND reverses_transaction_id=$2 AND status='confirmed' AND journal_type='foundation_reversal'`, [input.institutionId, input.originalTransactionId]);
+    const remaining = Money.parse(row.amount, row.currency).subtract(Money.parse(reversed.rows[0].amount, row.currency));
+    if (input.amount.compare(remaining) > 0) throw new Error('Reversal exceeds remaining reversible amount');
+    return this.confirmInTransaction(client, { institutionId: input.institutionId, commandId, journalType: 'foundation_reversal', effectiveAt: input.effectiveAt, entries: [{ positionType: 'reversed_value', money: input.amount, sourceRef: input.originalTransactionId }], reversesTransactionId: input.originalTransactionId, reason: input.reason, actorPersonId: input.actorPersonId, financialProfileVersion: input.financialProfileVersion });
   }
   async getConfirmed(institutionId: string, transactionId: string): Promise<unknown | null> {
     const result = await this.readClient.query(`SELECT id,institution_id,status,currency,amount,command_id,journal_type,actor_person_id,financial_profile_version,reason FROM finance_journal_transactions WHERE institution_id=$1 AND id=$2 AND status='confirmed'`, [institutionId, transactionId]);

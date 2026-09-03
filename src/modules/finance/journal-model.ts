@@ -5,6 +5,7 @@ export type FoundationJournalType = 'foundation_value_received' | 'foundation_re
 export type FoundationPositionType = 'received_value' | 'reversed_value';
 export interface JournalEntryDraft { positionType: FoundationPositionType; money: Money; sourceRef: string; }
 export interface ConfirmJournalInput { institutionId: string; commandId: string; journalType: FoundationJournalType; effectiveAt: Date; entries: readonly JournalEntryDraft[]; reversesTransactionId?: string; reason?: string; actorPersonId: string; financialProfileVersion: number; }
+export interface ReverseFoundationTransactionInput { institutionId: string; originalTransactionId: string; amount: Money; reason: string; actorPersonId: string; effectiveAt: Date; financialProfileVersion: number; }
 export interface JournalRepository { confirm(client: import('pg').PoolClient, input: ConfirmJournalInput): Promise<{ transactionId: string }>; getConfirmed(institutionId: string, transactionId: string): Promise<unknown | null>; }
 
 export function validateConfirmation(input: ConfirmJournalInput): { currency: string; amount: Money } {
