@@ -1,0 +1,73 @@
+import { createHash } from 'node:crypto';
+import type { Pool, PoolClient } from 'pg';
+import { Money } from './money.ts';
+
+export interface FinanceCommandIdentity {
+  institutionId: string;
+  operationNamespace: string;
+  idempotencyKey: string;
+  canonicalFingerprint: string;
+}
+
+type PersistedCommand = { request_fingerprint: string; result_ref: string };
+
+export function createCanonicalFinanceFingerprint(value: unknown): string {
+  return createHash('sha256').update(JSON.stringify(canonicalize(value))).digest('hex');
+}
+
+export async function executeIdempotentFinanceCommand<T>(input: {
+  pool: Pool;
+  identity: FinanceCommandIdentity;
+  execute: (client: PoolClient) => Promise<{ resultRef: string; result: T }>;
+  loadResult: (client: PoolClient, resultRef: string) => Promise<T>;
+}): Promise<{ replayed: boolean; result: T }> {
+  const client = await input.pool.connect();
+  try {
+    const existing = await findCommand(client, input.identity);
+    if (existing) return replayOrConflict(client, input.identity, existing, input.loadResult);
+
+    await client.query('BEGIN');
+    try {
+      const executed = await input.execute(client);
+      await client.query(
+        `INSERT INTO finance_command_results (institution_id,operation_namespace,idempotency_key,request_fingerprint,result_ref) VALUES ($1,$2,$3,$4,$5)`,
+        [input.identity.institutionId, input.identity.operationNamespace, input.identity.idempotencyKey, input.identity.canonicalFingerprint, executed.resultRef],
+      );
+      await client.query('COMMIT');
+      return { replayed: false, result: executed.result };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (!isUniqueConflict(error)) throw error;
+      const persisted = await findCommand(client, input.identity);
+      if (!persisted) throw error;
+      return replayOrConflict(client, input.identity, persisted, input.loadResult);
+    }
+  } finally { client.release(); }
+}
+
+async function findCommand(client: PoolClient, identity: FinanceCommandIdentity): Promise<PersistedCommand | undefined> {
+  const result = await client.query<PersistedCommand>(
+    `SELECT request_fingerprint,result_ref FROM finance_command_results WHERE institution_id=$1 AND operation_namespace=$2 AND idempotency_key=$3`,
+    [identity.institutionId, identity.operationNamespace, identity.idempotencyKey],
+  );
+  return result.rows[0];
+}
+
+async function replayOrConflict<T>(client: PoolClient, identity: FinanceCommandIdentity, persisted: PersistedCommand, loadResult: (client: PoolClient, resultRef: string) => Promise<T>): Promise<{ replayed: boolean; result: T }> {
+  if (persisted.request_fingerprint !== identity.canonicalFingerprint) throw new Error('Finance command fingerprint conflict');
+  return { replayed: true, result: await loadResult(client, persisted.result_ref) };
+}
+
+function isUniqueConflict(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === '23505';
+}
+
+function canonicalize(value: unknown): unknown {
+  if (value instanceof Money) return value.serialize();
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([key, nested]) => [key, canonicalize(nested)]));
+  }
+  if (value === undefined || typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') throw new Error('Canonical Finance fingerprint input is not serializable');
+  return value;
+}

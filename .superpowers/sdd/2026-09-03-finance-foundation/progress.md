@@ -174,3 +174,18 @@ No test result may be inferred from source inspection or GitHub connector writes
 - `GREEN_COMMANDS=TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-journal-postgres.test.ts; TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-foundation-schema-postgres.test.ts; TEST_DATABASE_LOCAL_AUTHORIZED=true npm run test:migrations:isolated; TEST_DATABASE_LOCAL_AUTHORIZED=true npm run test:fnd01:cp2:local; npm run test:fnd03; npm run lint; npm run build; git diff --check`
 - `GREEN_RESULT=PASS` — build retains only existing chunk-size and direct-eval warnings outside this correction.`
 - `TASK_5=NOT_STARTED`
+
+## Task 5 — canonical command idempotency and PostgreSQL concurrency
+
+- `MISSION=FINANCE-FOUNDATION-05`
+- `BASE_HEAD=2a84191c22abe31adb39af1e15748b0b48b4e9c8`
+- `PREFLIGHT=bootstrap-local-worktree and approved disposable PostgreSQL safety gate PASS.`
+- `RED_COMMAND=TEST_DATABASE_LOCAL_AUTHORIZED=true npx tsx tests/finance-idempotency-concurrency-postgres.test.ts`
+- `RED_RESULT=ERR_MODULE_NOT_FOUND for src/modules/finance/finance-command.ts; the canonical command boundary did not exist.`
+- `AUTHORITY=executeIdempotentFinanceCommand is the sole writer of finance_command_results. Journal now exposes confirmInTransaction for the caller-owned transaction and no longer writes Task 4's provisional commandId fingerprint.`
+- `CONCURRENCY=The existing PostgreSQL unique (institution_id, operation_namespace, idempotency_key) is the final arbiter. Unique conflicts roll back the attempted Journal/audit/outbox work, reload the persisted tenant-scoped result, replay only on matching SHA-256 fingerprint, and conflict otherwise; no process-local lock/map is used.`
+- `FINGERPRINT=SHA-256 over recursively key-sorted server-canonical JSON; Money serializes as exact canonical amount plus currency. Equivalent 1.0/1.00 Money and reordered objects hash identically; a material amount change hashes differently.`
+- `POSTGRES_GREEN=Real PostgreSQL proves sequential same-fingerprint replay, same-key fingerprint conflict, same-identity concurrent one-fact replay, concurrent different-fingerprint one-winner/one-conflict, distinct-key legitimacy, and lost-response recovery.`
+- `REGRESSIONS=finance journal/schema PostgreSQL, isolated migration bootstrap/checksum, FND01 CP2 local, FND03, lint, build and diff-check PASS.`
+- `SCHEMA_CHANGED=NO; no migration was needed or created.`
+- `TASK_6=NOT_STARTED`
