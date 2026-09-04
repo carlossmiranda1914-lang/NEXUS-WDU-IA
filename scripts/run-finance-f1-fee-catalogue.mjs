@@ -7,8 +7,11 @@ const files = [
   'tests/finance-fee-catalogue-model.test.ts',
   'tests/finance-fee-catalogue-policy.test.ts',
   'tests/finance-fee-catalogue-schema-postgres.test.ts',
+  'tests/finance-fee-catalogue-legacy-reconciliation.test.ts', // P1-01
   'tests/finance-fee-type-postgres.test.ts',
+  'tests/finance-fee-type-prefix-immutability.test.ts',        // P1-02
   'tests/finance-fee-catalogue-postgres.test.ts',
+  'tests/finance-fee-catalogue-inactive-type.test.ts',         // P1-03, P1-04
   'tests/finance-fee-catalogue-concurrency-postgres.test.ts',
   'tests/finance-fee-catalogue-http.test.ts',
   'tests/finance-fee-catalogue-client.test.ts',

@@ -113,7 +113,13 @@ function version(row: Row): FeeCatalogueVersion {
     version: Number(row.version),
     name: String(row.name),
     description: row.description ? String(row.description) : null,
-    kind: String(row.kind || row.fee_type_canonical_key || row.fee_type_code_prefix || 'fee'),
+    // P1-03: kind is compatibility-only derived data from fee_type_id.
+    // Classification authority is fee_type_canonical_key / fee_type_code_prefix from fee_types.
+    // The raw row.kind is the stored derived value (set from fee type at write time) — it is
+    // used here only as a fallback for history rows where fee_type columns are not joined.
+    // It CANNOT diverge from the fee type authority by design (set at write-time from fee type).
+    // Removal boundary: Phase 2, once all history consumers use fee_type_id directly.
+    kind: String(row.fee_type_canonical_key || row.fee_type_code_prefix || row.kind),
     money: { amount: String(row.amount), currency: String(row.currency) },
     effectiveFrom,
     effectiveTo,
@@ -300,15 +306,27 @@ export class PostgresFeeCatalogueRepository {
           );
         }
 
-        const targetFeeTypeId = x.feeTypeId || locked.rows[0].fee_type_id;
-        const feeTypeRes = await c.query<{ id: string; code_prefix: string; canonical_key: string | null }>(
-          `SELECT id, code_prefix, canonical_key FROM finance_fee_types WHERE institution_id = $1 AND id = $2`,
+        const currentFeeTypeId = String(locked.rows[0].fee_type_id);
+        const targetFeeTypeId = x.feeTypeId || currentFeeTypeId;
+        const isTypeChange = targetFeeTypeId !== currentFeeTypeId;
+
+        // P1-04: Fetch target fee type; check active status only when the type is being CHANGED.
+        // Same-type version publishes (amount/name changes) are allowed even if the type is later inactive
+        // — historical validity is preserved.
+        const feeTypeRes = await c.query<{ id: string; code_prefix: string; status: string; canonical_key: string | null }>(
+          `SELECT id, code_prefix, status, canonical_key FROM finance_fee_types WHERE institution_id = $1 AND id = $2`,
           [actor.institutionId, targetFeeTypeId],
         );
         if (!feeTypeRes.rows[0]) {
           throw new FeeCatalogueValidationError('Tipo de emolumento não encontrado.');
         }
+        if (isTypeChange && feeTypeRes.rows[0].status !== 'active') {
+          throw new FeeCatalogueValidationError(
+            'Não é possível alterar o tipo de emolumento para um tipo inativo. Selecione um tipo ativo.',
+          );
+        }
         const feeType = feeTypeRes.rows[0];
+        // P1-03: kind is compatibility-only derived data from fee_type_id — never from user input.
         const kind = feeType.canonical_key || feeType.code_prefix;
 
         await c.query(

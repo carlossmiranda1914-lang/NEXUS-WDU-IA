@@ -48,7 +48,9 @@ export interface CreateFeeCatalogueInput {
   effectiveFrom: string;
   // Legacy optional field (ignored if provided, server generates code)
   code?: string;
-  kind?: string;
+  // P1-03: kind is NOT accepted as user input. Classification authority is fee_type_id.
+  // kind is compatibility-only derived data written by the server from the referenced fee type.
+  // Removal boundary: Phase 2, once all consumers migrate to fee_type_id.
 }
 
 export interface UpdateFeeCatalogueInput {
@@ -59,7 +61,8 @@ export interface UpdateFeeCatalogueInput {
   amount: string;
   currency: string;
   effectiveFrom: string;
-  kind?: string;
+  // P1-03: kind is NOT accepted as user input. Classification authority is fee_type_id.
+  // kind is compatibility-only derived data written by the server from the referenced fee type.
 }
 
 export class FeeCatalogueValidationError extends Error {

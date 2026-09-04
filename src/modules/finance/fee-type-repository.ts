@@ -174,6 +174,30 @@ export class PostgresFeeTypeRepository {
         if (!current.rows[0]) throw new FeeTypeNotFoundError();
 
         if (x.codePrefix && x.codePrefix !== current.rows[0].code_prefix) {
+          // P1-02: Application-layer defence — check prefix namespace before DB trigger fires.
+          // Rule 1: prefix is immutable after any catalogue codes have been generated.
+          const counters = await c.query<{ last_sequence: number }>(
+            `SELECT last_sequence FROM finance_fee_code_counters WHERE institution_id = $1 AND fee_type_id = $2`,
+            [actor.institutionId, id],
+          );
+          if (counters.rows[0] && counters.rows[0].last_sequence > 0) {
+            throw new FeeTypeConflictError(
+              `O prefixo do tipo de emolumento não pode ser alterado após códigos terem sido gerados (${counters.rows[0].last_sequence} código(s) existente(s)).`,
+            );
+          }
+          // Rule 2: reject if the new prefix was historically used by any other fee type.
+          const historyConflict = await c.query(
+            `SELECT fee_type_id FROM finance_fee_type_prefix_history
+             WHERE institution_id = $1 AND code_prefix = $2 AND fee_type_id <> $3
+             LIMIT 1`,
+            [actor.institutionId, x.codePrefix, id],
+          );
+          if (historyConflict.rowCount && historyConflict.rowCount > 0) {
+            throw new FeeTypeConflictError(
+              `O prefixo '${x.codePrefix}' já foi utilizado por outro tipo de emolumento nesta instituição e não pode ser reutilizado.`,
+            );
+          }
+          // Rule 0: check current active duplicates
           const conflict = await c.query(
             `SELECT id FROM finance_fee_types WHERE institution_id = $1 AND code_prefix = $2 AND id <> $3`,
             [actor.institutionId, x.codePrefix, id],
