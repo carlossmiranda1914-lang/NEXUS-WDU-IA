@@ -1,8 +1,8 @@
 # Nexus Edu IA — Finance Foundation Implementation Design
 
-**Status:** SPEC FOR PRODUCT OWNER REVIEW — NOT IMPLEMENTATION AUTHORITY  
-**Date:** 2026-09-03  
-**Scope:** Finance Foundation only — F0 Financial Constitution, F1 Institutional Financial Context, F2 Money Model, F3 Operational Journal Model, F4 Transaction/Persistence/Recovery Model.  
+**Status:** SPEC FOR PRODUCT OWNER REVIEW — NOT IMPLEMENTATION AUTHORITY
+**Date:** 2026-09-03
+**Scope:** Finance Foundation only — F0 Financial Constitution, F1 Institutional Financial Context, F2 Money Model, F3 Operational Journal Model, F4 Transaction/Persistence/Recovery Model.
 **Implementation authorization:** NO. Approval of this spec is required before an implementation plan or executable Finance mission is created.
 
 ## 1. Purpose
@@ -555,6 +555,6 @@ This specification is ready for implementation planning only if Product Owner re
 - no placeholder is allowed to be filled by an agent with a product/architecture decision;
 - the first implementation may remain deliberately backend/foundation-focused without fake UI.
 
-**SPEC_STATUS=AWAITING_PRODUCT_OWNER_REVIEW**  
-**IMPLEMENTATION_AUTHORIZED=NO**  
+**SPEC_STATUS=AWAITING_PRODUCT_OWNER_REVIEW**
+**IMPLEMENTATION_AUTHORIZED=NO**
 **NEXT_ON_APPROVAL=WRITE_FINANCE_FOUNDATION_IMPLEMENTATION_PLAN**

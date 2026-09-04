@@ -1,7 +1,7 @@
 # Nexus Edu IA — F2 Approved Decisions D05-D13
 
-**State:** APPROVED DESIGN RECORD — NOT IMPLEMENTATION AUTHORITY  
-**Scope:** companion to `FINANCE_F2_MONEY_MODEL_PREPARATION.md`, which already records approved F2-D01 through F2-D04.  
+**State:** APPROVED DESIGN RECORD — NOT IMPLEMENTATION AUTHORITY
+**Scope:** companion to `FINANCE_F2_MONEY_MODEL_PREPARATION.md`, which already records approved F2-D01 through F2-D04.
 **Purpose:** preserve the Product Owner-approved F2-D05 through F2-D13 decisions without rewriting or truncating the existing canonical preparation file. This document does not authorize code, migrations, APIs, UI or FINANCE-01 implementation.
 
 ## F2-D05 — Explicit FX Conversion Evidence

@@ -1,6 +1,6 @@
 # Nexus Edu IA — F3 Ledger Model Review & Proof Contract
 
-**State:** DESIGN-CLOSED — NOT IMPLEMENTATION AUTHORITY  
+**State:** DESIGN-CLOSED — NOT IMPLEMENTATION AUTHORITY
 **Scope:** approved F3-D01 through F3-D08, F0–F2 constraints, canonical Finance architecture, and Nexus engineering governance.
 
 ## Executive determination
@@ -113,11 +113,11 @@ Cross-check against F0–F2 and the canonical roadmap found:
 
 ## Closure
 
-**F3_STATUS=DESIGN-CLOSED**  
-**PRODUCT_OWNER_APPROVAL=YES**  
-**KNOWN_F3_P0_DESIGN_GAPS=0**  
-**KNOWN_F3_P1_DESIGN_GAPS=0**  
-**IMPLEMENTATION_AUTHORIZED=NO**  
+**F3_STATUS=DESIGN-CLOSED**
+**PRODUCT_OWNER_APPROVAL=YES**
+**KNOWN_F3_P0_DESIGN_GAPS=0**
+**KNOWN_F3_P1_DESIGN_GAPS=0**
+**IMPLEMENTATION_AUTHORIZED=NO**
 **NEXT_STAGE=F4_MINIMUM_TRANSACTION_AND_PERSISTENCE_DESIGN**
 
 F3 closure authorizes only the minimal F4 design needed to make F0–F3 implementable and testable. It does not authorize Payments, Allocation, Reconciliation, Reporting or the complete Finance module.

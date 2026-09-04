@@ -654,5 +654,5 @@ Only after exact-HEAD review with zero unresolved P0/P1 and a fresh `TEST_DATABA
 - **Proof sufficiency:** PostgreSQL is mandatory for schema, atomicity, tenant references, concurrency, idempotency, reversal and recovery claims.
 - **Plan status:** implementation execution remains blocked until Product Owner explicitly approves this plan.
 
-`PLAN_STATUS=AWAITING_PRODUCT_OWNER_APPROVAL`  
+`PLAN_STATUS=AWAITING_PRODUCT_OWNER_APPROVAL`
 `IMPLEMENTATION_AUTHORIZED=NO`

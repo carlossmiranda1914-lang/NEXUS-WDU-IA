@@ -1,6 +1,6 @@
 # Nexus Edu IA — F2 Money Model Completeness Review
 
-**State:** DESIGN-CLOSED — NOT IMPLEMENTATION AUTHORITY  
+**State:** DESIGN-CLOSED — NOT IMPLEMENTATION AUTHORITY
 **Reviewed scope:** F2-D01 through F2-D13, F0/F1 constraints, current Finance architecture/roadmap, and downstream requirements from Ledger, Payments, Allocation, Reconciliation, Reporting and PostgreSQL persistence.
 
 ## Final determination
@@ -91,11 +91,11 @@ Allocation priority across obligations/students, provider-fee accounting, tax mo
 
 ## Closure
 
-**F2_STATUS=DESIGN-CLOSED**  
-**PRODUCT_OWNER_APPROVAL=YES**  
-**KNOWN_F2_P0_DESIGN_GAPS=0**  
-**KNOWN_F2_P1_DESIGN_GAPS=0**  
-**IMPLEMENTATION_AUTHORIZED=NO**  
+**F2_STATUS=DESIGN-CLOSED**
+**PRODUCT_OWNER_APPROVAL=YES**
+**KNOWN_F2_P0_DESIGN_GAPS=0**
+**KNOWN_F2_P1_DESIGN_GAPS=0**
+**IMPLEMENTATION_AUTHORIZED=NO**
 **NEXT_ARCHITECTURAL_STAGE=F3_LEDGER_MODEL**
 
 F2 closure authorizes opening F3 design only. It does not authorize Finance implementation, migrations, APIs, UI or Mission Packs.

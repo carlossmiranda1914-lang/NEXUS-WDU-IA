@@ -1,6 +1,6 @@
 # Nexus Edu IA — F4 Persistence, Migration & Recovery Review
 
-**State:** DESIGN-CLOSED_FOR_FOUNDATION_GATE — NOT IMPLEMENTATION AUTHORITY  
+**State:** DESIGN-CLOSED_FOR_FOUNDATION_GATE — NOT IMPLEMENTATION AUTHORITY
 **Scope:** approved F4-D01 through F4-D04, F0–F3 constraints, canonical migration runner, current PostgreSQL proof practices and Nexus engineering governance.
 
 ## Executive determination
@@ -123,11 +123,11 @@ Cross-check of F4-D01 through F4-D04 against F0–F3 and the existing migration/
 
 ## Closure
 
-**F4_STATUS=DESIGN-CLOSED_FOR_FOUNDATION_GATE**  
-**PRODUCT_OWNER_APPROVAL=YES**  
-**KNOWN_F4_P0_DESIGN_GAPS=0**  
-**KNOWN_F4_P1_DESIGN_GAPS=0**  
-**IMPLEMENTATION_AUTHORIZED=NO**  
+**F4_STATUS=DESIGN-CLOSED_FOR_FOUNDATION_GATE**
+**PRODUCT_OWNER_APPROVAL=YES**
+**KNOWN_F4_P0_DESIGN_GAPS=0**
+**KNOWN_F4_P1_DESIGN_GAPS=0**
+**IMPLEMENTATION_AUTHORIZED=NO**
 **NEXT_STAGE=FINANCE_FOUNDATION_IMPLEMENTATION_SPEC_AND_PLAN**
 
 F4 closure ends the current foundation-design loop. The next step is not F5/F6 design. The next step is to consolidate F0–F4 into an implementation-ready Finance Foundation spec, self-review it, obtain Product Owner approval, and then write small bounded implementation missions/plans with Codex as writer and Antigravity as independent read-only reviewer.
