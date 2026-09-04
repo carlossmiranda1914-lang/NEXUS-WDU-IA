@@ -12,8 +12,8 @@ active_work:
   program: FINANCE_FOUNDATION
   mission: FINANCE-FOUNDATION-INTEGRATION-GATE
   mission_branch: codex/finance-foundation-01
-  durable_remote_checkpoint: 95dd350c872229a222eead5d88d79a13776c5955
-  activity: INTEGRATION_SYNC
+  durable_remote_checkpoint: 74d575a574bb4e3dd3cf9652327c6f1c665f393b
+  activity: INTEGRATION_MERGE_AUTHORIZED
   task: FINANCE-FOUNDATION-INTEGRATION-SYNC
   task_name: Synchronize accepted Finance Foundation with current main and prove integration readiness
   state: READY
@@ -27,7 +27,7 @@ active_work:
     Fetch origin, confirm origin/main, merge origin/main into codex/finance-foundation-01 with a normal
     merge commit, STOP before resolving any technical authority conflict, otherwise run the fresh
     Finance/migration/tenant/lint/build/diff gates, push the synchronized branch and STOP for the
-    Product Owner integration decision. Do not merge Finance into main and do not start upper Finance.
+    Product Owner has authorized merge of PR #89 into main after CI PASS. Do not start upper Finance.
 
 execution:
   one_code_owner_per_unit: true

@@ -12,19 +12,19 @@ Finance Foundation Tasks 1–8 are implementation-complete and independently rev
 
 Accepted exact Finance review checkpoint before sync:
 
-`95dd350c872229a222eead5d88d79a13776c5955`
+`74d575a574bb4e3dd3cf9652327c6f1c665f393b`
 
 Independent review outcome at that checkpoint:
 
 - P0 = 0
 - P1 = 0
 - P1-1 outbox tenant scope: CLOSED with explicit A/B PostgreSQL proof
-- P1-2 legacy HTTP E2E: adjudicated residual risk; no architecture expansion authorized
+- P1-2 guarded reversal confirmation: CLOSED
 - aggregate Finance Foundation gate: PASS
 - FND03 tenant regression: PASS
 - lint/build/diff: PASS
 
-This branch is not yet integrated because it was developed from an earlier `main` baseline. The remaining work is integration synchronization only.
+PR #89 CI is PASS and the Product Owner has authorized the Finance-to-`main` merge. Finance Foundation Tasks 1–8 are accepted with P0 = 0 and P1 = 0. Upper Finance/F1 remains NOT STARTED until that merge is confirmed.
 
 ## Active executable mission
 
