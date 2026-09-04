@@ -1,17 +1,23 @@
-﻿import { randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { executeIdempotentFinanceCommand, createCanonicalFinanceFingerprint } from './finance-command.ts';
+import { requireFinancialContext, type FinancialProfileStore } from './financial-context.ts';
 import {
   type CreateFeeCatalogueInput,
   type FeeCatalogueItem,
   type FeeCatalogueStatus,
   type FeeCatalogueVersion,
   type UpdateFeeCatalogueInput,
-  FeeCatalogueValidationError,
   normalizeFeeCatalogueCreate,
   normalizeFeeCatalogueUpdate,
+  FeeCatalogueValidationError,
 } from './fee-catalogue-model.ts';
-import { executeIdempotentFinanceCommand, createCanonicalFinanceFingerprint } from './finance-command.ts';
-import { requireFinancialContext, type FinancialProfileStore } from './financial-context.ts';
+
+export interface FeeCatalogueActor {
+  institutionId: string;
+  personId: string;
+  role: string;
+}
 
 export class FeeCatalogueNotFoundError extends Error {
   readonly code = 'FEE_CATALOGUE_NOT_FOUND';
@@ -24,64 +30,90 @@ export class FeeCatalogueNotFoundError extends Error {
 
 export class FeeCatalogueConflictError extends Error {
   readonly code = 'FEE_CATALOGUE_CONFLICT';
-  constructor(message = 'Catalogue version conflict') {
+  constructor(message = 'Catalogue conflict') {
     super(message);
     this.name = 'FeeCatalogueConflictError';
     Object.setPrototypeOf(this, FeeCatalogueConflictError.prototype);
   }
 }
 
-export interface FeeCatalogueActor {
-  institutionId: string;
-  personId: string;
-  role: string;
+interface Row {
+  id: string;
+  institution_id: string;
+  fee_type_id: string;
+  fee_type_display_name?: string;
+  fee_type_code_prefix?: string;
+  fee_type_canonical_key?: string | null;
+  code: string;
+  status: string;
+  current_version: number;
+  created_at: string | Date;
+  updated_at: string | Date;
+  version_id: string;
+  item_id?: string;
+  version: number;
+  name: string;
+  description: string | null;
+  kind: string;
+  amount: string;
+  currency: string;
+  effective_from: string | Date;
+  effective_to: string | Date | null;
+  version_created_at: string | Date;
 }
-
-type Row = Record<string, unknown>;
 
 const selectCurrent = `
   SELECT
     i.id,
     i.institution_id,
+    i.fee_type_id,
+    ft.display_name AS fee_type_display_name,
+    ft.code_prefix AS fee_type_code_prefix,
+    ft.canonical_key AS fee_type_canonical_key,
     i.code,
     i.status,
     i.current_version,
     i.created_at,
     i.updated_at,
-    v.id version_id,
+    v.id AS version_id,
     v.version,
     v.name,
     v.description,
     v.kind,
-    v.amount::text amount,
+    v.amount::text AS amount,
     v.currency,
     v.effective_from,
     v.effective_to,
-    v.created_at version_created_at
+    v.created_at AS version_created_at
   FROM finance_fee_catalogue_items i
   JOIN finance_fee_catalogue_versions v
     ON (v.institution_id = i.institution_id AND v.item_id = i.id AND v.version = i.current_version)
+  JOIN finance_fee_types ft
+    ON (ft.institution_id = v.institution_id AND ft.id = v.fee_type_id)
 `;
 
 function version(row: Row): FeeCatalogueVersion {
-  const effectiveFrom = row.effective_from instanceof Date
-    ? row.effective_from.toISOString()
-    : new Date(String(row.effective_from)).toISOString();
-  const effectiveTo = row.effective_to
-    ? (row.effective_to instanceof Date ? row.effective_to.toISOString() : new Date(String(row.effective_to)).toISOString())
-    : null;
-  const createdAt = row.version_created_at instanceof Date
-    ? row.version_created_at.toISOString()
-    : new Date(String(row.version_created_at || row.created_at)).toISOString();
+  const effectiveFrom = row.effective_from instanceof Date ? row.effective_from.toISOString() : new Date(String(row.effective_from)).toISOString();
+  const effectiveTo = row.effective_to ? (row.effective_to instanceof Date ? row.effective_to.toISOString() : new Date(String(row.effective_to)).toISOString()) : null;
+  const createdAt = row.version_created_at instanceof Date ? row.version_created_at.toISOString() : new Date(String(row.version_created_at)).toISOString();
 
   return {
     id: String(row.version_id),
     itemId: String(row.item_id || row.id),
     institutionId: String(row.institution_id),
+    feeTypeId: String(row.fee_type_id),
+    feeType: row.fee_type_display_name
+      ? {
+          id: String(row.fee_type_id),
+          displayName: String(row.fee_type_display_name),
+          codePrefix: String(row.fee_type_code_prefix),
+          canonicalKey: row.fee_type_canonical_key ? String(row.fee_type_canonical_key) : null,
+        }
+      : undefined,
     version: Number(row.version),
     name: String(row.name),
     description: row.description ? String(row.description) : null,
-    kind: String(row.kind),
+    kind: String(row.kind || row.fee_type_canonical_key || row.fee_type_code_prefix || 'fee'),
     money: { amount: String(row.amount), currency: String(row.currency) },
     effectiveFrom,
     effectiveTo,
@@ -96,6 +128,15 @@ function view(row: Row): FeeCatalogueItem {
   return {
     id: String(row.id),
     institutionId: String(row.institution_id),
+    feeTypeId: String(row.fee_type_id),
+    feeType: row.fee_type_display_name
+      ? {
+          id: String(row.fee_type_id),
+          displayName: String(row.fee_type_display_name),
+          codePrefix: String(row.fee_type_code_prefix),
+          canonicalKey: row.fee_type_canonical_key ? String(row.fee_type_canonical_key) : null,
+        }
+      : undefined,
     code: String(row.code),
     status: row.status as FeeCatalogueStatus,
     currentVersion: Number(row.current_version),
@@ -122,7 +163,28 @@ export class PostgresFeeCatalogueRepository {
     const item = view(r.rows[0]);
     if (history) {
       const h = await this.pool.query<Row>(
-        `SELECT v.id version_id, v.item_id, v.institution_id, v.version, v.name, v.description, v.kind, v.amount::text amount, v.currency, v.effective_from, v.effective_to, v.created_at version_created_at FROM finance_fee_catalogue_versions v WHERE v.institution_id=$1 AND v.item_id=$2 ORDER BY v.version DESC`,
+        `SELECT
+           v.id AS version_id,
+           v.item_id,
+           v.institution_id,
+           v.fee_type_id,
+           ft.display_name AS fee_type_display_name,
+           ft.code_prefix AS fee_type_code_prefix,
+           ft.canonical_key AS fee_type_canonical_key,
+           v.version,
+           v.name,
+           v.description,
+           v.kind,
+           v.amount::text AS amount,
+           v.currency,
+           v.effective_from,
+           v.effective_to,
+           v.created_at AS version_created_at
+         FROM finance_fee_catalogue_versions v
+         JOIN finance_fee_types ft
+           ON (ft.institution_id = v.institution_id AND ft.id = v.fee_type_id)
+         WHERE v.institution_id=$1 AND v.item_id=$2
+         ORDER BY v.version DESC`,
         [actor.institutionId, id],
       );
       item.history = h.rows.map((row) => version({ ...row, item_id: id, institution_id: actor.institutionId }));
@@ -138,6 +200,7 @@ export class PostgresFeeCatalogueRepository {
       store: this.profiles,
       requiredCurrency: x.currency,
     });
+
     return executeIdempotentFinanceCommand({
       pool: this.pool,
       identity: {
@@ -147,14 +210,44 @@ export class PostgresFeeCatalogueRepository {
         canonicalFingerprint: createCanonicalFinanceFingerprint(x),
       },
       execute: async (c) => {
+        // Validate Fee Type
+        const feeTypeRes = await c.query<{ id: string; code_prefix: string; status: string; canonical_key: string | null }>(
+          `SELECT id, code_prefix, status, canonical_key FROM finance_fee_types WHERE institution_id = $1 AND id = $2`,
+          [actor.institutionId, x.feeTypeId],
+        );
+        if (!feeTypeRes.rows[0]) {
+          throw new FeeCatalogueValidationError('Tipo de emolumento não encontrado.');
+        }
+        if (feeTypeRes.rows[0].status !== 'active') {
+          throw new FeeCatalogueValidationError('Não é possível criar um emolumento com um tipo inativo.');
+        }
+
+        const feeType = feeTypeRes.rows[0];
+
+        // Concurrently safe atomic code generation
+        const counterRes = await c.query<{ last_sequence: number }>(
+          `INSERT INTO finance_fee_code_counters (institution_id, fee_type_id, last_sequence)
+           VALUES ($1, $2, 1)
+           ON CONFLICT (institution_id, fee_type_id)
+           DO UPDATE SET last_sequence = finance_fee_code_counters.last_sequence + 1
+           RETURNING last_sequence`,
+          [actor.institutionId, x.feeTypeId],
+        );
+        const sequence = counterRes.rows[0].last_sequence;
+        const generatedCode = `${feeType.code_prefix}-${String(sequence).padStart(6, '0')}`;
+
         const id = randomUUID();
+        const kind = feeType.canonical_key || feeType.code_prefix;
+
         await c.query(
-          `INSERT INTO finance_fee_catalogue_items(id, institution_id, code, status, current_version, created_by_person_id) VALUES($1, $2, $3, 'active', 1, $4)`,
-          [id, actor.institutionId, x.code, actor.personId],
+          `INSERT INTO finance_fee_catalogue_items(id, institution_id, fee_type_id, code, status, current_version, created_by_person_id)
+           VALUES($1, $2, $3, $4, 'active', 1, $5)`,
+          [id, actor.institutionId, x.feeTypeId, generatedCode, actor.personId],
         );
         await c.query(
-          `INSERT INTO finance_fee_catalogue_versions(institution_id, item_id, version, name, description, kind, amount, currency, effective_from, created_by_person_id) VALUES($1, $2, 1, $3, $4, $5, $6, $7, $8, $9)`,
-          [actor.institutionId, id, x.name, x.description, x.kind, x.amount, x.currency, x.effectiveFrom, actor.personId],
+          `INSERT INTO finance_fee_catalogue_versions(institution_id, item_id, fee_type_id, version, name, description, kind, amount, currency, effective_from, created_by_person_id)
+           VALUES($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $10)`,
+          [actor.institutionId, id, x.feeTypeId, x.name, x.description, kind, x.amount, x.currency, x.effectiveFrom, actor.personId],
         );
         await audit(c, actor, 'fee_catalogue.created', id);
         return { resultRef: id, result: await getIn(c, actor, id) };
@@ -171,6 +264,7 @@ export class PostgresFeeCatalogueRepository {
       store: this.profiles,
       requiredCurrency: x.currency,
     });
+
     return executeIdempotentFinanceCommand({
       pool: this.pool,
       identity: {
@@ -181,7 +275,7 @@ export class PostgresFeeCatalogueRepository {
       },
       execute: async (c) => {
         const locked = await c.query<Row>(
-          `SELECT i.current_version, v.effective_from
+          `SELECT i.current_version, i.fee_type_id, v.effective_from
            FROM finance_fee_catalogue_items i
            JOIN finance_fee_catalogue_versions v
              ON (v.institution_id = i.institution_id AND v.item_id = i.id AND v.version = i.current_version)
@@ -206,17 +300,29 @@ export class PostgresFeeCatalogueRepository {
           );
         }
 
+        const targetFeeTypeId = x.feeTypeId || locked.rows[0].fee_type_id;
+        const feeTypeRes = await c.query<{ id: string; code_prefix: string; canonical_key: string | null }>(
+          `SELECT id, code_prefix, canonical_key FROM finance_fee_types WHERE institution_id = $1 AND id = $2`,
+          [actor.institutionId, targetFeeTypeId],
+        );
+        if (!feeTypeRes.rows[0]) {
+          throw new FeeCatalogueValidationError('Tipo de emolumento não encontrado.');
+        }
+        const feeType = feeTypeRes.rows[0];
+        const kind = feeType.canonical_key || feeType.code_prefix;
+
         await c.query(
           `UPDATE finance_fee_catalogue_versions SET effective_to = $1 WHERE institution_id = $2 AND item_id = $3 AND version = $4`,
           [x.effectiveFrom, actor.institutionId, id, x.expectedVersion],
         );
         await c.query(
-          `INSERT INTO finance_fee_catalogue_versions(institution_id, item_id, version, name, description, kind, amount, currency, effective_from, created_by_person_id) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-          [actor.institutionId, id, x.expectedVersion + 1, x.name, x.description, x.kind, x.amount, x.currency, x.effectiveFrom, actor.personId],
+          `INSERT INTO finance_fee_catalogue_versions(institution_id, item_id, fee_type_id, version, name, description, kind, amount, currency, effective_from, created_by_person_id)
+           VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          [actor.institutionId, id, targetFeeTypeId, x.expectedVersion + 1, x.name, x.description, kind, x.amount, x.currency, x.effectiveFrom, actor.personId],
         );
         await c.query(
-          `UPDATE finance_fee_catalogue_items SET current_version = $1, updated_at = now() WHERE institution_id = $2 AND id = $3`,
-          [x.expectedVersion + 1, actor.institutionId, id],
+          `UPDATE finance_fee_catalogue_items SET current_version = $1, fee_type_id = $2, updated_at = now() WHERE institution_id = $3 AND id = $4`,
+          [x.expectedVersion + 1, targetFeeTypeId, actor.institutionId, id],
         );
         await audit(c, actor, 'fee_catalogue.updated', id);
         return { resultRef: id, result: await getIn(c, actor, id) };

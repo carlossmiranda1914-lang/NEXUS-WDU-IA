@@ -1,4 +1,4 @@
-﻿import { auth } from '../../lib/firebase.ts';
+import { auth } from '../../lib/firebase.ts';
 
 export class FeeCatalogueApiError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) {
@@ -7,9 +7,28 @@ export class FeeCatalogueApiError extends Error {
   }
 }
 
+export type FeeTypeRecord = {
+  id: string;
+  institutionId?: string;
+  canonicalKey: string | null;
+  source: 'nexus_base' | 'institution_custom';
+  displayName: string;
+  codePrefix: string;
+  status: 'active' | 'inactive';
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type FeeCatalogueRecord = {
   id: string;
   institutionId?: string;
+  feeTypeId: string;
+  feeType?: {
+    id: string;
+    displayName: string;
+    codePrefix: string;
+    canonicalKey?: string | null;
+  };
   code: string;
   status: 'active' | 'inactive';
   currentVersion: number;
@@ -18,6 +37,13 @@ export type FeeCatalogueRecord = {
   current: {
     id?: string;
     version?: number;
+    feeTypeId?: string;
+    feeType?: {
+      id: string;
+      displayName: string;
+      codePrefix: string;
+      canonicalKey?: string | null;
+    };
     name: string;
     description?: string | null;
     kind: string;
@@ -28,6 +54,13 @@ export type FeeCatalogueRecord = {
   history?: Array<{
     id?: string;
     version: number;
+    feeTypeId?: string;
+    feeType?: {
+      id: string;
+      displayName: string;
+      codePrefix: string;
+      canonicalKey?: string | null;
+    };
     name: string;
     description?: string | null;
     kind: string;
@@ -62,7 +95,7 @@ function resolveOptions(options?: FeeCatalogueRequestOptions | typeof fetch): {
 }
 
 async function request(
-  path: string,
+  fullPath: string,
   init?: RequestInit,
   fetcher: typeof fetch = fetch,
   getToken: () => Promise<string | null | undefined> = defaultGetToken,
@@ -74,7 +107,7 @@ async function request(
     ...(init?.headers as Record<string, string> || {}),
   };
 
-  const res = await fetcher(`/api/finance/fee-catalogue${path}`, {
+  const res = await fetcher(fullPath, {
     ...init,
     headers,
   });
@@ -88,24 +121,47 @@ async function request(
 const key = () => crypto.randomUUID();
 
 export const feeCatalogueClient = {
+  // Fee Catalogue Items
   list: (status = 'all', options?: FeeCatalogueRequestOptions | typeof fetch) => {
     const { fetcher, getToken } = resolveOptions(options);
-    return request(`?status=${status}`, undefined, fetcher, getToken);
+    return request(`/api/finance/fee-catalogue?status=${status}`, undefined, fetcher, getToken);
   },
   get: (id: string, history = false, options?: FeeCatalogueRequestOptions | typeof fetch) => {
     const { fetcher, getToken } = resolveOptions(options);
-    return request(`/${id}${history ? '?history=true' : ''}`, undefined, fetcher, getToken);
+    return request(`/api/finance/fee-catalogue/${id}${history ? '?history=true' : ''}`, undefined, fetcher, getToken);
   },
   create: (body: unknown, options?: FeeCatalogueRequestOptions | typeof fetch) => {
     const { fetcher, getToken } = resolveOptions(options);
-    return request('', { method: 'POST', headers: { 'Idempotency-Key': key() }, body: JSON.stringify(body) }, fetcher, getToken);
+    return request('/api/finance/fee-catalogue', { method: 'POST', headers: { 'Idempotency-Key': key() }, body: JSON.stringify(body) }, fetcher, getToken);
   },
   update: (id: string, body: unknown, options?: FeeCatalogueRequestOptions | typeof fetch) => {
     const { fetcher, getToken } = resolveOptions(options);
-    return request(`/${id}`, { method: 'PUT', headers: { 'Idempotency-Key': key() }, body: JSON.stringify(body) }, fetcher, getToken);
+    return request(`/api/finance/fee-catalogue/${id}`, { method: 'PUT', headers: { 'Idempotency-Key': key() }, body: JSON.stringify(body) }, fetcher, getToken);
   },
   setStatus: (id: string, active: boolean, options?: FeeCatalogueRequestOptions | typeof fetch) => {
     const { fetcher, getToken } = resolveOptions(options);
-    return request(`/${id}/${active ? 'activate' : 'deactivate'}`, { method: 'POST', headers: { 'Idempotency-Key': key() } }, fetcher, getToken);
+    return request(`/api/finance/fee-catalogue/${id}/${active ? 'activate' : 'deactivate'}`, { method: 'POST', headers: { 'Idempotency-Key': key() } }, fetcher, getToken);
+  },
+
+  // Fee Types Registry
+  listTypes: (status = 'all', options?: FeeCatalogueRequestOptions | typeof fetch) => {
+    const { fetcher, getToken } = resolveOptions(options);
+    return request(`/api/finance/fee-types?status=${status}`, undefined, fetcher, getToken);
+  },
+  getType: (id: string, options?: FeeCatalogueRequestOptions | typeof fetch) => {
+    const { fetcher, getToken } = resolveOptions(options);
+    return request(`/api/finance/fee-types/${id}`, undefined, fetcher, getToken);
+  },
+  createType: (body: unknown, options?: FeeCatalogueRequestOptions | typeof fetch) => {
+    const { fetcher, getToken } = resolveOptions(options);
+    return request('/api/finance/fee-types', { method: 'POST', headers: { 'Idempotency-Key': key() }, body: JSON.stringify(body) }, fetcher, getToken);
+  },
+  updateType: (id: string, body: unknown, options?: FeeCatalogueRequestOptions | typeof fetch) => {
+    const { fetcher, getToken } = resolveOptions(options);
+    return request(`/api/finance/fee-types/${id}`, { method: 'PUT', headers: { 'Idempotency-Key': key() }, body: JSON.stringify(body) }, fetcher, getToken);
+  },
+  setTypeStatus: (id: string, active: boolean, options?: FeeCatalogueRequestOptions | typeof fetch) => {
+    const { fetcher, getToken } = resolveOptions(options);
+    return request(`/api/finance/fee-types/${id}/${active ? 'activate' : 'deactivate'}`, { method: 'POST', headers: { 'Idempotency-Key': key() } }, fetcher, getToken);
   },
 };

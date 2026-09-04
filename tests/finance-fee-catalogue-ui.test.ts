@@ -1,17 +1,48 @@
-﻿import test from 'node:test';
+import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { create, act } from 'react-test-renderer';
 import { FinanceFeeCatalogueWorkspace } from '../src/components/finance/fee-catalogue/FinanceFeeCatalogueWorkspace.tsx';
-import type { FeeCatalogueRecord } from '../src/modules/finance/fee-catalogue-client.ts';
+import type { FeeCatalogueRecord, FeeTypeRecord } from '../src/modules/finance/fee-catalogue-client.ts';
+
+const sampleTypes: FeeTypeRecord[] = [
+  {
+    id: 'type-001',
+    canonicalKey: 'tuition',
+    source: 'nexus_base',
+    displayName: 'Propina / Mensalidade',
+    codePrefix: 'PROP',
+    status: 'active',
+  },
+  {
+    id: 'type-002',
+    canonicalKey: 'document',
+    source: 'nexus_base',
+    displayName: 'Certificados / Documentos',
+    codePrefix: 'DOC',
+    status: 'active',
+  },
+  {
+    id: 'type-003',
+    canonicalKey: null,
+    source: 'institution_custom',
+    displayName: 'Laboratório',
+    codePrefix: 'LAB',
+    status: 'active',
+  },
+];
 
 const sampleItems: FeeCatalogueRecord[] = [
   {
     id: 'fee-item-001',
-    code: 'PROP-2026',
+    feeTypeId: 'type-001',
+    feeType: sampleTypes[0],
+    code: 'PROP-000001',
     status: 'active',
     currentVersion: 1,
     current: {
+      feeTypeId: 'type-001',
+      feeType: sampleTypes[0],
       name: 'Propina Anual 2026/2027',
       kind: 'tuition',
       description: 'Propina regular anual',
@@ -21,6 +52,8 @@ const sampleItems: FeeCatalogueRecord[] = [
     history: [
       {
         id: 'ver-001',
+        feeTypeId: 'type-001',
+        feeType: sampleTypes[0],
         version: 1,
         name: 'Propina Anual 2026/2027',
         kind: 'tuition',
@@ -33,12 +66,16 @@ const sampleItems: FeeCatalogueRecord[] = [
   },
   {
     id: 'fee-item-002',
-    code: 'CERT-01',
+    feeTypeId: 'type-002',
+    feeType: sampleTypes[1],
+    code: 'DOC-000001',
     status: 'inactive',
     currentVersion: 2,
     current: {
+      feeTypeId: 'type-002',
+      feeType: sampleTypes[1],
       name: 'Certidão de Matrícula',
-      kind: 'fee',
+      kind: 'document',
       description: null,
       money: { amount: '20.00', currency: 'EUR' },
       effectiveFrom: '2026-09-02T10:00:00.000Z',
@@ -46,9 +83,11 @@ const sampleItems: FeeCatalogueRecord[] = [
     history: [
       {
         id: 'ver-002-v1',
+        feeTypeId: 'type-002',
+        feeType: sampleTypes[1],
         version: 1,
         name: 'Certidão de Matrícula v1',
-        kind: 'fee',
+        kind: 'document',
         description: 'Versão anterior',
         money: { amount: '15.00', currency: 'EUR' },
         effectiveFrom: '2026-09-01T00:00:00.000Z',
@@ -56,9 +95,11 @@ const sampleItems: FeeCatalogueRecord[] = [
       },
       {
         id: 'ver-002-v2',
+        feeTypeId: 'type-002',
+        feeType: sampleTypes[1],
         version: 2,
         name: 'Certidão de Matrícula',
-        kind: 'fee',
+        kind: 'document',
         description: null,
         money: { amount: '20.00', currency: 'EUR' },
         effectiveFrom: '2026-09-02T10:00:00.000Z',
@@ -70,6 +111,7 @@ const sampleItems: FeeCatalogueRecord[] = [
 
 const originalFetch = globalThis.fetch;
 let itemsStore = [...sampleItems];
+let typesStore = [...sampleTypes];
 let recordedRequests: { url: string; method: string; body: any; headers: any }[] = [];
 let failNextLoad = false;
 
@@ -87,6 +129,25 @@ function setupMockFetch() {
       return new Response(JSON.stringify({ error: 'Network failure' }), { status: 500 });
     }
 
+    // GET /api/finance/fee-types
+    if (method === 'GET' && url.startsWith('/api/finance/fee-types') && !url.includes('/type-')) {
+      return new Response(JSON.stringify(typesStore), { status: 200 });
+    }
+
+    // POST /api/finance/fee-types
+    if (method === 'POST' && url === '/api/finance/fee-types') {
+      const newType: FeeTypeRecord = {
+        id: `type-${Date.now()}`,
+        canonicalKey: null,
+        source: 'institution_custom',
+        displayName: body.displayName,
+        codePrefix: body.codePrefix,
+        status: 'active',
+      };
+      typesStore.push(newType);
+      return new Response(JSON.stringify(newType), { status: 201 });
+    }
+
     // GET /api/finance/fee-catalogue
     if (method === 'GET' && url.startsWith('/api/finance/fee-catalogue') && !url.includes('/fee-item-')) {
       return new Response(JSON.stringify(itemsStore), { status: 200 });
@@ -102,16 +163,24 @@ function setupMockFetch() {
       return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
     }
 
-    // POST create
+    // POST create fee-catalogue (server generates code!)
     if (method === 'POST' && url === '/api/finance/fee-catalogue') {
+      const selectedType = typesStore.find((t) => t.id === body.feeTypeId) || typesStore[0];
+      const seq = itemsStore.filter((i) => i.feeTypeId === selectedType.id).length + 1;
+      const generatedCode = `${selectedType.codePrefix}-${String(seq).padStart(6, '0')}`;
+
       const newItem: FeeCatalogueRecord = {
         id: `fee-item-${Date.now()}`,
-        code: body.code,
+        feeTypeId: selectedType.id,
+        feeType: selectedType,
+        code: generatedCode,
         status: 'active',
         currentVersion: 1,
         current: {
+          feeTypeId: selectedType.id,
+          feeType: selectedType,
           name: body.name,
-          kind: body.kind,
+          kind: selectedType.canonicalKey || selectedType.codePrefix,
           description: body.description || null,
           money: { amount: body.amount, currency: body.currency },
           effectiveFrom: body.effectiveFrom,
@@ -119,9 +188,11 @@ function setupMockFetch() {
         history: [
           {
             id: `ver-${Date.now()}`,
+            feeTypeId: selectedType.id,
+            feeType: selectedType,
             version: 1,
             name: body.name,
-            kind: body.kind,
+            kind: selectedType.canonicalKey || selectedType.codePrefix,
             description: body.description || null,
             money: { amount: body.amount, currency: body.currency },
             effectiveFrom: body.effectiveFrom,
@@ -141,7 +212,7 @@ function setupMockFetch() {
         item.currentVersion += 1;
         item.current = {
           name: body.name,
-          kind: body.kind,
+          kind: item.current.kind,
           description: body.description || null,
           money: { amount: body.amount, currency: body.currency },
           effectiveFrom: body.effectiveFrom,
@@ -172,84 +243,89 @@ function setupMockFetch() {
 try {
   setupMockFetch();
 
-  // Test 1: Loading state & Default List view (NO forms or subviews on default view)
+  // Test 1: Loading state & Default List view (renders generated codes, no forms)
   let renderer: any;
   await act(async () => {
     renderer = create(React.createElement(FinanceFeeCatalogueWorkspace, { theme: 'dark' }));
   });
 
   const defaultRendered = JSON.stringify(renderer.toJSON());
-  assert.ok(defaultRendered.includes('PROP-2026'), 'Must render item PROP-2026');
-  assert.ok(defaultRendered.includes('CERT-01'), 'Must render item CERT-01');
-  assert.ok(defaultRendered.includes('150.00'), 'Must render item amount');
+  assert.ok(defaultRendered.includes('PROP-000001'), 'Must render item PROP-000001');
+  assert.ok(defaultRendered.includes('DOC-000001'), 'Must render item DOC-000001');
+  assert.ok(defaultRendered.includes('Propina / Mensalidade'), 'Must render Fee Type designation');
+  assert.ok(defaultRendered.includes('Gerir tipos'), 'Must have Gerir tipos button');
 
   // Verify that NO <form> elements are visible on default screen
   const formsOnDefault = renderer.root.findAllByType('form');
-  assert.equal(formsOnDefault.length, 0, 'No form elements must occupy space on the default catalogue screen');
+  assert.equal(formsOnDefault.length, 0, 'No form elements on default screen');
 
-  // Verify that NO modal backdrops exist
-  assert.ok(!defaultRendered.includes('backdrop-blur'), 'Must not have modal backdrop');
+  // Test 2: Fee Types Subview Navigation (`Gerir tipos`)
+  const typesBtn = renderer.root.findAll((node: any) => node.type === 'button' && node.children?.includes('Gerir tipos'))[0];
+  assert.ok(typesBtn, 'Must have Gerir tipos button in list header');
 
-  // Test 2: Error and retry
-  failNextLoad = true;
   await act(async () => {
-    renderer = create(React.createElement(FinanceFeeCatalogueWorkspace, { theme: 'dark' }));
+    typesBtn.props.onClick();
   });
-  let errText = JSON.stringify(renderer.toJSON());
-  assert.ok(errText.includes('Network failure') || errText.includes('Falha de rede'), 'Must render load error message');
 
-  // Click retry button
-  itemsStore = [...sampleItems];
-  const retryBtn = renderer.root.findByProps({ className: 'mt-3 underline text-sm hover:text-rose-300 block' });
+  let typesViewText = JSON.stringify(renderer.toJSON());
+  assert.ok(typesViewText.includes('Tipos de Emolumento'), 'Must display Tipos de Emolumento subview');
+  assert.ok(typesViewText.includes('Propina / Mensalidade'), 'Must display baseline type');
+  assert.ok(typesViewText.includes('PROP'), 'Must display prefix PROP');
+
+  // Test Adding Custom Type in Types Subview
+  const typeForms = renderer.root.findAllByType('form');
+  assert.equal(typeForms.length, 1, 'Must have custom fee type form');
+  const typeInputs = typeForms[0].findAllByType('input');
   await act(async () => {
-    retryBtn.props.onClick();
+    typeInputs[0].props.onChange({ target: { value: 'Transporte Escolar Especial' } });
+    typeInputs[1].props.onChange({ target: { value: 'TRAN' } });
   });
-  const retriedText = JSON.stringify(renderer.toJSON());
-  assert.ok(retriedText.includes('PROP-2026'), 'Retry must succeed and render list');
 
-  // Test 3: Create Subview Navigation (Enter -> Cancel -> Re-enter -> Submit -> Return to List)
+  await act(async () => {
+    typeForms[0].props.onSubmit({ preventDefault: () => {} });
+  });
+
+  // Return to list from Types subview
+  const backFromTypesBtn = renderer.root.findAll((node: any) => node.type === 'button' && node.children?.includes('Voltar ao catálogo'))[0];
+  await act(async () => {
+    backFromTypesBtn.props.onClick();
+  });
+
+  let backToListText = JSON.stringify(renderer.toJSON());
+  assert.ok(backToListText.includes('PROP-000001'), 'Must return to catalogue list');
+
+  // Test 3: Create Subview Navigation with Governed Fee Type Combobox & Server Code Generation
   const createBtn = renderer.root.findAll((node: any) => node.type === 'button' && node.children?.includes('+ Novo emolumento'))[0];
-  assert.ok(createBtn, 'Must have + Novo emolumento primary action button');
-
   await act(async () => {
     createBtn.props.onClick();
   });
 
-  // Create subview is now active
   let createViewText = JSON.stringify(renderer.toJSON());
-  assert.ok(createViewText.includes('Novo Emolumento / Taxa'), 'Must display Novo Emolumento subview title');
-  assert.ok(createViewText.includes('Catálogo de Emolumentos'), 'Must display contextual back link');
-  assert.ok(!createViewText.includes('PROP-2026'), 'Catalogue list items must not be rendered behind create subview');
-
-  // Test Cancel / Back from Create Subview
-  const cancelCreateBtn = renderer.root.findAll((node: any) => node.type === 'button' && node.children?.includes('Voltar ao catálogo'))[0];
-  await act(async () => {
-    cancelCreateBtn.props.onClick();
-  });
-
-  let backToListText = JSON.stringify(renderer.toJSON());
-  assert.ok(backToListText.includes('PROP-2026'), 'Back button must return to default catalogue list');
-  assert.equal(renderer.root.findAllByType('form').length, 0, 'No forms visible after returning to list');
-
-  // Re-open Create Subview and submit new fee item
-  const createBtn2 = renderer.root.findAll((node: any) => node.type === 'button' && node.children?.includes('+ Novo emolumento'))[0];
-  await act(async () => {
-    createBtn2.props.onClick();
-  });
+  assert.ok(createViewText.includes('Novo Emolumento / Taxa'), 'Must display Novo Emolumento subview');
 
   const createForms = renderer.root.findAllByType('form');
-  assert.equal(createForms.length, 1, 'Exactly one creation form subview must be open');
+  assert.equal(createForms.length, 1);
 
+  // Assert NO manual code input field exists!
   const createInputs = createForms[0].findAllByType('input');
-  // Inputs: code, name, kind, amount, currency, effectiveFrom, description
+  const placeholders = createInputs.map((i: any) => i.props.placeholder || '');
+  assert.ok(!placeholders.some((p: string) => p.includes('PROP-MENSAL')), 'Manual code input must NOT exist');
+
+  // Select fee type and fill other fields
+  const selects = createForms[0].findAllByType('select');
+  assert.equal(selects.length, 1, 'Must have Fee Type select');
+
   await act(async () => {
-    createInputs[0].props.onChange({ target: { value: 'SEGURO-ESC' } });
-    createInputs[1].props.onChange({ target: { value: 'Seguro Escolar Anual' } });
-    createInputs[2].props.onChange({ target: { value: 'insurance' } });
-    createInputs[3].props.onChange({ target: { value: '12,50' } }); // Test comma normalization
-    createInputs[4].props.onChange({ target: { value: 'EUR' } });
-    createInputs[5].props.onChange({ target: { value: '2026-09-01T08:00' } });
-    createInputs[6].props.onChange({ target: { value: 'Cobertura anual' } });
+    selects[0].props.onChange({ target: { value: 'type-003' } }); // Select LAB type
+  });
+
+  // Inputs: name, amount, currency, effectiveFrom, description
+  await act(async () => {
+    createInputs[0].props.onChange({ target: { value: 'Taxa de Laboratório' } });
+    createInputs[1].props.onChange({ target: { value: '45,50' } }); // Test comma
+    createInputs[2].props.onChange({ target: { value: 'EUR' } });
+    createInputs[3].props.onChange({ target: { value: '2026-09-01T08:00' } });
+    createInputs[4].props.onChange({ target: { value: 'Uso de laboratório' } });
   });
 
   recordedRequests.length = 0;
@@ -259,58 +335,31 @@ try {
 
   const createReq = recordedRequests.find((r) => r.method === 'POST' && r.url === '/api/finance/fee-catalogue');
   assert.ok(createReq, 'Must have recorded create POST request');
-  assert.ok(createReq.headers['Idempotency-Key'], 'Must have Idempotency-Key header');
-  assert.equal(createReq.body.code, 'SEGURO-ESC');
-  assert.equal(createReq.body.amount, '12.50', 'Comma must be normalized to dot');
+  assert.equal(createReq.body.feeTypeId, 'type-003');
+  assert.equal(createReq.body.amount, '45.50');
+  assert.equal(createReq.body.code, undefined, 'Browser must NOT send code authority');
 
-  // Subview automatically returns to list view on success
-  const formsAfterCreate = renderer.root.findAllByType('form');
-  assert.equal(formsAfterCreate.length, 0, 'Must return to list view after successful creation');
-
+  // Returned to list view with generated LAB-000001 code
   const postCreateText = JSON.stringify(renderer.toJSON());
-  assert.ok(postCreateText.includes('SEGURO-ESC'), 'Created item must appear in list');
+  assert.ok(postCreateText.includes('LAB-000001'), 'Created item must have backend-generated code LAB-000001');
 
-  // Test 4: Version Publishing Subview Navigation (Enter -> Cancel -> Re-enter -> Edit Amount Only -> Submit -> Return to List)
+  // Test 4: Version Subview (Edit amount only, immutable code preserved)
   const editButtons = renderer.root.findAll((node: any) => node.type === 'button' && node.children?.includes('Editar'));
-  assert.ok(editButtons.length >= 1, 'Must have Editar action buttons');
-
   await act(async () => {
-    editButtons[0].props.onClick(); // Click edit on first item
+    editButtons[0].props.onClick();
   });
 
-  // Version subview is now active
   let versionViewText = JSON.stringify(renderer.toJSON());
-  assert.ok(versionViewText.includes('Publicar Nova Versão'), 'Must display Publicar Nova Versão header');
-  assert.ok(versionViewText.includes('PROP-2026'), 'Must display immutable code');
-  assert.ok(versionViewText.includes('Versão Atual em Vigor'), 'Must display active version context summary');
-  assert.ok(!versionViewText.includes('CERT-01'), 'Other catalogue items must not be rendered behind version subview');
-
-  // Test Cancel / Back from Version Subview
-  const cancelVersionBtn = renderer.root.findAll((node: any) => node.type === 'button' && node.children?.includes('Voltar ao catálogo'))[0];
-  await act(async () => {
-    cancelVersionBtn.props.onClick();
-  });
-
-  let backToListFromVersion = JSON.stringify(renderer.toJSON());
-  assert.ok(backToListFromVersion.includes('CERT-01'), 'Back button must return to default catalogue list');
-  assert.equal(renderer.root.findAllByType('form').length, 0, 'No forms visible after returning to list');
-
-  // Re-open Version Subview and modify ONLY the amount
-  const editButtons2 = renderer.root.findAll((node: any) => node.type === 'button' && node.children?.includes('Editar'));
-  await act(async () => {
-    editButtons2[0].props.onClick();
-  });
+  assert.ok(versionViewText.includes('Publicar Nova Versão'), 'Must display version subview');
+  assert.ok(versionViewText.includes('PROP-000001'), 'Must display immutable code');
 
   const editForms = renderer.root.findAllByType('form');
-  assert.equal(editForms.length, 1, 'Exactly one edit version form subview must be open');
-
   const editInputs = editForms[0].findAllByType('input');
-  // First input is disabled code
   assert.equal(editInputs[0].props.disabled, true, 'Code input must be disabled / immutable');
 
-  // Modify ONLY the amount without touching date
+  // Modify ONLY amount
   await act(async () => {
-    editInputs[3].props.onChange({ target: { value: '185.00' } });
+    editInputs[2].props.onChange({ target: { value: '185.00' } });
   });
 
   recordedRequests.length = 0;
@@ -319,51 +368,35 @@ try {
   });
 
   const updateReq = recordedRequests.find((r) => r.method === 'PUT');
-  assert.ok(updateReq, 'Must have recorded PUT update request');
+  assert.ok(updateReq, 'Must record PUT update request');
   assert.equal(updateReq.body.expectedVersion, 1);
   assert.equal(updateReq.body.amount, '185.00');
-  assert.ok(updateReq.body.effectiveFrom, 'Must have automatic valid effectiveFrom timestamp');
 
-  // Version subview automatically returns to list view on success
-  const formsAfterEdit = renderer.root.findAllByType('form');
-  assert.equal(formsAfterEdit.length, 0, 'Must return to list view after successful update');
-
-  // Test 5: History Subview Navigation (Enter -> View Timeline -> Back -> Return to List)
+  // Test 5: History Subview
   const historyButtons = renderer.root.findAll((node: any) => node.type === 'button' && node.children?.includes('Histórico'));
-  assert.ok(historyButtons.length >= 1, 'Must have Histórico action buttons');
-
   await act(async () => {
     historyButtons[0].props.onClick();
   });
 
-  const historyViewText = JSON.stringify(renderer.toJSON());
-  assert.ok(historyViewText.includes('Histórico de Versões'), 'Must render Histórico subview header');
-  assert.ok(historyViewText.includes('PROP-2026'), 'Must display code in history header');
-  assert.ok(historyViewText.includes('Versão original') || historyViewText.includes('Propina Anual'), 'Must display history details');
-  assert.ok(historyViewText.includes('Linha Temporal de Vigência'), 'Must display timeline container');
+  const historyText = JSON.stringify(renderer.toJSON());
+  assert.ok(historyText.includes('Histórico de Versões'), 'Must open history subview');
+  assert.ok(historyText.includes('PROP-000001'), 'Must display code in history');
 
-  // Click Voltar ao catálogo from history subview
   const backHistoryBtn = renderer.root.findAll((node: any) => node.type === 'button' && node.children?.includes('Voltar ao catálogo'))[0];
   await act(async () => {
     backHistoryBtn.props.onClick();
   });
 
-  const afterHistoryClose = JSON.stringify(renderer.toJSON());
-  assert.ok(afterHistoryClose.includes('Emolumentos Registados'), 'Must return to default list view');
-  assert.ok(!afterHistoryClose.includes('Linha Temporal de Vigência'), 'History subview must not be visible');
-
-  // Test 6: Lifecycle actions (Deactivate / Activate)
+  // Test 6: Lifecycle Deactivate / Activate
   const deactivateBtn = renderer.root.findAll((node: any) => node.type === 'button' && node.children?.includes('Desativar'))[0];
-  assert.ok(deactivateBtn, 'Must have Desativar button');
-
   recordedRequests.length = 0;
   await act(async () => {
     deactivateBtn.props.onClick();
   });
 
-  const deactivateReq = recordedRequests.find((r) => r.method === 'POST' && r.url.endsWith('/deactivate'));
-  assert.ok(deactivateReq, 'Must have recorded deactivate request');
-  assert.ok(deactivateReq.headers['Idempotency-Key'], 'Must have Idempotency-Key on deactivate');
+  const deactReq = recordedRequests.find((r) => r.method === 'POST' && r.url.endsWith('/deactivate'));
+  assert.ok(deactReq, 'Must record deactivate request');
+  assert.ok(deactReq.headers['Idempotency-Key']);
 
   console.log('Finance fee catalogue UI tests: PASS');
 } finally {

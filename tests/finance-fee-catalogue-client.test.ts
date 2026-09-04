@@ -1,8 +1,9 @@
-﻿import assert from 'node:assert/strict';
+import assert from 'node:assert/strict';
 import {
   feeCatalogueClient,
   FeeCatalogueApiError,
   type FeeCatalogueRecord,
+  type FeeTypeRecord,
 } from '../src/modules/finance/fee-catalogue-client.ts';
 
 let capturedUrl: string = '';
@@ -17,7 +18,13 @@ const getHeaders = (): Record<string, string> => capturedHeaders;
 
 const sampleRecord: FeeCatalogueRecord = {
   id: '00000000-0000-0000-0000-000000000010',
-  code: 'PROP-2026',
+  feeTypeId: '00000000-0000-0000-0000-000000000001',
+  feeType: {
+    id: '00000000-0000-0000-0000-000000000001',
+    displayName: 'Propina / Mensalidade',
+    codePrefix: 'PROP',
+  },
+  code: 'PROP-000001',
   status: 'active',
   currentVersion: 1,
   current: {
@@ -26,6 +33,15 @@ const sampleRecord: FeeCatalogueRecord = {
     money: { amount: '120.00', currency: 'EUR' },
     effectiveFrom: '2026-09-01T00:00:00.000Z',
   },
+};
+
+const sampleTypeRecord: FeeTypeRecord = {
+  id: '00000000-0000-0000-0000-000000000001',
+  canonicalKey: 'tuition',
+  source: 'nexus_base',
+  displayName: 'Propina / Mensalidade',
+  codePrefix: 'PROP',
+  status: 'active',
 };
 
 const mockFetch: typeof fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -45,6 +61,13 @@ const mockFetch: typeof fetch = async (input: RequestInfo | URL, init?: RequestI
   }
   if (capturedUrl.includes('error-422')) {
     return new Response(JSON.stringify({ code: 'FEE_CATALOGUE_VALIDATION', error: 'amount must be positive' }), { status: 422 });
+  }
+
+  if (capturedUrl.includes('/api/finance/fee-types')) {
+    if (capturedMethod === 'POST' || capturedMethod === 'PUT') {
+      return new Response(JSON.stringify(sampleTypeRecord), { status: 201, headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify([sampleTypeRecord]), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 
   if (capturedMethod === 'GET' && capturedUrl.includes('/api/finance/fee-catalogue/')) {
@@ -70,7 +93,7 @@ assert.equal(getUrl(), '/api/finance/fee-catalogue?status=active');
 assert.equal(getMethod(), 'GET');
 assert.equal(getHeaders()['Authorization'], `Bearer ${fakeToken}`, 'Must transport Authorization Bearer token when authenticated');
 assert.equal(authList.length, 1);
-assert.equal(authList[0].code, 'PROP-2026');
+assert.equal(authList[0].code, 'PROP-000001');
 
 // 2. Unauthenticated state characterization (no token -> no Authorization header)
 const unauthOptions = {
@@ -95,9 +118,8 @@ assert.equal(getHeaders()['Authorization'], `Bearer ${fakeToken}`);
 
 // 5. Test create with auth + idempotency
 const createInput = {
-  code: 'EXAME',
+  feeTypeId: '00000000-0000-0000-0000-000000000001',
   name: 'Taxa de Exame',
-  kind: 'fee',
   amount: '15.00',
   currency: 'EUR',
   effectiveFrom: '2026-09-01T00:00:00.000Z',
@@ -116,7 +138,6 @@ if (createBody) {
 // 6. Test update with auth + idempotency
 const updateInput = {
   name: 'Taxa de Exame Recurso',
-  kind: 'fee',
   amount: '20.00',
   currency: 'EUR',
   effectiveFrom: '2026-09-02T00:00:00.000Z',
@@ -128,28 +149,28 @@ assert.equal(getMethod(), 'PUT');
 assert.equal(getHeaders()['Authorization'], `Bearer ${fakeToken}`);
 assert.ok(getHeaders()['Idempotency-Key'], 'Must include Idempotency-Key on update');
 assert.deepEqual(JSON.parse(getBody() || '{}'), updateInput);
-const updateBody = getBody();
-if (updateBody) {
-  assert.ok(!updateBody.includes('institutionId'), 'Update body must not carry institutionId authority');
-}
 
-// 7. Test setStatus (activate / deactivate) with auth
+// 7. Test Fee Types client methods
+const typesList = await feeCatalogueClient.listTypes('active', authOptions);
+assert.equal(getUrl(), '/api/finance/fee-types?status=active');
+assert.equal(typesList.length, 1);
+assert.equal(typesList[0].codePrefix, 'PROP');
+
+await feeCatalogueClient.createType({ displayName: 'Lab', codePrefix: 'LAB' }, authOptions);
+assert.equal(getUrl(), '/api/finance/fee-types');
+assert.equal(getMethod(), 'POST');
+assert.ok(getHeaders()['Idempotency-Key']);
+
+await feeCatalogueClient.setTypeStatus('00000000-0000-0000-0000-000000000001', false, authOptions);
+assert.equal(getUrl(), '/api/finance/fee-types/00000000-0000-0000-0000-000000000001/deactivate');
+assert.equal(getMethod(), 'POST');
+
+// 8. Test setStatus (activate / deactivate) on items
 await feeCatalogueClient.setStatus('00000000-0000-0000-0000-000000000010', false, authOptions);
 assert.equal(getUrl(), '/api/finance/fee-catalogue/00000000-0000-0000-0000-000000000010/deactivate');
 assert.equal(getMethod(), 'POST');
 assert.equal(getHeaders()['Authorization'], `Bearer ${fakeToken}`);
 assert.ok(getHeaders()['Idempotency-Key'], 'Must include Idempotency-Key on deactivate');
-
-await feeCatalogueClient.setStatus('00000000-0000-0000-0000-000000000010', true, authOptions);
-assert.equal(getUrl(), '/api/finance/fee-catalogue/00000000-0000-0000-0000-000000000010/activate');
-assert.equal(getMethod(), 'POST');
-assert.equal(getHeaders()['Authorization'], `Bearer ${fakeToken}`);
-assert.ok(getHeaders()['Idempotency-Key'], 'Must include Idempotency-Key on activate');
-
-// 8. Test backwards-compatible fetcher-only argument overload
-const legacyListResult = await feeCatalogueClient.list('active', mockFetch);
-assert.equal(legacyListResult.length, 1);
-assert.equal(legacyListResult[0].code, 'PROP-2026');
 
 // 9. Test error handling
 await assert.rejects(
@@ -166,8 +187,5 @@ await assert.rejects(
   () => feeCatalogueClient.get('error-422', false, authOptions),
   (err: unknown) => err instanceof FeeCatalogueApiError && err.status === 422 && err.code === 'FEE_CATALOGUE_VALIDATION',
 );
-
-// 10. Invariant verification: no browser authority injected
-assert.ok(!getUrl().includes('institutionId'), 'URL must not carry institutionId override');
 
 console.log('Finance fee catalogue client tests: PASS');

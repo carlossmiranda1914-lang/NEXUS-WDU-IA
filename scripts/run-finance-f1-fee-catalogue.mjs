@@ -1,11 +1,13 @@
-﻿import { spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 
 const files = [
   'tests/finance-fee-catalogue-safety.test.ts',
   'tests/finance-fee-catalogue-date.test.ts',
+  'tests/finance-fee-type-model.test.ts',
   'tests/finance-fee-catalogue-model.test.ts',
   'tests/finance-fee-catalogue-policy.test.ts',
   'tests/finance-fee-catalogue-schema-postgres.test.ts',
+  'tests/finance-fee-type-postgres.test.ts',
   'tests/finance-fee-catalogue-postgres.test.ts',
   'tests/finance-fee-catalogue-concurrency-postgres.test.ts',
   'tests/finance-fee-catalogue-http.test.ts',

@@ -1,5 +1,10 @@
-﻿import React, { useState } from 'react';
-import { feeCatalogueClient, FeeCatalogueApiError, type FeeCatalogueRecord } from '../../../modules/finance/fee-catalogue-client.ts';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  feeCatalogueClient,
+  FeeCatalogueApiError,
+  type FeeCatalogueRecord,
+  type FeeTypeRecord,
+} from '../../../modules/finance/fee-catalogue-client.ts';
 import {
   formatDisplayDateTime,
   toLocalDatetimeInputValue,
@@ -14,12 +19,15 @@ export interface FeeCatalogueVersionViewProps {
 }
 
 export function FeeCatalogueVersionView({ item, onBack, onUpdated }: FeeCatalogueVersionViewProps) {
+  const [feeTypes, setFeeTypes] = useState<FeeTypeRecord[]>([]);
+  const [loadingTypes, setLoadingTypes] = useState(true);
+
   const [form, setForm] = useState(() => {
     const suggestedNextDate = nextValidEffectiveFrom(item.current.effectiveFrom, new Date());
     return {
+      feeTypeId: item.current.feeTypeId || item.feeTypeId || '',
       name: item.current.name,
       description: item.current.description || '',
-      kind: item.current.kind,
       amount: item.current.money.amount,
       currency: item.current.money.currency,
       effectiveFrom: suggestedNextDate,
@@ -28,6 +36,22 @@ export function FeeCatalogueVersionView({ item, onBack, onUpdated }: FeeCatalogu
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const loadTypes = useCallback(async () => {
+    setLoadingTypes(true);
+    try {
+      const data = (await feeCatalogueClient.listTypes('all')) as FeeTypeRecord[];
+      setFeeTypes(data);
+    } catch {
+      // Non-blocking fallback
+    } finally {
+      setLoadingTypes(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadTypes();
+  }, [loadTypes]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,9 +69,9 @@ export function FeeCatalogueVersionView({ item, onBack, onUpdated }: FeeCatalogu
     try {
       await feeCatalogueClient.update(item.id, {
         expectedVersion: item.currentVersion,
+        feeTypeId: form.feeTypeId || undefined,
         name: form.name.trim(),
         description: form.description.trim() || null,
-        kind: form.kind.trim(),
         amount: normalizedAmount,
         currency: form.currency.trim().toUpperCase(),
         effectiveFrom: parsedDate.toISOString(),
@@ -102,7 +126,13 @@ export function FeeCatalogueVersionView({ item, onBack, onUpdated }: FeeCatalogu
         <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
           Versão Atual em Vigor (v{item.currentVersion})
         </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
+          <div className="flex flex-col">
+            <span className="text-zinc-500">Classificação:</span>
+            <span className="font-medium text-zinc-200">
+              {item.current.feeType?.displayName || item.feeType?.displayName || item.current.kind}
+            </span>
+          </div>
           <div className="flex flex-col">
             <span className="text-zinc-500">Montante atual:</span>
             <span className="font-mono text-emerald-400 font-semibold text-sm">
@@ -159,24 +189,29 @@ export function FeeCatalogueVersionView({ item, onBack, onUpdated }: FeeCatalogu
                 />
               </div>
 
-              <div className="sm:col-span-2">
+              <div>
+                <label className="block text-xs text-zinc-300 mb-1 font-medium">Tipo de Emolumento</label>
+                <select
+                  value={form.feeTypeId}
+                  disabled={loadingTypes || feeTypes.length === 0}
+                  onChange={(e) => setForm((prev) => ({ ...prev, feeTypeId: e.target.value }))}
+                  className="w-full p-2.5 border border-zinc-700 rounded-lg bg-zinc-950 text-sm focus:border-emerald-500 focus:outline-hidden text-white cursor-pointer"
+                >
+                  {feeTypes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.displayName} ({t.codePrefix}) {t.status === 'inactive' ? '— (Inativo)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-xs text-zinc-300 mb-1 font-medium">Nome da nova versão</label>
                 <input
                   required
                   value={form.name}
                   placeholder="Ex: Propinas Mensais Atualizadas"
                   onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                  className="w-full p-2.5 border border-zinc-700 rounded-lg bg-zinc-950 text-sm focus:border-emerald-500 focus:outline-hidden text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-zinc-300 mb-1 font-medium">Tipo</label>
-                <input
-                  required
-                  value={form.kind}
-                  placeholder="Ex: tuition, fee, service"
-                  onChange={(e) => setForm((prev) => ({ ...prev, kind: e.target.value }))}
                   className="w-full p-2.5 border border-zinc-700 rounded-lg bg-zinc-950 text-sm focus:border-emerald-500 focus:outline-hidden text-white"
                 />
               </div>
@@ -266,4 +301,3 @@ export function FeeCatalogueVersionView({ item, onBack, onUpdated }: FeeCatalogu
 }
 
 export default FeeCatalogueVersionView;
-

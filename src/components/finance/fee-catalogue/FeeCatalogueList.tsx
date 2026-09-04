@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import type { FeeCatalogueRecord } from '../../../modules/finance/fee-catalogue-client.ts';
 import { formatDisplayDate } from './fee-catalogue-date.ts';
 
@@ -9,6 +9,7 @@ export interface FeeCatalogueListProps {
   statusFilter: 'all' | 'active' | 'inactive';
   onStatusFilterChange: (filter: 'all' | 'active' | 'inactive') => void;
   onOpenCreate: () => void;
+  onOpenTypes: () => void;
   onOpenEdit: (item: FeeCatalogueRecord) => void;
   onOpenHistory: (item: FeeCatalogueRecord) => void;
   onToggleStatus: (item: FeeCatalogueRecord) => Promise<void>;
@@ -23,6 +24,7 @@ export function FeeCatalogueList({
   statusFilter,
   onStatusFilterChange,
   onOpenCreate,
+  onOpenTypes,
   onOpenEdit,
   onOpenHistory,
   onToggleStatus,
@@ -56,7 +58,7 @@ export function FeeCatalogueList({
             <button
               type="button"
               onClick={() => onStatusFilterChange('all')}
-              className={`px-3 py-1 rounded-md transition-colors ${
+              className={`px-3 py-1 rounded-md transition-colors cursor-pointer ${
                 statusFilter === 'all'
                   ? 'bg-emerald-500/20 text-emerald-400 font-medium'
                   : 'text-zinc-400 hover:text-zinc-200'
@@ -67,7 +69,7 @@ export function FeeCatalogueList({
             <button
               type="button"
               onClick={() => onStatusFilterChange('active')}
-              className={`px-3 py-1 rounded-md transition-colors ${
+              className={`px-3 py-1 rounded-md transition-colors cursor-pointer ${
                 statusFilter === 'active'
                   ? 'bg-emerald-500/20 text-emerald-400 font-medium'
                   : 'text-zinc-400 hover:text-zinc-200'
@@ -78,7 +80,7 @@ export function FeeCatalogueList({
             <button
               type="button"
               onClick={() => onStatusFilterChange('inactive')}
-              className={`px-3 py-1 rounded-md transition-colors ${
+              className={`px-3 py-1 rounded-md transition-colors cursor-pointer ${
                 statusFilter === 'inactive'
                   ? 'bg-zinc-700 text-zinc-200 font-medium'
                   : 'text-zinc-400 hover:text-zinc-200'
@@ -89,8 +91,15 @@ export function FeeCatalogueList({
           </div>
           <button
             type="button"
+            onClick={onOpenTypes}
+            className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 transition-colors cursor-pointer"
+          >
+            Gerir tipos
+          </button>
+          <button
+            type="button"
             onClick={onOpenCreate}
-            className="px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm"
+            className="px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors shadow-sm cursor-pointer"
           >
             + Novo emolumento
           </button>
@@ -105,7 +114,7 @@ export function FeeCatalogueList({
             <button
               type="button"
               onClick={onRetry}
-              className="mt-3 underline text-sm hover:text-rose-300 block"
+              className="mt-3 underline text-sm hover:text-rose-300 block cursor-pointer"
             >
               Tentar novamente
             </button>
@@ -113,7 +122,7 @@ export function FeeCatalogueList({
           <button
             type="button"
             onClick={onDismissError}
-            className="text-rose-400 hover:text-rose-200 text-xs px-2 py-1 rounded border border-rose-800/50"
+            className="text-rose-400 hover:text-rose-200 text-xs px-2 py-1 rounded border border-rose-800/50 cursor-pointer"
           >
             Fechar
           </button>
@@ -135,7 +144,7 @@ export function FeeCatalogueList({
             </div>
             <p className="text-zinc-300 font-medium text-sm">Ainda não existem emolumentos neste catálogo.</p>
             <p className="text-zinc-500 text-xs mt-1 max-w-sm mx-auto">
-              Utilize o botão <strong className="text-emerald-400">Novo emolumento</strong> acima para registar a primeira taxa ou propina institucional.
+              Utilize o botão <strong className="text-emerald-400">+ Novo emolumento</strong> acima para registar a primeira taxa ou propina institucional.
             </p>
           </div>
         ) : (
@@ -169,7 +178,9 @@ export function FeeCatalogueList({
                         {i.current.money.amount} {i.current.money.currency}
                       </span>
                       <span className="text-zinc-600">•</span>
-                      <span className="capitalize text-zinc-300">{i.current.kind}</span>
+                      <span className="text-zinc-300 font-medium">
+                        {i.current.feeType?.displayName || i.feeType?.displayName || i.current.kind}
+                      </span>
                       <span className="text-zinc-600">•</span>
                       <span>Desde: {formatDisplayDate(i.current.effectiveFrom)}</span>
                       {i.current.description && (
@@ -185,21 +196,21 @@ export function FeeCatalogueList({
                     <button
                       type="button"
                       onClick={() => onOpenHistory(i)}
-                      className="px-3 py-1.5 text-xs rounded-lg border border-zinc-700 hover:bg-zinc-800 text-zinc-300 transition-colors"
+                      className="px-3 py-1.5 text-xs rounded-lg border border-zinc-700 hover:bg-zinc-800 text-zinc-300 transition-colors cursor-pointer"
                     >
                       Histórico
                     </button>
                     <button
                       type="button"
                       onClick={() => onOpenEdit(i)}
-                      className="px-3 py-1.5 text-xs rounded-lg border border-zinc-700 hover:bg-zinc-800 text-zinc-300 transition-colors"
+                      className="px-3 py-1.5 text-xs rounded-lg border border-zinc-700 hover:bg-zinc-800 text-zinc-300 transition-colors cursor-pointer"
                     >
                       Editar
                     </button>
                     <button
                       type="button"
                       onClick={() => void onToggleStatus(i)}
-                      className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                      className={`px-3 py-1.5 text-xs rounded-lg border transition-colors cursor-pointer ${
                         i.status === 'active'
                           ? 'border-zinc-700 hover:bg-rose-950/40 text-zinc-300 hover:text-rose-300'
                           : 'border-emerald-700/60 hover:bg-emerald-950/40 text-emerald-400'
@@ -217,3 +228,5 @@ export function FeeCatalogueList({
     </main>
   );
 }
+
+export default FeeCatalogueList;

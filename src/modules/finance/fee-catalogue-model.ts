@@ -1,11 +1,20 @@
-﻿import { Money } from './money.ts';
+import { Money } from './money.ts';
 
 export type FeeCatalogueStatus = 'active' | 'inactive';
+
+export interface FeeTypeSummary {
+  id: string;
+  displayName: string;
+  codePrefix: string;
+  canonicalKey?: string | null;
+}
 
 export interface FeeCatalogueVersion {
   id: string;
   itemId: string;
   institutionId: string;
+  feeTypeId: string;
+  feeType?: FeeTypeSummary;
   version: number;
   name: string;
   description: string | null;
@@ -19,6 +28,8 @@ export interface FeeCatalogueVersion {
 export interface FeeCatalogueItem {
   id: string;
   institutionId: string;
+  feeTypeId: string;
+  feeType?: FeeTypeSummary;
   code: string;
   status: FeeCatalogueStatus;
   currentVersion: number;
@@ -29,17 +40,26 @@ export interface FeeCatalogueItem {
 }
 
 export interface CreateFeeCatalogueInput {
-  code: string;
+  feeTypeId: string;
   name: string;
   description?: string | null;
-  kind: string;
   amount: string;
   currency: string;
   effectiveFrom: string;
+  // Legacy optional field (ignored if provided, server generates code)
+  code?: string;
+  kind?: string;
 }
 
-export interface UpdateFeeCatalogueInput extends Omit<CreateFeeCatalogueInput, 'code'> {
+export interface UpdateFeeCatalogueInput {
   expectedVersion: number;
+  feeTypeId?: string | null;
+  name: string;
+  description?: string | null;
+  amount: string;
+  currency: string;
+  effectiveFrom: string;
+  kind?: string;
 }
 
 export class FeeCatalogueValidationError extends Error {
@@ -51,10 +71,16 @@ export class FeeCatalogueValidationError extends Error {
   }
 }
 
-export function normalizeFeeCatalogueCreate(input: CreateFeeCatalogueInput): Required<CreateFeeCatalogueInput> {
-  const code = text(input.code, 'code').toUpperCase();
+export function normalizeFeeCatalogueCreate(input: CreateFeeCatalogueInput): {
+  feeTypeId: string;
+  name: string;
+  description: string | null;
+  amount: string;
+  currency: string;
+  effectiveFrom: string;
+} {
+  const feeTypeId = text(input.feeTypeId, 'feeTypeId');
   const name = text(input.name, 'name');
-  const kind = text(input.kind, 'kind');
   const effectiveFrom = time(input.effectiveFrom);
 
   let money: Money;
@@ -62,7 +88,7 @@ export function normalizeFeeCatalogueCreate(input: CreateFeeCatalogueInput): Req
     const rawAmount = typeof input.amount === 'string' ? input.amount.trim().replace(',', '.') : String(input.amount || '');
     money = Money.parse(rawAmount, input.currency);
   } catch (err: any) {
-    throw new FeeCatalogueValidationError(err?.message || 'Montante ou moeda inválida');
+    throw new FeeCatalogueValidationError(err?.message || 'Montante ou moeda invÃ¡lida');
   }
 
   if (money.compare(Money.parse('0', money.currency)) <= 0) {
@@ -70,9 +96,8 @@ export function normalizeFeeCatalogueCreate(input: CreateFeeCatalogueInput): Req
   }
 
   return {
-    code,
+    feeTypeId,
     name,
-    kind,
     description: input.description?.trim() || null,
     amount: money.canonicalAmount(),
     currency: money.currency,
@@ -80,12 +105,45 @@ export function normalizeFeeCatalogueCreate(input: CreateFeeCatalogueInput): Req
   };
 }
 
-export function normalizeFeeCatalogueUpdate(input: UpdateFeeCatalogueInput): Required<UpdateFeeCatalogueInput> {
+export function normalizeFeeCatalogueUpdate(input: UpdateFeeCatalogueInput): {
+  expectedVersion: number;
+  feeTypeId?: string | null;
+  name: string;
+  description: string | null;
+  amount: string;
+  currency: string;
+  effectiveFrom: string;
+} {
   if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
     throw new FeeCatalogueValidationError('expectedVersion must be a positive integer');
   }
-  const normalized = normalizeFeeCatalogueCreate({ ...input, code: 'UPDATE' });
-  return { ...normalized, expectedVersion: input.expectedVersion };
+
+  const name = text(input.name, 'name');
+  const effectiveFrom = time(input.effectiveFrom);
+
+  let money: Money;
+  try {
+    const rawAmount = typeof input.amount === 'string' ? input.amount.trim().replace(',', '.') : String(input.amount || '');
+    money = Money.parse(rawAmount, input.currency);
+  } catch (err: any) {
+    throw new FeeCatalogueValidationError(err?.message || 'Montante ou moeda invÃ¡lida');
+  }
+
+  if (money.compare(Money.parse('0', money.currency)) <= 0) {
+    throw new FeeCatalogueValidationError('amount must be positive');
+  }
+
+  const feeTypeId = input.feeTypeId ? text(input.feeTypeId, 'feeTypeId') : null;
+
+  return {
+    expectedVersion: input.expectedVersion,
+    feeTypeId,
+    name,
+    description: input.description?.trim() || null,
+    amount: money.canonicalAmount(),
+    currency: money.currency,
+    effectiveFrom,
+  };
 }
 
 function text(value: string, field: string): string {

@@ -65,6 +65,7 @@ import { adminAuth } from './src/lib/firebase-admin.ts';
 import { resolveInstitutionalContext } from './src/auth/institutional-context.ts';
 import { resolveAuthorizedStudents } from './src/auth/authorized-students.ts';
 import { registerFeeCatalogueRoutes } from './src/modules/finance/fee-catalogue-http.ts';
+import { registerFeeTypeRoutes } from './src/modules/finance/fee-type-http.ts';
 import type { FinancialProfileStore } from './src/modules/finance/financial-context.ts';
 import { isInstitutionOwned, resolveInstitutionOwnedResourceIds } from './src/auth/institution-resource-ownership.ts';
 import { eq, desc, sql, and, ne, inArray } from 'drizzle-orm';
@@ -332,6 +333,7 @@ async function startServer() {
       },
     };
     registerFeeCatalogueRoutes(app, pool, financialProfiles);
+    registerFeeTypeRoutes(app, pool);
 
   console.log('[SERVER] Servidor iniciado. Base de dados pronta para uso operacional.');
 

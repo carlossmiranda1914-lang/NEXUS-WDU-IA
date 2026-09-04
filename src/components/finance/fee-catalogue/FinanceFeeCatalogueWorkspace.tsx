@@ -1,13 +1,15 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { feeCatalogueClient, type FeeCatalogueRecord } from '../../../modules/finance/fee-catalogue-client.ts';
 import { FeeCatalogueList } from './FeeCatalogueList.tsx';
 import { FeeCatalogueCreateView } from './FeeCatalogueCreateView.tsx';
+import { FeeCatalogueTypesView } from './FeeCatalogueTypesView.tsx';
 import { FeeCatalogueVersionView } from './FeeCatalogueVersionView.tsx';
 import { FeeCatalogueHistoryView } from './FeeCatalogueHistoryView.tsx';
 
 export type FeeCatalogueView =
   | { kind: 'list' }
   | { kind: 'create' }
+  | { kind: 'types' }
   | { kind: 'version'; item: FeeCatalogueRecord }
   | { kind: 'history'; item: FeeCatalogueRecord };
 
@@ -70,6 +72,14 @@ export function FinanceFeeCatalogueWorkspace(_props: FinanceFeeCatalogueWorkspac
     );
   }
 
+  if (view.kind === 'types') {
+    return (
+      <FeeCatalogueTypesView
+        onBack={() => setView({ kind: 'list' })}
+      />
+    );
+  }
+
   if (view.kind === 'version') {
     return (
       <FeeCatalogueVersionView
@@ -97,6 +107,7 @@ export function FinanceFeeCatalogueWorkspace(_props: FinanceFeeCatalogueWorkspac
       statusFilter={statusFilter}
       onStatusFilterChange={setStatusFilter}
       onOpenCreate={() => setView({ kind: 'create' })}
+      onOpenTypes={() => setView({ kind: 'types' })}
       onOpenEdit={(item) => setView({ kind: 'version', item })}
       onOpenHistory={(item) => setView({ kind: 'history', item })}
       onToggleStatus={handleToggleStatus}

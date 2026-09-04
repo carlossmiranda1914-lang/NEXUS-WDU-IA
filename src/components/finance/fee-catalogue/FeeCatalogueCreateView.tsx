@@ -1,5 +1,9 @@
-﻿import React, { useState } from 'react';
-import { feeCatalogueClient, FeeCatalogueApiError } from '../../../modules/finance/fee-catalogue-client.ts';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  feeCatalogueClient,
+  FeeCatalogueApiError,
+  type FeeTypeRecord,
+} from '../../../modules/finance/fee-catalogue-client.ts';
 import { toLocalDatetimeInputValue, parseLocalDatetimeInput } from './fee-catalogue-date.ts';
 
 export interface FeeCatalogueCreateViewProps {
@@ -8,10 +12,12 @@ export interface FeeCatalogueCreateViewProps {
 }
 
 export function FeeCatalogueCreateView({ onBack, onCreated }: FeeCatalogueCreateViewProps) {
+  const [feeTypes, setFeeTypes] = useState<FeeTypeRecord[]>([]);
+  const [loadingTypes, setLoadingTypes] = useState(true);
+
   const [form, setForm] = useState({
-    code: '',
+    feeTypeId: '',
     name: '',
-    kind: 'fee',
     amount: '',
     currency: 'EUR',
     effectiveFrom: toLocalDatetimeInputValue(new Date()),
@@ -20,9 +26,35 @@ export function FeeCatalogueCreateView({ onBack, onCreated }: FeeCatalogueCreate
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const loadTypes = useCallback(async () => {
+    setLoadingTypes(true);
+    try {
+      const data = (await feeCatalogueClient.listTypes('active')) as FeeTypeRecord[];
+      setFeeTypes(data);
+      if (data.length > 0 && !form.feeTypeId) {
+        setForm((prev) => ({ ...prev, feeTypeId: data[0].id }));
+      }
+    } catch {
+      setError('Falha ao carregar tipos de emolumento ativos.');
+    } finally {
+      setLoadingTypes(false);
+    }
+  }, [form.feeTypeId]);
+
+  useEffect(() => {
+    void loadTypes();
+  }, [loadTypes]);
+
+  const selectedType = feeTypes.find((t) => t.id === form.feeTypeId);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!form.feeTypeId) {
+      setError('Por favor selecione um tipo de emolumento.');
+      return;
+    }
 
     const normalizedAmount = form.amount.trim().replace(',', '.');
     const parsedDate = form.effectiveFrom ? parseLocalDatetimeInput(form.effectiveFrom) : new Date();
@@ -35,10 +67,9 @@ export function FeeCatalogueCreateView({ onBack, onCreated }: FeeCatalogueCreate
     setSubmitting(true);
     try {
       await feeCatalogueClient.create({
-        code: form.code.trim().toUpperCase(),
+        feeTypeId: form.feeTypeId,
         name: form.name.trim(),
         description: form.description.trim() || null,
-        kind: form.kind.trim(),
         amount: normalizedAmount,
         currency: form.currency.trim().toUpperCase(),
         effectiveFrom: parsedDate.toISOString(),
@@ -47,7 +78,7 @@ export function FeeCatalogueCreateView({ onBack, onCreated }: FeeCatalogueCreate
     } catch (err: any) {
       if (err instanceof FeeCatalogueApiError) {
         if (err.status === 409) {
-          setError('Já existe um emolumento registado com este código.');
+          setError('Conflito ao gerar código operacional ou emolumento duplicado.');
         } else {
           setError(err.message || 'Erro ao criar emolumento');
         }
@@ -101,38 +132,38 @@ export function FeeCatalogueCreateView({ onBack, onCreated }: FeeCatalogueCreate
         <div className="border border-zinc-800 rounded-xl p-6 bg-zinc-900/40 space-y-5">
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-3">
-              Identificação & Classificação
+              Identificação & Classificação Institucional
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs text-zinc-300 mb-1 font-medium">Código</label>
-                <input
+              <div className="sm:col-span-1">
+                <label className="block text-xs text-zinc-300 mb-1 font-medium">Tipo de Emolumento</label>
+                <select
                   required
-                  value={form.code}
-                  placeholder="Ex: PROP-MENSAL"
-                  onChange={(e) => setForm((prev) => ({ ...prev, code: e.target.value.toUpperCase() }))}
-                  className="w-full p-2.5 border border-zinc-700 rounded-lg bg-zinc-950 text-sm font-mono uppercase focus:border-emerald-500 focus:outline-hidden text-white"
-                />
+                  value={form.feeTypeId}
+                  disabled={loadingTypes || feeTypes.length === 0}
+                  onChange={(e) => setForm((prev) => ({ ...prev, feeTypeId: e.target.value }))}
+                  className="w-full p-2.5 border border-zinc-700 rounded-lg bg-zinc-950 text-sm focus:border-emerald-500 focus:outline-hidden text-white cursor-pointer"
+                >
+                  {feeTypes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.displayName} ({t.codePrefix})
+                    </option>
+                  ))}
+                </select>
+                {selectedType && (
+                  <p className="text-[11px] text-zinc-400 mt-1.5 font-mono">
+                    Referência: gerada automaticamente (ex: <span className="text-emerald-400">{selectedType.codePrefix}-000001</span>)
+                  </p>
+                )}
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-xs text-zinc-300 mb-1 font-medium">Nome</label>
+                <label className="block text-xs text-zinc-300 mb-1 font-medium">Nome do Emolumento</label>
                 <input
                   required
                   value={form.name}
                   placeholder="Ex: Propinas Mensais do Ensino Regular"
                   onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                  className="w-full p-2.5 border border-zinc-700 rounded-lg bg-zinc-950 text-sm focus:border-emerald-500 focus:outline-hidden text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-zinc-300 mb-1 font-medium">Tipo</label>
-                <input
-                  required
-                  value={form.kind}
-                  placeholder="Ex: tuition, fee, service"
-                  onChange={(e) => setForm((prev) => ({ ...prev, kind: e.target.value }))}
                   className="w-full p-2.5 border border-zinc-700 rounded-lg bg-zinc-950 text-sm focus:border-emerald-500 focus:outline-hidden text-white"
                 />
               </div>
@@ -210,7 +241,7 @@ export function FeeCatalogueCreateView({ onBack, onCreated }: FeeCatalogueCreate
           </button>
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || loadingTypes}
             className="px-5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50 shadow-sm cursor-pointer"
           >
             {submitting ? 'A criar...' : 'Criar emolumento'}

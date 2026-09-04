@@ -1,10 +1,11 @@
-﻿import assert from 'node:assert/strict';
+import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import path from 'node:path';
 import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
 import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 import { PostgresFeeCatalogueRepository, FeeCatalogueNotFoundError } from '../src/modules/finance/fee-catalogue-repository.ts';
+import { PostgresFeeTypeRepository } from '../src/modules/finance/fee-type-repository.ts';
 import { FeeCatalogueValidationError } from '../src/modules/finance/fee-catalogue-model.ts';
 
 await verifyApprovedTestConnection();
@@ -48,29 +49,35 @@ try {
       }),
     };
 
-    const repo = new PostgresFeeCatalogueRepository(pool, profiles);
+    const typeRepo = new PostgresFeeTypeRepository(pool);
+    const catRepo = new PostgresFeeCatalogueRepository(pool, profiles);
     const actor = { institutionId: institution, personId: person, role: 'financial' };
+
+    // Get baseline type for tuition
+    const types = await typeRepo.list(actor);
+    const tuitionType = types.find((t) => t.codePrefix === 'PROP')!;
 
     const baseDate = new Date(Date.now() - 86400000); // Yesterday (after profileEffectiveFrom)
     const baseEffective = baseDate.toISOString();
     const input = {
-      code: 'FEE',
+      feeTypeId: tuitionType.id,
       name: 'Fee',
-      kind: 'emolument',
       amount: '10.1200',
       currency: 'EUR',
       effectiveFrom: baseEffective,
     };
 
-    // 1. Create v1
-    const first = await repo.create(actor, input, 'create-1');
+    // 1. Create v1 -> generated code PROP-000001
+    const first = await catRepo.create(actor, input, 'create-1');
     assert.equal(first.result.current.money.amount, '10.12');
     assert.equal(first.result.currentVersion, 1);
-    assert.equal((await repo.create(actor, input, 'create-1')).replayed, true);
+    assert.equal(first.result.code, 'PROP-000001', 'First created item must receive code PROP-000001');
+    assert.equal(first.result.feeTypeId, tuitionType.id);
+    assert.equal(first.result.current.feeType?.displayName, 'Propina / Mensalidade');
+    assert.equal((await catRepo.create(actor, input, 'create-1')).replayed, true);
 
-    // Rejection on distinct key with same code
-    await assert.rejects(() => repo.create(actor, input, 'create-2'));
-    await assert.rejects(() => repo.get({ ...actor, institutionId: foreign }, first.result.id), FeeCatalogueNotFoundError);
+    // Foreign tenant isolation
+    await assert.rejects(() => catRepo.get({ ...actor, institutionId: foreign }, first.result.id), FeeCatalogueNotFoundError);
 
     // 2. Characterization: Equal effectiveFrom rejected with FeeCatalogueValidationError (no partial mutation)
     const equalDateUpdate = {
@@ -81,13 +88,13 @@ try {
       expectedVersion: 1,
     };
     await assert.rejects(
-      () => repo.update(actor, first.result.id, equalDateUpdate, 'update-equal-date'),
+      () => catRepo.update(actor, first.result.id, equalDateUpdate, 'update-equal-date'),
       (err: unknown) => err instanceof FeeCatalogueValidationError,
       'Update with equal effectiveFrom must fail with FeeCatalogueValidationError',
     );
 
     // Confirm no partial mutation after equal date rejection
-    const afterEqualAttempt = await repo.get(actor, first.result.id, true);
+    const afterEqualAttempt = await catRepo.get(actor, first.result.id, true);
     assert.equal(afterEqualAttempt.currentVersion, 1, 'Version must remain 1');
     assert.equal(afterEqualAttempt.current.name, 'Fee', 'Name must not have changed');
     assert.equal(afterEqualAttempt.history?.length, 1, 'History must only have 1 version');
@@ -101,13 +108,13 @@ try {
       expectedVersion: 1,
     };
     await assert.rejects(
-      () => repo.update(actor, first.result.id, anteriorDateUpdate, 'update-anterior-date'),
+      () => catRepo.update(actor, first.result.id, anteriorDateUpdate, 'update-anterior-date'),
       (err: unknown) => err instanceof FeeCatalogueValidationError,
       'Update with anterior effectiveFrom must fail with FeeCatalogueValidationError',
     );
 
     // Confirm no partial mutation after anterior date rejection
-    const afterAnteriorAttempt = await repo.get(actor, first.result.id, true);
+    const afterAnteriorAttempt = await catRepo.get(actor, first.result.id, true);
     assert.equal(afterAnteriorAttempt.currentVersion, 1, 'Version must remain 1');
     assert.equal(afterAnteriorAttempt.current.name, 'Fee', 'Name must not have changed');
     assert.equal(afterAnteriorAttempt.history?.length, 1, 'History must only have 1 version');
@@ -121,13 +128,14 @@ try {
       effectiveFrom: posteriorEffective,
       expectedVersion: 1,
     };
-    const updateResult = await repo.update(actor, first.result.id, validUpdate, 'update-1');
+    const updateResult = await catRepo.update(actor, first.result.id, validUpdate, 'update-1');
     assert.equal(updateResult.result.currentVersion, 2);
     assert.equal(updateResult.result.current.name, 'Changed');
     assert.equal(updateResult.result.current.effectiveFrom, posteriorEffective);
+    assert.equal(updateResult.result.code, 'PROP-000001', 'Code must remain immutable across versions');
 
     // Verify history and interval correctness in DB
-    const itemWithHistory = await repo.get(actor, first.result.id, true);
+    const itemWithHistory = await catRepo.get(actor, first.result.id, true);
     assert.equal(itemWithHistory.history?.length, 2);
     const v1History = itemWithHistory.history?.find((v) => v.version === 1);
     const v2History = itemWithHistory.history?.find((v) => v.version === 2);
@@ -141,15 +149,15 @@ try {
     await assert.rejects(
       () =>
         c.query(
-          `INSERT INTO finance_fee_catalogue_versions(institution_id, item_id, version, name, kind, amount, currency, effective_from, effective_to, created_by_person_id) VALUES($1, $2, 99, 'Bad Interval', 'fee', 10, 'EUR', '2026-09-01 00:00:00+00', '2026-09-01 00:00:00+00', $3)`,
-          [institution, first.result.id, person],
+          `INSERT INTO finance_fee_catalogue_versions(institution_id, item_id, fee_type_id, version, name, kind, amount, currency, effective_from, effective_to, created_by_person_id) VALUES($1, $2, $3, 99, 'Bad Interval', 'fee', 10, 'EUR', '2026-09-01 00:00:00+00', '2026-09-01 00:00:00+00', $4)`,
+          [institution, first.result.id, tuitionType.id, person],
         ),
       /finance_fee_catalogue_versions_effective_interval/,
       'PostgreSQL CHECK constraint must refuse effective_from == effective_to',
     );
 
-    await repo.setStatus(actor, first.result.id, 'inactive', 'off');
-    assert.equal((await repo.get(actor, first.result.id)).status, 'inactive');
+    await catRepo.setStatus(actor, first.result.id, 'inactive', 'off');
+    assert.equal((await catRepo.get(actor, first.result.id)).status, 'inactive');
 
     assert.equal((await c.query(`SELECT count(*)::int value FROM finance_journal_transactions`)).rows[0].value, 0);
     assert.equal((await c.query(`SELECT count(*)::int value FROM finance_position_projection`)).rows[0].value, 0);
