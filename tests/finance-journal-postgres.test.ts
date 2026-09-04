@@ -7,6 +7,7 @@ import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts
 import { Money } from '../src/modules/finance/money.ts';
 import { createJournalConfirmationFingerprint, executeIdempotentFinanceCommand } from '../src/modules/finance/finance-command.ts';
 import { PostgresJournalRepository } from '../src/modules/finance/journal-repository.ts';
+import { validateConfirmation } from '../src/modules/finance/journal-model.ts';
 import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 
 await verifyApprovedTestConnection();
@@ -57,11 +58,14 @@ try {
     const prepared = randomUUID();
     await client.query(`INSERT INTO finance_journal_transactions (id,institution_id,status,currency,amount,command_id,journal_type,actor_person_id,financial_profile_version) VALUES ($1,$2,'prepared','EUR','1','prepared','foundation_value_received',$3,1)`, [prepared, institution, actor]);
     assert.equal(await repository.getConfirmed(institution, prepared), null);
+    assert.throws(() => validateConfirmation({ ...input, entries: [{ ...input.entries[0], money: Money.parse('0', 'EUR') }] }), /positive/i, 'foundation value received rejects zero');
+    assert.throws(() => validateConfirmation({ ...input, entries: [{ ...input.entries[0], money: Money.parse('-1', 'EUR') }] }), /positive/i, 'foundation value received rejects negative money');
+    await assert.rejects(() => repository.confirm(client, input), /idempotent/i, 'direct confirmation bypasses the canonical idempotency boundary');
     await assert.rejects(() => repository.confirm(client, { ...input, commandId: 'mixed', entries: [...input.entries, { positionType: 'received_value', money: Money.parse('1', 'USD'), sourceRef: 'bad' }] }));
     await assert.rejects(() => repository.confirm(client, { ...input, commandId: 'foreign-profile', institutionId: foreignInstitution }));
     await assert.rejects(() => repository.confirm(client, { ...input, commandId: 'bad-position', entries: [{ ...input.entries[0], positionType: 'bad' as any }] }));
     const reversal = { ...input, commandId: 'reversal', journalType: 'foundation_reversal' as const, entries: [{ ...input.entries[0], positionType: 'reversed_value' as const }] };
-    assert.ok((await repository.confirm(client, reversal)).transactionId, 'foundation reversals accept reversed_value');
+    await assert.rejects(() => repository.confirm(client, reversal), /idempotent/i, 'foundation reversals cannot bypass executeFoundationReversal');
     await assert.rejects(() => repository.confirm(client, { ...input, commandId: 'wrong-received-semantics', entries: [{ ...input.entries[0], positionType: 'reversed_value' as const }] }));
     await assert.rejects(() => repository.confirm(client, { ...input, commandId: 'wrong-semantics', journalType: 'foundation_reversal' }));
     for (const point of ['after_transaction', 'after_entries', 'after_audit', 'after_outbox'] as const) {

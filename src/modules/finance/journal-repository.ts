@@ -8,12 +8,8 @@ export type JournalFailurePoint = 'after_transaction' | 'after_entries' | 'after
 export class PostgresJournalRepository implements JournalRepository {
   constructor(private readonly readClient: PoolClient, private readonly failurePoint?: JournalFailurePoint) {}
   async confirm(client: PoolClient, input: ConfirmJournalInput): Promise<{ transactionId: string }> {
-    validateConfirmation(input);
-    await client.query('BEGIN');
-    try {
-      const confirmed = await this.confirmInTransaction(client, input);
-      await client.query('COMMIT'); return confirmed;
-    } catch (error) { await client.query('ROLLBACK'); throw error; }
+    void client; void input;
+    throw new Error('Journal confirmation must execute through the canonical idempotent command boundary');
   }
   async confirmInTransaction(client: PoolClient, input: ConfirmJournalInput): Promise<{ transactionId: string }> {
     const validated = validateConfirmation(input); const transactionId = randomUUID();
@@ -29,8 +25,8 @@ export class PostgresJournalRepository implements JournalRepository {
   }
   async reverseInTransaction(client: PoolClient, input: ReverseFoundationTransactionInput, commandId: string): Promise<{ transactionId: string }> {
     if (!input.reason.trim() || input.amount.compare(Money.parse('0', input.amount.currency)) <= 0) throw new Error('Reversal amount and reason are required');
-    const original = await client.query<{ status: string; currency: string; amount: string }>(`SELECT status,currency,amount::text FROM finance_journal_transactions WHERE institution_id=$1 AND id=$2 FOR UPDATE`, [input.institutionId, input.originalTransactionId]);
-    const row = original.rows[0]; if (!row || row.status !== 'confirmed') throw new Error('Original confirmed transaction is required');
+    const original = await client.query<{ status: string; currency: string; amount: string; journal_type: string }>(`SELECT status,currency,amount::text,journal_type FROM finance_journal_transactions WHERE institution_id=$1 AND id=$2 FOR UPDATE`, [input.institutionId, input.originalTransactionId]);
+    const row = original.rows[0]; if (!row || row.status !== 'confirmed' || row.journal_type === 'foundation_reversal') throw new Error('Original eligible transaction is required; reversal target is not eligible');
     if (row.currency !== input.amount.currency) throw new Error('Reversal currency must match original');
     const reversed = await client.query<{ amount: string }>(`SELECT coalesce(sum(amount),0)::text amount FROM finance_journal_transactions WHERE institution_id=$1 AND reverses_transaction_id=$2 AND status='confirmed' AND journal_type='foundation_reversal'`, [input.institutionId, input.originalTransactionId]);
     const remaining = Money.parse(row.amount, row.currency).subtract(Money.parse(reversed.rows[0].amount, row.currency));

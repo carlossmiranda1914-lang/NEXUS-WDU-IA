@@ -19,6 +19,7 @@ export function validateConfirmation(input: ConfirmJournalInput): { currency: st
   for (const entry of input.entries) {
     if (!['received_value', 'reversed_value'].includes(entry.positionType) || !entry.sourceRef || entry.money.currency !== first.money.currency) throw new Error('Journal entries require one currency and typed positions');
     if (entry.positionType !== requiredPosition) throw new Error('Journal type and entry position are incompatible');
+    if (entry.money.compare(Money.parse('0', entry.money.currency)) <= 0) throw new Error('Journal entry Money must be strictly positive');
   }
   for (const entry of input.entries.slice(1)) amount = amount.add(entry.money);
   return { currency: first.money.currency, amount };
