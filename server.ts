@@ -64,6 +64,8 @@ import { multiTenantMiddleware } from './src/middleware/multi-tenant.ts';
 import { adminAuth } from './src/lib/firebase-admin.ts';
 import { resolveInstitutionalContext } from './src/auth/institutional-context.ts';
 import { resolveAuthorizedStudents } from './src/auth/authorized-students.ts';
+import { registerFeeCatalogueRoutes } from './src/modules/finance/fee-catalogue-http.ts';
+import type { FinancialProfileStore } from './src/modules/finance/financial-context.ts';
 import { isInstitutionOwned, resolveInstitutionOwnedResourceIds } from './src/auth/institution-resource-ownership.ts';
 import { eq, desc, sql, and, ne, inArray } from 'drizzle-orm';
 
@@ -311,6 +313,14 @@ async function startServer() {
 
   // Initialize Database self-healing and seeding immediately on startup
   await initializeDatabase();
+  const financialProfiles: FinancialProfileStore = {
+    async resolveEffective(institutionId, at) {
+      const result = await pool.query(`SELECT institution_id,version,effective_from,effective_to,primary_jurisdiction,functional_currency,financial_timezone,monetary_policy_version,enabled_currencies FROM finance_profile_versions WHERE institution_id=$1 AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2) ORDER BY version DESC LIMIT 1`, [institutionId, at]);
+      const row = result.rows[0];
+      return row ? { institutionId: row.institution_id, version: row.version, effectiveFrom: row.effective_from, effectiveTo: row.effective_to, primaryJurisdiction: row.primary_jurisdiction, functionalCurrency: row.functional_currency, financialTimezone: row.financial_timezone, monetaryPolicyVersion: row.monetary_policy_version, enabledCurrencies: row.enabled_currencies } : null;
+    },
+  };
+  registerFeeCatalogueRoutes(app, pool, financialProfiles);
 
   console.log('[SERVER] Servidor iniciado. Base de dados pronta para uso operacional.');
 

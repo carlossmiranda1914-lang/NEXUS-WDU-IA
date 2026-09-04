@@ -68,6 +68,7 @@ const EnrollmentOperationsWorkspace = lazy(() => import('./components/Enrollment
 const StudentRecordWorkspace = lazy(() => import('./components/StudentRecordWorkspace'));
 const TeachersList = lazy(() => import('./components/TeachersList'));
 const FinancialPanel = lazy(() => import('./components/FinancialPanel'));
+const FinanceFeeCatalogueWorkspace = lazy(() => import('./components/FinanceFeeCatalogueWorkspace'));
 const CommunicationCenter = lazy(() => import('./components/CommunicationCenter'));
 const SystemConfig = lazy(() => import('./components/SystemConfig'));
 const AIAssistant = lazy(() => import('./components/AIAssistant'));
@@ -2667,10 +2668,7 @@ export default function App() {
                   )}
 
                   {activeTab === 'financials' && (
-                    <FactualUnavailablePanel
-                      title="Operações financeiras indisponíveis"
-                      detail="Não existe autoridade institucional para faturação, exportação, sincronização, entrega por email ou reconciliação neste ambiente. Nenhuma fatura, exportação ou comunicação externa foi criada."
-                    />
+                    <FinanceFeeCatalogueWorkspace theme={theme} />
                   )}
 
                   {activeTab === 'communications' && (
