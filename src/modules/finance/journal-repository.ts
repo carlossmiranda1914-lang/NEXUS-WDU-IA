@@ -12,6 +12,10 @@ export class PostgresJournalRepository implements JournalRepository {
     throw new Error('Journal confirmation must execute through the canonical idempotent command boundary');
   }
   async confirmInTransaction(client: PoolClient, input: ConfirmJournalInput): Promise<{ transactionId: string }> {
+    if (input.journalType !== 'foundation_value_received') throw new Error('Foundation reversal confirmation is guarded by executeFoundationReversal');
+    return this.persistConfirmed(client, input);
+  }
+  private async persistConfirmed(client: PoolClient, input: ConfirmJournalInput): Promise<{ transactionId: string }> {
     const validated = validateConfirmation(input); const transactionId = randomUUID();
     await client.query(`INSERT INTO finance_journal_transactions (id,institution_id,status,currency,amount,command_id,journal_type,actor_person_id,financial_profile_version,effective_at,confirmed_at,reverses_transaction_id,reason) VALUES ($1,$2,'confirmed',$3,$4,$5,$6,$7,$8,$9,now(),$10,$11)`, [transactionId,input.institutionId,validated.currency,validated.amount.canonicalAmount(),input.commandId,input.journalType,input.actorPersonId,input.financialProfileVersion,input.effectiveAt,input.reversesTransactionId ?? null,input.reason ?? null]);
       this.fail('after_transaction');
@@ -31,7 +35,7 @@ export class PostgresJournalRepository implements JournalRepository {
     const reversed = await client.query<{ amount: string }>(`SELECT coalesce(sum(amount),0)::text amount FROM finance_journal_transactions WHERE institution_id=$1 AND reverses_transaction_id=$2 AND status='confirmed' AND journal_type='foundation_reversal'`, [input.institutionId, input.originalTransactionId]);
     const remaining = Money.parse(row.amount, row.currency).subtract(Money.parse(reversed.rows[0].amount, row.currency));
     if (input.amount.compare(remaining) > 0) throw new Error('Reversal exceeds remaining reversible amount');
-    return this.confirmInTransaction(client, { institutionId: input.institutionId, commandId, journalType: 'foundation_reversal', effectiveAt: input.effectiveAt, entries: [{ positionType: 'reversed_value', money: input.amount, sourceRef: input.originalTransactionId }], reversesTransactionId: input.originalTransactionId, reason: input.reason, actorPersonId: input.actorPersonId, financialProfileVersion: input.financialProfileVersion });
+    return this.persistConfirmed(client, { institutionId: input.institutionId, commandId, journalType: 'foundation_reversal', effectiveAt: input.effectiveAt, entries: [{ positionType: 'reversed_value', money: input.amount, sourceRef: input.originalTransactionId }], reversesTransactionId: input.originalTransactionId, reason: input.reason, actorPersonId: input.actorPersonId, financialProfileVersion: input.financialProfileVersion });
   }
   async getConfirmed(institutionId: string, transactionId: string): Promise<unknown | null> {
     const result = await this.readClient.query(`SELECT id,institution_id,status,currency,amount,command_id,journal_type,actor_person_id,financial_profile_version,reason FROM finance_journal_transactions WHERE institution_id=$1 AND id=$2 AND status='confirmed'`, [institutionId, transactionId]);
