@@ -2,6 +2,7 @@
 
 const files = [
   'tests/finance-fee-catalogue-safety.test.ts',
+  'tests/finance-fee-catalogue-date.test.ts',
   'tests/finance-fee-catalogue-model.test.ts',
   'tests/finance-fee-catalogue-policy.test.ts',
   'tests/finance-fee-catalogue-schema-postgres.test.ts',
