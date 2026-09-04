@@ -4,7 +4,7 @@ Updated: 2026-09-04
 
 ## Integrated baseline
 
-`main @ e7ab85a1382cd8ac042a344d574ec25e967e80d9` is the current integrated capability authority. Existing Foundation/IAM/Enrollment/Academic/Student/ALUNOS capability remains integrated. Finance Foundation remains branch-scoped and is not integrated yet.
+`main @ 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc` is the current integrated capability authority. Finance Foundation is integrated: Tasks 1–8 are DONE, P0 = 0 and P1 = 0. F1 implementation is NOT STARTED.
 
 ## Finance Foundation accepted implementation state
 

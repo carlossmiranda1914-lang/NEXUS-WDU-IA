@@ -10,11 +10,11 @@ project:
 
 active_work:
   program: FINANCE_FOUNDATION
-  mission: FINANCE-FOUNDATION-INTEGRATION-GATE
+  mission: FINANCE-F1-PREPARATION
   mission_branch: codex/finance-foundation-01
   durable_remote_checkpoint: 74d575a574bb4e3dd3cf9652327c6f1c665f393b
-  activity: INTEGRATION_MERGE_AUTHORIZED
-  task: FINANCE-FOUNDATION-INTEGRATION-SYNC
+  activity: F1_PREPARATION
+  task: FINANCE-F1-PREPARATION
   task_name: Synchronize accepted Finance Foundation with current main and prove integration readiness
   state: READY
   owner: Product Owner
