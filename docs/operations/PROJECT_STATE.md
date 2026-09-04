@@ -4,91 +4,86 @@ Updated: 2026-09-04
 
 ## Integrated baseline
 
-`main @ f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e` remains the integrated capability authority. Existing Foundation/IAM/Enrollment/Academic/Student/ALUNOS capability remains unchanged. Finance Foundation remains branch-scoped and is not integrated yet.
+`main @ e7ab85a1382cd8ac042a344d574ec25e967e80d9` is the current integrated capability authority. Existing Foundation/IAM/Enrollment/Academic/Student/ALUNOS capability remains integrated. Finance Foundation remains branch-scoped and is not integrated yet.
 
-## Active product program
+## Finance Foundation accepted implementation state
 
-**FINANCE FOUNDATION — FINAL IMPLEMENTATION GATE ACTIVE, NOT YET INTEGRATED.**
+Finance Foundation Tasks 1–8 are implementation-complete and independently reviewed on branch `codex/finance-foundation-01`.
 
-Accepted task checkpoints:
-- Task 1 — Monetary Primitives: `8202dee1cdc7bb6878cf5b044ad2a17eb29b4798`, P0=0, P1=0.
-- Task 2 — Institution Financial Context: `49e5c06e9b5603cc814bffa047d9f009c2a10549`, P0=0, P1=0.
-- Task 3 — Canonical Finance Persistence Schema: `2f09580f7814da2fa8b15d063d83f6df53f328b1`, P0=0, P1=0.
-- Task 4 — Journal Domain + Atomic Repository: `2a84191c22abe31adb39af1e15748b0b48b4e9c8`, P0=0, P1=0.
-- Task 5 — Canonical Command Idempotency + Concurrency: `6222eabe69cb76322551ba8bcdaea3a0ec2646fd`, P0=0, P1=0.
-- Task 6 — Minimal Reversal + Remaining-Reversible Concurrency: `3e738704a66f88105f10edb02f517ba965db0d9e`, P0=0, P1=0.
-- Task 7 — Projection + Recovery + Durable Outbox: `ff5b91e40d756dcf9f2363c487386f08c972c9e5`, P0=0, P1=0.
+Accepted exact Finance review checkpoint before sync:
 
-Task 7 is closed. Its accepted proof includes confirmed-only exact projection, destroy/rebuild equivalence, durable PostgreSQL outbox retry, persisted failure provenance, fresh-pool recovery, concurrent claim safety and lease-expiry recovery.
+`95dd350c872229a222eead5d88d79a13776c5955`
+
+Independent review outcome at that checkpoint:
+
+- P0 = 0
+- P1 = 0
+- P1-1 outbox tenant scope: CLOSED with explicit A/B PostgreSQL proof
+- P1-2 legacy HTTP E2E: adjudicated residual risk; no architecture expansion authorized
+- aggregate Finance Foundation gate: PASS
+- FND03 tenant regression: PASS
+- lint/build/diff: PASS
+
+This branch is not yet integrated because it was developed from an earlier `main` baseline. The remaining work is integration synchronization only.
 
 ## Active executable mission
 
-- Mission: `FINANCE-FOUNDATION-08 — Legacy Authority Fence + Aggregate Foundation Gate`
+- Mission: `FINANCE FOUNDATION — Integration Sync Gate`
 - Branch: `codex/finance-foundation-01`
-- Mission Pack: `docs/roadmap/missions/FINANCE-FOUNDATION-08.md`
-- Spec: `docs/superpowers/specs/2026-09-03-finance-foundation-implementation-design.md`
-- Plan: `docs/superpowers/plans/2026-09-03-finance-foundation-implementation.md`
+- Mission Pack: `docs/roadmap/missions/FINANCE-FOUNDATION-INTEGRATION-GATE.md`
 - Writer: Codex
-- Reviewer: Antigravity READ-ONLY after exact implementation checkpoint
+- Reviewer: independent READ-ONLY after synchronized checkpoint if needed
+- Current `origin/main` authority at authorization: `e7ab85a1382cd8ac042a344d574ec25e967e80d9`
 
-Task 8 is the final implementation/verification task of this Finance Foundation plan. It is not authorization for upper Finance product domains.
+The Integration Sync Gate is authorized to merge `origin/main` **into the Finance branch only**, using a normal merge commit, then run fresh blocking Finance/integration gates.
 
-## Current Task 8 objective
-
-Prove that the accepted Tasks 1–7 form one coherent Foundation and that legacy mutable finance/convenience balances cannot become or modify canonical economic truth.
-
-Required outcome:
-- discover the real repository/runtime legacy balance path rather than inventing one;
-- behaviorally prove legacy mutation cannot change confirmed Finance Journal facts or rebuilt/read canonical position;
-- prove Finance authority modules do not consume legacy mutable balance as economic input;
-- create deterministic fail-fast `test:finance:foundation` aggregate over the complete Finance proof set;
-- run fresh aggregate PostgreSQL evidence plus migration/checksum, tenant-isolation, lint, build and diff gates;
-- checkpoint exact HEAD and STOP for independent review.
+It is **not** authorization to merge Finance into `main` automatically and is not authorization for upper Finance product work.
 
 ## Required sequence
 
-`clean preflight -> discover real legacy balance path -> Task 8 RED -> minimal authority-fence proof (production fence only if RED proves a real defect) -> deterministic aggregate runner -> fresh test:finance:foundation -> migrations/FND01/FND03 -> lint -> build -> git diff --check -> commit/push/remote coherence -> STOP -> independent exact-HEAD review`.
+`clean preflight -> fetch origin -> confirm origin/main -> merge origin/main into codex/finance-foundation-01 -> classify conflicts -> STOP on technical/authority conflict -> reconcile bounded governance-only conflicts if applicable -> fresh Finance aggregate -> migrations/FND01/FND03 -> lint -> build -> git diff --check -> push synchronized branch -> remote coherence -> STOP for Product Owner integration decision`.
 
 ## Protected invariants
 
-- Tasks 1–7 remain closed unless Task 8 produces concrete regression evidence.
+- Finance Foundation accepted semantics at `95dd350c872229a222eead5d88d79a13776c5955` remain unchanged unless a real integration conflict proves otherwise.
 - Journal remains canonical economic truth.
-- Projection remains confirmed-only rebuildable read authority.
-- Legacy `outstandingFees` or equivalent mutable fields are not Finance Foundation authority.
-- Legacy values are never imported into confirmed Journal history merely to reconcile old UI state.
-- Exact Money, financial context, idempotency, reversal concurrency, tenant isolation and durable recovery remain unchanged.
-- No new migration is authorized in Task 8.
-- No new Finance product behavior is authorized.
-- No Payment, Allocation, Reconciliation, provider, fiscal/reporting or UI work is authorized.
-- Aggregate gate must fail closed and preserve child failures.
-- A branch-level GREEN is not an integration claim.
+- projection remains confirmed-only rebuildable read authority.
+- exact Money, financial context, idempotency, reversal concurrency, durable outbox and tenant isolation remain PostgreSQL-backed/fail-closed.
+- legacy `outstandingFees` remains non-canonical Finance authority.
+- migration history remains immutable.
+- no new migration or Finance table is authorized.
+- no Payment, Allocation, Reconciliation, provider, fiscal/reporting or Finance UI work is authorized.
+- no force push or published-history rebase.
+- no merge from Finance branch into `main` during this mission.
 
-## STOP conditions
+## Conflict rule
 
-STOP rather than broaden scope if:
-- a real legacy write changes canonical Journal/projection authority;
-- fixing the defect requires broad production refactor or schema change;
-- any Task 1–7 aggregate regression appears;
-- migration/checksum or tenant isolation regresses;
-- passing would require weakening a test/safety gate;
-- upper Finance product semantics become necessary.
+STOP before resolving any merge conflict that touches:
+
+- Finance authority code;
+- migrations;
+- tenant/auth context;
+- database initialization or migration authority;
+- shared runtime behavior with material Finance impact.
+
+Pure governance/documentation conflicts may be reconciled narrowly to current truth while preserving the accepted Finance status.
 
 ## Engineering governance
 
 Operating standard remains: **priority clear, no useless cycles, no silent scope expansion, no false GREEN, advance immediately once sufficient evidence exists.**
 
-Task 8 closes implementation evidence; it does not self-approve integration. After a clean Task 8 checkpoint, the next required action is independent READ-ONLY exact-HEAD review and then Product Owner integration adjudication.
+This mission is integration preparation only. A synchronized branch-level GREEN still does not equal integrated `main`.
 
 ## Deferred domains
 
-- Finance Foundation: ACTIVE at Task 8 final gate.
+- Finance Foundation: ACCEPTED, INTEGRATION SYNC ACTIVE.
 - Upper Finance product domains: NOT STARTED / NOT AUTHORIZED.
 - Assessment/Attendance/other roadmap domains: unchanged.
 
 ## Canonical versus branch work
 
-Only merged `main` is integrated product capability. Finance branch work remains non-integrated until exact-HEAD review and explicit integration/merge complete.
+Only merged `main` is integrated capability. The Finance branch remains non-integrated until explicit Product Owner integration decision and merge complete.
 
 ## Next authorized action
 
-Synchronize the existing clean `worktrees/finance-foundation-01` to current `origin/codex/finance-foundation-01`, execute `FINANCE-FOUNDATION-08.md` only, checkpoint and STOP for independent exact-HEAD review. Do not merge automatically.
+Synchronize the clean `worktrees/finance-foundation-01` with the current remote branch, execute `FINANCE-FOUNDATION-INTEGRATION-GATE.md`, merge `origin/main` into the Finance branch only, run the required fresh gates and STOP before any merge to `main`.
