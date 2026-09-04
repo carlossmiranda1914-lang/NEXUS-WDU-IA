@@ -6,28 +6,28 @@ project:
   repository: carlossmiranda1914-lang/NEXUS-WDU-IA
   integrated_baseline:
     branch: main
-    sha: e7ab85a1382cd8ac042a344d574ec25e967e80d9
+    sha: 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc
 
 active_work:
-  program: FINANCE_FOUNDATION
+  program: FINANCE
   mission: FINANCE-F1-PREPARATION
-  mission_branch: codex/finance-foundation-01
-  durable_remote_checkpoint: 74d575a574bb4e3dd3cf9652327c6f1c665f393b
+  mission_branch: null
+  durable_remote_checkpoint: 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc
   activity: F1_PREPARATION
-  task: FINANCE-F1-PREPARATION
-  task_name: Synchronize accepted Finance Foundation with current main and prove integration readiness
-  state: READY
+  task: DEFINE_FIRST_FUNCTIONAL_VERTICAL
+  task_name: Define and approve the first upper-Finance functional vertical from the integrated Finance Foundation
+  state: PLANNING
   owner: Product Owner
-  write_owner: CODEX
-  reviewer: ANTIGRAVITY
-  reviewer_mode: READ_ONLY
+  write_owner: NONE
+  reviewer: NONE
+  reviewer_mode: NOT_APPLICABLE
   risk: HIGH
   resume_rule: >-
-    Resume only the Finance Foundation Integration Sync Gate in the existing clean isolated worktree.
-    Fetch origin, confirm origin/main, merge origin/main into codex/finance-foundation-01 with a normal
-    merge commit, STOP before resolving any technical authority conflict, otherwise run the fresh
-    Finance/migration/tenant/lint/build/diff gates, push the synchronized branch and STOP for the
-    Product Owner has authorized merge of PR #89 into main after CI PASS. Do not start upper Finance.
+    Finance Foundation is integrated in main. Do not rerun the completed Integration Sync Gate and do not
+    reopen Tasks 1 through 8 without concrete regression evidence. F1 implementation is not authorized yet.
+    Resume with bounded F1 product/architecture preparation from the integrated main baseline; define and
+    approve the first functional vertical and its mission/implementation contract before creating an F1
+    implementation branch or writing production code.
 
 execution:
   one_code_owner_per_unit: true
@@ -37,27 +37,22 @@ execution:
 
 scope:
   authorized:
-    - FINANCE-FOUNDATION-INTEGRATION-GATE only
-    - merge origin/main into codex/finance-foundation-01 using a normal merge commit
-    - bounded governance documentation reconciliation if merge conflicts are documentation-only
-    - fresh Finance Foundation aggregate and required integration gates
-    - execution record updates
+    - bounded F1 product and architecture preparation
+    - inspect integrated Finance Foundation and canonical roadmap evidence needed to define F1
+    - define the first functional vertical, invariants, proof requirements and implementation mission
+    - governance and planning documentation required to authorize that mission
   forbidden:
-    - merge codex/finance-foundation-01 into main during this mission
-    - rebase published Finance history
-    - force push
-    - resolve technical authority conflicts by inference
-    - new migration or Finance table
-    - new Finance product behavior
-    - Payment Allocation Reconciliation provider fiscal reporting or Finance UI
-    - reopen accepted Tasks 1 through 8 without concrete synchronized regression evidence
-    - re-open adjudicated legacy HTTP E2E residual risk as implementation scope
+    - F1 production implementation before explicit Product Owner approval of the F1 mission
+    - reopen Finance Foundation Tasks 1 through 8 without concrete regression evidence
+    - rerun the completed Finance Foundation Integration Sync Gate
+    - alter accepted Journal Money financial-context idempotency reversal projection outbox or tenant semantics without a new authorized mission
+    - force push or published-history rebase
     - unrelated IAM Enrollment ALUNOS refactor
-    - parallel writer
+    - parallel writer on the same authority unit
     - CI or safety-gate weakening
 
 protected_invariants:
-  - accepted Finance exact-head semantics remain intact unless synchronization proves a concrete conflict
+  - Finance Foundation Tasks 1 through 8 remain integrated and accepted with P0 0 and P1 0
   - Journal remains canonical economic truth
   - projection remains confirmed-only rebuildable read authority
   - legacy outstandingFees remains non-canonical Finance authority
@@ -65,34 +60,25 @@ protected_invariants:
   - financial context remains server-authoritative and fail closed
   - idempotency concurrency reversal recovery and outbox tenant isolation remain PostgreSQL-backed
   - migration history remains immutable
-  - synchronized branch GREEN does not equal integrated main
 
 gates:
-  finance_foundation_tasks_1_8_accepted: true
-  accepted_finance_review_head: 95dd350c872229a222eead5d88d79a13776c5955
+  finance_foundation_integrated: true
+  finance_foundation_merge_commit: 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc
+  accepted_finance_review_head: 74d575a574bb4e3dd3cf9652327c6f1c665f393b
   accepted_unresolved_p0: 0
   accepted_unresolved_p1: 0
   legacy_http_e2e_residual_risk_adjudicated: true
-  current_main_head_at_authorization: e7ab85a1382cd8ac042a344d574ec25e967e80d9
-  normal_merge_main_into_finance_required: true
-  finance_foundation_fresh_aggregate_required: true
-  migration_schema_regression_required: true
-  fnd01_migration_regression_required: true
-  fnd03_tenant_regression_required: true
-  lint_required: true
-  build_required: true
-  diff_check_required: true
-  remote_coherence_required: true
-  unresolved_p0: 0
-  unresolved_p1: 0
+  f1_design_approved: false
+  f1_mission_pack_exists: false
+  f1_implementation_authorized: false
 
 next_program:
-  program: FINANCE_FOUNDATION
+  program: FINANCE
   roadmap_priority: 6
-  state: INTEGRATION_SYNC_ACTIVE
-  authorized_phase: INTEGRATION_PREPARATION
+  state: F1_PREPARATION
+  authorized_phase: PRODUCT_ARCHITECTURE_PREPARATION
   implementation_authorized: false
-  authorization_scope: FINANCE-FOUNDATION-INTEGRATION-GATE_ONLY
+  authorization_scope: DEFINE_AND_APPROVE_FIRST_F1_FUNCTIONAL_VERTICAL
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -106,10 +92,11 @@ resource_policy:
     - required_quality_gates
 
 integration:
-  technical_task_checkpoint: TASKS_1_8_ACCEPTED_INTEGRATION_SYNC_READY
-  mission_to_main: NOT_READY
-  merge_main_into_finance_branch_authorized: true
-  merge_finance_into_main_authorized: false
+  finance_foundation: INTEGRATED
+  finance_foundation_main_commit: 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc
+  integration_sync_gate: COMPLETE
+  f1: NOT_STARTED
+  f1_implementation_authorized: false
   dirty_worktree_allowed: false
 
 recovery:
