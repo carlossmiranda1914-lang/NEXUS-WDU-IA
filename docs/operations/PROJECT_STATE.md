@@ -1,98 +1,89 @@
-﻿# NEXUS Project State
+# NEXUS Project State
 
-Updated: 2026-09-03
+Updated: 2026-09-04
 
 ## Integrated baseline
 
-- `main @ f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e` — PR #87 merged; ALUNOS-01A / ALUNOS-01A.2 / ALUNOS-01A.3 integrated.
-- Foundation Authority Convergence: **DONE** and integrated.
-- IAM / institutional access: **DONE** and integrated; canonical access is Firebase Identity → Person → active Membership → server-derived InstitutionalContext.
-- Enrollment authority: **DONE** and integrated, including canonical activation.
-- Academic Core (`ACADEMIC-01`): **DONE** and integrated; migration `0022` provides temporal academic authority.
-- Student 360 / Student Experience: **DONE** and integrated; read-only Student Record and opaque `studentRef` continuity are in `main`.
-- ALUNOS Product Integrity & Closure (`ALUNOS-01A.3`): **DONE** and integrated through PR #87.
+`main @ e7ab85a1382cd8ac042a344d574ec25e967e80d9` is the current integrated capability authority. Existing Foundation/IAM/Enrollment/Academic/Student/ALUNOS capability remains integrated. Finance Foundation remains branch-scoped and is not integrated yet.
 
-## Active product program
+## Finance Foundation accepted implementation state
 
-**NONE.**
+Finance Foundation Tasks 1–8 are implementation-complete and independently reviewed on branch `codex/finance-foundation-01`.
 
-No product mission is authorized for implementation while this post-ALUNOS closeout is being recorded. The next roadmap program is Finance Core, but Finance remains **NOT STARTED** until discovery/product decision/design authority/Mission Pack/DoR explicitly authorize implementation.
+Accepted exact Finance review checkpoint before sync:
 
-## ALUNOS final integration record
+`74d575a574bb4e3dd3cf9652327c6f1c665f393b`
 
-Final validated product/evidence checkpoint: `aa5dc956d82e6ad941377f75f6144a642c64f6a6`.
-Final documentation-closeout checkpoint before merge: `136a1f9150ad541a974139aafae9ca6dc0eb5509`.
-Integration merge commit: `f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e`.
+Independent review outcome at that checkpoint:
 
-Final gate state:
+- P0 = 0
+- P1 = 0
+- P1-1 outbox tenant scope: CLOSED with explicit A/B PostgreSQL proof
+- P1-2 guarded reversal confirmation: CLOSED
+- aggregate Finance Foundation gate: PASS
+- FND03 tenant regression: PASS
+- lint/build/diff: PASS
 
-```text
-ENGINEERING_GREEN=YES
-INTEGRITY_GREEN=YES
-PRODUCT_GREEN=YES
-ADVERSARIAL_REVIEW=PASS
-HUMAN_UAT_GREEN=YES
-MISSION_STATUS=DONE
-P0=0
-P1=0
-P2=0
-REVIEW_THREADS=5/5_RESOLVED
-FINAL_PR_CI=SUCCESS
-PR_87=MERGED
-MAIN_INTEGRATION=COMPLETE
-```
+PR #89 CI is PASS and the Product Owner has authorized the Finance-to-`main` merge. Finance Foundation Tasks 1–8 are accepted with P0 = 0 and P1 = 0. Upper Finance/F1 remains NOT STARTED until that merge is confirmed.
 
-Final hardening evidence:
+## Active executable mission
 
-- **F2 — State continuity:** PASS — registration save refreshes server-authoritative versions and same-drawer activation submits current lifecycle/registration versions without `STALE_VERSION`.
-- **F3 — Lifecycle continuity:** PASS — activation → `active` retains the reachable Student Record handoff and uses the exact server-returned opaque `studentRef`.
-- **F4 — Document policy continuity:** PASS — supported ad-hoc documents do not block canonical policy capture; matching evidence is preserved, unrelated ad-hoc material remains intact, snapshot immutability/idempotency remain enforced.
-- **F5 — Identity contract continuity:** PASS — resolver producer reasons and decision allowlist are aligned, including `national_id_number`; authorized opaque review queue and tenant non-disclosure remain intact.
-- Same-class variants audited: **YES**.
-- Historical applied migrations changed by hardening: **NO**.
-- Workflow weakening: **NO**.
-- Affected UAT: **GREEN**; F4/F5 manual scenarios were not manufactured and reused their passing PostgreSQL/HTTP proofs.
+- Mission: `FINANCE FOUNDATION — Integration Sync Gate`
+- Branch: `codex/finance-foundation-01`
+- Mission Pack: `docs/roadmap/missions/FINANCE-FOUNDATION-INTEGRATION-GATE.md`
+- Writer: Codex
+- Reviewer: independent READ-ONLY after synchronized checkpoint if needed
+- Current `origin/main` authority at authorization: `e7ab85a1382cd8ac042a344d574ec25e967e80d9`
 
-## Non-blocking visual/product debt (Backlog / Polish)
+The Integration Sync Gate is authorized to merge `origin/main` **into the Finance branch only**, using a normal merge commit, then run fresh blocking Finance/integration gates.
 
-1. Nexus visual identity/palette can continue future Aurora design-system refinement.
-2. Motion language can become more distinctive across state transitions.
-3. Future visual polish must not reopen established domain/schema authority without a new mission.
-4. Optional operational partial-failure messaging can mature in later UX work.
+It is **not** authorization to merge Finance into `main` automatically and is not authorization for upper Finance product work.
+
+## Required sequence
+
+`clean preflight -> fetch origin -> confirm origin/main -> merge origin/main into codex/finance-foundation-01 -> classify conflicts -> STOP on technical/authority conflict -> reconcile bounded governance-only conflicts if applicable -> fresh Finance aggregate -> migrations/FND01/FND03 -> lint -> build -> git diff --check -> push synchronized branch -> remote coherence -> STOP for Product Owner integration decision`.
+
+## Protected invariants
+
+- Finance Foundation accepted semantics at `95dd350c872229a222eead5d88d79a13776c5955` remain unchanged unless a real integration conflict proves otherwise.
+- Journal remains canonical economic truth.
+- projection remains confirmed-only rebuildable read authority.
+- exact Money, financial context, idempotency, reversal concurrency, durable outbox and tenant isolation remain PostgreSQL-backed/fail-closed.
+- legacy `outstandingFees` remains non-canonical Finance authority.
+- migration history remains immutable.
+- no new migration or Finance table is authorized.
+- no Payment, Allocation, Reconciliation, provider, fiscal/reporting or Finance UI work is authorized.
+- no force push or published-history rebase.
+- no merge from Finance branch into `main` during this mission.
+
+## Conflict rule
+
+STOP before resolving any merge conflict that touches:
+
+- Finance authority code;
+- migrations;
+- tenant/auth context;
+- database initialization or migration authority;
+- shared runtime behavior with material Finance impact.
+
+Pure governance/documentation conflicts may be reconciled narrowly to current truth while preserving the accepted Finance status.
 
 ## Engineering governance
 
-The canonical engineering operating model is active. Risk → Proof → Tool → DONE, single-writer ownership, SHA-bound handoffs, independent review and review-thread adjudication remain mandatory for future missions.
+Operating standard remains: **priority clear, no useless cycles, no silent scope expansion, no false GREEN, advance immediately once sufficient evidence exists.**
 
-## Deferred / next domains
+This mission is integration preparation only. A synchronized branch-level GREEN still does not equal integrated `main`.
 
-- **Finance Core:** NEXT ROADMAP PRIORITY, **NOT STARTED**.
-- Assessment: NOT STARTED.
-- Attendance: NOT STARTED.
-- Physical document storage/upload: separate future work.
+## Deferred domains
 
-These domains must not be represented as implemented authority merely because UI placeholders, legacy fields, metadata contracts or plans exist.
+- Finance Foundation: ACCEPTED, INTEGRATION SYNC ACTIVE.
+- Upper Finance product domains: NOT STARTED / NOT AUTHORIZED.
+- Assessment/Attendance/other roadmap domains: unchanged.
 
-## Canonical versus supporting work
+## Canonical versus branch work
 
-- Only merged `main` commits are integrated capability.
-- Mission branches contain work but are non-integrated until merged through their product gates.
-- Chat history, Codex sessions and Antigravity sessions are not canonical project memory.
-- Drive is source authority for business/external material; implementation authority derived from it must be promoted into canonical repository documentation.
+Only merged `main` is integrated capability. The Finance branch remains non-integrated until explicit Product Owner integration decision and merge complete.
 
-## Recovery entrypoint
+## Next authorized action
 
-A human or agent resuming work reads, in order:
-
-1. `AGENTS.md`;
-2. `docs/README.md`;
-3. this `PROJECT_STATE.md`;
-4. `docs/operations/NEXUS_ENGINEERING_CONFIG.yaml`;
-5. the active Mission Pack/spec/plan and referenced contracts, when one exists;
-6. the applicable Codex or Antigravity adapter.
-
-Then verify Git reality before editing.
-
-## Next authorised action
-
-Complete this documentation/governance-only post-merge truth reconciliation. After it is integrated, begin **Finance Core PREPARATION/DISCOVERY only**: inspect AS-IS financial authority, legacy writes/data/contracts and operational requirements, then make an explicit product/design decision before creating or implementing `FINANCE-01`. No Finance production code is authorized by this state document.
+Synchronize the clean `worktrees/finance-foundation-01` with the current remote branch, execute `FINANCE-FOUNDATION-INTEGRATION-GATE.md`, merge `origin/main` into the Finance branch only, run the required fresh gates and STOP before any merge to `main`.

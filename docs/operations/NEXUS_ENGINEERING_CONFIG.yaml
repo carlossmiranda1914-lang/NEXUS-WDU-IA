@@ -6,111 +6,98 @@ project:
   repository: carlossmiranda1914-lang/NEXUS-WDU-IA
   integrated_baseline:
     branch: main
-    sha: f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e
+    sha: e7ab85a1382cd8ac042a344d574ec25e967e80d9
 
 active_work:
-  program: GOVERNANCE
-  mission: POST-ALUNOS-CLOSEOUT
-  mission_branch: docs/post-alunos-closeout
-  durable_remote_checkpoint: f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e
-  activity: PROJECT_STATE_UPDATE
-  task: POST-ALUNOS-CANONICAL-TRUTH
-  task_name: Record ALUNOS integration and clear active product mission
-  state: IMPLEMENTING
+  program: FINANCE_FOUNDATION
+  mission: FINANCE-FOUNDATION-INTEGRATION-GATE
+  mission_branch: codex/finance-foundation-01
+  durable_remote_checkpoint: 74d575a574bb4e3dd3cf9652327c6f1c665f393b
+  activity: INTEGRATION_MERGE_AUTHORIZED
+  task: FINANCE-FOUNDATION-INTEGRATION-SYNC
+  task_name: Synchronize accepted Finance Foundation with current main and prove integration readiness
+  state: READY
   owner: Product Owner
-  write_owner: CHATGPT
-  reviewer: NONE_REQUIRED_FOR_DOC_ONLY_TRUTH_RECONCILIATION
+  write_owner: CODEX
+  reviewer: ANTIGRAVITY
   reviewer_mode: READ_ONLY
-  risk: LOW
+  risk: HIGH
   resume_rule: >-
-    PR #87 is already merged into main at f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e.
-    Do not reopen ALUNOS. Reconcile canonical post-merge truth only, prove the governance
-    contract remains coherent, integrate this micro-closeout, then Finance may enter
-    PREPARATION/DISCOVERY. Finance implementation remains unauthorized.
+    Resume only the Finance Foundation Integration Sync Gate in the existing clean isolated worktree.
+    Fetch origin, confirm origin/main, merge origin/main into codex/finance-foundation-01 with a normal
+    merge commit, STOP before resolving any technical authority conflict, otherwise run the fresh
+    Finance/migration/tenant/lint/build/diff gates, push the synchronized branch and STOP for the
+    Product Owner has authorized merge of PR #89 into main after CI PASS. Do not start upper Finance.
 
 execution:
   one_code_owner_per_unit: true
   reviewer_starts_read_only: true
   parallelism: INDEPENDENT_WORK_OR_FROZEN_CONTRACT_ONLY
   self_approval_of_integration: false
-  implementation_pipeline:
-    - DISCOVERY
-    - PRODUCT_DECISION
-    - DESIGN_AUTHORITY
-    - MISSION_PACK
-    - IMPLEMENTATION_PLAN
-    - EXECUTION
-    - INDEPENDENT_REVIEW
-    - ADVERSARIAL_PRODUCT_REVIEW
-    - HUMAN_UAT
-    - INTEGRATION
-    - PROJECT_STATE_UPDATE
 
 scope:
   authorized:
-    - documentation-only post-merge canonical truth reconciliation
-    - governance contract alignment required by the selector transition
-    - remote CI verification for this micro-closeout
-    - integration of this micro-closeout after green evidence
+    - FINANCE-FOUNDATION-INTEGRATION-GATE only
+    - merge origin/main into codex/finance-foundation-01 using a normal merge commit
+    - bounded governance documentation reconciliation if merge conflicts are documentation-only
+    - fresh Finance Foundation aggregate and required integration gates
+    - execution record updates
   forbidden:
-    - no ALUNOS product changes
-    - no Finance production code
-    - no new product module implementation
-    - no unrelated refactor
-    - no historical migration modification
-    - no parallel writer
-    - no automatic scope expansion
-    - no broad UI redesign
-    - no CI or workflow weakening
-    - no force push
-    - destructive Git reconciliation without explicit authorization
+    - merge codex/finance-foundation-01 into main during this mission
+    - rebase published Finance history
+    - force push
+    - resolve technical authority conflicts by inference
+    - new migration or Finance table
+    - new Finance product behavior
+    - Payment Allocation Reconciliation provider fiscal reporting or Finance UI
+    - reopen accepted Tasks 1 through 8 without concrete synchronized regression evidence
+    - re-open adjudicated legacy HTTP E2E residual risk as implementation scope
+    - unrelated IAM Enrollment ALUNOS refactor
+    - parallel writer
+    - CI or safety-gate weakening
 
 protected_invariants:
-  - merged main is the integrated capability authority
-  - browser never owns institution, Person, role, decision or case authority
-  - tenant boundaries fail closed and remain non-disclosing
-  - historical applied migrations remain immutable
-  - exactly one active StudentProfile invariant remains intact
-  - no duplicate Person, StudentProfile or Enrollment creation
-  - no hidden manual database dependency
-  - completed ALUNOS evidence remains historical and must not be rewritten as new execution
+  - accepted Finance exact-head semantics remain intact unless synchronization proves a concrete conflict
+  - Journal remains canonical economic truth
+  - projection remains confirmed-only rebuildable read authority
+  - legacy outstandingFees remains non-canonical Finance authority
+  - exact Money and currency separation remain enforced
+  - financial context remains server-authoritative and fail closed
+  - idempotency concurrency reversal recovery and outbox tenant isolation remain PostgreSQL-backed
+  - migration history remains immutable
+  - synchronized branch GREEN does not equal integrated main
 
 gates:
-  alunos_final_product_checkpoint: aa5dc956d82e6ad941377f75f6144a642c64f6a6
-  alunos_merge_commit: f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e
-  alunos_integrated: true
-  engineering_green: true
-  integrity_green: true
-  product_green: true
-  human_uat_green: true
+  finance_foundation_tasks_1_8_accepted: true
+  accepted_finance_review_head: 95dd350c872229a222eead5d88d79a13776c5955
+  accepted_unresolved_p0: 0
+  accepted_unresolved_p1: 0
+  legacy_http_e2e_residual_risk_adjudicated: true
+  current_main_head_at_authorization: e7ab85a1382cd8ac042a344d574ec25e967e80d9
+  normal_merge_main_into_finance_required: true
+  finance_foundation_fresh_aggregate_required: true
+  migration_schema_regression_required: true
+  fnd01_migration_regression_required: true
+  fnd03_tenant_regression_required: true
+  lint_required: true
+  build_required: true
+  diff_check_required: true
+  remote_coherence_required: true
   unresolved_p0: 0
   unresolved_p1: 0
-  unresolved_p2: 0
-  review_threads_resolved: 5
-  post_merge_truth_ci_required: true
 
 next_program:
-  program: FINANCE
+  program: FINANCE_FOUNDATION
   roadmap_priority: 6
-  state: NOT_STARTED
-  authorized_phase_after_closeout: PREPARATION_DISCOVERY
+  state: INTEGRATION_SYNC_ACTIVE
+  authorized_phase: INTEGRATION_PREPARATION
   implementation_authorized: false
+  authorization_scope: FINANCE-FOUNDATION-INTEGRATION-GATE_ONLY
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
-  progressive_context:
-    - L0_PROJECT_STATE_AND_CONFIG
-    - L1_ACTIVE_MISSION_TASK
-    - L2_DIRECTLY_AFFECTED_FILES
-    - L3_REQUIRED_CONTRACTS_DEPENDENCIES
-    - L4_HISTORICAL_EVIDENCE
-    - L5_BROAD_REPOSITORY_INVESTIGATION
-  evidence_classes:
-    - FRESH
-    - REUSABLE
-    - INVALIDATED
-  max_default_parallel_implementers_same_authority: 1
   avoid_duplicate_investigation: true
+  max_default_parallel_implementers_same_authority: 1
   never_trade_for_savings:
     - security
     - tenant_isolation
@@ -119,8 +106,10 @@ resource_policy:
     - required_quality_gates
 
 integration:
-  technical_task_checkpoint: DOCUMENTATION_ONLY
-  mission_to_main: READY_AFTER_REMOTE_CI
+  technical_task_checkpoint: TASKS_1_8_ACCEPTED_INTEGRATION_SYNC_READY
+  mission_to_main: NOT_READY
+  merge_main_into_finance_branch_authorized: true
+  merge_finance_into_main_authorized: false
   dirty_worktree_allowed: false
 
 recovery:

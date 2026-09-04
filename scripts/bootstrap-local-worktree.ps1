@@ -20,7 +20,8 @@ if (Test-Path -LiteralPath $target) {
   $targetItem = Get-Item -LiteralPath $target -Force
   if (-not $targetItem.LinkType) { throw 'Refusing to replace a non-link local configuration file.' }
 } else {
-  New-Item -ItemType HardLink -Path $target -Target $ConfigSource | Out-Null
+  $linkType = if ([IO.Path]::GetPathRoot($target) -eq [IO.Path]::GetPathRoot($ConfigSource)) { 'HardLink' } else { 'SymbolicLink' }
+  New-Item -ItemType $linkType -Path $target -Target $ConfigSource | Out-Null
 }
 
 $raw = Get-Content -LiteralPath $target -Raw
