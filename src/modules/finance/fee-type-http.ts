@@ -18,7 +18,10 @@ export function registerFeeTypeRoutes(
 
   const actor = (req: AuthRequest, res: Response, write = false) => {
     const c = req.institutionalContext;
-    if (!c) return undefined;
+    if (!c) {
+      res.status(401).json({ code: 'UNAUTHORIZED', error: 'Contexto institucional não encontrado' });
+      return undefined;
+    }
     if (!canAccessFeeCatalogue(c.role, write ? 'write' : 'read')) {
       res.status(403).json({ code: 'FEE_TYPE_FORBIDDEN', error: 'Acesso não autorizado a tipos de emolumento' });
       return undefined;

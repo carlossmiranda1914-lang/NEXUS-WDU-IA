@@ -166,11 +166,33 @@ try {
     const createTypeRes = await request('token-fin-a', '/api/finance/fee-types', {
       method: 'POST',
       headers: { 'Idempotency-Key': 'fin-key-type-1' },
-      body: { displayName: 'LaboratÃ³rio de RobÃ³tica', codePrefix: 'LAB' },
+      body: { displayName: 'Laboratório de Robótica', codePrefix: 'LAB' },
     });
     assert.equal(createTypeRes.status, 201);
     assert.equal(createTypeRes.body.codePrefix, 'LAB');
     const customTypeId = createTypeRes.body.id;
+
+    // 5b. Verify PostgreSQL row exists directly
+    const dbTypeCheck = await client.query('SELECT id, display_name, code_prefix, status FROM finance_fee_types WHERE id = $1', [customTypeId]);
+    assert.equal(dbTypeCheck.rows.length, 1);
+    assert.equal(dbTypeCheck.rows[0].code_prefix, 'LAB');
+    assert.equal(dbTypeCheck.rows[0].status, 'active');
+
+    // 5c. GET active fee types returns newly created custom type
+    const activeTypesRes = await request('token-fin-a', '/api/finance/fee-types?status=active');
+    assert.equal(activeTypesRes.status, 200);
+    const labInActive = activeTypesRes.body.find((t: any) => t.id === customTypeId);
+    assert.ok(labInActive, 'Custom type LAB must be in active types list');
+
+    // 5d. Duplicate prefix returns 409 conflict with clean error
+    const duplicatePrefixRes = await request('token-fin-a', '/api/finance/fee-types', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': 'fin-key-type-dup' },
+      body: { displayName: 'Outro Laboratório', codePrefix: 'LAB' },
+    });
+    assert.equal(duplicatePrefixRes.status, 409);
+    assert.equal(duplicatePrefixRes.body.code, 'FEE_TYPE_CONFLICT');
+    assert.ok(!duplicatePrefixRes.body.error.includes('SELECT'), 'No DB syntax in error response');
 
     // 6. Fee Catalogue: Create item with generated code (201)
     const baseEffective = new Date(Date.now() - 86400000).toISOString();
@@ -179,7 +201,7 @@ try {
       headers: { 'Idempotency-Key': 'create-item-key-1' },
       body: {
         feeTypeId: customTypeId,
-        name: 'Taxa de LaboratÃ³rio',
+        name: 'Taxa de Laboratório',
         amount: '25.00',
         currency: 'EUR',
         effectiveFrom: baseEffective,
@@ -188,7 +210,7 @@ try {
     assert.equal(createItemRes.status, 201);
     assert.equal(createItemRes.body.code, 'LAB-000001', 'First item for LAB type must receive code LAB-000001');
     assert.equal(createItemRes.body.currentVersion, 1);
-    assert.equal(createItemRes.body.current.feeType?.displayName, 'LaboratÃ³rio de RobÃ³tica');
+    assert.equal(createItemRes.body.current.feeType?.displayName, 'Laboratório de Robótica');
     const itemId = createItemRes.body.id;
 
     // Second item for LAB type receives LAB-000002
@@ -197,7 +219,7 @@ try {
       headers: { 'Idempotency-Key': 'create-item-key-2' },
       body: {
         feeTypeId: customTypeId,
-        name: 'Taxa de LaboratÃ³rio AvanÃ§ado',
+        name: 'Taxa de Laboratório Avançado',
         amount: '35.00',
         currency: 'EUR',
         effectiveFrom: baseEffective,
@@ -213,7 +235,7 @@ try {
       headers: { 'Idempotency-Key': 'update-item-key-1' },
       body: {
         expectedVersion: 1,
-        name: 'Taxa de LaboratÃ³rio Atualizada',
+        name: 'Taxa de Laboratório Atualizada',
         amount: '28.00',
         currency: 'EUR',
         effectiveFrom: posteriorEffective,

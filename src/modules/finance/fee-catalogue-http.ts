@@ -1,4 +1,4 @@
-﻿import type { Express, Response } from 'express';
+import type { Express, Response } from 'express';
 import type { Pool } from 'pg';
 import { requireAuth, type AuthRequest } from '../../middleware/auth.ts';
 import { canAccessFeeCatalogue } from './fee-catalogue-policy.ts';
@@ -16,7 +16,10 @@ export function registerFeeCatalogueRoutes(
 
   const actor = (req: AuthRequest, res: Response, write = false) => {
     const c = req.institutionalContext;
-    if (!c) return undefined;
+    if (!c) {
+      res.status(401).json({ code: 'UNAUTHORIZED', error: 'Contexto institucional não encontrado' });
+      return undefined;
+    }
     if (!canAccessFeeCatalogue(c.role, write ? 'write' : 'read')) {
       res.status(403).json({ code: 'FEE_CATALOGUE_FORBIDDEN', error: 'Catalogue access is not permitted' });
       return undefined;

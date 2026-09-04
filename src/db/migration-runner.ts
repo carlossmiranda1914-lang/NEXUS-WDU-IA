@@ -28,7 +28,7 @@ const migrationLedgerSql = `
 `;
 
 export function migrationChecksum(sql: string): string {
-  return createHash('sha256').update(sql, 'utf8').digest('hex');
+  return createHash('sha256').update(sql.replace(/\r\n/g, '\n'), 'utf8').digest('hex');
 }
 
 export async function discoverMigrations(migrationsDirectory: string): Promise<MigrationFile[]> {
@@ -65,7 +65,9 @@ export async function runMigrations(client: MigrationQueryClient, migrations: Mi
     if (!current) {
       throw new Error(`Applied migration ${filename} is missing from the migration directory.`);
     }
-    if (current.checksum !== checksum) {
+    const rawChecksum = createHash('sha256').update(current.sql, 'utf8').digest('hex');
+    const lfChecksum = createHash('sha256').update(current.sql.replace(/\r\n/g, '\n'), 'utf8').digest('hex');
+    if (checksum !== rawChecksum && checksum !== lfChecksum) {
       throw new Error(`Checksum mismatch for applied migration ${filename}. Migration history must not be rewritten.`);
     }
   }

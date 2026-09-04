@@ -104,11 +104,11 @@ function version(row: Row): FeeCatalogueVersion {
     feeTypeId: String(row.fee_type_id),
     feeType: row.fee_type_display_name
       ? {
-          id: String(row.fee_type_id),
-          displayName: String(row.fee_type_display_name),
-          codePrefix: String(row.fee_type_code_prefix),
-          canonicalKey: row.fee_type_canonical_key ? String(row.fee_type_canonical_key) : null,
-        }
+        id: String(row.fee_type_id),
+        displayName: String(row.fee_type_display_name),
+        codePrefix: String(row.fee_type_code_prefix),
+        canonicalKey: row.fee_type_canonical_key ? String(row.fee_type_canonical_key) : null,
+      }
       : undefined,
     version: Number(row.version),
     name: String(row.name),
@@ -137,23 +137,25 @@ function view(row: Row): FeeCatalogueItem {
     feeTypeId: String(row.fee_type_id),
     feeType: row.fee_type_display_name
       ? {
-          id: String(row.fee_type_id),
-          displayName: String(row.fee_type_display_name),
-          codePrefix: String(row.fee_type_code_prefix),
-          canonicalKey: row.fee_type_canonical_key ? String(row.fee_type_canonical_key) : null,
-        }
+        id: String(row.fee_type_id),
+        displayName: String(row.fee_type_display_name),
+        codePrefix: String(row.fee_type_code_prefix),
+        canonicalKey: row.fee_type_canonical_key ? String(row.fee_type_canonical_key) : null,
+      }
       : undefined,
     code: String(row.code),
     status: row.status as FeeCatalogueStatus,
     currentVersion: Number(row.current_version),
     createdAt,
     updatedAt,
+
+
     current: version(row),
   };
 }
 
 export class PostgresFeeCatalogueRepository {
-  constructor(private readonly pool: Pool, private readonly profiles: FinancialProfileStore) {}
+  constructor(private readonly pool: Pool, private readonly profiles: FinancialProfileStore) { }
 
   async list(actor: FeeCatalogueActor, status: FeeCatalogueStatus | 'all' = 'all'): Promise<FeeCatalogueItem[]> {
     const r = await this.pool.query<Row>(
