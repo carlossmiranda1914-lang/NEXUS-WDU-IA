@@ -314,13 +314,24 @@ async function startServer() {
   // Initialize Database self-healing and seeding immediately on startup
   await initializeDatabase();
   const financialProfiles: FinancialProfileStore = {
-    async resolveEffective(institutionId, at) {
-      const result = await pool.query(`SELECT institution_id,version,effective_from,effective_to,primary_jurisdiction,functional_currency,financial_timezone,monetary_policy_version,enabled_currencies FROM finance_profile_versions WHERE institution_id=$1 AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2) ORDER BY version DESC LIMIT 1`, [institutionId, at]);
-      const row = result.rows[0];
-      return row ? { institutionId: row.institution_id, version: row.version, effectiveFrom: row.effective_from, effectiveTo: row.effective_to, primaryJurisdiction: row.primary_jurisdiction, functionalCurrency: row.functional_currency, financialTimezone: row.financial_timezone, monetaryPolicyVersion: row.monetary_policy_version, enabledCurrencies: row.enabled_currencies } : null;
-    },
-  };
-  registerFeeCatalogueRoutes(app, pool, financialProfiles);
+      async resolveEffective(institutionId, at = new Date()) {
+        const effectiveDate = at instanceof Date && !Number.isNaN(at.getTime()) ? at : new Date(at || Date.now());
+        const result = await pool.query(`SELECT institution_id,version,effective_from,effective_to,primary_jurisdiction,functional_currency,financial_timezone,monetary_policy_version,enabled_currencies FROM finance_profile_versions WHERE institution_id=$1 AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2) ORDER BY version DESC LIMIT 1`, [institutionId, effectiveDate]);
+        const row = result.rows[0];
+        return row ? {
+          institutionId: row.institution_id,
+          version: row.version,
+          effectiveFrom: row.effective_from instanceof Date ? row.effective_from.toISOString() : String(row.effective_from),
+          effectiveTo: row.effective_to ? (row.effective_to instanceof Date ? row.effective_to.toISOString() : String(row.effective_to)) : null,
+          primaryJurisdiction: row.primary_jurisdiction,
+          functionalCurrency: row.functional_currency,
+          financialTimezone: row.financial_timezone,
+          monetaryPolicyVersion: row.monetary_policy_version,
+          enabledCurrencies: row.enabled_currencies,
+        } : null;
+      },
+    };
+    registerFeeCatalogueRoutes(app, pool, financialProfiles);
 
   console.log('[SERVER] Servidor iniciado. Base de dados pronta para uso operacional.');
 

@@ -1,49 +1,109 @@
 ﻿import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { executeIdempotentFinanceCommand, createCanonicalFinanceFingerprint } from './finance-command.ts';
 import {
-  normalizeFeeCatalogueCreate,
-  normalizeFeeCatalogueUpdate,
-  FeeCatalogueValidationError,
   type CreateFeeCatalogueInput,
-  type UpdateFeeCatalogueInput,
   type FeeCatalogueItem,
   type FeeCatalogueStatus,
   type FeeCatalogueVersion,
+  type UpdateFeeCatalogueInput,
+  FeeCatalogueValidationError,
+  normalizeFeeCatalogueCreate,
+  normalizeFeeCatalogueUpdate,
 } from './fee-catalogue-model.ts';
+import { executeIdempotentFinanceCommand, createCanonicalFinanceFingerprint } from './finance-command.ts';
 import { requireFinancialContext, type FinancialProfileStore } from './financial-context.ts';
 
-export class FeeCatalogueConflictError extends Error { readonly code = 'FEE_CATALOGUE_CONFLICT'; }
-export class FeeCatalogueNotFoundError extends Error { readonly code = 'FEE_CATALOGUE_NOT_FOUND'; }
-export interface FeeCatalogueActor { institutionId: string; personId: string; role: string; }
+export class FeeCatalogueNotFoundError extends Error {
+  readonly code = 'FEE_CATALOGUE_NOT_FOUND';
+  constructor(message = 'Catalogue item not found') {
+    super(message);
+    this.name = 'FeeCatalogueNotFoundError';
+    Object.setPrototypeOf(this, FeeCatalogueNotFoundError.prototype);
+  }
+}
+
+export class FeeCatalogueConflictError extends Error {
+  readonly code = 'FEE_CATALOGUE_CONFLICT';
+  constructor(message = 'Catalogue version conflict') {
+    super(message);
+    this.name = 'FeeCatalogueConflictError';
+    Object.setPrototypeOf(this, FeeCatalogueConflictError.prototype);
+  }
+}
+
+export interface FeeCatalogueActor {
+  institutionId: string;
+  personId: string;
+  role: string;
+}
+
 type Row = Record<string, unknown>;
 
-const view = (r: Row): FeeCatalogueItem => ({
-  id: String(r.item_id),
-  institutionId: String(r.institution_id),
-  code: String(r.code),
-  status: r.status as FeeCatalogueStatus,
-  currentVersion: Number(r.current_version),
-  createdAt: new Date(r.item_created_at as Date | string).toISOString(),
-  updatedAt: new Date(r.updated_at as Date | string).toISOString(),
-  current: version(r),
-});
+const selectCurrent = `
+  SELECT
+    i.id,
+    i.institution_id,
+    i.code,
+    i.status,
+    i.current_version,
+    i.created_at,
+    i.updated_at,
+    v.id version_id,
+    v.version,
+    v.name,
+    v.description,
+    v.kind,
+    v.amount::text amount,
+    v.currency,
+    v.effective_from,
+    v.effective_to,
+    v.created_at version_created_at
+  FROM finance_fee_catalogue_items i
+  JOIN finance_fee_catalogue_versions v
+    ON (v.institution_id = i.institution_id AND v.item_id = i.id AND v.version = i.current_version)
+`;
 
-const version = (r: Row): FeeCatalogueVersion => ({
-  id: String(r.version_id),
-  itemId: String(r.item_id),
-  institutionId: String(r.institution_id),
-  version: Number(r.version),
-  name: String(r.name),
-  description: r.description === null ? null : String(r.description),
-  kind: String(r.kind),
-  money: { amount: String(r.amount), currency: String(r.currency) },
-  effectiveFrom: new Date(r.effective_from as Date | string).toISOString(),
-  effectiveTo: r.effective_to === null ? null : new Date(r.effective_to as Date | string).toISOString(),
-  createdAt: new Date(r.version_created_at as Date | string).toISOString(),
-});
+function version(row: Row): FeeCatalogueVersion {
+  const effectiveFrom = row.effective_from instanceof Date
+    ? row.effective_from.toISOString()
+    : new Date(String(row.effective_from)).toISOString();
+  const effectiveTo = row.effective_to
+    ? (row.effective_to instanceof Date ? row.effective_to.toISOString() : new Date(String(row.effective_to)).toISOString())
+    : null;
+  const createdAt = row.version_created_at instanceof Date
+    ? row.version_created_at.toISOString()
+    : new Date(String(row.version_created_at || row.created_at)).toISOString();
 
-const selectCurrent = `SELECT i.id item_id, i.institution_id, i.code, i.status, i.current_version, i.created_at item_created_at, i.updated_at, v.id version_id, v.version, v.name, v.description, v.kind, v.amount::text amount, v.currency, v.effective_from, v.effective_to, v.created_at version_created_at FROM finance_fee_catalogue_items i JOIN finance_fee_catalogue_versions v ON (v.institution_id=i.institution_id AND v.item_id=i.id AND v.version=i.current_version)`;
+  return {
+    id: String(row.version_id),
+    itemId: String(row.item_id || row.id),
+    institutionId: String(row.institution_id),
+    version: Number(row.version),
+    name: String(row.name),
+    description: row.description ? String(row.description) : null,
+    kind: String(row.kind),
+    money: { amount: String(row.amount), currency: String(row.currency) },
+    effectiveFrom,
+    effectiveTo,
+    createdAt,
+  };
+}
+
+function view(row: Row): FeeCatalogueItem {
+  const createdAt = row.created_at instanceof Date ? row.created_at.toISOString() : new Date(String(row.created_at)).toISOString();
+  const updatedAt = row.updated_at instanceof Date ? row.updated_at.toISOString() : new Date(String(row.updated_at)).toISOString();
+
+  return {
+    id: String(row.id),
+    institutionId: String(row.institution_id),
+    code: String(row.code),
+    status: row.status as FeeCatalogueStatus,
+    currentVersion: Number(row.current_version),
+    createdAt,
+    updatedAt,
+    current: version(row),
+  };
+}
 
 export class PostgresFeeCatalogueRepository {
   constructor(private readonly pool: Pool, private readonly profiles: FinancialProfileStore) {}

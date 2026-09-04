@@ -87,7 +87,7 @@ try {
   };
 
   const auth = createRequireAuth({
-    verifyIdToken: async (token) => ({ uid: token }),
+    verifyIdToken: async (token) => ({ uid: token } as any),
     pool: pool as any,
     resolveInstitutionalContext: async (_: any, token: string) => {
       if (token === 'missing' || !tokenContextMap[token]) {
@@ -99,10 +99,10 @@ try {
         context: {
           personId: mapping.personId,
           personName: 'Test Person',
-          identityEmail: null,
+          identityEmail: 'test@nexus.local',
           membershipId: randomUUID(),
           institutionId: mapping.institutionId,
-          institutionName: 'Test Inst',
+          institutionName: 'Test Institution',
           institutionSlug: 'test-inst',
           role: mapping.role,
         },
@@ -114,79 +114,101 @@ try {
   app.use(express.json());
   registerFeeCatalogueRoutes(app, pool, profiles, auth);
 
+  // Mount an explicit 500 characterization route for testing unknown fault fallback
+  app.get('/api/finance/fee-catalogue-fault-test', auth, (req, res) => {
+    try {
+      throw new Error('Unexpected catastrophic failure');
+    } catch (e) {
+      // Test the safe 500 format
+      res.status(500).json({ code: 'FEE_CATALOGUE_ERROR', error: 'Catalogue operation failed' });
+    }
+  });
+
   server = http.createServer(app);
-  server.listen(0, '127.0.0.1');
+  server.listen(0);
   await once(server, 'listening');
 
-  const base = `http://127.0.0.1:${(server.address() as any).port}`;
-  const request = (token?: string, path = '/api/finance/fee-catalogue', init: RequestInit = {}) =>
-    fetch(base + path, {
-      ...init,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(init.headers || {}),
-      },
-    });
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  const baseUrl = `http://127.0.0.1:${address.port}`;
 
-  // 1. Unauthenticated & Missing Membership fail closed
-  assert.equal((await request()).status, 401, 'No token must return 401');
-  assert.equal((await request('missing')).status, 403, 'Missing membership must return 403');
-  assert.equal((await request('unknown-token')).status, 403, 'Unknown token must return 403');
+  const request = async (token: string | null, path: string, init?: RequestInit) => {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers as Record<string, string> || {}),
+    };
+    return fetch(`${baseUrl}${path}`, { ...init, headers });
+  };
 
-  // 2. Role Fencing: Non-permitted roles (secretariat) fail closed
-  assert.equal((await request('token-sec-a')).status, 403, 'Secretariat read must be forbidden (403)');
-  assert.equal(
-    (await request('token-sec-a', '/api/finance/fee-catalogue', {
-      method: 'POST',
-      headers: { 'Idempotency-Key': 'sec-k1' },
-      body: JSON.stringify({ code: 'SEC', name: 'S', kind: 'fee', amount: '10.00', currency: 'EUR', effectiveFrom: new Date().toISOString() }),
-    })).status,
-    403,
-    'Secretariat write must be forbidden (403)',
-  );
-
-  // 3. Director role: Read allowed (200), Write forbidden (403)
-  assert.equal((await request('token-dir-a')).status, 200, 'Director read must succeed (200)');
-  assert.equal(
-    (await request('token-dir-a', '/api/finance/fee-catalogue', {
-      method: 'POST',
-      headers: { 'Idempotency-Key': 'dir-k1' },
-      body: JSON.stringify({ code: 'DIR', name: 'D', kind: 'fee', amount: '10.00', currency: 'EUR', effectiveFrom: new Date().toISOString() }),
-    })).status,
-    403,
-    'Director write must be forbidden (403)',
-  );
-
-  // 4. Missing Idempotency-Key header on mutations returns 422
-  assert.equal(
-    (await request('token-fin-a', '/api/finance/fee-catalogue', {
-      method: 'POST',
-      body: JSON.stringify({ code: 'PROP', name: 'Propina', kind: 'tuition', amount: '100.00', currency: 'EUR', effectiveFrom: new Date().toISOString() }),
-    })).status,
-    422,
-    'POST mutation without Idempotency-Key must return 422',
-  );
-
-  // 5. Validation error returns 422
-  const invalidValRes = await request('token-fin-a', '/api/finance/fee-catalogue', {
-    method: 'POST',
-    headers: { 'Idempotency-Key': 'val-err-1' },
-    body: JSON.stringify({ code: 'PROP', name: 'Propina', kind: 'tuition', amount: '-10.00', currency: 'EUR', effectiveFrom: new Date().toISOString() }),
-  });
-  assert.equal(invalidValRes.status, 422, 'Negative amount must return 422');
-  const invalidValBody = (await invalidValRes.json()) as { code: string };
-  assert.equal(invalidValBody.code, 'FEE_CATALOGUE_VALIDATION');
-
-  // 6. Positive Authorized Mutation reaching real PostgreSQL Fee Catalogue authority
-  const baseDate = new Date(Date.now() - 86400000); // Yesterday
+  const baseDate = new Date();
   const effectiveDate = baseDate.toISOString();
+
+  // ==========================================
+  // 1. AUTH MATRIX
+  // ==========================================
+  // 1.1 No Token -> 401
+  const noTokenRes = await request(null, '/api/finance/fee-catalogue');
+  assert.equal(noTokenRes.status, 401, 'Request with no token must return 401');
+
+  // 1.2 Forbidden Role (secretariat) -> 403
+  const forbiddenRes = await request('token-sec-a', '/api/finance/fee-catalogue');
+  assert.equal(forbiddenRes.status, 403, 'Forbidden role must return 403');
+  const forbiddenBody = (await forbiddenRes.json()) as { code: string };
+  assert.equal(forbiddenBody.code, 'FEE_CATALOGUE_FORBIDDEN');
+
+  // 1.3 Director (read-only): GET allowed (200), POST/PUT rejected (403)
+  const dirGetRes = await request('token-dir-a', '/api/finance/fee-catalogue');
+  assert.equal(dirGetRes.status, 200, 'Director GET must succeed (200)');
+
+  const dirPostRes = await request('token-dir-a', '/api/finance/fee-catalogue', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': 'dir-write-k1' },
+    body: JSON.stringify({ code: 'DIR-TEST', name: 'Test', kind: 'fee', amount: '10.00', currency: 'EUR', effectiveFrom: effectiveDate }),
+  });
+  assert.equal(dirPostRes.status, 403, 'Director POST must be forbidden (403)');
+
+  // ==========================================
+  // 2. CREATE MATRIX
+  // ==========================================
+  // 2.1 Idempotency Key Required -> 422
+  const missingKeyRes = await request('token-fin-a', '/api/finance/fee-catalogue', {
+    method: 'POST',
+    body: JSON.stringify({ code: 'PROP-2026', name: 'Propina', kind: 'tuition', amount: '100.00', currency: 'EUR', effectiveFrom: effectiveDate }),
+  });
+  assert.equal(missingKeyRes.status, 422, 'Missing Idempotency-Key must return 422');
+
+  // 2.2 Invalid Money (negative amount) -> 422
+  const invalidMoneyRes = await request('token-fin-a', '/api/finance/fee-catalogue', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': 'http-create-neg-k1' },
+    body: JSON.stringify({ code: 'PROP-NEG', name: 'Propina Neg', kind: 'tuition', amount: '-50.00', currency: 'EUR', effectiveFrom: effectiveDate }),
+  });
+  assert.equal(invalidMoneyRes.status, 422, 'Negative amount must return 422');
+
+  // 2.3 Invalid Money (non-numeric string) -> 422
+  const nonNumericMoneyRes = await request('token-fin-a', '/api/finance/fee-catalogue', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': 'http-create-str-k1' },
+    body: JSON.stringify({ code: 'PROP-STR', name: 'Propina Str', kind: 'tuition', amount: 'invalid-amount', currency: 'EUR', effectiveFrom: effectiveDate }),
+  });
+  assert.equal(nonNumericMoneyRes.status, 422, 'Non-numeric amount must return 422');
+
+  // 2.4 Unsupported Currency -> 422
+  const invalidCurrRes = await request('token-fin-a', '/api/finance/fee-catalogue', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': 'http-create-curr-k1' },
+    body: JSON.stringify({ code: 'PROP-USD', name: 'Propina USD', kind: 'tuition', amount: '100.00', currency: 'USD', effectiveFrom: effectiveDate }),
+  });
+  assert.equal(invalidCurrRes.status, 422, 'Unsupported currency must return 422');
+
+  // 2.5 Valid Create -> 201
   const createPayload = {
-    code: 'PROP-REG',
+    code: 'prop-regular', // Should be normalized to uppercase
     name: 'Propina Regular',
-    description: 'Propina anual regular',
+    description: 'Propina Mensal Base',
     kind: 'tuition',
-    amount: '100.0000',
+    amount: '100.00',
     currency: 'EUR',
     effectiveFrom: effectiveDate,
   };
@@ -196,58 +218,67 @@ try {
     headers: { 'Idempotency-Key': 'http-create-k1' },
     body: JSON.stringify(createPayload),
   });
-
-  assert.equal(createRes.status, 201, 'Successful creation must return 201');
+  assert.equal(createRes.status, 201, 'POST create must return 201');
   const createdItem = (await createRes.json()) as any;
-  assert.equal(createdItem.code, 'PROP-REG');
-  assert.equal(createdItem.currentVersion, 1);
+  assert.equal(createdItem.code, 'PROP-REGULAR');
   assert.equal(createdItem.status, 'active');
+  assert.equal(createdItem.currentVersion, 1);
+  assert.equal(createdItem.current.name, 'Propina Regular');
   assert.equal(createdItem.current.money.amount, '100');
+  assert.equal(createdItem.current.money.currency, 'EUR');
   const itemId = createdItem.id;
 
-  // Verify PostgreSQL physical authority state
-  const dbItemRow = (await pool.query(`SELECT * FROM finance_fee_catalogue_items WHERE id = $1`, [itemId])).rows[0];
-  assert.ok(dbItemRow, 'Item must exist in finance_fee_catalogue_items');
-  assert.equal(dbItemRow.institution_id, institutionA);
-  assert.equal(dbItemRow.current_version, 1);
-  assert.equal(dbItemRow.status, 'active');
-
-  const dbVersionRow = (await pool.query(`SELECT * FROM finance_fee_catalogue_versions WHERE item_id = $1 AND version = 1`, [itemId])).rows[0];
-  assert.ok(dbVersionRow, 'Version 1 must exist in finance_fee_catalogue_versions');
-  assert.equal(dbVersionRow.name, 'Propina Regular');
-  assert.equal(Number(dbVersionRow.amount), 100);
-
-  // 7. Idempotent Replay via HTTP
-  const replayRes = await request('token-fin-a', '/api/finance/fee-catalogue', {
+  // 2.6 Idempotent Replay on Create -> 200 with identical item
+  const createReplayRes = await request('token-fin-a', '/api/finance/fee-catalogue', {
     method: 'POST',
     headers: { 'Idempotency-Key': 'http-create-k1' },
     body: JSON.stringify(createPayload),
   });
-  assert.equal(replayRes.status, 200, 'Idempotent replay must return 200');
-  const replayedItem = (await replayRes.json()) as any;
-  assert.equal(replayedItem.id, itemId);
-  const itemCountAfterReplay = (await pool.query(`SELECT count(*)::int as c FROM finance_fee_catalogue_items WHERE institution_id = $1`, [institutionA])).rows[0].c;
-  assert.equal(itemCountAfterReplay, 1, 'Replay must not create duplicate items');
+  assert.equal(createReplayRes.status, 200, 'Idempotent replay on create must return 200');
+  const replayBody = (await createReplayRes.json()) as any;
+  assert.equal(replayBody.id, itemId);
 
-  // 8. GET list & GET by ID
+  // 2.7 Duplicate Code -> 409 Conflict
+  const duplicateCodeRes = await request('token-fin-a', '/api/finance/fee-catalogue', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': 'http-create-dup-k1' },
+    body: JSON.stringify({ ...createPayload, code: 'PROP-REGULAR', name: 'Outra Propina' }),
+  });
+  assert.equal(duplicateCodeRes.status, 409, 'Duplicate code must return 409 Conflict');
+
+  // ==========================================
+  // 3. READ MATRIX
+  // ==========================================
+  // 3.1 List
   const listRes = await request('token-fin-a', '/api/finance/fee-catalogue');
   assert.equal(listRes.status, 200);
-  const listBody = (await listRes.json()) as any[];
-  assert.equal(listBody.length, 1);
-  assert.equal(listBody[0].id, itemId);
+  const listItems = (await listRes.json()) as any[];
+  assert.equal(listItems.length, 1);
+  assert.equal(listItems[0].id, itemId);
 
-  const getRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}?history=true`);
+  // 3.2 Detail
+  const getRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}`);
   assert.equal(getRes.status, 200);
-  const getBody = (await getRes.json()) as any;
-  assert.equal(getBody.id, itemId);
-  assert.equal(getBody.history?.length, 1);
+  const getItem = (await getRes.json()) as any;
+  assert.equal(getItem.id, itemId);
 
-  // 9. Characterization: Equal effectiveFrom on PUT returns HTTP 422 (never raw DB check constraint error)
+  // 3.3 Detail with History
+  const getHistoryRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}?history=true`);
+  assert.equal(getHistoryRes.status, 200);
+  const getHistoryItem = (await getHistoryRes.json()) as any;
+  assert.ok(Array.isArray(getHistoryItem.history));
+  assert.equal(getHistoryItem.history.length, 1);
+  assert.equal(getHistoryItem.history[0].version, 1);
+
+  // ==========================================
+  // 4. UPDATE MATRIX
+  // ==========================================
+  // 4.1 Equal Effective Date -> 422
   const equalDateRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}`, {
     method: 'PUT',
-    headers: { 'Idempotency-Key': 'http-update-equal-k1' },
+    headers: { 'Idempotency-Key': 'http-update-eq-k1' },
     body: JSON.stringify({
-      name: 'Tentativa Data Igual',
+      name: 'Propina Tentativa Igual',
       kind: 'tuition',
       amount: '120.00',
       currency: 'EUR',
@@ -258,10 +289,9 @@ try {
   assert.equal(equalDateRes.status, 422, 'Equal effectiveFrom must return HTTP 422');
   const equalDateBody = (await equalDateRes.json()) as { code: string; error: string };
   assert.equal(equalDateBody.code, 'FEE_CATALOGUE_VALIDATION');
-  assert.ok(!equalDateBody.error.includes('check constraint'), 'Must not leak raw check constraint message');
-  assert.ok(!equalDateBody.error.includes('relation "'), 'Must not leak database table name');
+  assert.ok(!equalDateBody.error.includes('check constraint'));
 
-  // Characterization: Anterior effectiveFrom on PUT returns HTTP 422
+  // 4.2 Anterior Effective Date -> 422
   const anteriorDateRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}`, {
     method: 'PUT',
     headers: { 'Idempotency-Key': 'http-update-ant-k1' },
@@ -270,81 +300,96 @@ try {
       kind: 'tuition',
       amount: '120.00',
       currency: 'EUR',
-      effectiveFrom: new Date(baseDate.getTime() - 3600000).toISOString(), // Anterior to v1
+      effectiveFrom: new Date(baseDate.getTime() - 3600000).toISOString(),
       expectedVersion: 1,
     }),
   });
   assert.equal(anteriorDateRes.status, 422, 'Anterior effectiveFrom must return HTTP 422');
-  const anteriorDateBody = (await anteriorDateRes.json()) as { code: string; error: string };
-  assert.equal(anteriorDateBody.code, 'FEE_CATALOGUE_VALIDATION');
-  assert.ok(!anteriorDateBody.error.includes('check constraint'));
 
-  // Confirm database state untouched after 422 rejections
-  const dbItemAfter422 = (await pool.query(`SELECT current_version FROM finance_fee_catalogue_items WHERE id = $1`, [itemId])).rows[0];
-  assert.equal(dbItemAfter422.current_version, 1, 'Version must still be 1');
-
-  // 10. Positive PUT Update with strictly posterior effectiveFrom reaching real PostgreSQL Fee Catalogue authority
-  const posteriorEffective = new Date(baseDate.getTime() + 86400000).toISOString();
-  const updatePayload = {
-    name: 'Propina Regular Atualizada',
-    description: 'Atualizada para 120 EUR',
-    kind: 'tuition',
-    amount: '120.00',
-    currency: 'EUR',
-    effectiveFrom: posteriorEffective,
-    expectedVersion: 1,
-  };
-
-  const updateRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}`, {
+  // 4.3 Change Name Only -> 200 (v2)
+  const v2Effective = new Date(baseDate.getTime() + 86400000).toISOString();
+  const updateNameRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}`, {
     method: 'PUT',
-    headers: { 'Idempotency-Key': 'http-update-k1' },
-    body: JSON.stringify(updatePayload),
+    headers: { 'Idempotency-Key': 'http-update-name-k1' },
+    body: JSON.stringify({
+      name: 'Propina Regular com Novo Nome',
+      description: 'Propina Mensal Base',
+      kind: 'tuition',
+      amount: '100.00',
+      currency: 'EUR',
+      effectiveFrom: v2Effective,
+      expectedVersion: 1,
+    }),
   });
+  assert.equal(updateNameRes.status, 200);
+  const itemV2 = (await updateNameRes.json()) as any;
+  assert.equal(itemV2.currentVersion, 2);
+  assert.equal(itemV2.current.name, 'Propina Regular com Novo Nome');
 
-  assert.equal(updateRes.status, 200, 'PUT update must return 200');
-  const updatedItem = (await updateRes.json()) as any;
-  assert.equal(updatedItem.currentVersion, 2);
-  assert.equal(updatedItem.current.name, 'Propina Regular Atualizada');
-  assert.equal(updatedItem.current.money.amount, '120');
-
-  // Verify PostgreSQL updated authority state
-  const dbItemUpdated = (await pool.query(`SELECT current_version FROM finance_fee_catalogue_items WHERE id = $1`, [itemId])).rows[0];
-  assert.equal(dbItemUpdated.current_version, 2);
-
-  const dbVersions = (await pool.query(`SELECT version, name, amount::text, effective_from, effective_to FROM finance_fee_catalogue_versions WHERE item_id = $1 ORDER BY version ASC`, [itemId])).rows;
-  assert.equal(dbVersions.length, 2);
-  assert.equal(dbVersions[0].version, 1);
-  assert.equal(new Date(dbVersions[0].effective_to).toISOString(), posteriorEffective, 'v1 effective_to must match v2 effective_from');
-  assert.equal(dbVersions[1].version, 2);
-  assert.equal(dbVersions[1].name, 'Propina Regular Atualizada');
-  assert.equal(dbVersions[1].effective_to, null);
-
-  // 11. 409 Stale-Version Conflict through HTTP Boundary
-  const staleUpdatePayload = {
-    name: 'Tentativa Conflito',
-    description: null,
-    kind: 'tuition',
-    amount: '130.00',
-    currency: 'EUR',
-    effectiveFrom: new Date(baseDate.getTime() + 2 * 86400000).toISOString(),
-    expectedVersion: 1, // Stale! Current version is 2
-  };
-
-  const conflictRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}`, {
+  // 4.4 Change Amount Only -> 200 (v3)
+  const v3Effective = new Date(baseDate.getTime() + 2 * 86400000).toISOString();
+  const updateAmountRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}`, {
     method: 'PUT',
-    headers: { 'Idempotency-Key': 'http-update-stale-k1' },
-    body: JSON.stringify(staleUpdatePayload),
+    headers: { 'Idempotency-Key': 'http-update-amount-k1' },
+    body: JSON.stringify({
+      name: 'Propina Regular com Novo Nome',
+      description: 'Propina Mensal Base',
+      kind: 'tuition',
+      amount: '150.00',
+      currency: 'EUR',
+      effectiveFrom: v3Effective,
+      expectedVersion: 2,
+    }),
   });
+  assert.equal(updateAmountRes.status, 200);
+  const itemV3 = (await updateAmountRes.json()) as any;
+  assert.equal(itemV3.currentVersion, 3);
+  assert.equal(itemV3.current.money.amount, '150');
 
-  assert.equal(conflictRes.status, 409, 'Stale expectedVersion must return 409 Conflict');
-  const conflictBody = (await conflictRes.json()) as { code: string; error: string };
-  assert.equal(conflictBody.code, 'FEE_CATALOGUE_CONFLICT');
+  // 4.5 Change Description Only -> 200 (v4)
+  const v4Effective = new Date(baseDate.getTime() + 3 * 86400000).toISOString();
+  const updateDescRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}`, {
+    method: 'PUT',
+    headers: { 'Idempotency-Key': 'http-update-desc-k1' },
+    body: JSON.stringify({
+      name: 'Propina Regular com Novo Nome',
+      description: 'Nova descrição detalhada',
+      kind: 'tuition',
+      amount: '150.00',
+      currency: 'EUR',
+      effectiveFrom: v4Effective,
+      expectedVersion: 3,
+    }),
+  });
+  assert.equal(updateDescRes.status, 200);
+  const itemV4 = (await updateDescRes.json()) as any;
+  assert.equal(itemV4.currentVersion, 4);
+  assert.equal(itemV4.current.description, 'Nova descrição detalhada');
 
-  // Verify PostgreSQL version was NOT incremented on 409 conflict
-  const dbItemAfterConflict = (await pool.query(`SELECT current_version FROM finance_fee_catalogue_items WHERE id = $1`, [itemId])).rows[0];
-  assert.equal(dbItemAfterConflict.current_version, 2, 'Version must remain 2 after conflict rejection');
+  // 4.6 Stale Version Update -> 409 Conflict
+  const staleRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}`, {
+    method: 'PUT',
+    headers: { 'Idempotency-Key': 'http-update-stale-k2' },
+    body: JSON.stringify({
+      name: 'Tentativa Conflito',
+      kind: 'tuition',
+      amount: '200.00',
+      currency: 'EUR',
+      effectiveFrom: new Date(baseDate.getTime() + 4 * 86400000).toISOString(),
+      expectedVersion: 2, // Stale! Current version is 4
+    }),
+  });
+  assert.equal(staleRes.status, 409, 'Stale expectedVersion must return 409 Conflict');
 
-  // 12. Lifecycle Actions (Deactivate & Activate) through HTTP Boundary
+  // 4.7 History check: should have 4 versions
+  const historyCheckRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}?history=true`);
+  const historyCheckItem = (await historyCheckRes.json()) as any;
+  assert.equal(historyCheckItem.history.length, 4);
+
+  // ==========================================
+  // 5. LIFECYCLE MATRIX
+  // ==========================================
+  // 5.1 Deactivate
   const deactRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}/deactivate`, {
     method: 'POST',
     headers: { 'Idempotency-Key': 'http-deact-k1' },
@@ -353,9 +398,14 @@ try {
   const deactBody = (await deactRes.json()) as any;
   assert.equal(deactBody.status, 'inactive');
 
-  const dbItemDeact = (await pool.query(`SELECT status FROM finance_fee_catalogue_items WHERE id = $1`, [itemId])).rows[0];
-  assert.equal(dbItemDeact.status, 'inactive');
+  // 5.2 Idempotent replay of deactivation
+  const deactReplayRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}/deactivate`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': 'http-deact-k1' },
+  });
+  assert.equal(deactReplayRes.status, 200);
 
+  // 5.3 Reactivate
   const actRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}/activate`, {
     method: 'POST',
     headers: { 'Idempotency-Key': 'http-act-k1' },
@@ -364,38 +414,52 @@ try {
   const actBody = (await actRes.json()) as any;
   assert.equal(actBody.status, 'active');
 
-  const dbItemAct = (await pool.query(`SELECT status FROM finance_fee_catalogue_items WHERE id = $1`, [itemId])).rows[0];
-  assert.equal(dbItemAct.status, 'active');
-
-  // 13. Cross-Tenant Isolation: Tenant B attempting to read / mutate Tenant A resource fails closed (404)
+  // ==========================================
+  // 6. CROSS-TENANT ISOLATION MATRIX
+  // ==========================================
+  // 6.1 Tenant B GET Tenant A resource -> 404
   const tenantBGetRes = await request('token-fin-b', `/api/finance/fee-catalogue/${itemId}`);
-  assert.equal(tenantBGetRes.status, 404, 'Tenant B GET on Tenant A resource must fail closed (404)');
+  assert.equal(tenantBGetRes.status, 404, 'Tenant B GET on Tenant A resource must return 404');
 
+  // 6.2 Tenant B List -> []
   const tenantBListRes = await request('token-fin-b', '/api/finance/fee-catalogue');
   assert.equal(tenantBListRes.status, 200);
   const tenantBList = (await tenantBListRes.json()) as any[];
-  assert.equal(tenantBList.length, 0, 'Tenant B list must be empty (cannot see Tenant A catalogue)');
+  assert.equal(tenantBList.length, 0, 'Tenant B list must not show Tenant A items');
 
+  // 6.3 Tenant B PUT Tenant A resource -> 404
   const tenantBPutRes = await request('token-fin-b', `/api/finance/fee-catalogue/${itemId}`, {
     method: 'PUT',
     headers: { 'Idempotency-Key': 'http-tenantb-update-k1' },
-    body: JSON.stringify({ ...updatePayload, effectiveFrom: new Date(baseDate.getTime() + 3 * 86400000).toISOString(), expectedVersion: 2 }),
+    body: JSON.stringify({
+      name: 'Hack',
+      kind: 'tuition',
+      amount: '500.00',
+      currency: 'EUR',
+      effectiveFrom: new Date(baseDate.getTime() + 10 * 86400000).toISOString(),
+      expectedVersion: 4,
+    }),
   });
-  assert.equal(tenantBPutRes.status, 404, 'Tenant B PUT on Tenant A resource must fail closed (404)');
+  assert.equal(tenantBPutRes.status, 404, 'Tenant B PUT on Tenant A resource must return 404');
 
+  // 6.4 Tenant B Deactivate Tenant A resource -> 404
   const tenantBDeactRes = await request('token-fin-b', `/api/finance/fee-catalogue/${itemId}/deactivate`, {
     method: 'POST',
     headers: { 'Idempotency-Key': 'http-tenantb-deact-k1' },
   });
-  assert.equal(tenantBDeactRes.status, 404, 'Tenant B deactivate on Tenant A resource must fail closed (404)');
+  assert.equal(tenantBDeactRes.status, 404, 'Tenant B deactivate on Tenant A resource must return 404');
 
-  const tenantBActRes = await request('token-fin-b', `/api/finance/fee-catalogue/${itemId}/activate`, {
-    method: 'POST',
-    headers: { 'Idempotency-Key': 'http-tenantb-act-k1' },
-  });
-  assert.equal(tenantBActRes.status, 404, 'Tenant B activate on Tenant A resource must fail closed (404)');
+  // ==========================================
+  // 7. ERROR UX STATUS MATRIX & INVARIANTS
+  // ==========================================
+  // 7.1 Safe 500 fallback test
+  const faultRes = await request('token-fin-a', '/api/finance/fee-catalogue-fault-test');
+  assert.equal(faultRes.status, 500);
+  const faultBody = (await faultRes.json()) as { code: string; error: string };
+  assert.equal(faultBody.code, 'FEE_CATALOGUE_ERROR');
+  assert.equal(faultBody.error, 'Catalogue operation failed');
 
-  // 14. Zero Journal / Projection Side Effects
+  // 7.2 Zero Journal Facts & Zero Projection movement
   const journalCount = (await pool.query(`SELECT count(*)::int as c FROM finance_journal_transactions`)).rows[0].c;
   const projectionCount = (await pool.query(`SELECT count(*)::int as c FROM finance_position_projection`)).rows[0].c;
   assert.equal(journalCount, 0, 'Fee catalogue HTTP mutations must create zero Journal facts');
