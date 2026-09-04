@@ -6,16 +6,16 @@ project:
   repository: carlossmiranda1914-lang/NEXUS-WDU-IA
   integrated_baseline:
     branch: main
-    sha: f3ffb1c73f09f33079fcb34d8cad8bab9f5dfe4e
+    sha: e7ab85a1382cd8ac042a344d574ec25e967e80d9
 
 active_work:
   program: FINANCE_FOUNDATION
-  mission: FINANCE-FOUNDATION-08
+  mission: FINANCE-FOUNDATION-INTEGRATION-GATE
   mission_branch: codex/finance-foundation-01
-  durable_remote_checkpoint: ff5b91e40d756dcf9f2363c487386f08c972c9e5
-  activity: IMPLEMENTATION
-  task: TASK-8-LEGACY-AUTHORITY-FENCE-AGGREGATE-GATE
-  task_name: Legacy authority fence and aggregate Finance Foundation gate
+  durable_remote_checkpoint: 95dd350c872229a222eead5d88d79a13776c5955
+  activity: INTEGRATION_SYNC
+  task: FINANCE-FOUNDATION-INTEGRATION-SYNC
+  task_name: Synchronize accepted Finance Foundation with current main and prove integration readiness
   state: READY
   owner: Product Owner
   write_owner: CODEX
@@ -23,12 +23,11 @@ active_work:
   reviewer_mode: READ_ONLY
   risk: HIGH
   resume_rule: >-
-    Resume only FINANCE-FOUNDATION-08 in the existing clean isolated worktree. Treat this as a
-    closure and verification task, not a new feature slice. Discover the real legacy mutable
-    Finance balance path, RED then prove that it cannot alter canonical Journal/projection truth.
-    Build one deterministic fail-fast aggregate Finance Foundation runner over Tasks 1 through 8,
-    run fresh PostgreSQL/migration/tenant/lint/build/diff gates, checkpoint and STOP for independent
-    exact-HEAD review. Do not merge and do not start upper Finance domains.
+    Resume only the Finance Foundation Integration Sync Gate in the existing clean isolated worktree.
+    Fetch origin, confirm origin/main, merge origin/main into codex/finance-foundation-01 with a normal
+    merge commit, STOP before resolving any technical authority conflict, otherwise run the fresh
+    Finance/migration/tenant/lint/build/diff gates, push the synchronized branch and STOP for the
+    Product Owner integration decision. Do not merge Finance into main and do not start upper Finance.
 
 execution:
   one_code_owner_per_unit: true
@@ -38,72 +37,44 @@ execution:
 
 scope:
   authorized:
-    - FINANCE-FOUNDATION-08 Task 8 only
-    - tests/finance-foundation-authority-fence.test.ts
-    - scripts/run-finance-foundation.mjs
-    - package.json narrow Finance test aliases and aggregate gate
+    - FINANCE-FOUNDATION-INTEGRATION-GATE only
+    - merge origin/main into codex/finance-foundation-01 using a normal merge commit
+    - bounded governance documentation reconciliation if merge conflicts are documentation-only
+    - fresh Finance Foundation aggregate and required integration gates
     - execution record updates
-    - one narrowly-proved existing legacy adapter or service fence only if Task 8 RED proves it necessary
   forbidden:
+    - merge codex/finance-foundation-01 into main during this mission
+    - rebase published Finance history
+    - force push
+    - resolve technical authority conflicts by inference
     - new migration or Finance table
-    - reopen Tasks 1 through 7 without concrete regression evidence
     - new Finance product behavior
     - Payment Allocation Reconciliation provider fiscal reporting or Finance UI
-    - import or conversion of legacy balances into confirmed Journal history
-    - second Finance balance projection or authority
-    - direct browser client AI Excel or provider write to Journal
-    - implicit FX or JavaScript-number monetary authority
+    - reopen accepted Tasks 1 through 8 without concrete synchronized regression evidence
+    - re-open adjudicated legacy HTTP E2E residual risk as implementation scope
     - unrelated IAM Enrollment ALUNOS refactor
     - parallel writer
-    - automatic scope expansion
     - CI or safety-gate weakening
-    - force push
-    - merge to main before independent review and Product Owner adjudication
 
 protected_invariants:
-  - Tasks 1 through 7 accepted behavior remains intact
+  - accepted Finance exact-head semantics remain intact unless synchronization proves a concrete conflict
   - Journal remains canonical economic truth
   - projection remains confirmed-only rebuildable read authority
-  - legacy outstandingFees or equivalent mutable fields are not canonical Finance balance authority
-  - mutating legacy convenience balance cannot change canonical Finance position or Journal facts
+  - legacy outstandingFees remains non-canonical Finance authority
   - exact Money and currency separation remain enforced
   - financial context remains server-authoritative and fail closed
-  - idempotency concurrency reversal and recovery contracts remain PostgreSQL-backed
-  - tenant isolation remains fail closed
+  - idempotency concurrency reversal recovery and outbox tenant isolation remain PostgreSQL-backed
   - migration history remains immutable
-  - aggregate gate fails closed and preserves child failures
-  - branch GREEN does not equal integrated main
+  - synchronized branch GREEN does not equal integrated main
 
 gates:
-  product_owner_finance_foundation_spec_approved: true
-  product_owner_finance_foundation_plan_approved: true
-  finance_f0_f4_design_closed: true
-  task_1_accepted_head: 8202dee1cdc7bb6878cf5b044ad2a17eb29b4798
-  task_2_accepted_head: 49e5c06e9b5603cc814bffa047d9f009c2a10549
-  task_3_accepted_head: 2f09580f7814da2fa8b15d063d83f6df53f328b1
-  task_4_accepted_head: 2a84191c22abe31adb39af1e15748b0b48b4e9c8
-  task_5_accepted_head: 6222eabe69cb76322551ba8bcdaea3a0ec2646fd
-  task_6_accepted_head: 3e738704a66f88105f10edb02f517ba965db0d9e
-  task_7_accepted_head: ff5b91e40d756dcf9f2363c487386f08c972c9e5
-  task_1_unresolved_p0: 0
-  task_1_unresolved_p1: 0
-  task_2_unresolved_p0: 0
-  task_2_unresolved_p1: 0
-  task_3_unresolved_p0: 0
-  task_3_unresolved_p1: 0
-  task_4_unresolved_p0: 0
-  task_4_unresolved_p1: 0
-  task_5_unresolved_p0: 0
-  task_5_unresolved_p1: 0
-  task_6_unresolved_p0: 0
-  task_6_unresolved_p1: 0
-  task_7_unresolved_p0: 0
-  task_7_unresolved_p1: 0
-  task_8_red_required: true
-  task_8_real_legacy_path_discovery_required: true
-  task_8_behavioral_legacy_fence_required: true
-  task_8_finance_import_fence_required: true
-  task_8_aggregate_fail_fast_required: true
+  finance_foundation_tasks_1_8_accepted: true
+  accepted_finance_review_head: 95dd350c872229a222eead5d88d79a13776c5955
+  accepted_unresolved_p0: 0
+  accepted_unresolved_p1: 0
+  legacy_http_e2e_residual_risk_adjudicated: true
+  current_main_head_at_authorization: e7ab85a1382cd8ac042a344d574ec25e967e80d9
+  normal_merge_main_into_finance_required: true
   finance_foundation_fresh_aggregate_required: true
   migration_schema_regression_required: true
   fnd01_migration_regression_required: true
@@ -111,17 +82,17 @@ gates:
   lint_required: true
   build_required: true
   diff_check_required: true
-  exact_head_independent_review_required_after_checkpoint: true
+  remote_coherence_required: true
   unresolved_p0: 0
   unresolved_p1: 0
 
 next_program:
   program: FINANCE_FOUNDATION
   roadmap_priority: 6
-  state: IMPLEMENTING_FINAL_GATE
-  authorized_phase: EXECUTION
-  implementation_authorized: true
-  authorization_scope: FINANCE-FOUNDATION-08_ONLY
+  state: INTEGRATION_SYNC_ACTIVE
+  authorized_phase: INTEGRATION_PREPARATION
+  implementation_authorized: false
+  authorization_scope: FINANCE-FOUNDATION-INTEGRATION-GATE_ONLY
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -135,8 +106,10 @@ resource_policy:
     - required_quality_gates
 
 integration:
-  technical_task_checkpoint: TASK_7_ACCEPTED_TASK_8_READY
+  technical_task_checkpoint: TASKS_1_8_ACCEPTED_INTEGRATION_SYNC_READY
   mission_to_main: NOT_READY
+  merge_main_into_finance_branch_authorized: true
+  merge_finance_into_main_authorized: false
   dirty_worktree_allowed: false
 
 recovery:
