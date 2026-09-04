@@ -1,11 +1,12 @@
 # FINANCE-F1-01 — Institutional Fee / Emolument Catalogue
 
-**State:** READY_FOR_PRODUCT_OWNER_APPROVAL
+**State:** READY_FOR_EXECUTION
 **Program:** `FINANCE`
 **Stage:** first upper-Finance functional vertical
 **Planning branch:** `codex/finance-f1-fee-catalogue-prep`
 **Integrated planning baseline:** `main @ 02b7f0a454df922598b56660ce10216956539939`
-**Implementation branch:** not authorized until Product Owner approval
+**Implementation branch:** `codex/finance-f1-fee-catalogue`
+**Product Owner approval:** APPROVED — 2026-09-04
 **DoR evidence:** `docs/roadmap/missions/FINANCE-F1-01_DOR_EVIDENCE.md`
 **Implementation plan:** `docs/superpowers/plans/2026-09-04-finance-f1-fee-catalogue.md`
 
@@ -197,7 +198,7 @@ Using an authorized local test institution:
 
 ## Execution discipline
 
-This is one objective-complete implementation mission. After Product Owner approval, one Codex writer owns normal preflight -> TDD -> implementation -> own-scope fixes -> aggregate gates -> commit/push -> clean remote-coherent checkpoint. Do not return Product Owner micro-checkpoints for normal task boundaries.
+This is one objective-complete implementation mission. Product Owner approval is now granted. One Codex writer owns normal preflight -> TDD -> implementation -> own-scope fixes -> aggregate gates -> commit/push -> clean remote-coherent checkpoint. Do not return Product Owner micro-checkpoints for normal task boundaries.
 
 Independent review begins READ-ONLY against the exact pushed implementation HEAD only after the full vertical evidence is GREEN.
 
