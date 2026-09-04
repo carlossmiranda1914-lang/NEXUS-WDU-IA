@@ -4,186 +4,224 @@
 **Program:** `FINANCE`
 **Stage:** first upper-Finance functional vertical
 **Planning branch:** `codex/finance-f1-fee-catalogue-prep`
-**Integrated baseline:** `main @ 02b7f0a454df922598b56660ce10216956539939`
+**Integrated planning baseline:** `main @ 02b7f0a454df922598b56660ce10216956539939`
 **Implementation branch:** not authorized until Product Owner approval
+**DoR evidence:** `docs/roadmap/missions/FINANCE-F1-01_DOR_EVIDENCE.md`
+**Implementation plan:** `docs/superpowers/plans/2026-09-04-finance-f1-fee-catalogue.md`
 
 ## Mission
 
-Deliver the first real upper-Finance functional vertical after the integrated Finance Foundation: an institution-scoped, server-authoritative **Fee / Emolument Catalogue** that authorized Finance/Institution administrators can create, activate/deactivate, edit through controlled versioned change, list and inspect through the Nexus UI.
+Deliver the first real upper-Finance functional vertical after the integrated Finance Foundation: an institution-scoped, server-authoritative **Fee / Emolument Catalogue** that authorized institutional users can manage through PostgreSQL-backed API and Nexus UI.
 
-The catalogue defines reusable financial charge definitions. It does **not** itself create a student's obligation, receivable, payment, allocation, invoice or Journal economic fact. Those remain later Finance missions.
+The catalogue defines reusable charge definitions. It does **not** itself create a student's obligation, receivable, payment, allocation, invoice or Journal economic fact. Those remain later Finance missions.
 
 The mission is complete only as one coherent vertical: domain contract -> PostgreSQL persistence -> authorization/tenant isolation -> HTTP API -> Nexus UI -> behavioral/negative proof -> human UAT -> exact-HEAD review/integration evidence.
 
+## Verified repository contracts consumed by this mission
+
+The mission is written against the integrated repository, not against assumed interfaces:
+
+- Canonical active institutional context is `InstitutionalContext` from `src/auth/institutional-context.ts`; institution comes from active Membership resolution, not request-body authority.
+- Canonical institutional roles are exactly `institution_admin`, `director`, `secretariat`, `financial`, `teacher`, `student`, `parent`. There is no canonical role named `finance`.
+- Canonical Finance context is `requireFinancialContext()` from `src/modules/finance/financial-context.ts`; currency must be present in the effective profile's enabled currencies and the profile must match the resolved institution.
+- Exact Money uses the integrated Finance Money/exact-decimal contract; authoritative amounts must not use JS floating-point arithmetic.
+- `executeIdempotentFinanceCommand()` and `finance_command_results` are the existing PostgreSQL-backed Finance retry/concurrency boundary for administrative Finance commands that need idempotency.
+- `finance_audit_records` already permits institution-scoped Finance audit records without requiring a Journal transaction (`transaction_id` is nullable); catalogue administrative events may reuse this authority with actor/provenance in metadata rather than creating a parallel audit platform.
+- Current Finance schema has no catalogue authority. Integrated Finance migrations end at `0030`; `0031` is the next free migration number at this planning baseline and must be re-confirmed at implementation preflight.
+- Legacy `students.outstanding_fees` and legacy `invoices` remain non-canonical. Legacy invoice/payment HTTP paths are fenced with `503 CANONICAL_FINANCE_AUTHORITY_REQUIRED`; they are not catalogue authority and must not be reused as such.
+
 ## User-visible outcome
 
-An authorized institutional user can open Finance and manage the institution's real fee/emolument catalogue without fake/local browser authority. At minimum the workspace must support:
+An authorized institutional user can open Finance and manage the institution's real fee/emolument catalogue without fake/local browser authority. At minimum the workspace supports:
 
 - list catalogue items for the active institution;
-- create a catalogue item with stable code, human name/description, exact Money amount and currency compatible with the institution Financial Profile;
-- distinguish a fee/emolument category/type without country-specific fiscal semantics;
-- activate/deactivate an item without deleting historical identity;
-- change mutable commercial/display attributes without rewriting prior effective history;
-- inspect status and effective/version information needed by later obligation rules;
+- create a catalogue item with stable code, human name/description, exact Money amount and enabled currency;
+- distinguish a neutral fee/emolument kind without country-specific fiscal semantics;
+- activate/deactivate without deleting historical identity;
+- edit commercial/display attributes through a new effective version rather than rewriting prior history;
+- inspect current status, current version and effective history needed by later obligation rules;
 - receive explicit validation/conflict/authorization failures rather than optimistic fake success.
 
-## Domain boundary and authority laws
+## Authorization matrix — fixed for this mission
+
+Least-privilege policy for the first catalogue vertical:
+
+| Role | Read catalogue | Create/edit/activate/deactivate |
+| --- | --- | --- |
+| `institution_admin` | allow | allow |
+| `financial` | allow | allow |
+| `director` | allow | deny |
+| `secretariat` | deny | deny |
+| `teacher` | deny | deny |
+| `student` | deny | deny |
+| `parent` | deny | deny |
+
+Only active Memberships in the active institution qualify. Browser role labels, legacy `admin`, Platform Admin notions and payload-supplied institution identifiers never grant authority.
+
+## Canonical persistence model — fixed for this mission
+
+Use the next available append-only migration, expected `0031_finance_fee_catalogue.sql` at the accepted baseline, with two institution-scoped tables:
+
+### `finance_fee_catalogue_items`
+
+- `id UUID PRIMARY KEY`
+- `institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE RESTRICT`
+- `code TEXT NOT NULL`
+- `status TEXT NOT NULL CHECK (status IN ('active','inactive'))`
+- `current_version INTEGER NOT NULL CHECK (current_version > 0)`
+- `created_by_person_id UUID NOT NULL`
+- `created_at TIMESTAMPTZ NOT NULL`
+- `updated_at TIMESTAMPTZ NOT NULL`
+- `UNIQUE (institution_id, code)`
+- `UNIQUE (institution_id, id)` for tenant-safe composite references
+
+### `finance_fee_catalogue_versions`
+
+- `id UUID PRIMARY KEY`
+- `institution_id UUID NOT NULL`
+- `item_id UUID NOT NULL`
+- `version INTEGER NOT NULL CHECK (version > 0)`
+- `name TEXT NOT NULL`
+- `description TEXT NULL`
+- `kind TEXT NOT NULL`
+- `amount NUMERIC(30,12) NOT NULL` with the same explicit no-silent-rounding envelope used by Finance Money persistence
+- `currency TEXT NOT NULL CHECK (currency ~ '^[A-Z]{3}$')`
+- `effective_from TIMESTAMPTZ NOT NULL`
+- `effective_to TIMESTAMPTZ NULL`
+- `created_by_person_id UUID NOT NULL`
+- `created_at TIMESTAMPTZ NOT NULL`
+- tenant-safe FK `(institution_id,item_id)` -> catalogue item
+- `UNIQUE (institution_id,item_id,version)`
+- effective interval check `effective_to IS NULL OR effective_from < effective_to`
+
+Creation inserts item + version 1 atomically. Edit locks the current item, verifies expected version, closes the prior version at the new effective time, inserts version N+1 and advances `current_version` in one transaction. Activation/deactivation changes item lifecycle only; it never rewrites historical versions. There is no normal hard-delete path.
+
+## Domain and authority laws
 
 1. PostgreSQL is authoritative for catalogue state. Browser state, localStorage, fixtures and legacy fee fields are never authority.
-2. Every catalogue item belongs to exactly one institution. Institution/tenant identity comes from authenticated server context, never a trusted request-body tenant selector.
-3. Money uses the integrated exact Finance Money model. No authoritative JS floating-point amount is permitted.
-4. Catalogue currency must be permitted by the institution's authoritative Financial Profile/Currency Registry; missing or invalid Financial Context fails closed.
-5. Stable catalogue identity and code are not silently repurposed. Material changes that could alter the meaning of future charges must preserve effective/version history rather than mutate history in place.
-6. Deactivation prevents future selection by later charge/obligation creation but does not erase the item or prior versions.
-7. A catalogue mutation is administrative configuration, not an economic event. It must not create a confirmed Finance Journal transaction merely because a catalogue item is created/edited/activated/deactivated.
-8. Existing `outstandingFees` or equivalent legacy values remain non-canonical and cannot seed, overwrite or derive catalogue authority.
-9. All writes are authenticated, capability/role checked server-side, audited/provenanced, tenant-safe and idempotent where request retry can duplicate a mutation.
-10. Migration history already integrated is immutable; new schema must use the next canonical migration number discovered from current `main` at execution preflight.
+2. Every catalogue item belongs to exactly one institution. Institution identity comes from authenticated server context.
+3. Money uses the integrated exact Finance Money model and `NUMERIC(30,12)` persistence envelope with explicit rejection of over-scale values.
+4. Catalogue currency must be enabled by the effective `FinancialProfile`; missing/invalid Financial Context fails closed.
+5. Stable catalogue code is institution-scoped and is never silently repurposed.
+6. Material edits create a new effective version; prior versions remain historically readable.
+7. Deactivation prevents future selection by later obligation missions but does not erase identity/history.
+8. Catalogue mutation is administrative configuration, not an economic event. It must create **zero** confirmed Journal transactions and zero projection movement.
+9. Writes are authenticated, role checked server-side, tenant-safe, audited and idempotent through the existing Finance command boundary.
+10. Legacy `outstanding_fees`, legacy invoices and legacy payment routes cannot seed/overwrite/derive catalogue authority.
+11. Migration history `0001`–`0030` is immutable.
 
-## Minimum canonical model
+## Command/API contract — fixed for implementation
 
-The implementation must model these concepts explicitly, while matching established repository naming conventions discovered at preflight:
+Server endpoints, all resolved against authenticated institutional context:
 
-- catalogue item identity;
-- institution ownership;
-- stable institution-scoped code;
-- display name and optional description;
-- neutral item kind/category suitable for international core;
-- exact amount + ISO currency;
-- lifecycle status (`active` / `inactive` minimum);
-- effective/version identity sufficient to preserve historical meaning;
-- created/updated provenance and audit linkage consistent with Nexus authority patterns.
+- `GET /api/finance/fee-catalogue?status=active|inactive|all`
+- `GET /api/finance/fee-catalogue/:id`
+- `POST /api/finance/fee-catalogue`
+- `PUT /api/finance/fee-catalogue/:id`
+- `POST /api/finance/fee-catalogue/:id/activate`
+- `POST /api/finance/fee-catalogue/:id/deactivate`
 
-Do not add Angola-specific tax, invoice, payment-rail or statutory fields to the international core.
+Write requests require an idempotency key and an expected version where concurrency matters. The server constructs the Finance command identity from authenticated `institutionId`, operation namespace, idempotency key and canonical request fingerprint. Payload/query must not select another institution.
 
-## Authorization and tenancy
+Stable error classes:
 
-Implementation must reuse the canonical authenticated Membership/institution context and existing server-side IAM policy patterns. The exact capability names must be derived from current IAM conventions rather than inventing a browser-only role gate.
-
-Mandatory negatives:
-
-- unauthenticated read/write rejected;
-- authenticated member without Finance catalogue authority rejected;
-- cross-institution read rejected or returns no foreign records according to canonical API convention;
-- cross-institution update/deactivate rejected;
-- request body/query cannot override authoritative institution context;
-- inactive/suspended membership cannot mutate catalogue authority.
-
-## Persistence requirements
-
-Create canonical PostgreSQL schema for the catalogue using the repository migration runner and safety policy. Constraints must enforce, at minimum:
-
-- non-null institution ownership;
-- institution-scoped stable-code uniqueness under the chosen lifecycle/version model;
-- valid lifecycle state;
-- exact decimal amount envelope compatible with Finance Money law;
-- explicit currency storage/validation boundary;
-- no hard-delete path for normal lifecycle;
-- deterministic concurrency behavior for conflicting edits/versions.
-
-If versioning uses separate current/version records, both must remain tenant-scoped and transactionally coherent. If the repository's existing effective-version pattern is reused, prove the same invariants behaviorally.
-
-## HTTP contract
-
-Expose a narrow server-authoritative catalogue API following existing Nexus adapter/controller conventions. Required behavior:
-
-- list active/all catalogue items for current institution;
-- fetch one catalogue item/version as needed by the UI;
-- create;
-- update through the approved version/effective-history mechanism;
-- activate/deactivate;
-- deterministic validation/conflict responses;
-- no endpoint accepts browser-supplied institution authority.
-
-Do not expose generic Journal mutation or raw database semantics through this API.
+- `401` unauthenticated;
+- `403` authenticated but role/membership not authorized;
+- `404` missing same-tenant resource without cross-tenant disclosure;
+- `409` duplicate institution code, stale expected version or fingerprint/idempotency conflict;
+- `422` domain/Money/currency/effective-time validation failure.
 
 ## UI slice
 
-Add a Finance catalogue workspace inside the existing Nexus shell, following established responsive and light/dark patterns. It must provide a real institutional workflow, not a demo:
+Add a Finance catalogue workspace inside the existing Nexus shell, responsive and light/dark compatible. It must provide:
 
-- catalogue list with code, name, amount/currency, type/category and status;
-- create/edit interaction with server validation;
-- activate/deactivate action with explicit result/error state;
-- loading, empty, filtered-empty where applicable, retry, forbidden and validation/conflict states;
-- immediate refresh from authoritative server result after successful mutation;
+- list with code, name, amount/currency, kind and status;
+- create/edit interaction backed by the real API;
+- activate/deactivate with explicit confirmation/result/error state;
+- loading, empty, filtered-empty, retry, forbidden, validation and conflict states;
+- authoritative refresh after mutation;
+- current version/effective information visible enough for operational confidence;
 - no localStorage or hard-coded catalogue records;
 - no payment, obligation or invoice controls in this mission.
 
-## Mandatory proof
+## Mandatory RED/GREEN and proof matrix
 
-Use TDD for new behavior. Fresh proof on the implementation HEAD must include:
+Fresh evidence on the implementation HEAD must prove:
 
-1. domain/Money validation RED -> GREEN;
-2. PostgreSQL migration/bootstrap/checksum proof;
-3. PostgreSQL create/read/update-version/activate/deactivate behavior;
-4. same-tenant uniqueness and concurrency conflict behavior;
-5. cross-tenant negative read/write proof;
-6. authorization negatives including inactive/suspended membership;
-7. exact decimal persistence/round-trip proof with no silent rounding;
-8. retry/idempotency proof for mutation boundary where applicable;
-9. proof catalogue mutations do not create confirmed Journal economic facts;
-10. HTTP contract tests for success and negative paths;
-11. UI/client tests for real server-backed states and mutation flow;
-12. Finance Foundation aggregate regression;
-13. FND03 tenant-isolation regression;
-14. lint, production build and `git diff --check`;
-15. human visual UAT against a real local PostgreSQL-backed fixture through the application.
+1. missing catalogue schema/repository contract produces the initial RED;
+2. migration/bootstrap creates exactly the new tenant-safe catalogue authority and preserves migration checksum/history;
+3. create/read and current/history reads are PostgreSQL-backed;
+4. versioned edit preserves version N and creates N+1 atomically;
+5. same institution duplicate code and stale version produce deterministic conflict;
+6. concurrent conflicting edits produce one accepted version progression, never divergent current heads;
+7. cross-tenant direct-ID read/write returns no foreign authority and creates no side effect;
+8. role matrix above is enforced for active Memberships; suspended/revoked/missing Membership cannot mutate;
+9. amount round-trips exactly and over-scale input is rejected rather than silently rounded;
+10. unsupported/disabled currency fails through `requireFinancialContext()`;
+11. replay of the same idempotency key/fingerprint returns one catalogue fact; mismatched fingerprint conflicts;
+12. catalogue create/edit/activate/deactivate create zero confirmed Journal transactions and do not change `finance_position_projection`;
+13. HTTP success + 401/403/404/409/422 contracts are real Express behavior;
+14. UI/client tests prove server-backed list/create/edit/lifecycle/error states;
+15. Finance Foundation aggregate remains GREEN;
+16. FND03 remains GREEN;
+17. migrations isolated, lint, build, `git diff --check` and repository quality gate remain GREEN;
+18. human UAT passes against local authorized PostgreSQL and authenticated institutional context.
 
-Structural/source-string checks may supplement but never replace behavioral/PostgreSQL proof for authority, tenant isolation, exact Money or persistence.
+Structural/source-string checks may supplement but never replace behavioral/PostgreSQL proof for authority, tenant isolation, exact Money, idempotency or persistence.
 
-## UAT target
+## Human UAT target
 
-Using an authorized local test institution and authenticated institutional user:
+Using an authorized local test institution:
 
-1. open Finance -> Fee / Emolument Catalogue;
-2. create a real test item, for example an enrollment fee, using the institution's configured currency;
-3. observe it persisted after refresh/restart;
-4. edit a mutable field/amount through the approved version mechanism and verify history/current state is coherent;
-5. deactivate it and verify the UI/server show inactive state without deleting identity/history;
-6. confirm an unauthorized or wrong-institution context cannot view/mutate it;
-7. confirm no payment/obligation/Journal economic fact was fabricated by catalogue administration.
+1. sign in as `financial` and open Finance -> Fee / Emolument Catalogue;
+2. create `MATRICULA-BASE` (or another neutral test code) in the institution's enabled currency;
+3. refresh/restart and prove persistence;
+4. edit amount/name through expected-version flow and verify prior version remains inspectable;
+5. deactivate and reactivate without deleting history;
+6. sign in/use context as `director` and prove read allowed / mutation denied;
+7. prove wrong-institution and suspended Membership cannot read foreign or mutate authority;
+8. verify Journal count/projection are unchanged by catalogue administration.
 
 ## Explicitly out of scope
 
-- assigning fees to students/enrollments;
+- assigning catalogue items to students/enrollments;
 - obligation/charge generation rules;
-- receivable balance authority beyond the existing Foundation;
 - invoices/receipts/fiscal documents;
-- payment providers or payment confirmation;
-- payment allocation/reconciliation;
-- penalties, discounts or scholarships beyond catalogue base-definition semantics;
-- refunds, payables, treasury, statutory GL or fiscal adapters;
+- payment providers, confirmation, allocation or reconciliation;
+- penalties, discounts, scholarships, refunds;
+- payables, treasury, statutory GL/fiscal adapters;
 - FX conversion/revaluation;
 - reporting/BI/automation;
-- country-specific payment or tax rails;
-- reopening accepted Finance Foundation semantics without concrete regression evidence.
+- country-specific payment/tax rails;
+- reopening accepted Foundation semantics without concrete regression evidence.
 
 ## Execution discipline
 
-This is **one objective-complete implementation mission**, not a sequence of Product Owner micro-prompts. After approval, Codex owns normal preflight -> implementation -> tests -> own-scope fixes -> aggregate gates -> commit/push -> clean/remote-coherent checkpoint. It returns early only for a material STOP condition.
+This is one objective-complete implementation mission. After Product Owner approval, one Codex writer owns normal preflight -> TDD -> implementation -> own-scope fixes -> aggregate gates -> commit/push -> clean remote-coherent checkpoint. Do not return Product Owner micro-checkpoints for normal task boundaries.
 
-Use one implementation branch/worktree and one writer for this authority unit. Independent review starts READ-ONLY against the exact pushed HEAD after implementation evidence is GREEN.
+Independent review begins READ-ONLY against the exact pushed implementation HEAD only after the full vertical evidence is GREEN.
 
-Resource policy: smallest sufficient context, single implementer, targeted tests during RED/GREEN, aggregate gates once the vertical is coherent. Do not trade tenant isolation, data integrity, authorization, behavioral proof or independent review for credit savings.
+## Material STOP conditions only
 
-## STOP conditions
+STOP rather than expand scope if and only if fresh evidence proves one of these conditions:
 
-STOP and report evidence rather than expanding scope if:
+- the accepted active Membership context cannot supply institution/person/role authority required above;
+- `requireFinancialContext()` cannot resolve a valid effective profile for the authorized local UAT institution;
+- next migration number `0031` is no longer free at execution preflight;
+- correct implementation requires changing accepted Journal/Money/reversal/idempotency semantics instead of consuming them;
+- tenant isolation cannot be achieved with canonical context without a broader IAM change;
+- truthful catalogue semantics require obligation/payment/invoice behavior;
+- a blocking Foundation/FND03 regression is caused by this vertical;
+- completion requires weakening a safety/test/CI gate.
 
-- current canonical academic/IAM/Financial Context cannot supply an institution authority required by this mission;
-- implementing catalogue authority requires changing accepted Journal/Money/reversal/idempotency semantics rather than consuming them;
-- a required canonical migration would conflict with current migration history;
-- correct tenant isolation cannot be proved with existing authenticated institution context;
-- the vertical requires obligation/payment/invoice semantics to become truthful;
-- a blocking regression appears in Finance Foundation or FND03 attributable to this work;
-- completion would require weakening a safety/test/CI gate.
+Timeout, long-running gates, formatting, expected REDs, normal own-scope compile/test failures and ordinary implementation work are not Product Owner STOP conditions; persist evidence and continue within the mission.
 
 ## DONE definition
 
-`FINANCE-F1-01` is DONE only when the complete catalogue vertical is real and server-authoritative; PostgreSQL persistence and exact Money behavior pass; auth and cross-tenant negatives pass; lifecycle/version history is proved; HTTP and UI flows are operational; catalogue mutation is proved non-economic with respect to the Journal; Finance Foundation/FND03/lint/build/diff gates are GREEN; human UAT passes; exact implementation HEAD is committed/pushed/clean/remote-coherent; independent exact-HEAD review has P0=0/P1=0 (P2 explicitly adjudicated); and Product Owner authorizes integration.
+`FINANCE-F1-01` is DONE only when the complete catalogue vertical is real and server-authoritative; PostgreSQL exact Money/version/lifecycle behavior passes; the fixed role matrix and tenant negatives pass; HTTP and UI flows are operational; catalogue mutation is proved non-economic with respect to Journal/projection; Foundation/FND03/migration/lint/build/diff/quality gates are GREEN; human UAT passes; exact implementation HEAD is committed/pushed/clean/remote-coherent; independent exact-HEAD review has P0=0/P1=0 with P2 explicitly adjudicated; and Product Owner authorizes integration.
 
-Passing implementation tests alone does not make the mission integrated. `main` becomes authority only after reviewed merge and canonical project-state update.
+Passing implementation tests alone does not make the mission integrated. `main` becomes authority only after reviewed merge and canonical state update.
 
 ## After DONE
 
-The next Finance mission may define **obligation/charge rules tied to canonical academic/enrollment context**, consuming this catalogue and the Finance Foundation. Do not begin it automatically.
+The next Finance mission is **obligation/charge rules tied to canonical academic/enrollment context**, consuming this catalogue and the Finance Foundation. Do not begin it automatically.
