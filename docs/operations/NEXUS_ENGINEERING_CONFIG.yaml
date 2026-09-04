@@ -6,28 +6,27 @@ project:
   repository: carlossmiranda1914-lang/NEXUS-WDU-IA
   integrated_baseline:
     branch: main
-    sha: 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc
+    sha: 02b7f0a454df922598b56660ce10216956539939
 
 active_work:
   program: FINANCE
-  mission: FINANCE-F1-PREPARATION
-  mission_branch: null
-  durable_remote_checkpoint: 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc
-  activity: F1_PREPARATION
-  task: DEFINE_FIRST_FUNCTIONAL_VERTICAL
-  task_name: Define and approve the first upper-Finance functional vertical from the integrated Finance Foundation
-  state: PLANNING
+  mission: FINANCE-F1-01
+  mission_branch: codex/finance-f1-fee-catalogue
+  durable_remote_checkpoint: 02b7f0a454df922598b56660ce10216956539939
+  activity: IMPLEMENTATION
+  task: FEE_CATALOGUE_VERTICAL
+  task_name: Implement the institutional Fee / Emolument Catalogue end to end
+  state: READY_FOR_EXECUTION
   owner: Product Owner
-  write_owner: NONE
+  write_owner: CODEX
   reviewer: NONE
-  reviewer_mode: NOT_APPLICABLE
+  reviewer_mode: READ_ONLY_AFTER_GREEN
   risk: HIGH
   resume_rule: >-
-    Finance Foundation is integrated in main. Do not rerun the completed Integration Sync Gate and do not
-    reopen Tasks 1 through 8 without concrete regression evidence. F1 implementation is not authorized yet.
-    Resume with bounded F1 product/architecture preparation from the integrated main baseline; define and
-    approve the first functional vertical and its mission/implementation contract before creating an F1
-    implementation branch or writing production code.
+    FINANCE-F1-01 is approved for implementation. Execute the complete Fee / Emolument Catalogue vertical
+    from the integrated main baseline and the approved Mission Pack/implementation plan. Do not reopen Finance
+    Foundation Tasks 1 through 8 without concrete regression evidence. Continue through normal RED/GREEN,
+    own-scope fixes, aggregate gates, commit/push and UAT readiness; stop only on a material Mission Pack STOP condition.
 
 execution:
   one_code_owner_per_unit: true
@@ -37,15 +36,19 @@ execution:
 
 scope:
   authorized:
-    - bounded F1 product and architecture preparation
-    - inspect integrated Finance Foundation and canonical roadmap evidence needed to define F1
-    - define the first functional vertical, invariants, proof requirements and implementation mission
-    - governance and planning documentation required to authorize that mission
+    - FINANCE-F1-01 institutional Fee / Emolument Catalogue domain and PostgreSQL authority
+    - append-only catalogue migration after re-confirming the next free migration number
+    - catalogue repository version history lifecycle concurrency idempotency and Finance audit provenance
+    - authenticated institutional authorization and tenant isolation for the fixed F1 role matrix
+    - fee catalogue HTTP API and Nexus UI defined by the approved Mission Pack
+    - behavioral PostgreSQL negative HTTP UI and UAT-readiness proof required by FINANCE-F1-01
+    - own-scope fixes required to make FINANCE-F1-01 gates GREEN
   forbidden:
-    - F1 production implementation before explicit Product Owner approval of the F1 mission
+    - obligation or charge generation for students or enrollments
+    - invoice receipt payment allocation reconciliation provider or fiscal implementation
     - reopen Finance Foundation Tasks 1 through 8 without concrete regression evidence
-    - rerun the completed Finance Foundation Integration Sync Gate
-    - alter accepted Journal Money financial-context idempotency reversal projection outbox or tenant semantics without a new authorized mission
+    - alter accepted Journal Money financial-context reversal projection outbox or tenant semantics outside the approved F1 contract
+    - revive legacy outstandingFees invoices or payment routes as canonical Finance authority
     - force push or published-history rebase
     - unrelated IAM Enrollment ALUNOS refactor
     - parallel writer on the same authority unit
@@ -54,6 +57,7 @@ scope:
 protected_invariants:
   - Finance Foundation Tasks 1 through 8 remain integrated and accepted with P0 0 and P1 0
   - Journal remains canonical economic truth
+  - catalogue administration creates no confirmed Journal fact and no projection movement
   - projection remains confirmed-only rebuildable read authority
   - legacy outstandingFees remains non-canonical Finance authority
   - exact Money and currency separation remain enforced
@@ -64,21 +68,22 @@ protected_invariants:
 gates:
   finance_foundation_integrated: true
   finance_foundation_merge_commit: 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc
+  finance_foundation_closeout_main_commit: 02b7f0a454df922598b56660ce10216956539939
   accepted_finance_review_head: 74d575a574bb4e3dd3cf9652327c6f1c665f393b
   accepted_unresolved_p0: 0
   accepted_unresolved_p1: 0
   legacy_http_e2e_residual_risk_adjudicated: true
-  f1_design_approved: false
-  f1_mission_pack_exists: false
-  f1_implementation_authorized: false
+  f1_design_approved: true
+  f1_mission_pack_exists: true
+  f1_implementation_authorized: true
 
 next_program:
   program: FINANCE
   roadmap_priority: 6
-  state: F1_PREPARATION
-  authorized_phase: PRODUCT_ARCHITECTURE_PREPARATION
-  implementation_authorized: false
-  authorization_scope: DEFINE_AND_APPROVE_FIRST_F1_FUNCTIONAL_VERTICAL
+  state: FINANCE-F1-01_IMPLEMENTATION
+  authorized_phase: IMPLEMENTATION
+  implementation_authorized: true
+  authorization_scope: FINANCE-F1-01_FEE_CATALOGUE
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -95,8 +100,9 @@ integration:
   finance_foundation: INTEGRATED
   finance_foundation_main_commit: 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc
   integration_sync_gate: COMPLETE
-  f1: NOT_STARTED
-  f1_implementation_authorized: false
+  f1: AUTHORIZED_FOR_IMPLEMENTATION
+  f1_mission: FINANCE-F1-01
+  f1_implementation_authorized: true
   dirty_worktree_allowed: false
 
 recovery:
