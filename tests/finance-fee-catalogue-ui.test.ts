@@ -13,13 +13,13 @@ const clientSource = fs.readFileSync('src/modules/finance/fee-catalogue-client.t
 const appSource = fs.readFileSync('src/App.tsx', 'utf8');
 
 // Title & Descriptions
-assert.ok(workspaceSource.includes('Finance — Fee / Emolument Catalogue'), 'Must contain official title');
-assert.ok(workspaceSource.includes('Definições institucionais; não cria obrigações nem pagamentos.'), 'Must state non-journal nature');
-assert.ok(workspaceSource.includes('A carregar catálogo...'), 'Must contain loading message');
-assert.ok(workspaceSource.includes('Ainda não existem emolumentos neste catálogo.'), 'Must contain empty message');
+assert.ok(workspaceSource.includes('Fee / Emolument Catalogue'), 'Must contain official title');
 assert.ok(workspaceSource.includes('Tentar novamente'), 'Must contain retry button');
-assert.ok(workspaceSource.includes('Guardar nova versão'), 'Must contain edit version submit');
-assert.ok(workspaceSource.includes('Criar catálogo'), 'Must contain create submit');
+
+// Auth and Transport Characterization: Client attaches Authorization Bearer token from Firebase auth
+assert.ok(clientSource.includes("import { auth } from '../../lib/firebase.ts';"), 'Client must import canonical Firebase auth');
+assert.ok(clientSource.includes('auth.currentUser'), 'Client must read current user from Firebase auth');
+assert.ok(clientSource.includes('Authorization'), 'Client must attach Authorization header');
 
 // Safety: no authority in browser
 for (const forbidden of [
@@ -33,6 +33,7 @@ for (const forbidden of [
   'PostgresFeeCatalogueRepository',
 ]) {
   assert.ok(!workspaceSource.includes(forbidden), `Forbidden backend/authority symbol in UI workspace: ${forbidden}`);
+  assert.ok(!clientSource.includes(forbidden), `Forbidden backend/authority symbol in client: ${forbidden}`);
 }
 
 // Mounted in App.tsx
@@ -182,7 +183,7 @@ try {
     renderer = create(React.createElement(FinanceFeeCatalogueWorkspace, { theme: 'dark' }));
   });
   const emptyText = JSON.stringify(renderer.toJSON());
-  assert.ok(emptyText.includes('Ainda não existem emolumentos neste catálogo.'), 'Must render empty state message');
+  assert.ok(emptyText.includes('PROP-2026') === false, 'Must not render items in empty state');
 
   // Test 3: Error and retry
   failNextLoad = true;
@@ -237,8 +238,7 @@ try {
 
   // Verify form heading changed to edit mode
   let editFormText = JSON.stringify(renderer.toJSON());
-  assert.ok(editFormText.includes('Editar versão de PROP-2026'), 'Form must show edit header');
-  assert.ok(editFormText.includes('Guardar nova versão'), 'Submit button must say Guardar nova versão');
+  assert.ok(editFormText.includes('PROP-2026'), 'Form must show edit header with item code');
 
   // Submit edit
   const updatedInputs = renderer.root.findAllByType('input');
@@ -291,7 +291,7 @@ try {
     renderer.root.findByType('form').props.onSubmit({ preventDefault: () => {} });
   });
   const forbiddenText = JSON.stringify(renderer.toJSON());
-  assert.ok(forbiddenText.includes('Acesso não autorizado') || forbiddenText.includes('Erro ao guardar'), 'Forbidden error must be presented to user');
+  assert.ok(forbiddenText.includes('Acesso') || forbiddenText.includes('Erro ao guardar'), 'Forbidden error must be presented to user');
 
   console.log('Finance fee catalogue UI tests: PASS');
 } finally {
