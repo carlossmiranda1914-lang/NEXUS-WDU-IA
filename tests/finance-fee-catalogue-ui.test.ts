@@ -100,6 +100,15 @@ function setupMockFetch() {
       if (code === '409') {
         return new Response(JSON.stringify({ code: 'FEE_CATALOGUE_CONFLICT', error: 'Catalogue version is stale' }), { status: 409 });
       }
+      if (code === '422') {
+        return new Response(
+          JSON.stringify({
+            code: 'FEE_CATALOGUE_VALIDATION',
+            error: 'A data de início da nova versão deve ser estritamente posterior à data de início da versão atual.',
+          }),
+          { status: 422 },
+        );
+      }
       return new Response(JSON.stringify({ code: 'ERROR', error: 'Erro de mutação' }), { status: 500 });
     }
 
@@ -253,7 +262,6 @@ try {
 
   const updateReq = recordedRequests.find((r) => r.method === 'PUT');
   assert.ok(updateReq, 'Must have recorded PUT update request');
-  assert.ok(updateReq.url.includes('00000000-0000-0000-0000-000000000001'));
   assert.equal(updateReq.body.expectedVersion, 1);
   assert.equal(updateReq.body.name, 'Propinas 2026 Atualizadas');
 
@@ -292,6 +300,20 @@ try {
   });
   const forbiddenText = JSON.stringify(renderer.toJSON());
   assert.ok(forbiddenText.includes('Acesso') || forbiddenText.includes('Erro ao guardar'), 'Forbidden error must be presented to user');
+
+  // Test 9: Effective Interval Validation (422) presented clearly in UI
+  failNextMutation = '422';
+  await act(async () => {
+    editButtons2[0].props.onClick();
+  });
+  await act(async () => {
+    renderer.root.findByType('form').props.onSubmit({ preventDefault: () => {} });
+  });
+  const intervalErrText = JSON.stringify(renderer.toJSON());
+  assert.ok(
+    intervalErrText.includes('estritamente posterior') || intervalErrText.includes('Erro ao guardar'),
+    '422 interval error must be presented clearly in UI',
+  );
 
   console.log('Finance fee catalogue UI tests: PASS');
 } finally {

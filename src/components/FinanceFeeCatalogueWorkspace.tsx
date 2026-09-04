@@ -144,7 +144,9 @@ export default function FinanceFeeCatalogueWorkspace({ theme = 'dark' }: { theme
             />
           </div>
           <div>
-            <label className="block text-xs text-zinc-400 mb-1">Data Efetiva</label>
+            <label className="block text-xs text-zinc-400 mb-1">
+              {editing ? 'Data Efetiva (início da nova versão)' : 'Data Efetiva'}
+            </label>
             <input
               required
               type="datetime-local"
@@ -152,6 +154,11 @@ export default function FinanceFeeCatalogueWorkspace({ theme = 'dark' }: { theme
               onChange={(e) => setForm((prev: any) => ({ ...prev, effectiveFrom: e.target.value }))}
               className="w-full p-2 border border-zinc-700 rounded bg-zinc-900 text-sm"
             />
+            {editing && (
+              <span className="block text-[11px] text-zinc-500 mt-0.5">
+                Versão atual (v{editing.currentVersion}) ativa desde: {new Date(editing.current.effectiveFrom).toLocaleString('pt-PT')}
+              </span>
+            )}
           </div>
           <div className="sm:col-span-2">
             <label className="block text-xs text-zinc-400 mb-1">Descrição (opcional)</label>
@@ -197,7 +204,7 @@ export default function FinanceFeeCatalogueWorkspace({ theme = 'dark' }: { theme
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-sm tracking-wide">{i.code}</span>
-                  <span className="text-zinc-500">•</span>
+                  <span className="text-zinc-500">·</span>
                   <span className="text-sm">{i.current.name}</span>
                   <span
                     className={`text-xs px-2 py-0.5 rounded ${
@@ -213,13 +220,13 @@ export default function FinanceFeeCatalogueWorkspace({ theme = 'dark' }: { theme
                   <span>
                     {i.current.money.amount} {i.current.money.currency}
                   </span>
-                  <span>•</span>
+                  <span>·</span>
                   <span>{i.current.kind}</span>
-                  <span>•</span>
+                  <span>·</span>
                   <span>v{i.currentVersion}</span>
                   {i.current.description && (
                     <>
-                      <span>•</span>
+                      <span>·</span>
                       <span className="italic">{i.current.description}</span>
                     </>
                   )}
@@ -229,6 +236,12 @@ export default function FinanceFeeCatalogueWorkspace({ theme = 'dark' }: { theme
                 <button
                   type="button"
                   onClick={() => {
+                    const currentEffectiveFrom = new Date(i.current.effectiveFrom);
+                    const now = new Date();
+                    const defaultDate = now.getTime() > currentEffectiveFrom.getTime()
+                      ? now
+                      : new Date(currentEffectiveFrom.getTime() + 60 * 60 * 1000);
+
                     setEditing(i);
                     setForm({
                       code: i.code,
@@ -237,7 +250,7 @@ export default function FinanceFeeCatalogueWorkspace({ theme = 'dark' }: { theme
                       kind: i.current.kind,
                       amount: i.current.money.amount,
                       currency: i.current.money.currency,
-                      effectiveFrom: new Date().toISOString().slice(0, 16),
+                      effectiveFrom: defaultDate.toISOString().slice(0, 16),
                     });
                   }}
                   className="px-3 py-1.5 text-xs rounded border border-zinc-700 hover:bg-zinc-800"

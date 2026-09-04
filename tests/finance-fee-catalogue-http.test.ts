@@ -60,13 +60,14 @@ try {
     client.release();
   }
 
+  const profileEffectiveFrom = new Date(Date.now() - 7 * 86400000).toISOString();
   // Define Financial Profiles Store
   const profiles: FinancialProfileStore = {
     async resolveEffective(instId: string) {
       return {
         institutionId: instId,
         version: 1,
-        effectiveFrom: new Date(Date.now() - 86400000).toISOString(),
+        effectiveFrom: profileEffectiveFrom,
         effectiveTo: null,
         primaryJurisdiction: 'PT',
         functionalCurrency: 'EUR',
@@ -178,7 +179,8 @@ try {
   assert.equal(invalidValBody.code, 'FEE_CATALOGUE_VALIDATION');
 
   // 6. Positive Authorized Mutation reaching real PostgreSQL Fee Catalogue authority
-  const effectiveDate = new Date().toISOString();
+  const baseDate = new Date(Date.now() - 86400000); // Yesterday
+  const effectiveDate = baseDate.toISOString();
   const createPayload = {
     code: 'PROP-REG',
     name: 'Propina Regular',
@@ -240,14 +242,56 @@ try {
   assert.equal(getBody.id, itemId);
   assert.equal(getBody.history?.length, 1);
 
-  // 9. Positive PUT Update reaching real PostgreSQL Fee Catalogue authority
+  // 9. Characterization: Equal effectiveFrom on PUT returns HTTP 422 (never raw DB check constraint error)
+  const equalDateRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}`, {
+    method: 'PUT',
+    headers: { 'Idempotency-Key': 'http-update-equal-k1' },
+    body: JSON.stringify({
+      name: 'Tentativa Data Igual',
+      kind: 'tuition',
+      amount: '120.00',
+      currency: 'EUR',
+      effectiveFrom: effectiveDate, // Equal to v1
+      expectedVersion: 1,
+    }),
+  });
+  assert.equal(equalDateRes.status, 422, 'Equal effectiveFrom must return HTTP 422');
+  const equalDateBody = (await equalDateRes.json()) as { code: string; error: string };
+  assert.equal(equalDateBody.code, 'FEE_CATALOGUE_VALIDATION');
+  assert.ok(!equalDateBody.error.includes('check constraint'), 'Must not leak raw check constraint message');
+  assert.ok(!equalDateBody.error.includes('relation "'), 'Must not leak database table name');
+
+  // Characterization: Anterior effectiveFrom on PUT returns HTTP 422
+  const anteriorDateRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}`, {
+    method: 'PUT',
+    headers: { 'Idempotency-Key': 'http-update-ant-k1' },
+    body: JSON.stringify({
+      name: 'Tentativa Data Anterior',
+      kind: 'tuition',
+      amount: '120.00',
+      currency: 'EUR',
+      effectiveFrom: new Date(baseDate.getTime() - 3600000).toISOString(), // Anterior to v1
+      expectedVersion: 1,
+    }),
+  });
+  assert.equal(anteriorDateRes.status, 422, 'Anterior effectiveFrom must return HTTP 422');
+  const anteriorDateBody = (await anteriorDateRes.json()) as { code: string; error: string };
+  assert.equal(anteriorDateBody.code, 'FEE_CATALOGUE_VALIDATION');
+  assert.ok(!anteriorDateBody.error.includes('check constraint'));
+
+  // Confirm database state untouched after 422 rejections
+  const dbItemAfter422 = (await pool.query(`SELECT current_version FROM finance_fee_catalogue_items WHERE id = $1`, [itemId])).rows[0];
+  assert.equal(dbItemAfter422.current_version, 1, 'Version must still be 1');
+
+  // 10. Positive PUT Update with strictly posterior effectiveFrom reaching real PostgreSQL Fee Catalogue authority
+  const posteriorEffective = new Date(baseDate.getTime() + 86400000).toISOString();
   const updatePayload = {
     name: 'Propina Regular Atualizada',
     description: 'Atualizada para 120 EUR',
     kind: 'tuition',
     amount: '120.00',
     currency: 'EUR',
-    effectiveFrom: new Date(Date.now() + 60000).toISOString(),
+    effectiveFrom: posteriorEffective,
     expectedVersion: 1,
   };
 
@@ -267,19 +311,22 @@ try {
   const dbItemUpdated = (await pool.query(`SELECT current_version FROM finance_fee_catalogue_items WHERE id = $1`, [itemId])).rows[0];
   assert.equal(dbItemUpdated.current_version, 2);
 
-  const dbVersions = (await pool.query(`SELECT version, name, amount::text FROM finance_fee_catalogue_versions WHERE item_id = $1 ORDER BY version ASC`, [itemId])).rows;
+  const dbVersions = (await pool.query(`SELECT version, name, amount::text, effective_from, effective_to FROM finance_fee_catalogue_versions WHERE item_id = $1 ORDER BY version ASC`, [itemId])).rows;
   assert.equal(dbVersions.length, 2);
+  assert.equal(dbVersions[0].version, 1);
+  assert.equal(new Date(dbVersions[0].effective_to).toISOString(), posteriorEffective, 'v1 effective_to must match v2 effective_from');
   assert.equal(dbVersions[1].version, 2);
   assert.equal(dbVersions[1].name, 'Propina Regular Atualizada');
+  assert.equal(dbVersions[1].effective_to, null);
 
-  // 10. 409 Stale-Version Conflict through HTTP Boundary
+  // 11. 409 Stale-Version Conflict through HTTP Boundary
   const staleUpdatePayload = {
     name: 'Tentativa Conflito',
     description: null,
     kind: 'tuition',
     amount: '130.00',
     currency: 'EUR',
-    effectiveFrom: new Date(Date.now() + 120000).toISOString(),
+    effectiveFrom: new Date(baseDate.getTime() + 2 * 86400000).toISOString(),
     expectedVersion: 1, // Stale! Current version is 2
   };
 
@@ -297,7 +344,7 @@ try {
   const dbItemAfterConflict = (await pool.query(`SELECT current_version FROM finance_fee_catalogue_items WHERE id = $1`, [itemId])).rows[0];
   assert.equal(dbItemAfterConflict.current_version, 2, 'Version must remain 2 after conflict rejection');
 
-  // 11. Lifecycle Actions (Deactivate & Activate) through HTTP Boundary
+  // 12. Lifecycle Actions (Deactivate & Activate) through HTTP Boundary
   const deactRes = await request('token-fin-a', `/api/finance/fee-catalogue/${itemId}/deactivate`, {
     method: 'POST',
     headers: { 'Idempotency-Key': 'http-deact-k1' },
@@ -320,7 +367,7 @@ try {
   const dbItemAct = (await pool.query(`SELECT status FROM finance_fee_catalogue_items WHERE id = $1`, [itemId])).rows[0];
   assert.equal(dbItemAct.status, 'active');
 
-  // 12. Cross-Tenant Isolation: Tenant B attempting to read / mutate Tenant A resource fails closed (404)
+  // 13. Cross-Tenant Isolation: Tenant B attempting to read / mutate Tenant A resource fails closed (404)
   const tenantBGetRes = await request('token-fin-b', `/api/finance/fee-catalogue/${itemId}`);
   assert.equal(tenantBGetRes.status, 404, 'Tenant B GET on Tenant A resource must fail closed (404)');
 
@@ -332,7 +379,7 @@ try {
   const tenantBPutRes = await request('token-fin-b', `/api/finance/fee-catalogue/${itemId}`, {
     method: 'PUT',
     headers: { 'Idempotency-Key': 'http-tenantb-update-k1' },
-    body: JSON.stringify({ ...updatePayload, expectedVersion: 2 }),
+    body: JSON.stringify({ ...updatePayload, effectiveFrom: new Date(baseDate.getTime() + 3 * 86400000).toISOString(), expectedVersion: 2 }),
   });
   assert.equal(tenantBPutRes.status, 404, 'Tenant B PUT on Tenant A resource must fail closed (404)');
 
@@ -348,7 +395,7 @@ try {
   });
   assert.equal(tenantBActRes.status, 404, 'Tenant B activate on Tenant A resource must fail closed (404)');
 
-  // 13. Zero Journal / Projection Side Effects
+  // 14. Zero Journal / Projection Side Effects
   const journalCount = (await pool.query(`SELECT count(*)::int as c FROM finance_journal_transactions`)).rows[0].c;
   const projectionCount = (await pool.query(`SELECT count(*)::int as c FROM finance_position_projection`)).rows[0].c;
   assert.equal(journalCount, 0, 'Fee catalogue HTTP mutations must create zero Journal facts');
