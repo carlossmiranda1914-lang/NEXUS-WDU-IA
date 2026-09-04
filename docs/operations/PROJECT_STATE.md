@@ -4,17 +4,21 @@ Updated: 2026-09-04
 
 ## Integrated baseline
 
-`main @ e7ab85a1382cd8ac042a344d574ec25e967e80d9` is the current integrated capability authority. Existing Foundation/IAM/Enrollment/Academic/Student/ALUNOS capability remains integrated. Finance Foundation remains branch-scoped and is not integrated yet.
+`main @ 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc` is the current integrated capability authority. Finance Foundation is integrated: Tasks 1–8 are DONE, P0 = 0 and P1 = 0. F1 implementation is NOT STARTED.
 
-## Finance Foundation accepted implementation state
+## Finance Foundation — closed
 
-Finance Foundation Tasks 1–8 are implementation-complete and independently reviewed on branch `codex/finance-foundation-01`.
+Finance Foundation Tasks 1–8 are integrated in `main` through PR #89.
 
-Accepted exact Finance review checkpoint before sync:
+Accepted exact Finance implementation/review checkpoint before merge:
 
 `74d575a574bb4e3dd3cf9652327c6f1c665f393b`
 
-Independent review outcome at that checkpoint:
+Integration merge commit:
+
+`3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc`
+
+Accepted outcome:
 
 - P0 = 0
 - P1 = 0
@@ -23,67 +27,48 @@ Independent review outcome at that checkpoint:
 - aggregate Finance Foundation gate: PASS
 - FND03 tenant regression: PASS
 - lint/build/diff: PASS
+- PR #89 CI: PASS
+- Finance Foundation Integration Sync Gate: COMPLETE
 
-PR #89 CI is PASS and the Product Owner has authorized the Finance-to-`main` merge. Finance Foundation Tasks 1–8 are accepted with P0 = 0 and P1 = 0. Upper Finance/F1 remains NOT STARTED until that merge is confirmed.
+The former Integration Sync Gate is closed. Do not rerun it and do not treat `codex/finance-foundation-01` as active implementation authority.
 
-## Active executable mission
+## Current stage — F1 preparation
 
-- Mission: `FINANCE FOUNDATION — Integration Sync Gate`
-- Branch: `codex/finance-foundation-01`
-- Mission Pack: `docs/roadmap/missions/FINANCE-FOUNDATION-INTEGRATION-GATE.md`
-- Writer: Codex
-- Reviewer: independent READ-ONLY after synchronized checkpoint if needed
-- Current `origin/main` authority at authorization: `e7ab85a1382cd8ac042a344d574ec25e967e80d9`
+- Program: `FINANCE`
+- Stage: `FINANCE-F1-PREPARATION`
+- State: `PLANNING`
+- Implementation: `NOT STARTED / NOT AUTHORIZED`
+- Active implementation branch: none
+- Active F1 Mission Pack: none yet
+- Owner: Product Owner
 
-The Integration Sync Gate is authorized to merge `origin/main` **into the Finance branch only**, using a normal merge commit, then run fresh blocking Finance/integration gates.
+F1 preparation is a bounded product/architecture step whose purpose is to define and approve the first upper-Finance functional vertical from the integrated Foundation. It is not an executable production-code mission until the Product Owner approves a concrete F1 design/mission contract.
 
-It is **not** authorization to merge Finance into `main` automatically and is not authorization for upper Finance product work.
+## Authorized next action
 
-## Required sequence
+Define the first F1 functional vertical from the integrated `main` baseline. The preparation must establish its user-visible outcome, domain boundary, authority model, persistence/API/UI slice, tenant/auth rules, behavioral and PostgreSQL proof, UAT target, and explicit out-of-scope boundary. After approval, create the F1 Mission Pack and implementation plan/branch. Only then may production implementation begin.
 
-`clean preflight -> fetch origin -> confirm origin/main -> merge origin/main into codex/finance-foundation-01 -> classify conflicts -> STOP on technical/authority conflict -> reconcile bounded governance-only conflicts if applicable -> fresh Finance aggregate -> migrations/FND01/FND03 -> lint -> build -> git diff --check -> push synchronized branch -> remote coherence -> STOP for Product Owner integration decision`.
+## Protected Finance invariants
 
-## Protected invariants
-
-- Finance Foundation accepted semantics at `95dd350c872229a222eead5d88d79a13776c5955` remain unchanged unless a real integration conflict proves otherwise.
 - Journal remains canonical economic truth.
 - projection remains confirmed-only rebuildable read authority.
-- exact Money, financial context, idempotency, reversal concurrency, durable outbox and tenant isolation remain PostgreSQL-backed/fail-closed.
+- exact Money and currency separation remain enforced.
+- financial context remains server-authoritative and fail closed.
+- idempotency, concurrency, reversal, recovery, durable outbox and tenant isolation remain PostgreSQL-backed.
 - legacy `outstandingFees` remains non-canonical Finance authority.
 - migration history remains immutable.
-- no new migration or Finance table is authorized.
-- no Payment, Allocation, Reconciliation, provider, fiscal/reporting or Finance UI work is authorized.
-- no force push or published-history rebase.
-- no merge from Finance branch into `main` during this mission.
-
-## Conflict rule
-
-STOP before resolving any merge conflict that touches:
-
-- Finance authority code;
-- migrations;
-- tenant/auth context;
-- database initialization or migration authority;
-- shared runtime behavior with material Finance impact.
-
-Pure governance/documentation conflicts may be reconciled narrowly to current truth while preserving the accepted Finance status.
+- Finance Foundation Tasks 1–8 are not reopened without concrete regression evidence and explicit authorization.
 
 ## Engineering governance
 
 Operating standard remains: **priority clear, no useless cycles, no silent scope expansion, no false GREEN, advance immediately once sufficient evidence exists.**
 
-This mission is integration preparation only. A synchronized branch-level GREEN still does not equal integrated `main`.
+For F1, prefer one complete functional vertical per mission: domain authority -> persistence/API -> UI -> behavioral/negative proof -> UAT -> integration. Do not fragment normal completion steps into repeated Product Owner/Codex calls.
 
 ## Deferred domains
 
-- Finance Foundation: ACCEPTED, INTEGRATION SYNC ACTIVE.
-- Upper Finance product domains: NOT STARTED / NOT AUTHORIZED.
-- Assessment/Attendance/other roadmap domains: unchanged.
+Until an F1 design is approved, Payment provider integration, Allocation/Reconciliation expansion, fiscal/statutory adapters, reporting/BI and later Finance verticals remain NOT STARTED / NOT AUTHORIZED except where explicitly selected as part of the approved first F1 vertical.
 
 ## Canonical versus branch work
 
-Only merged `main` is integrated capability. The Finance branch remains non-integrated until explicit Product Owner integration decision and merge complete.
-
-## Next authorized action
-
-Synchronize the clean `worktrees/finance-foundation-01` with the current remote branch, execute `FINANCE-FOUNDATION-INTEGRATION-GATE.md`, merge `origin/main` into the Finance branch only, run the required fresh gates and STOP before any merge to `main`.
+Merged `main` is the integrated capability authority. The closeout branch exists only to make this canonical state explicit; it does not authorize F1 production code.
