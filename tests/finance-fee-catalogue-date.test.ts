@@ -21,8 +21,8 @@ assert.equal(parsed.getMinutes(), 45);
 assert.equal(parsed.getTime(), testDate.getTime());
 
 // 2. Current version created in the past (common case)
-const pastEffectiveIso = new Date(Date.now() - 3600000).toISOString(); // 1 hour ago
 const now = new Date(2026, 8, 4, 19, 30, 15, 500); // 19:30:15.500
+const pastEffectiveIso = new Date(now.getTime() - 3600000).toISOString(); // 1 hour before `now`
 const proposedForPast = nextValidEffectiveFrom(pastEffectiveIso, now);
 
 // Must be rounded up to next minute relative to now
