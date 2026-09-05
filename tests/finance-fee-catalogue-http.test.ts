@@ -286,8 +286,8 @@ try {
   }
 } finally {
   if (server) {
+    server.closeAllConnections?.();
     server.close();
-    await once(server, 'close');
   }
   const c = await pool.connect().catch(() => undefined);
   if (c) {

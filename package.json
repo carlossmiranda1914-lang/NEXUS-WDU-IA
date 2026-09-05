@@ -36,6 +36,7 @@
     "test:finance:authority": "tsx tests/finance-foundation-authority-fence.test.ts",
     "test:finance:foundation": "node scripts/run-finance-foundation.mjs",
     "test:finance:f1:fee-catalogue": "node scripts/run-finance-f1-fee-catalogue.mjs",
+    "test:finance:f2:account-obligation": "node scripts/run-finance-f2-account-obligation.mjs",
     "test:artifacts": "node scripts/check-artifacts.mjs",
     "test:postgres-foundation": "node scripts/run-postgres-foundation.mjs",
     "quality-gate": "node scripts/run-quality-gate.mjs",

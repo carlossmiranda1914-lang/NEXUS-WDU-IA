@@ -67,8 +67,7 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const EnrollmentOperationsWorkspace = lazy(() => import('./components/EnrollmentOperationsWorkspace'));
 const StudentRecordWorkspace = lazy(() => import('./components/StudentRecordWorkspace'));
 const TeachersList = lazy(() => import('./components/TeachersList'));
-const FinancialPanel = lazy(() => import('./components/FinancialPanel'));
-const FinanceFeeCatalogueWorkspace = lazy(() => import('./components/FinanceFeeCatalogueWorkspace'));
+const FinanceWorkspace = lazy(() => import('./components/finance/FinanceWorkspace'));
 const CommunicationCenter = lazy(() => import('./components/CommunicationCenter'));
 const SystemConfig = lazy(() => import('./components/SystemConfig'));
 const AIAssistant = lazy(() => import('./components/AIAssistant'));
@@ -2668,7 +2667,7 @@ export default function App() {
                   )}
 
                   {activeTab === 'financials' && (
-                    <FinanceFeeCatalogueWorkspace theme={theme} />
+                    <FinanceWorkspace theme={theme} />
                   )}
 
                   {activeTab === 'communications' && (
