@@ -33,7 +33,7 @@
 ## Audit Remediation (Post-SHA: c7682ff2f83601756368480c2f51bad3379843a3)
 - **P1-A (Adyen Minor Unit Table Alignment):** CLOSED. Derived mapping strictly from official Adyen currency specification: ISK=2 decimals, IDR=0 decimals, CLP=2 decimals, CVE=0 decimals, JPY=0 decimals, BHD=3 decimals, EUR=2 decimals. No generic ISO assumption where Adyen differs. Retains exact BigInt/string conversion and fails controlled on missing/invalid currencies.
 - **P1-B (Remove Premature Allocation States):** CLOSED. `PaymentAllocationStatus` returned to `'unapplied'`. PostgreSQL schema constraint (`chk_finance_payments_allocation_status_f3`) and TypeScript domain types strictly aligned. `partially_applied` and `fully_applied` removed from F3 domain. Zero allocation-derived state exposed in F3.
-- **P2 (Secret Resolver Hardening Follow-up):** RECORDED. Bounded security follow-up: provider secret references (`secretReferenceId`) should ultimately be constrained to an approved payment-secret namespace/allowlist/vault provider (e.g. AWS Secrets Manager, HashiCorp Vault, or restricted namespace) before production. Secret values must never be exposed or logged.
+- **P2 (Secret Resolver Hardening):** CLOSED. Provider secret references restricted strictly to approved payment secret namespaces (`env://NEXUS_PAYMENT_*` and `vault://*`). Generic `process.env` fallback removed. Attempts to resolve unrelated process secrets (such as `DATABASE_URL`, `FIREBASE_PRIVATE_KEY`, `GEMINI_API_KEY`) rejected. Zero raw secret values exposed in browser, projections, logs, or errors. Deterministic test suite added.
 
 ## Final Verification & Evidence Summary
 - **Aggregate Test Suite:** `npm run test:finance:f3:payment-core` (PASS)

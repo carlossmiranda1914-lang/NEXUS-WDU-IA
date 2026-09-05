@@ -19,6 +19,7 @@ const files = [
   'tests/finance-payment-adyen-adapter.test.ts',
   'tests/finance-payment-adyen-webhook-postgres.test.ts',
   'tests/finance-payment-webhook-http.test.ts',
+  'tests/finance-payment-secret-resolver.test.ts',
   'tests/finance-payment-client.test.ts',
   'tests/finance-payment-ui.test.ts',
   'tests/finance-payment-runtime-parity.test.ts',

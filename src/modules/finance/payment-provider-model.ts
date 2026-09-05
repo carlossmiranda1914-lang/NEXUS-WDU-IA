@@ -1,3 +1,5 @@
+import { isApprovedPaymentSecretReference } from './secret-resolver.ts';
+
 export class PaymentProviderValidationError extends Error {
   readonly code = 'PAYMENT_PROVIDER_VALIDATION_ERROR';
   constructor(message: string) {
@@ -136,6 +138,9 @@ export function normalizeSavePaymentProviderConfigInput(input: unknown): SavePay
     throw new PaymentProviderValidationError('Identificador de referência de segredo (secretReferenceId) é obrigatório.');
   }
   const secretReferenceId = raw.secretReferenceId.trim();
+  if (!isApprovedPaymentSecretReference(secretReferenceId)) {
+    throw new PaymentProviderValidationError(`Referência de segredo inválida ou fora do namespace aprovado de pagamentos: ${secretReferenceId}`);
+  }
 
   let webhookEndpointRef: string | undefined = undefined;
   if (typeof raw.webhookEndpointRef === 'string' && raw.webhookEndpointRef.trim()) {
