@@ -30,20 +30,10 @@
 - [x] Task 11: Build F3 aggregate, regression suite, and runtime-parity gate
 - [x] Task 12: Final independent review, sandbox evidence, and Human UAT preparation
 
-## Audit Remediation (Post-SHA: f190c9844c9f3e127fde7551add450962625b8cd)
-- **P0-01 (Adyen Auth Bypass Elimination):** CLOSED. Test mode auth bypass removed. Deterministic HMAC authentication enforced across all environments. Missing/invalid HMAC returns zero economic effect.
-- **P0-02 (EMIS Protocol Inventions Removed):** CLOSED. All guessed headers/payloads removed. Status set to `AWAITING_AUTHORIZED_PROTOCOL`.
-- **P0-03 (Provider Tenant Binding):** CLOSED. Webhook cryptographically authenticates and strictly binds external `merchantAccountCode` to configured `merchantAccountRef`. Mismatched merchant / cross-tenant replay fails closed.
-- **P0-04 (Provenance & Financial Context):** CLOSED. Effective profile resolved strictly via `PostgresFinancialProfileStore`. Migration 0036 establishes `actor_kind` (`human`, `system`, `provider`) with strict schema constraints. No fake persons or zero UUIDs.
-- **P1-05 (Adyen Minor Units):** CLOSED. Official ISO 4217 scales implemented for 0-decimal, 2-decimal, and 3-decimal currencies using exact BigInt math without floats or EUR defaults.
-- **P1-06 (Provider Occurrence Time):** CLOSED. Only set when explicitly and validly provided by provider; never fabricated with local NOW().
-- **P1-07 (Secret Reference Resolution):** CLOSED. `SecretResolver` resolves secrets strictly from `secretReferenceId` server-side. Distinct institution secret references proven without cross-acceptance.
-- **P1-08 (Payer Tenant Safety):** CLOSED. Payer person validated against institutional memberships and financial account parties. Foreign payers rejected.
-- **System Actor Extension Required:** NO (Handled via Migration 0036).
-- **EMIS Multicaixa Status:** `AWAITING_AUTHORIZED_PROTOCOL`
-- **Adyen Sandbox Status:** `BLOCKED_EXTERNAL_DEPENDENCY`
-- **Manual Payment UAT Ready:** `YES`
-- **Overall Finance-F3-01 Status:** `BLOCKED_EXTERNAL_DEPENDENCY`
+## Audit Remediation (Post-SHA: c7682ff2f83601756368480c2f51bad3379843a3)
+- **P1-A (Adyen Minor Unit Table Alignment):** CLOSED. Derived mapping strictly from official Adyen currency specification: ISK=2 decimals, IDR=0 decimals, CLP=2 decimals, CVE=0 decimals, JPY=0 decimals, BHD=3 decimals, EUR=2 decimals. No generic ISO assumption where Adyen differs. Retains exact BigInt/string conversion and fails controlled on missing/invalid currencies.
+- **P1-B (Remove Premature Allocation States):** CLOSED. `PaymentAllocationStatus` returned to `'unapplied'`. PostgreSQL schema constraint (`chk_finance_payments_allocation_status_f3`) and TypeScript domain types strictly aligned. `partially_applied` and `fully_applied` removed from F3 domain. Zero allocation-derived state exposed in F3.
+- **P2 (Secret Resolver Hardening Follow-up):** RECORDED. Bounded security follow-up: provider secret references (`secretReferenceId`) should ultimately be constrained to an approved payment-secret namespace/allowlist/vault provider (e.g. AWS Secrets Manager, HashiCorp Vault, or restricted namespace) before production. Secret values must never be exposed or logged.
 
 ## Final Verification & Evidence Summary
 - **Aggregate Test Suite:** `npm run test:finance:f3:payment-core` (PASS)
@@ -56,5 +46,7 @@
 - **Secret & Artifact Audits:** `npm run test:secrets` (PASS), `npm run test:artifacts` (PASS)
 - **Adyen Sandbox Status:** `ADYEN_SANDBOX=BLOCKED_EXTERNAL_DEPENDENCY` (Real credentials absent in test environment)
 - **EMIS Multicaixa Status:** `EMIS_MULTICAIXA=AWAITING_AUTHORIZED_PROTOCOL`
+- **Manual Payment UAT Ready:** `YES`
+- **Overall Finance-F3-01 Status:** `BLOCKED_EXTERNAL_DEPENDENCY`
 - **Runtime Parity:** Validated at worktree `codex/finance-f3-payment-core-provider-adapter`
 

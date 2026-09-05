@@ -43,7 +43,7 @@ export function calculateAdyenHmac(fields: AdyenHmacFields, hmacKeyHex: string):
 }
 
 const ZERO_DECIMAL_CURRENCIES = new Set([
-  'CVE', 'DJF', 'GNF', 'ISK', 'JPY', 'KMF', 'KRW', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF', 'CLF',
+  'CVE', 'DJF', 'GNF', 'IDR', 'JPY', 'KMF', 'KRW', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF',
 ]);
 
 const THREE_DECIMAL_CURRENCIES = new Set([

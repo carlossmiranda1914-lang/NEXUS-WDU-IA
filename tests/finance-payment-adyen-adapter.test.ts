@@ -166,15 +166,19 @@ const adapter = new AdyenAdapter();
   );
 }
 
-// 6. P1-05 Proof: Minor units conversion across ISO 4217 scales
+// 6. P1-A Proof: Minor units conversion according to official Adyen currency table
 {
-  // 2-decimals: EUR
+  // 2-decimals standard & Adyen exceptions: EUR, CLP, ISK, AOA
   assert.equal(formatAdyenMinorUnits(12550, 'EUR'), '125.50');
   assert.equal(formatAdyenMinorUnits('50', 'EUR'), '0.50');
+  assert.equal(formatAdyenMinorUnits(100000, 'CLP'), '1000.00'); // Adyen CLP = 2 decimals
+  assert.equal(formatAdyenMinorUnits(12500, 'ISK'), '125.00');  // Adyen ISK = 2 decimals
   assert.equal(formatAdyenMinorUnits(100000, 'AOA'), '1000.00');
 
-  // 0-decimals: JPY, KRW
-  assert.equal(formatAdyenMinorUnits(5000, 'JPY'), '5000');
+  // 0-decimals standard & Adyen exceptions: JPY, CVE, IDR, KRW
+  assert.equal(formatAdyenMinorUnits(1500, 'JPY'), '1500');
+  assert.equal(formatAdyenMinorUnits(5000, 'CVE'), '5000');     // Adyen CVE = 0 decimals
+  assert.equal(formatAdyenMinorUnits(250000, 'IDR'), '250000'); // Adyen IDR = 0 decimals
   assert.equal(formatAdyenMinorUnits('1200', 'KRW'), '1200');
 
   // 3-decimals: BHD, KWD, OMR
@@ -184,6 +188,7 @@ const adapter = new AdyenAdapter();
   // Invalid / missing currency rejected
   assert.throws(() => formatAdyenMinorUnits(100, ''), /moeda/i);
   assert.throws(() => formatAdyenMinorUnits(100, 'INVALID'), /moeda/i);
+  assert.throws(() => formatAdyenMinorUnits(100, '12'), /moeda/i);
 }
 
 // 7. P1-06 Proof: Missing eventDate does not fabricate occurrence time

@@ -230,6 +230,24 @@ try {
       /finance_payments_actor_provenance/i
     );
 
+    // 10. P1-B Proof: premature allocation states rejected in PostgreSQL & F3 exposes no allocation-derived state
+    for (const invalidAllocationStatus of ['partially_applied', 'fully_applied', 'applied', 'allocated']) {
+      await assert.rejects(
+        () => client.query(`
+          INSERT INTO finance_payments (
+            id, institution_id, payment_reference, journal_transaction_id, source_type, method,
+            amount, currency, status, allocation_status, provider_key, provider_event_id, provider_transaction_ref,
+            effective_at, financial_profile_version, actor_kind, actor_person_id
+          ) VALUES (
+            gen_random_uuid(), $1, 'PAY-ALLOC-FAIL', $2, 'provider', 'card',
+            50.00, 'EUR', 'confirmed', $3, 'adyen', 'EVT-ALLOC', 'TXN-ALLOC',
+            now(), 1, 'provider', NULL
+          )
+        `, [institutionA, journalProviderId, invalidAllocationStatus]),
+        /chk_finance_payments_allocation_status_f3|allocation_status/i
+      );
+    }
+
     console.log('Finance Payment Schema PostgreSQL: PASS');
   } finally {
     client.release();

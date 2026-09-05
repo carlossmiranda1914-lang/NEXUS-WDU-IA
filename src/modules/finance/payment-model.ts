@@ -12,7 +12,7 @@ export class PaymentValidationError extends Error {
 export type PaymentSourceType = 'manual_offline' | 'provider';
 export type ManualPaymentMethod = 'cash' | 'bank_transfer' | 'external_reference';
 export type PaymentStatus = 'confirmed';
-export type PaymentAllocationStatus = 'unapplied' | 'partially_applied' | 'fully_applied';
+export type PaymentAllocationStatus = 'unapplied';
 export type PaymentActorKind = 'human' | 'system' | 'provider';
 
 export interface Payment {
