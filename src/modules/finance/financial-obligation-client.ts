@@ -108,8 +108,4 @@ export const financialObligationClient = {
     const { fetcher, getToken } = resolveOptions(options);
     return request('/api/finance/obligations', { method: 'POST', headers: { 'Idempotency-Key': key() }, body: JSON.stringify(body) }, fetcher, getToken);
   },
-  cancelObligation: (id: string, reason: string, options?: FinancialObligationRequestOptions | typeof fetch) => {
-    const { fetcher, getToken } = resolveOptions(options);
-    return request(`/api/finance/obligations/${id}/cancel`, { method: 'POST', headers: { 'Idempotency-Key': key() }, body: JSON.stringify({ reason }) }, fetcher, getToken);
-  },
 };

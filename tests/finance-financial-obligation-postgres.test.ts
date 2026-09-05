@@ -1,6 +1,9 @@
 import { strict as assert } from 'node:assert';
-import { Pool } from 'pg';
-import dotenv from 'dotenv';
+import { randomUUID } from 'node:crypto';
+import pg from 'pg';
+import path from 'node:path';
+import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
+import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 import { PostgresFinancialAccountRepository } from '../src/modules/finance/financial-account-repository.ts';
 import { PostgresFinancialObligationRepository } from '../src/modules/finance/financial-obligation-repository.ts';
 import { PostgresFeeCatalogueRepository } from '../src/modules/finance/fee-catalogue-repository.ts';
@@ -8,24 +11,20 @@ import { PostgresFeeTypeRepository } from '../src/modules/finance/fee-type-repos
 import type { InstitutionalContext } from '../src/auth/institutional-context.ts';
 import type { FinancialProfileStore } from '../src/modules/finance/financial-context.ts';
 
-dotenv.config();
-if (process.env.TEST_DATABASE_LOCAL_AUTHORIZED === 'true') {
-  dotenv.config({ path: '.env.test.local', override: true });
-}
-
-const dbUrl = process.env.TEST_DATABASE_URL;
-if (!dbUrl) {
-  console.log('Skipping PostgresFinancialObligationRepository tests (no TEST_DATABASE_URL)');
-  process.exit(0);
-}
-
-const pool = new Pool({ connectionString: dbUrl });
+await verifyApprovedTestConnection();
+const schema = `fin_obl_${randomUUID().replaceAll('-', '')}`;
+const quote = (x: string) => `"${x}"`;
+const pool = new pg.Pool({
+  connectionString: process.env.TEST_DATABASE_URL,
+  options: `-c search_path=${quote(schema)},public`,
+});
 
 const institutionA = '00000000-0000-0000-0000-000000000001';
 const institutionB = '00000000-0000-0000-0000-000000000002';
 const personA = '00000000-0000-0000-0000-000000000011';
 const personB = '00000000-0000-0000-0000-000000000022';
 const studentPersonId = '00000000-0000-0000-0000-000000000033';
+const foreignPersonId = '00000000-0000-0000-0000-000000000099';
 
 const actorA: InstitutionalContext = {
   institutionId: institutionA,
@@ -50,9 +49,10 @@ const actorB: InstitutionalContext = {
 };
 
 const mockProfiles: FinancialProfileStore = {
-  async resolveEffective() {
+  async resolveEffective(instId: string) {
+    if (instId !== institutionA && instId !== institutionB) return null;
     return {
-      institutionId: institutionA,
+      institutionId: instId,
       version: 1,
       effectiveFrom: new Date(Date.now() - 1000000000).toISOString(),
       effectiveTo: null,
@@ -65,21 +65,39 @@ const mockProfiles: FinancialProfileStore = {
   },
 };
 
+const emptyProfiles: FinancialProfileStore = {
+  async resolveEffective() {
+    return null;
+  },
+};
+
 async function runTests() {
   const client = await pool.connect();
   try {
-    // Seed institutions and people
+    await client.query(`CREATE SCHEMA ${quote(schema)}`);
+    await client.query(`SET search_path TO ${quote(schema)},public`);
+    await runMigrations(client, await discoverMigrations(path.resolve('src/db/migrations')));
+
+    // Seed institutions, people, and memberships
     await client.query(`
       INSERT INTO institutions (id, name, slug) VALUES 
         ('${institutionA}', 'Inst A', 'inst-a'),
         ('${institutionB}', 'Inst B', 'inst-b')
       ON CONFLICT (id) DO NOTHING;
 
-      INSERT INTO people (id, name, email) VALUES
-        ('${personA}', 'Person A', 'person.a@test.local'),
-        ('${personB}', 'Person B', 'person.b@test.local'),
-        ('${studentPersonId}', 'Student Silva', 'student.silva@test.local')
+      INSERT INTO people (id, name) VALUES
+        ('${personA}', 'Person A'),
+        ('${personB}', 'Person B'),
+        ('${studentPersonId}', 'Student Silva'),
+        ('${foreignPersonId}', 'Foreign Person')
       ON CONFLICT (id) DO NOTHING;
+
+      INSERT INTO memberships (institution_id, person_id, role, status) VALUES
+        ('${institutionA}', '${personA}', 'institution_admin', 'active'),
+        ('${institutionA}', '${studentPersonId}', 'student', 'active'),
+        ('${institutionB}', '${personB}', 'institution_admin', 'active'),
+        ('${institutionB}', '${foreignPersonId}', 'student', 'active')
+      ON CONFLICT DO NOTHING;
     `);
 
     const accountRepo = new PostgresFinancialAccountRepository(pool);
@@ -158,16 +176,18 @@ async function runTests() {
     assert.equal(obl2.money.amount, '75');
     assert.equal(obl2.feeCatalogueVersion, 2);
 
-    // 7. Idempotency: Replaying with same key returns the exact same obligation
+    // 7. P1-04 Canonical Idempotency: Replaying with same key returns the exact same obligation from command results
     const obl1Replay = await obligationRepo.issue(actorA, {
       financialAccountId: acc.id,
       feeCatalogueItemId: feeItem.id,
       beneficiaryPersonId: studentPersonId,
+      dueAt: obl1.dueAt,
+      notes: 'Mensalidade Outubro 2026',
     }, keyObl1);
     assert.equal(obl1Replay.id, obl1.id);
     assert.equal(obl1Replay.money.amount, '50');
 
-    // 8. Replaying with same key but DIFFERENT payload throws 409 conflict
+    // 8. P1-04 Replaying with same key but DIFFERENT payload throws fingerprint mismatch conflict
     const differentAcc = await accountRepo.create(actorA, {
       name: `Outra Conta ${uid}`,
       primaryPersonId: personA,
@@ -178,20 +198,101 @@ async function runTests() {
         financialAccountId: differentAcc.id,
         feeCatalogueItemId: feeItem.id,
       }, keyObl1);
-    }, (err: any) => err.code === 'FINANCIAL_OBLIGATION_CONFLICT');
+    }, (err: any) => err.message.includes('fingerprint conflict') || err.code === 'FINANCIAL_OBLIGATION_CONFLICT');
 
-    // 9. Tenant isolation: Institution B cannot read or list Institution A obligations
+    // 9. P1-01 Exact Money precision and boundary scale round-trip in PostgreSQL
+    const exactFeeType = await feeTypeRepo.create(actorA, {
+      displayName: `Exact Type ${uid}`,
+      codePrefix: `EX${uid}`.substring(0, 5),
+    }, `key-type-ex-${uid}`);
+
+    const exactFeeItem = await feeCatalogueRepo.create(actorA, {
+      feeTypeId: exactFeeType.result.id,
+      name: 'Exact Item',
+      amount: '123.456789012345',
+      currency: 'EUR',
+      effectiveFrom: new Date(Date.now() - 100000).toISOString(),
+    }, `key-fee-ex-${uid}`);
+
+    const exactObl = await obligationRepo.issue(actorA, {
+      financialAccountId: acc.id,
+      feeCatalogueItemId: exactFeeItem.result.id,
+    }, `key-obl-ex-${uid}`);
+
+    assert.equal(exactObl.money.amount, '123.456789012345', 'Exact 12 decimal scale preserved in round-trip');
+
+    // 10. P1-02 Tenant-Safe Composite Relational Integrity at PostgreSQL boundary
+    // 10a. Cross-tenant financial account in obligation is rejected by DB FK
+    await assert.rejects(async () => {
+      await client.query(
+        `INSERT INTO finance_obligations (
+          institution_id, financial_account_id, fee_catalogue_item_id, fee_catalogue_version,
+          source_type, source_ref, amount, currency, status, financial_profile_version,
+          created_by_person_id, idempotency_key
+        ) VALUES (
+          '${institutionB}', '${acc.id}', '${feeItem.id}', 1,
+          'manual_finance', 'test', 50, 'EUR', 'open', 1,
+          '${personB}', 'test-cross-acc-fk'
+        )`,
+      );
+    }, (err: any) => err.code === '23503', 'Cross-tenant financial account FK must be rejected by PostgreSQL');
+
+    // 10b. Cross-tenant fee catalogue item in obligation is rejected by DB FK
+    const accB = await accountRepo.create(actorB, {
+      name: `Conta Inst B ${uid}`,
+      primaryPersonId: personB,
+    }, `key-acc-b-${uid}`);
+
+    await assert.rejects(async () => {
+      await client.query(
+        `INSERT INTO finance_obligations (
+          institution_id, financial_account_id, fee_catalogue_item_id, fee_catalogue_version,
+          source_type, source_ref, amount, currency, status, financial_profile_version,
+          created_by_person_id, idempotency_key
+        ) VALUES (
+          '${institutionB}', '${accB.id}', '${feeItem.id}', 1,
+          'manual_finance', 'test', 50, 'EUR', 'open', 1,
+          '${personB}', 'test-cross-fee-fk'
+        )`,
+      );
+    }, (err: any) => err.code === '23503', 'Cross-tenant fee catalogue item FK must be rejected by PostgreSQL');
+
+    // 10c. Cross-tenant party in financial account is rejected by DB FK
+    await assert.rejects(async () => {
+      await client.query(
+        `INSERT INTO finance_financial_account_parties (
+          institution_id, financial_account_id, person_id, role, status
+        ) VALUES (
+          '${institutionB}', '${acc.id}', '${personB}', 'primary_debtor', 'active'
+        )`,
+      );
+    }, (err: any) => err.code === '23503', 'Cross-tenant financial account party FK must be rejected by PostgreSQL');
+
+    // 11. P1-03 Missing or Ineffective Financial Profile fails closed
+    const brokenProfileRepo = new PostgresFinancialObligationRepository(pool, emptyProfiles);
+    await assert.rejects(async () => {
+      await brokenProfileRepo.issue(actorA, {
+        financialAccountId: acc.id,
+        feeCatalogueItemId: feeItem.id,
+      }, `key-obl-broken-prof-${uid}`);
+    }, (err: any) => err.message.includes('financial profile') || err.message.includes('Financial profile'));
+
+    // 12. P1-05 Beneficiary Institutional Eligibility: foreign person fails closed
+    await assert.rejects(async () => {
+      await obligationRepo.issue(actorA, {
+        financialAccountId: acc.id,
+        feeCatalogueItemId: feeItem.id,
+        beneficiaryPersonId: foreignPersonId, // Member of Institution B only
+      }, `key-obl-foreign-ben-${uid}`);
+    }, (err: any) => err.message.includes('não pertence à instituição ativa'));
+
+    // 13. Tenant isolation: Institution B cannot read Institution A obligations
     const listB = await obligationRepo.list(actorB);
     assert.ok(!listB.some((o) => o.id === obl1.id));
 
     await assert.rejects(async () => {
       await obligationRepo.getById(actorB, obl1.id);
     }, (err: any) => err.code === 'FINANCIAL_OBLIGATION_NOT_FOUND');
-
-    // 10. Cancel obligation
-    const cancelled = await obligationRepo.cancel(actorA, obl1.id, 'Erro de emissão manual');
-    assert.equal(cancelled.status, 'cancelled');
-    assert.ok(cancelled.notes?.includes('Cancelado: Erro de emissão manual'));
 
     console.log('Finance financial obligation PostgreSQL tests: PASS');
   } finally {

@@ -49,6 +49,7 @@ export function registerFinancialObligationRoutes(
     }
 
     if (
+      (typeof e === 'object' && e !== null && (e as Error).message === 'Finance command fingerprint conflict') ||
       e instanceof FinancialObligationConflictError ||
       (typeof e === 'object' && e !== null && (e as { code?: string }).code === 'FINANCIAL_OBLIGATION_CONFLICT') ||
       (typeof e === 'object' && e !== null && (e as { code?: string }).code === '23505')
@@ -61,6 +62,13 @@ export function registerFinancialObligationRoutes(
       (typeof e === 'object' && e !== null && (e as { code?: string }).code === 'FINANCIAL_OBLIGATION_VALIDATION_ERROR')
     ) {
       return res.status(422).json({ code: 'FINANCIAL_OBLIGATION_VALIDATION_ERROR', error: (e as Error).message || 'Dados de obrigação inválidos' });
+    }
+
+    if (
+      typeof e === 'object' && e !== null &&
+      ((e as Error).message.includes('Financial profile') || (e as Error).message.includes('financial profile'))
+    ) {
+      return res.status(422).json({ code: 'FINANCIAL_PROFILE_UNAVAILABLE', error: (e as Error).message });
     }
 
     console.error('[FINANCIAL-OBLIGATION-HTTP] Unexpected error:', e);
@@ -100,21 +108,6 @@ export function registerFinancialObligationRoutes(
     try {
       const created = await repo.issue(actorCtx, req.body, idempotencyKey);
       res.status(201).json(created);
-    } catch (e) {
-      handle(res, e);
-    }
-  });
-
-  app.post('/api/finance/obligations/:id/cancel', auth, async (req: AuthRequest, res) => {
-    const actorCtx = actor(req, res, true);
-    if (!actorCtx) return;
-    const idempotencyKey = key(req, res);
-    if (!idempotencyKey) return;
-
-    try {
-      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : 'Cancelamento manual';
-      const cancelled = await repo.cancel(actorCtx, req.params.id, reason);
-      res.json(cancelled);
     } catch (e) {
       handle(res, e);
     }

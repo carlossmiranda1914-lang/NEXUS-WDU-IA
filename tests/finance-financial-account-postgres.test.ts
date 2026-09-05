@@ -1,21 +1,19 @@
 import { strict as assert } from 'node:assert';
-import { Pool } from 'pg';
-import dotenv from 'dotenv';
+import { randomUUID } from 'node:crypto';
+import pg from 'pg';
+import path from 'node:path';
+import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
+import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 import { PostgresFinancialAccountRepository } from '../src/modules/finance/financial-account-repository.ts';
 import type { InstitutionalContext } from '../src/auth/institutional-context.ts';
 
-dotenv.config();
-if (process.env.TEST_DATABASE_LOCAL_AUTHORIZED === 'true') {
-  dotenv.config({ path: '.env.test.local', override: true });
-}
-
-const dbUrl = process.env.TEST_DATABASE_URL;
-if (!dbUrl) {
-  console.log('Skipping PostgresFinancialAccountRepository tests (no TEST_DATABASE_URL)');
-  process.exit(0);
-}
-
-const pool = new Pool({ connectionString: dbUrl });
+await verifyApprovedTestConnection();
+const schema = `fin_acc_${randomUUID().replaceAll('-', '')}`;
+const quote = (x: string) => `"${x}"`;
+const pool = new pg.Pool({
+  connectionString: process.env.TEST_DATABASE_URL,
+  options: `-c search_path=${quote(schema)},public`,
+});
 
 const institutionA = '00000000-0000-0000-0000-000000000001';
 const institutionB = '00000000-0000-0000-0000-000000000002';
@@ -47,7 +45,11 @@ const actorB: InstitutionalContext = {
 async function runTests() {
   const client = await pool.connect();
   try {
-    // Seed institutions and people if needed
+    await client.query(`CREATE SCHEMA ${quote(schema)}`);
+    await client.query(`SET search_path TO ${quote(schema)},public`);
+    await runMigrations(client, await discoverMigrations(path.resolve('src/db/migrations')));
+
+    // Seed institutions, people, and memberships
     await client.query(`
       INSERT INTO institutions (id, name, slug) VALUES 
         ('${institutionA}', 'Inst A', 'inst-a'),
@@ -58,6 +60,11 @@ async function runTests() {
         ('${personA}', 'Person A', 'person.a@test.local'),
         ('${personB}', 'Person B', 'person.b@test.local')
       ON CONFLICT (id) DO NOTHING;
+
+      INSERT INTO memberships (institution_id, person_id, role, status) VALUES
+        ('${institutionA}', '${personA}', 'institution_admin', 'active'),
+        ('${institutionB}', '${personB}', 'institution_admin', 'active')
+      ON CONFLICT DO NOTHING;
     `);
 
     const repo = new PostgresFinancialAccountRepository(pool);

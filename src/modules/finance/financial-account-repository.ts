@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import {
   FinancialAccount,
   FinancialAccountParty,
@@ -8,6 +8,7 @@ import {
   normalizeUpdateFinancialAccount,
 } from './financial-account-model.ts';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
+import { executeIdempotentFinanceCommand, createCanonicalFinanceFingerprint } from './finance-command.ts';
 
 export class FinancialAccountNotFoundError extends Error {
   readonly code = 'FINANCIAL_ACCOUNT_NOT_FOUND';
@@ -33,32 +34,38 @@ interface AccountRow {
   status: string;
   created_at: string | Date;
   updated_at: string | Date;
-  party_id?: string;
-  person_id?: string;
-  person_name?: string;
-  party_role?: string;
-  party_status?: string;
+  party_id?: string | null;
+  person_id?: string | null;
+  person_name?: string | null;
+  party_role?: string | null;
+  party_status?: string | null;
 }
 
-function mapAccount(row: AccountRow): FinancialAccount {
+function mapAccount(r: AccountRow): FinancialAccount {
+  const createdAt = r.created_at instanceof Date ? r.created_at.toISOString() : new Date(String(r.created_at)).toISOString();
+  const updatedAt = r.updated_at instanceof Date ? r.updated_at.toISOString() : new Date(String(r.updated_at)).toISOString();
+
+  let primaryParty: FinancialAccountParty | undefined = undefined;
+  if (r.party_id && r.person_id) {
+    primaryParty = {
+      id: String(r.party_id),
+      financialAccountId: String(r.id),
+      personId: String(r.person_id),
+      personName: r.person_name ? String(r.person_name) : undefined,
+      role: (r.party_role || 'primary_debtor') as any,
+      status: (r.party_status || 'active') as any,
+    };
+  }
+
   return {
-    id: String(row.id),
-    institutionId: String(row.institution_id),
-    accountNumber: String(row.account_number),
-    name: String(row.name),
-    status: row.status as FinancialAccountStatus,
-    primaryParty: row.party_id && row.person_id
-      ? {
-          id: String(row.party_id),
-          financialAccountId: String(row.id),
-          personId: String(row.person_id),
-          personName: row.person_name ? String(row.person_name) : undefined,
-          role: 'primary_debtor',
-          status: (row.party_status as 'active' | 'inactive') || 'active',
-        }
-      : undefined,
-    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : new Date(String(row.created_at)).toISOString(),
-    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : new Date(String(row.updated_at)).toISOString(),
+    id: String(r.id),
+    institutionId: String(r.institution_id),
+    accountNumber: String(r.account_number),
+    name: String(r.name),
+    status: r.status as FinancialAccountStatus,
+    primaryParty,
+    createdAt,
+    updatedAt,
   };
 }
 
@@ -96,7 +103,7 @@ export class PostgresFinancialAccountRepository {
     return res.rows.map(mapAccount);
   }
 
-  async getById(actor: InstitutionalContext, id: string): Promise<FinancialAccount> {
+  async getById(actor: InstitutionalContext, id: string, client: Pool | PoolClient = this.pool): Promise<FinancialAccount> {
     const sql = `
       SELECT 
         a.id,
@@ -119,7 +126,7 @@ export class PostgresFinancialAccountRepository {
       WHERE a.institution_id = $1 AND a.id = $2
     `;
 
-    const res = await this.pool.query<AccountRow>(sql, [actor.institutionId, id]);
+    const res = await client.query<AccountRow>(sql, [actor.institutionId, id]);
     if (!res.rows[0]) {
       throw new FinancialAccountNotFoundError();
     }
@@ -127,7 +134,7 @@ export class PostgresFinancialAccountRepository {
     const account = mapAccount(res.rows[0]);
 
     // Load all parties
-    const partiesRes = await this.pool.query<{
+    const partiesRes = await client.query<{
       id: string;
       financial_account_id: string;
       person_id: string;
@@ -162,74 +169,67 @@ export class PostgresFinancialAccountRepository {
   async create(actor: InstitutionalContext, rawInput: unknown, idempotencyKey: string): Promise<FinancialAccount> {
     const input = normalizeCreateFinancialAccount(rawInput);
 
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN');
+    const result = await executeIdempotentFinanceCommand<FinancialAccount>({
+      pool: this.pool,
+      identity: {
+        institutionId: actor.institutionId,
+        operationNamespace: 'finance.account.create',
+        idempotencyKey,
+        canonicalFingerprint: createCanonicalFinanceFingerprint({
+          name: input.name,
+          primaryPersonId: input.primaryPersonId,
+        }),
+      },
+      execute: async (client) => {
+        // Verify person exists and has institutional eligibility in active institution
+        const personRes = await client.query<{ id: string; name: string }>(
+          `SELECT p.id, p.name FROM people p
+           WHERE p.id = $2
+             AND (
+               EXISTS (SELECT 1 FROM memberships m WHERE m.institution_id = $1 AND m.person_id = p.id)
+               OR EXISTS (SELECT 1 FROM enrollment_applications ea WHERE ea.institution_id = $1 AND (ea.student_person_id = p.id OR ea.guardian_person_id = p.id))
+             )`,
+          [actor.institutionId, input.primaryPersonId],
+        );
+        if (!personRes.rows[0]) {
+          throw new FinancialAccountValidationError('Pessoa responsável não encontrada ou não pertence à instituição ativa.');
+        }
 
-      // Verify person exists
-      const personRes = await client.query('SELECT id, name FROM people WHERE id = $1', [input.primaryPersonId]);
-      if (!personRes.rows[0]) {
-        throw new FinancialAccountValidationError('Pessoa responsável não encontrada.');
-      }
-      const personName = String(personRes.rows[0].name);
+        // Increment sequence atomically
+        const counterRes = await client.query<{ last_sequence: number }>(
+          `INSERT INTO finance_financial_account_counters (institution_id, last_sequence, updated_at)
+           VALUES ($1, 1, NOW())
+           ON CONFLICT (institution_id)
+           DO UPDATE SET last_sequence = finance_financial_account_counters.last_sequence + 1, updated_at = NOW()
+           RETURNING last_sequence`,
+          [actor.institutionId],
+        );
+        const seq = counterRes.rows[0].last_sequence;
+        const accountNumber = `CTA-${String(seq).padStart(6, '0')}`;
 
-      // Increment sequence atomically
-      const counterRes = await client.query<{ last_sequence: number }>(
-        `INSERT INTO finance_financial_account_counters (institution_id, last_sequence, updated_at)
-         VALUES ($1, 1, NOW())
-         ON CONFLICT (institution_id)
-         DO UPDATE SET last_sequence = finance_financial_account_counters.last_sequence + 1, updated_at = NOW()
-         RETURNING last_sequence`,
-        [actor.institutionId],
-      );
-      const seq = counterRes.rows[0].last_sequence;
-      const accountNumber = `CTA-${String(seq).padStart(6, '0')}`;
+        // Insert account
+        const accountRes = await client.query<AccountRow>(
+          `INSERT INTO finance_financial_accounts (institution_id, account_number, name, status)
+           VALUES ($1, $2, $3, 'active')
+           RETURNING id, institution_id, account_number, name, status, created_at, updated_at`,
+          [actor.institutionId, accountNumber, input.name],
+        );
+        const acc = accountRes.rows[0];
 
-      // Insert account
-      const accountRes = await client.query<AccountRow>(
-        `INSERT INTO finance_financial_accounts (institution_id, account_number, name, status)
-         VALUES ($1, $2, $3, 'active')
-         RETURNING id, institution_id, account_number, name, status, created_at, updated_at`,
-        [actor.institutionId, accountNumber, input.name],
-      );
-      const acc = accountRes.rows[0];
+        // Insert primary responsible party
+        await client.query(
+          `INSERT INTO finance_financial_account_parties (institution_id, financial_account_id, person_id, role, status)
+           VALUES ($1, $2, $3, 'primary_debtor', 'active')`,
+          [actor.institutionId, acc.id, input.primaryPersonId],
+        );
 
-      // Insert primary responsible party
-      const partyRes = await client.query<{ id: string }>(
-        `INSERT INTO finance_financial_account_parties (institution_id, financial_account_id, person_id, role, status)
-         VALUES ($1, $2, $3, 'primary_debtor', 'active')
-         RETURNING id`,
-        [actor.institutionId, acc.id, input.primaryPersonId],
-      );
+        const createdAccount = await this.getById(actor, acc.id, client);
+        return { resultRef: acc.id, result: createdAccount };
+      },
+      loadResult: (_, resultRef) => this.getById(actor, resultRef),
+    });
 
-      await client.query('COMMIT');
-
-      return {
-        id: String(acc.id),
-        institutionId: String(acc.institution_id),
-        accountNumber: String(acc.account_number),
-        name: String(acc.name),
-        status: 'active',
-        primaryParty: {
-          id: String(partyRes.rows[0].id),
-          financialAccountId: String(acc.id),
-          personId: input.primaryPersonId,
-          personName,
-          role: 'primary_debtor',
-          status: 'active',
-        },
-        createdAt: acc.created_at instanceof Date ? acc.created_at.toISOString() : new Date(String(acc.created_at)).toISOString(),
-        updatedAt: acc.updated_at instanceof Date ? acc.updated_at.toISOString() : new Date(String(acc.updated_at)).toISOString(),
-      };
-    } catch (e: any) {
-      await client.query('ROLLBACK');
-      if (e.code === '23505') {
-        throw new FinancialAccountConflictError('Já existe uma conta financeira com este número ou dados nesta instituição.');
-      }
-      throw e;
-    } finally {
-      client.release();
-    }
+    return result.result;
   }
 
   async update(actor: InstitutionalContext, id: string, rawInput: unknown): Promise<FinancialAccount> {

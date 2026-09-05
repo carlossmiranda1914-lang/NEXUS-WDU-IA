@@ -37,10 +37,9 @@ assert.equal(capturedUrl, '/api/finance/obligations');
 assert.equal(capturedInit?.method, 'POST');
 assert.ok(capturedInit?.headers?.['Idempotency-Key']);
 
-// 5. Cancel obligation sends reason
-await financialObligationClient.cancelObligation('obl-123', 'Motivo teste', { fetcher: fakeFetcher, getToken: fakeGetToken });
-assert.equal(capturedUrl, '/api/finance/obligations/obl-123/cancel');
-assert.equal(capturedInit?.method, 'POST');
-assert.equal(JSON.parse(capturedInit?.body).reason, 'Motivo teste');
+// 5. List eligible person options
+await financialObligationClient.listPersonOptions({ fetcher: fakeFetcher, getToken: fakeGetToken });
+assert.equal(capturedUrl, '/api/finance/financial-accounts/persons');
+assert.equal(capturedInit?.headers?.Authorization, 'Bearer test-bearer-token');
 
 console.log('Finance financial obligation client tests: PASS');

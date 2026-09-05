@@ -18,47 +18,33 @@ export function FinancialObligationsListView({
   const [items, setItems] = useState<FinancialObligationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'cancelled'>('all');
   const [search, setSearch] = useState('');
 
   const loadItems = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = (await financialObligationClient.listObligations({
-        status: statusFilter,
-      })) as FinancialObligationRecord[];
+      const data = (await financialObligationClient.listObligations()) as FinancialObligationRecord[];
       setItems(data || []);
     } catch (err: any) {
       setError(err?.message || 'Falha ao carregar obrigações financeiras');
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, []);
 
   useEffect(() => {
     void loadItems();
   }, [loadItems, refreshTrigger]);
 
-  const handleCancel = async (id: string) => {
-    const reason = window.prompt('Indique o motivo do cancelamento da obrigação:');
-    if (!reason || !reason.trim()) return;
-
-    try {
-      await financialObligationClient.cancelObligation(id, reason.trim());
-      await loadItems();
-    } catch (err: any) {
-      alert(err?.message || 'Erro ao cancelar obrigação');
-    }
-  };
-
   const filteredItems = (items || []).filter((item) => {
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     return (
-      (item.accountDisplayReference && item.accountDisplayReference.toLowerCase().includes(q)) ||
-      (item.feeCode && item.feeCode.toLowerCase().includes(q)) ||
-      (item.feeName && item.feeName.toLowerCase().includes(q)) ||
+      (item.accountNumber && item.accountNumber.toLowerCase().includes(q)) ||
+      (item.accountName && item.accountName.toLowerCase().includes(q)) ||
+      (item.feeItemCode && item.feeItemCode.toLowerCase().includes(q)) ||
+      (item.feeItemName && item.feeItemName.toLowerCase().includes(q)) ||
       (item.beneficiaryName && item.beneficiaryName.toLowerCase().includes(q)) ||
       (item.sourceType && item.sourceType.toLowerCase().includes(q)) ||
       item.id.toLowerCase().includes(q)
@@ -97,44 +83,10 @@ export function FinancialObligationsListView({
         </div>
       </div>
 
-      {/* Filters & Search */}
+      {/* Search */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <div className="inline-flex rounded-lg p-1 bg-zinc-900 border border-zinc-800">
-            <button
-              type="button"
-              onClick={() => setStatusFilter('all')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                statusFilter === 'all'
-                  ? 'bg-zinc-800 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Todas
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('open')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                statusFilter === 'open'
-                  ? 'bg-emerald-900/50 text-emerald-300 border border-emerald-800/60 shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Abertas
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter('cancelled')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                statusFilter === 'cancelled'
-                  ? 'bg-zinc-800 text-white shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Canceladas
-            </button>
-          </div>
+        <div className="text-xs text-zinc-400">
+          Total registado: <span className="font-semibold text-zinc-200">{filteredItems.length}</span> obrigações abertas
         </div>
 
         <div className="w-full sm:w-72">
@@ -197,28 +149,27 @@ export function FinancialObligationsListView({
                   <th className="py-3 px-4 font-semibold">Origem</th>
                   <th className="py-3 px-4 font-semibold">Data Emissão</th>
                   <th className="py-3 px-4 font-semibold">Vencimento</th>
-                  <th className="py-3 px-4 font-semibold">Estado</th>
-                  <th className="py-3 px-4 font-semibold text-right">Ações</th>
+                  <th className="py-3 px-4 font-semibold text-right">Estado</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/60">
                 {filteredItems.map((item) => (
                   <tr key={item.id} className="hover:bg-zinc-800/30 transition-colors">
                     <td className="py-3.5 px-4 font-medium text-white">
-                      <div>{item.accountDisplayReference || 'Conta'}</div>
-                      <div className="text-[11px] text-zinc-500 font-mono">{item.financialAccountId}</div>
+                      <div>{item.accountNumber || 'Conta'}</div>
+                      <div className="text-[11px] text-zinc-500">{item.accountName || item.financialAccountId}</div>
                     </td>
                     <td className="py-3.5 px-4 text-zinc-300">
                       {item.beneficiaryName || <span className="text-zinc-500 italic">Titular da Conta</span>}
                     </td>
                     <td className="py-3.5 px-4">
-                      <div className="text-zinc-200">{item.feeName || 'Emolumento'}</div>
+                      <div className="text-zinc-200">{item.feeItemName || 'Emolumento'}</div>
                       <div className="text-[11px] text-zinc-500 font-mono">
-                        {item.feeCode} (v{item.feeCatalogueVersion})
+                        {item.feeItemCode} (v{item.feeCatalogueVersion})
                       </div>
                     </td>
                     <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-400">
-                      {item.amount} {item.currency}
+                      {item.money.amount} {item.money.currency}
                     </td>
                     <td className="py-3.5 px-4 text-zinc-400 font-mono text-[11px]">
                       {item.sourceType}
@@ -229,27 +180,10 @@ export function FinancialObligationsListView({
                     <td className="py-3.5 px-4 text-zinc-400">
                       {item.dueAt ? new Date(item.dueAt).toLocaleDateString('pt-PT') : <span className="text-zinc-500">-</span>}
                     </td>
-                    <td className="py-3.5 px-4">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
-                          item.status === 'open'
-                            ? 'bg-emerald-950/60 border border-emerald-800/80 text-emerald-300'
-                            : 'bg-zinc-800 border border-zinc-700 text-zinc-400'
-                        }`}
-                      >
-                        {item.status === 'open' ? 'Aberta' : 'Cancelada'}
-                      </span>
-                    </td>
                     <td className="py-3.5 px-4 text-right">
-                      {item.status === 'open' && (
-                        <button
-                          type="button"
-                          onClick={() => handleCancel(item.id)}
-                          className="text-xs text-red-400 hover:text-red-300 transition-colors cursor-pointer"
-                        >
-                          Anular
-                        </button>
-                      )}
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-950/60 border border-emerald-800/80 text-emerald-300">
+                        Aberta
+                      </span>
                     </td>
                   </tr>
                 ))}

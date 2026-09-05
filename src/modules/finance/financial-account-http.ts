@@ -47,6 +47,7 @@ export function registerFinancialAccountRoutes(
     }
 
     if (
+      (typeof e === 'object' && e !== null && (e as Error).message === 'Finance command fingerprint conflict') ||
       e instanceof FinancialAccountConflictError ||
       (typeof e === 'object' && e !== null && (e as { code?: string }).code === 'FINANCIAL_ACCOUNT_CONFLICT') ||
       (typeof e === 'object' && e !== null && (e as { code?: string }).code === '23505')
@@ -64,6 +65,24 @@ export function registerFinancialAccountRoutes(
     console.error('[FINANCIAL-ACCOUNT-HTTP] Unexpected error:', e);
     return res.status(500).json({ code: 'FINANCIAL_ACCOUNT_ERROR', error: 'Operação de conta financeira falhou' });
   };
+
+  app.get('/api/finance/financial-accounts/persons', auth, async (req: AuthRequest, res) => {
+    const actorCtx = actor(req, res, false);
+    if (!actorCtx) return;
+    try {
+      const result = await pool.query<{ id: string; name: string; email: string | null }>(
+        `SELECT DISTINCT p.id, p.name, NULL::text AS email
+         FROM people p
+         WHERE EXISTS (SELECT 1 FROM memberships m WHERE m.institution_id = $1 AND m.person_id = p.id)
+            OR EXISTS (SELECT 1 FROM enrollment_applications ea WHERE ea.institution_id = $1 AND (ea.student_person_id = p.id OR ea.guardian_person_id = p.id))
+         ORDER BY p.name ASC`,
+        [actorCtx.institutionId],
+      );
+      res.json(result.rows);
+    } catch (e) {
+      handle(res, e);
+    }
+  });
 
   app.get('/api/finance/financial-accounts', auth, async (req: AuthRequest, res) => {
     const actorCtx = actor(req, res, false);

@@ -1,4 +1,12 @@
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import dotenv from 'dotenv';
+
+const envTestLocal = path.resolve(process.cwd(), '.env.test.local');
+if (existsSync(envTestLocal)) {
+  dotenv.config({ path: envTestLocal, override: true });
+}
 
 const files = [
   'tests/finance-fee-catalogue-safety.test.ts',

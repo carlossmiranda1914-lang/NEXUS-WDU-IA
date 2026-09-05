@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { Money } from './money.ts';
 import {
   FinancialObligation,
@@ -7,7 +7,8 @@ import {
   normalizeIssueObligationInput,
 } from './financial-obligation-model.ts';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
-import type { FinancialProfileStore } from './financial-context.ts';
+import { FinancialProfileStore, requireFinancialContext } from './financial-context.ts';
+import { executeIdempotentFinanceCommand, createCanonicalFinanceFingerprint } from './finance-command.ts';
 
 export class FinancialObligationNotFoundError extends Error {
   readonly code = 'FINANCIAL_OBLIGATION_NOT_FOUND';
@@ -133,11 +134,11 @@ export class PostgresFinancialObligationRepository {
         o.created_at,
         o.updated_at
       FROM finance_obligations o
-      JOIN finance_financial_accounts a ON a.id = o.financial_account_id
+      JOIN finance_financial_accounts a ON (a.institution_id = o.institution_id AND a.id = o.financial_account_id)
       LEFT JOIN people p ON p.id = o.beneficiary_person_id
-      JOIN finance_fee_catalogue_items fci ON fci.id = o.fee_catalogue_item_id
+      JOIN finance_fee_catalogue_items fci ON (fci.institution_id = o.institution_id AND fci.id = o.fee_catalogue_item_id)
       JOIN finance_fee_catalogue_versions fcv 
-        ON fcv.item_id = o.fee_catalogue_item_id AND fcv.version = o.fee_catalogue_version
+        ON (fcv.institution_id = o.institution_id AND fcv.item_id = o.fee_catalogue_item_id AND fcv.version = o.fee_catalogue_version)
       WHERE ${conditions.join(' AND ')}
       ORDER BY o.effective_at DESC, o.created_at DESC
     `;
@@ -146,7 +147,7 @@ export class PostgresFinancialObligationRepository {
     return res.rows.map(mapObligation);
   }
 
-  async getById(actor: InstitutionalContext, id: string): Promise<FinancialObligation> {
+  async getById(actor: InstitutionalContext, id: string, client: Pool | PoolClient = this.pool): Promise<FinancialObligation> {
     const sql = `
       SELECT 
         o.id,
@@ -174,15 +175,15 @@ export class PostgresFinancialObligationRepository {
         o.created_at,
         o.updated_at
       FROM finance_obligations o
-      JOIN finance_financial_accounts a ON a.id = o.financial_account_id
+      JOIN finance_financial_accounts a ON (a.institution_id = o.institution_id AND a.id = o.financial_account_id)
       LEFT JOIN people p ON p.id = o.beneficiary_person_id
-      JOIN finance_fee_catalogue_items fci ON fci.id = o.fee_catalogue_item_id
+      JOIN finance_fee_catalogue_items fci ON (fci.institution_id = o.institution_id AND fci.id = o.fee_catalogue_item_id)
       JOIN finance_fee_catalogue_versions fcv 
-        ON fcv.item_id = o.fee_catalogue_item_id AND fcv.version = o.fee_catalogue_version
+        ON (fcv.institution_id = o.institution_id AND fcv.item_id = o.fee_catalogue_item_id AND fcv.version = o.fee_catalogue_version)
       WHERE o.institution_id = $1 AND o.id = $2
     `;
 
-    const res = await this.pool.query<ObligationRow>(sql, [actor.institutionId, id]);
+    const res = await client.query<ObligationRow>(sql, [actor.institutionId, id]);
     if (!res.rows[0]) {
       throw new FinancialObligationNotFoundError();
     }
@@ -192,142 +193,123 @@ export class PostgresFinancialObligationRepository {
   async issue(actor: InstitutionalContext, rawInput: unknown, idempotencyKey: string): Promise<FinancialObligation> {
     const input = normalizeIssueObligationInput(rawInput);
 
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      // Check idempotency replay
-      const existingRes = await client.query<ObligationRow>(
-        `SELECT id, financial_account_id, fee_catalogue_item_id FROM finance_obligations 
-         WHERE institution_id = $1 AND idempotency_key = $2`,
-        [actor.institutionId, idempotencyKey],
-      );
-      if (existingRes.rows[0]) {
-        const existing = existingRes.rows[0];
-        if (
-          existing.financial_account_id === input.financialAccountId &&
-          existing.fee_catalogue_item_id === input.feeCatalogueItemId
-        ) {
-          await client.query('COMMIT');
-          return this.getById(actor, existing.id);
+    const result = await executeIdempotentFinanceCommand<FinancialObligation>({
+      pool: this.pool,
+      identity: {
+        institutionId: actor.institutionId,
+        operationNamespace: 'finance.obligation.issue',
+        idempotencyKey,
+        canonicalFingerprint: createCanonicalFinanceFingerprint(input),
+      },
+      execute: async (client) => {
+        // Verify Financial Account exists in this institution and is active
+        const accountRes = await client.query<{ id: string; status: string }>(
+          `SELECT id, status FROM finance_financial_accounts WHERE institution_id = $1 AND id = $2`,
+          [actor.institutionId, input.financialAccountId],
+        );
+        if (!accountRes.rows[0]) {
+          throw new FinancialObligationValidationError('Conta financeira não encontrada.');
         }
-        throw new FinancialObligationConflictError('Chave de idempotência reutilizada com parâmetros diferentes.');
-      }
-
-      // Verify Financial Account exists and is active
-      const accountRes = await client.query<{ id: string; status: string }>(
-        `SELECT id, status FROM finance_financial_accounts WHERE institution_id = $1 AND id = $2`,
-        [actor.institutionId, input.financialAccountId],
-      );
-      if (!accountRes.rows[0]) {
-        throw new FinancialObligationValidationError('Conta financeira não encontrada.');
-      }
-      if (accountRes.rows[0].status !== 'active') {
-        throw new FinancialObligationValidationError('A conta financeira selecionada está inativa.');
-      }
-
-      // Verify beneficiary if present
-      if (input.beneficiaryPersonId) {
-        const beneficiaryRes = await client.query('SELECT id FROM people WHERE id = $1', [input.beneficiaryPersonId]);
-        if (!beneficiaryRes.rows[0]) {
-          throw new FinancialObligationValidationError('Pessoa beneficiária não encontrada.');
+        if (accountRes.rows[0].status !== 'active') {
+          throw new FinancialObligationValidationError('A conta financeira selecionada está inativa.');
         }
-      }
 
-      // Resolve active Fee Catalogue Item and its current version snapshot
-      const feeItemRes = await client.query<{
-        id: string;
-        status: string;
-        current_version: number;
-        amount: string;
-        currency: string;
-      }>(
-        `SELECT i.id, i.status, i.current_version, v.amount, v.currency
-         FROM finance_fee_catalogue_items i
-         JOIN finance_fee_catalogue_versions v 
-           ON v.item_id = i.id AND v.version = i.current_version
-         WHERE i.institution_id = $1 AND i.id = $2`,
-        [actor.institutionId, input.feeCatalogueItemId],
-      );
-      if (!feeItemRes.rows[0]) {
-        throw new FinancialObligationValidationError('Item do catálogo de emolumentos não encontrado.');
-      }
-      if (feeItemRes.rows[0].status !== 'active') {
-        throw new FinancialObligationValidationError('O item do catálogo de emolumentos selecionado está inativo.');
-      }
+        // Verify beneficiary institutional eligibility in this institution
+        if (input.beneficiaryPersonId) {
+          const beneficiaryRes = await client.query(
+            `SELECT p.id FROM people p
+             WHERE p.id = $2
+               AND (
+                 EXISTS (SELECT 1 FROM memberships m WHERE m.institution_id = $1 AND m.person_id = p.id)
+                 OR EXISTS (SELECT 1 FROM enrollment_applications ea WHERE ea.institution_id = $1 AND (ea.student_person_id = p.id OR ea.guardian_person_id = p.id))
+               )`,
+            [actor.institutionId, input.beneficiaryPersonId],
+          );
+          if (!beneficiaryRes.rows[0]) {
+            throw new FinancialObligationValidationError('Pessoa beneficiária não encontrada ou não pertence à instituição ativa.');
+          }
+        }
 
-      const feeItem = feeItemRes.rows[0];
-      const snapshotAmount = String(feeItem.amount);
-      const snapshotCurrency = String(feeItem.currency);
-      const snapshotVersion = Number(feeItem.current_version);
+        // Resolve active Fee Catalogue Item and its current version snapshot
+        const feeItemRes = await client.query<{
+          id: string;
+          status: string;
+          current_version: number;
+          amount: string;
+          currency: string;
+        }>(
+          `SELECT i.id, i.status, i.current_version, v.amount::text AS amount, v.currency
+           FROM finance_fee_catalogue_items i
+           JOIN finance_fee_catalogue_versions v
+             ON (v.institution_id = i.institution_id AND v.item_id = i.id AND v.version = i.current_version)
+           WHERE i.institution_id = $1 AND i.id = $2`,
+          [actor.institutionId, input.feeCatalogueItemId],
+        );
+        if (!feeItemRes.rows[0]) {
+          throw new FinancialObligationValidationError('Item do catálogo de emolumentos não encontrado.');
+        }
+        if (feeItemRes.rows[0].status !== 'active') {
+          throw new FinancialObligationValidationError('O item do catálogo de emolumentos selecionado está inativo.');
+        }
 
-      // Resolve effective Financial Profile version
-      const profile = await this.profiles.resolveEffective(actor.institutionId, new Date());
-      const profileVersion = profile?.version || 1;
+        const feeItem = feeItemRes.rows[0];
+        const snapshotAmount = String(feeItem.amount);
+        const snapshotCurrency = String(feeItem.currency);
+        const snapshotVersion = Number(feeItem.current_version);
 
-      // Insert obligation
-      const insertRes = await client.query<{ id: string }>(
-        `INSERT INTO finance_obligations (
-          institution_id,
-          financial_account_id,
-          beneficiary_person_id,
-          fee_catalogue_item_id,
-          fee_catalogue_version,
-          source_type,
-          source_ref,
-          amount,
-          currency,
-          effective_at,
-          due_at,
-          status,
-          notes,
-          financial_profile_version,
-          created_by_person_id,
-          idempotency_key
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, 'open', $11, $12, $13, $14)
-        RETURNING id`,
-        [
-          actor.institutionId,
-          input.financialAccountId,
-          input.beneficiaryPersonId,
-          input.feeCatalogueItemId,
-          snapshotVersion,
-          input.sourceType || 'manual_finance',
-          input.sourceRef || 'manual',
-          snapshotAmount,
-          snapshotCurrency,
-          input.dueAt,
-          input.notes,
-          profileVersion,
-          actor.personId,
-          idempotencyKey,
-        ],
-      );
+        // Resolve effective Financial Profile strictly (fails closed if missing or ineffective)
+        const profile = await requireFinancialContext({
+          institutionalContext: actor,
+          effectiveAt: new Date(),
+          store: this.profiles,
+          requiredCurrency: snapshotCurrency,
+        });
 
-      await client.query('COMMIT');
-      return this.getById(actor, insertRes.rows[0].id);
-    } catch (e: any) {
-      await client.query('ROLLBACK');
-      if (e.code === '23505') {
-        throw new FinancialObligationConflictError('Conflito de idempotência ou chave duplicada na obrigação.');
-      }
-      throw e;
-    } finally {
-      client.release();
-    }
-  }
+        // Insert obligation
+        const insertRes = await client.query<{ id: string }>(
+          `INSERT INTO finance_obligations (
+            institution_id,
+            financial_account_id,
+            beneficiary_person_id,
+            fee_catalogue_item_id,
+            fee_catalogue_version,
+            source_type,
+            source_ref,
+            amount,
+            currency,
+            effective_at,
+            due_at,
+            status,
+            notes,
+            financial_profile_version,
+            created_by_person_id,
+            idempotency_key
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), $10, 'open', $11, $12, $13, $14)
+          RETURNING id`,
+          [
+            actor.institutionId,
+            input.financialAccountId,
+            input.beneficiaryPersonId,
+            input.feeCatalogueItemId,
+            snapshotVersion,
+            input.sourceType || 'manual_finance',
+            input.sourceRef || 'manual',
+            snapshotAmount,
+            snapshotCurrency,
+            input.dueAt,
+            input.notes,
+            profile.version,
+            actor.personId,
+            idempotencyKey,
+          ],
+        );
 
-  async cancel(actor: InstitutionalContext, id: string, reason: string): Promise<FinancialObligation> {
-    const res = await this.pool.query<ObligationRow>(
-      `UPDATE finance_obligations 
-       SET status = 'cancelled', notes = COALESCE(notes || E'\\n', '') || $3, updated_at = NOW() 
-       WHERE institution_id = $1 AND id = $2 AND status = 'open'
-       RETURNING id`,
-      [actor.institutionId, id, `Cancelado: ${reason}`],
-    );
-    if (!res.rows[0]) {
-      throw new FinancialObligationNotFoundError('Obrigação não encontrada ou já cancelada.');
-    }
-    return this.getById(actor, id);
+        const createdObligation = await this.getById(actor, insertRes.rows[0].id, client);
+        return { resultRef: insertRes.rows[0].id, result: createdObligation };
+      },
+      loadResult: (_, resultRef) => this.getById(actor, resultRef),
+    });
+
+    return result.result;
   }
 }

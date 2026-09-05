@@ -2,8 +2,11 @@ import { strict as assert } from 'node:assert';
 import http from 'node:http';
 import { once } from 'node:events';
 import express from 'express';
-import { Pool } from 'pg';
-import dotenv from 'dotenv';
+import { randomUUID } from 'node:crypto';
+import pg from 'pg';
+import path from 'node:path';
+import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
+import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 import { createRequireAuth } from '../src/middleware/auth.ts';
 import { registerFeeCatalogueRoutes } from '../src/modules/finance/fee-catalogue-http.ts';
 import { registerFeeTypeRoutes } from '../src/modules/finance/fee-type-http.ts';
@@ -11,18 +14,13 @@ import { registerFinancialAccountRoutes } from '../src/modules/finance/financial
 import { registerFinancialObligationRoutes } from '../src/modules/finance/financial-obligation-http.ts';
 import type { FinancialProfileStore } from '../src/modules/finance/financial-context.ts';
 
-dotenv.config();
-if (process.env.TEST_DATABASE_LOCAL_AUTHORIZED === 'true') {
-  dotenv.config({ path: '.env.test.local', override: true });
-}
-
-const dbUrl = process.env.TEST_DATABASE_URL;
-if (!dbUrl) {
-  console.log('Skipping HTTP integration tests (no TEST_DATABASE_URL)');
-  process.exit(0);
-}
-
-const pool = new Pool({ connectionString: dbUrl });
+await verifyApprovedTestConnection();
+const schema = `fin_http_${randomUUID().replaceAll('-', '')}`;
+const quote = (x: string) => `"${x}"`;
+const pool = new pg.Pool({
+  connectionString: process.env.TEST_DATABASE_URL,
+  options: `-c search_path=${quote(schema)},public`,
+});
 
 const institutionA = '00000000-0000-0000-0000-000000000001';
 const institutionB = '00000000-0000-0000-0000-000000000002';
@@ -57,6 +55,10 @@ async function runTests() {
   const client = await pool.connect();
   let server: http.Server | undefined;
   try {
+    await client.query(`CREATE SCHEMA ${quote(schema)}`);
+    await client.query(`SET search_path TO ${quote(schema)},public`);
+    await runMigrations(client, await discoverMigrations(path.resolve('src/db/migrations')));
+
     // Seed
     await client.query(`
       INSERT INTO institutions (id, name, slug) VALUES 
@@ -69,6 +71,12 @@ async function runTests() {
         ('${personB}', 'Person B', 'person.b@test.local'),
         ('${studentPerson}', 'Student Test', 'student.test@test.local')
       ON CONFLICT (id) DO NOTHING;
+
+      INSERT INTO memberships (institution_id, person_id, role, status) VALUES
+        ('${institutionA}', '${personA}', 'institution_admin', 'active'),
+        ('${institutionA}', '${studentPerson}', 'student', 'active'),
+        ('${institutionB}', '${personB}', 'institution_admin', 'active')
+      ON CONFLICT DO NOTHING;
     `);
 
     const auth = createRequireAuth({
@@ -207,14 +215,13 @@ async function runTests() {
     assert.equal(getRes.status, 200);
     assert.equal(getRes.body.id, oblId);
 
-    // 10. Obligations API: 200 Cancel obligation
+    // 10. Obligations API: P1-06 Correction Law: in-place cancel route is removed (404)
     const cancelRes = await request('token-fin-a', `/api/finance/obligations/${oblId}/cancel`, {
       method: 'POST',
       headers: { 'Idempotency-Key': `key-cancel-http-${uid}` },
       body: { reason: 'Anulado a pedido do encarregado de educação' },
     });
-    assert.equal(cancelRes.status, 200);
-    assert.equal(cancelRes.body.status, 'cancelled');
+    assert.equal(cancelRes.status, 404, 'In-place cancel endpoint must not exist in F2-01');
 
     // 11. Cross-tenant isolation: Tenant B cannot access Tenant A obligation (404)
     const tenantBGet = await request('token-fin-b', `/api/finance/obligations/${oblId}`);
