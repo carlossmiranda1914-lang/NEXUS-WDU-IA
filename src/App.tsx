@@ -386,6 +386,7 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [studentRecordRef, setStudentRecordRef] = useState<string | null>(null);
+  const [financeAccountId, setFinanceAccountId] = useState<string | null>(null);
   // Until the backend resolves an active Membership, the client has no institutional authority.
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('student');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
@@ -616,6 +617,19 @@ export default function App() {
     };
     window.addEventListener('nexus-open-student-record', openStudentRecord);
     return () => window.removeEventListener('nexus-open-student-record', openStudentRecord);
+  }, []);
+
+  useEffect(() => {
+    const openFinance = (event: Event) => {
+      const detail = (event as CustomEvent<{ financialAccountId?: string } | string | undefined>).detail;
+      const accountId = typeof detail === 'string' ? detail : detail?.financialAccountId;
+      if (typeof accountId === 'string' && accountId.trim().length > 0) {
+        setFinanceAccountId(accountId.trim());
+      }
+      setActiveTab('financials');
+    };
+    window.addEventListener('nexus-open-finance', openFinance);
+    return () => window.removeEventListener('nexus-open-finance', openFinance);
   }, []);
 
   // Custom Event listener for granular cross-tab transitions (eg dossier -> signature)
@@ -2667,7 +2681,7 @@ export default function App() {
                   )}
 
                   {activeTab === 'financials' && (
-                    <FinanceWorkspace theme={theme} />
+                    <FinanceWorkspace theme={theme} initialFinancialAccountId={financeAccountId} />
                   )}
 
                   {activeTab === 'communications' && (
