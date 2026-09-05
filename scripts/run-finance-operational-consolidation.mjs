@@ -18,6 +18,7 @@ const files = [
   'tests/finance-contextual-payment-ui-contract.test.ts',
   'tests/finance-context-entrypoints-contract.test.ts',
   'tests/finance-operational-context-atomicity-contract.test.ts',
+  'tests/finance-operational-context-atomicity-behavior.test.ts',
 ];
 
 for (const file of files) {
