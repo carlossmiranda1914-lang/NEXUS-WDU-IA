@@ -3,8 +3,10 @@ import { createHmac } from 'node:crypto';
 import {
   AdyenAdapter,
   calculateAdyenHmac,
+  formatAdyenMinorUnits,
 } from '../src/modules/finance/providers/adyen-adapter.ts';
 import type { PaymentProviderConfig } from '../src/modules/finance/payment-provider-model.ts';
+import { PaymentValidationError } from '../src/modules/finance/payment-model.ts';
 
 const mockHmacKeyHex = '44782F3DEBEA52232C80CA829978C2E75CBE1441F10F0945B97F36E493D6BDD2'; // 32-byte hex key
 const mockConfig: PaymentProviderConfig = {
@@ -14,7 +16,7 @@ const mockConfig: PaymentProviderConfig = {
   environment: 'test',
   status: 'active',
   merchantAccountRef: 'TestMerchantPT',
-  supportedCurrencies: ['EUR', 'USD'],
+  supportedCurrencies: ['EUR', 'USD', 'JPY', 'BHD'],
   enabledMethods: ['card', 'mbway'],
   operationalAvailability: 'available',
   secretReferenceId: 'vault://secrets/adyen/mock',
@@ -104,9 +106,19 @@ const adapter = new AdyenAdapter();
   assert.equal(normalized.candidate.method, 'card');
   assert.equal(normalized.candidate.providerTransactionRef, '8815123456789012');
   assert.equal(normalized.candidate.financialAccountId, '00000000-0000-0000-0000-000000000055');
+  assert.ok(normalized.candidate.providerOccurredAt instanceof Date);
 }
 
-// 3. Rejection of invalid HMAC
+// 3. P0-01 Proof: Missing secret fails even in test environment
+{
+  const validPayload = JSON.stringify({
+    notificationItems: [{ NotificationRequestItem: { pspReference: '123' } }],
+  });
+  const noSecretAuth = await adapter.authenticateWebhook(Buffer.from(validPayload), {}, mockConfig, undefined);
+  assert.equal(noSecretAuth.valid, false, 'Adyen test mode must not bypass auth without secret');
+}
+
+// 4. Rejection of invalid HMAC
 {
   const badPayload = JSON.stringify({
     live: 'false',
@@ -133,7 +145,69 @@ const adapter = new AdyenAdapter();
   assert.equal(authBad.valid, false);
 }
 
-// 4. Non-confirmation event (e.g. success = 'false' or eventCode = 'CANCEL_OR_REFUND')
+// 5. P0-03 Proof: Mismatched merchantAccountCode rejected
+{
+  const foreignMerchantPayload = JSON.stringify({
+    notificationItems: [
+      {
+        NotificationRequestItem: {
+          merchantAccountCode: 'ForeignMerchantAccount',
+          pspReference: '8815123456780001',
+          eventCode: 'AUTHORISATION',
+          success: 'true',
+          amount: { currency: 'EUR', value: 1000 },
+        },
+      },
+    ],
+  });
+  await assert.rejects(
+    () => adapter.parseAndNormalizeEvent(Buffer.from(foreignMerchantPayload), {}, mockConfig),
+    (err: any) => err instanceof PaymentValidationError && /não corresponde à conta/i.test(err.message)
+  );
+}
+
+// 6. P1-05 Proof: Minor units conversion across ISO 4217 scales
+{
+  // 2-decimals: EUR
+  assert.equal(formatAdyenMinorUnits(12550, 'EUR'), '125.50');
+  assert.equal(formatAdyenMinorUnits('50', 'EUR'), '0.50');
+  assert.equal(formatAdyenMinorUnits(100000, 'AOA'), '1000.00');
+
+  // 0-decimals: JPY, KRW
+  assert.equal(formatAdyenMinorUnits(5000, 'JPY'), '5000');
+  assert.equal(formatAdyenMinorUnits('1200', 'KRW'), '1200');
+
+  // 3-decimals: BHD, KWD, OMR
+  assert.equal(formatAdyenMinorUnits(12345, 'BHD'), '12.345');
+  assert.equal(formatAdyenMinorUnits(500, 'KWD'), '0.500');
+
+  // Invalid / missing currency rejected
+  assert.throws(() => formatAdyenMinorUnits(100, ''), /moeda/i);
+  assert.throws(() => formatAdyenMinorUnits(100, 'INVALID'), /moeda/i);
+}
+
+// 7. P1-06 Proof: Missing eventDate does not fabricate occurrence time
+{
+  const noDatePayload = JSON.stringify({
+    notificationItems: [
+      {
+        NotificationRequestItem: {
+          merchantAccountCode: 'TestMerchantPT',
+          pspReference: '8815123456780002',
+          eventCode: 'AUTHORISATION',
+          success: 'true',
+          amount: { currency: 'EUR', value: 2500 },
+        },
+      },
+    ],
+  });
+
+  const parsed = await adapter.parseAndNormalizeEvent(Buffer.from(noDatePayload), {}, mockConfig);
+  assert.ok(parsed);
+  assert.equal(parsed.candidate?.providerOccurredAt, undefined, 'Missing provider date must not invent occurrence time');
+}
+
+// 8. Non-confirmation event (e.g. success = 'false' or eventCode = 'CANCEL_OR_REFUND')
 {
   const declinedPayload = JSON.stringify({
     live: 'false',

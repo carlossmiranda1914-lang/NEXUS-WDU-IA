@@ -31,6 +31,7 @@ const institutionB = '00000000-0000-0000-0000-000000000302';
 const actorA = '00000000-0000-0000-0000-000000000311';
 const actorB = '00000000-0000-0000-0000-000000000312';
 const personPayerA = '00000000-0000-0000-0000-000000000321';
+const personPayerB = '00000000-0000-0000-0000-000000000322';
 
 const contextA = {
   institutionId: institutionA,
@@ -65,7 +66,8 @@ try {
 
     // Setup base institutional fixtures
     await client.query(`INSERT INTO institutions(id,name,slug,status) VALUES ($1,'Inst A','inst-a','active'),($2,'Inst B','inst-b','active')`, [institutionA, institutionB]);
-    await client.query(`INSERT INTO people(id,name) VALUES ($1,'Actor A'),($2,'Actor B'),($3,'Payer A')`, [actorA, actorB, personPayerA]);
+    await client.query(`INSERT INTO people(id,name) VALUES ($1,'Actor A'),($2,'Actor B'),($3,'Payer A'),($4,'Payer B')`, [actorA, actorB, personPayerA, personPayerB]);
+    await client.query(`INSERT INTO memberships(id,institution_id,person_id,role,status) VALUES ($1,$2,$3,'student','active'),($4,$5,$6,'student','active')`, [randomUUID(), institutionA, personPayerA, randomUUID(), institutionB, personPayerB]);
     await client.query(`INSERT INTO finance_profile_versions(institution_id,version,effective_from,primary_jurisdiction,functional_currency,financial_timezone,monetary_policy_version,enabled_currencies) VALUES ($1,1,now() - interval '1 day','PT','EUR','Europe/Lisbon','v1','["EUR","USD"]'),($2,1,now() - interval '1 day','AO','AOA','Africa/Luanda','v1','["AOA"]')`, [institutionA, institutionB]);
 
     // Financial Account in Inst A
@@ -193,6 +195,18 @@ try {
         'idemp-pay-cross-tenant'
       ),
       (err: any) => err instanceof PaymentValidationError && /conta financeira/i.test(err.message)
+    );
+
+    // Cross-tenant payer rejection: Inst A trying to use Payer Person of Inst B
+    await assert.rejects(
+      () => confirmIncomingPayment(
+        pool,
+        profileStore,
+        contextA,
+        { ...input1, payerPersonId: personPayerB },
+        'idemp-pay-cross-payer'
+      ),
+      (err: any) => err instanceof PaymentValidationError && /pessoa pagadora/i.test(err.message)
     );
 
     // 6. Rollback injection proof

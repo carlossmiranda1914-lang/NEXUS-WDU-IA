@@ -27,6 +27,7 @@ const samplePayments: Payment[] = [
     confirmedAt: '2026-09-05T10:00:00.000Z',
     createdAt: '2026-09-05T10:00:00.000Z',
     financialProfileVersion: 1,
+    actorKind: 'human',
     actorPersonId: 'actor-001',
   },
 ];
@@ -167,7 +168,7 @@ test('FinancePaymentProvidersView displays Adyen and EMIS with contract status b
     const text = JSON.stringify(renderer.toJSON());
     assert.ok(text.includes('Adyen Payment Gateway'));
     assert.ok(text.includes('EMIS / Rede MULTICAIXA'));
-    assert.ok(text.includes('CONTRACT_READY'));
+    assert.ok(text.includes('AWAITING_AUTHORIZED_PROTOCOL'));
     assert.ok(text.includes('SANDBOX'));
 
     // Assert no secret tokens or keys in DOM

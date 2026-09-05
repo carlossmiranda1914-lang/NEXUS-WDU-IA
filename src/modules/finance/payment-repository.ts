@@ -57,7 +57,8 @@ interface PaymentRow {
   confirmed_at: string | Date;
   created_at: string | Date;
   financial_profile_version: number;
-  actor_person_id: string;
+  actor_kind?: string | null;
+  actor_person_id?: string | null;
 }
 
 export function mapPayment(row: PaymentRow): Payment {
@@ -86,7 +87,8 @@ export function mapPayment(row: PaymentRow): Payment {
     confirmedAt: row.confirmed_at instanceof Date ? row.confirmed_at.toISOString() : new Date(String(row.confirmed_at)).toISOString(),
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : new Date(String(row.created_at)).toISOString(),
     financialProfileVersion: Number(row.financial_profile_version),
-    actorPersonId: String(row.actor_person_id),
+    actorKind: (row.actor_kind || 'human') as any,
+    actorPersonId: row.actor_person_id ? String(row.actor_person_id) : undefined,
   };
 }
 
@@ -116,6 +118,25 @@ export class PostgresPaymentRepository {
     intent: ConfirmIncomingPaymentIntent,
     commandId: string
   ): Promise<Payment> {
+    // 0. Validate payer tenant safety if payer is provided
+    if (intent.payerPersonId) {
+      const payerCheck = await client.query(
+        `SELECT 1 FROM people p
+         WHERE p.id = $1
+         AND (
+           EXISTS (SELECT 1 FROM memberships m WHERE m.person_id = p.id AND m.institution_id = $2)
+           OR EXISTS (
+             SELECT 1 FROM finance_financial_account_parties fap
+             WHERE fap.person_id = p.id AND fap.institution_id = $2
+           )
+         )`,
+        [intent.payerPersonId, intent.institutionId]
+      );
+      if (!payerCheck.rows[0]) {
+        throw new PaymentValidationError('Pessoa pagadora não pertence à instituição ou não está habilitada.');
+      }
+    }
+
     // 1. Allocate next payment reference
     const paymentReference = await this.allocatePaymentReference(client, intent.institutionId);
     this.fail('after_counter');
@@ -134,6 +155,7 @@ export class PostgresPaymentRepository {
           sourceRef: paymentReference,
         },
       ],
+      actorKind: intent.actorKind,
       actorPersonId: intent.actorPersonId,
       financialProfileVersion: intent.financialProfileVersion,
     });
@@ -147,13 +169,13 @@ export class PostgresPaymentRepository {
         amount, currency, status, allocation_status, financial_account_id, payer_person_id,
         provider_key, provider_event_id, provider_transaction_ref, provider_occurred_at,
         manual_evidence_ref, notes, effective_at, confirmed_at, created_at,
-        financial_profile_version, actor_person_id
+        financial_profile_version, actor_kind, actor_person_id
       ) VALUES (
         $1, $2, $3, $4, $5, $6,
         $7, $8, 'confirmed', 'unapplied', $9, $10,
         $11, $12, $13, $14,
         $15, $16, $17, NOW(), NOW(),
-        $18, $19
+        $18, $19, $20
       )
       RETURNING *;
     `;
@@ -177,7 +199,8 @@ export class PostgresPaymentRepository {
       intent.notes ?? null,
       intent.effectiveAt,
       intent.financialProfileVersion,
-      intent.actorPersonId,
+      intent.actorKind,
+      intent.actorPersonId ?? null,
     ];
 
     const insertRes = await client.query<PaymentRow>(insertSql, insertParams);

@@ -174,6 +174,62 @@ try {
       /uq_finance_provider_configs_inst_provider/i
     );
 
+    // 9. Migration 0036: actor_kind invariants in journal and payments
+    // Journal: provider actor must have null actor_person_id
+    const journalProviderId = randomUUID();
+    await client.query(`
+      INSERT INTO finance_journal_transactions (
+        id, institution_id, status, currency, amount, command_id, journal_type,
+        actor_kind, actor_person_id, financial_profile_version, confirmed_at
+      ) VALUES (
+        $1, $2, 'confirmed', 'EUR', '50.00', 'cmd-prov', 'foundation_value_received',
+        'provider', NULL, 1, now()
+      )
+    `, [journalProviderId, institutionA]);
+
+    // Journal: human actor without actor_person_id rejected
+    await assert.rejects(
+      () => client.query(`
+        INSERT INTO finance_journal_transactions (
+          id, institution_id, status, currency, amount, command_id, journal_type,
+          actor_kind, actor_person_id, financial_profile_version, confirmed_at
+        ) VALUES (
+          gen_random_uuid(), $1, 'confirmed', 'EUR', '50.00', 'cmd-fail', 'foundation_value_received',
+          'human', NULL, 1, now()
+        )
+      `, [institutionA]),
+      /finance_journal_transactions_actor_provenance/i
+    );
+
+    // Payments: provider actor without actor_person_id succeeds
+    await client.query(`
+      INSERT INTO finance_payments (
+        id, institution_id, payment_reference, journal_transaction_id, source_type, method,
+        amount, currency, status, allocation_status, provider_key, provider_event_id, provider_transaction_ref,
+        effective_at, financial_profile_version, actor_kind, actor_person_id
+      ) VALUES (
+        gen_random_uuid(), $1, 'PAY-PROV-001', $2, 'provider', 'card',
+        50.00, 'EUR', 'confirmed', 'unapplied', 'adyen', 'EVT-001', 'TXN-001',
+        now(), 1, 'provider', NULL
+      )
+    `, [institutionA, journalProviderId]);
+
+    // Payments: provider actor with non-null actor_person_id rejected
+    await assert.rejects(
+      () => client.query(`
+        INSERT INTO finance_payments (
+          id, institution_id, payment_reference, journal_transaction_id, source_type, method,
+          amount, currency, status, allocation_status, provider_key, provider_event_id, provider_transaction_ref,
+          effective_at, financial_profile_version, actor_kind, actor_person_id
+        ) VALUES (
+          gen_random_uuid(), $1, 'PAY-PROV-002', $2, 'provider', 'card',
+          50.00, 'EUR', 'confirmed', 'unapplied', 'adyen', 'EVT-002', 'TXN-002',
+          now(), 1, 'provider', $3
+        )
+      `, [institutionA, journalProviderId, actorA]),
+      /finance_payments_actor_provenance/i
+    );
+
     console.log('Finance Payment Schema PostgreSQL: PASS');
   } finally {
     client.release();

@@ -14,7 +14,7 @@ export interface InstitutionFinancialProfileVersion {
 }
 
 export interface FinancialProfileStore {
-  resolveEffective(institutionId: string, at: Date): Promise<InstitutionFinancialProfileVersion | null>;
+  resolveEffective(institutionId: string, at?: Date): Promise<InstitutionFinancialProfileVersion | null>;
 }
 
 export interface FinancialContext {
@@ -28,7 +28,7 @@ export interface FinancialContext {
 export class PostgresFinancialProfileStore implements FinancialProfileStore {
   constructor(private readonly pool: Pool | import('pg').PoolClient) {}
 
-  async resolveEffective(institutionId: string, at: Date): Promise<InstitutionFinancialProfileVersion | null> {
+  async resolveEffective(institutionId: string, at: Date = new Date()): Promise<InstitutionFinancialProfileVersion | null> {
     const res = await this.pool.query<{
       institution_id: string;
       version: number;

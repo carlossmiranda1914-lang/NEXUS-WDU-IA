@@ -23,8 +23,11 @@ export function createPaymentConfirmationFingerprint(intent: ConfirmIncomingPaym
     providerKey: intent.providerKey ?? '',
     providerEventId: intent.providerEventId ?? '',
     providerTransactionRef: intent.providerTransactionRef ?? '',
+    providerOccurredAt: intent.providerOccurredAt ? intent.providerOccurredAt.toISOString() : '',
     manualEvidenceRef: intent.manualEvidenceRef ?? '',
     notes: intent.notes ?? '',
+    actorKind: intent.actorKind,
+    actorPersonId: intent.actorPersonId ?? '',
     financialProfileVersion: intent.financialProfileVersion,
   };
 
@@ -54,7 +57,7 @@ export async function confirmIncomingPayment(
     enabledCurrencies: profile.enabledCurrencies,
     financialTimezone: profile.financialTimezone,
   };
-  const intent = normalizeConfirmIncomingPaymentIntent(rawInput, context, actor.personId);
+  const intent = normalizeConfirmIncomingPaymentIntent(rawInput, context, actor.personId, 'human');
 
   // If financial account is specified, verify tenant ownership and active status
   if (intent.financialAccountId) {

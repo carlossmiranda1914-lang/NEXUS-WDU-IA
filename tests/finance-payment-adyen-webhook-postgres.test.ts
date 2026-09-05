@@ -126,8 +126,8 @@ try {
       providerKey: 'adyen',
       providerEventId: parsed.providerEventId,
       providerTransactionRef: parsed.candidate.providerTransactionRef,
-      providerOccurredAt: parsed.candidate.providerOccurredAt,
-      actorPersonId: actorSystem,
+      actorKind: 'provider',
+      actorPersonId: undefined,
       financialProfileVersion: 1,
     };
 

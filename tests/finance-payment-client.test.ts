@@ -22,6 +22,7 @@ const mockPayment: Payment = {
   confirmedAt: '2026-09-05T10:00:00.000Z',
   createdAt: '2026-09-05T10:00:00.000Z',
   financialProfileVersion: 1,
+  actorKind: 'human',
   actorPersonId: '00000000-0000-0000-0000-000000000030',
 };
 

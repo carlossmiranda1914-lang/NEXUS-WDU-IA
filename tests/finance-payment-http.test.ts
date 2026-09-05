@@ -113,6 +113,7 @@ try {
 
     await client.query(`INSERT INTO institutions(id,name,slug,status) VALUES ($1,'Inst A','inst-a','active'),($2,'Inst B','inst-b','active')`, [institutionA, institutionB]);
     await client.query(`INSERT INTO people(id,name) VALUES ($1,'Admin A'),($2,'Director A'),($3,'Teacher A'),($4,'Admin B'),($5,'Payer')`, [actorAdminA, actorDirectorA, actorTeacherA, actorAdminB, personPayer]);
+    await client.query(`INSERT INTO memberships(id,institution_id,person_id,role,status) VALUES ($1,$2,$3,'student','active')`, [randomUUID(), institutionA, personPayer]);
     await client.query(`INSERT INTO finance_profile_versions(institution_id,version,effective_from,primary_jurisdiction,functional_currency,financial_timezone,monetary_policy_version,enabled_currencies) VALUES ($1,1,now() - interval '1 day','PT','EUR','Europe/Lisbon','v1','["EUR","USD"]'),($2,1,now() - interval '1 day','AO','AOA','Africa/Luanda','v1','["AOA"]')`, [institutionA, institutionB]);
 
     const accountA = randomUUID();

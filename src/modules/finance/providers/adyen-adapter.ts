@@ -42,6 +42,44 @@ export function calculateAdyenHmac(fields: AdyenHmacFields, hmacKeyHex: string):
   return createHmac('sha256', keyBuffer).update(payloadString, 'utf8').digest('base64');
 }
 
+const ZERO_DECIMAL_CURRENCIES = new Set([
+  'CVE', 'DJF', 'GNF', 'ISK', 'JPY', 'KMF', 'KRW', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF', 'CLF',
+]);
+
+const THREE_DECIMAL_CURRENCIES = new Set([
+  'BHD', 'IQD', 'JOD', 'KWD', 'LYD', 'OMR', 'TND',
+]);
+
+export function formatAdyenMinorUnits(value: string | number | bigint, currency: string): string {
+  if (!currency || typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency.toUpperCase())) {
+    throw new PaymentValidationError(`Código de moeda inválido no evento Adyen: ${currency}`);
+  }
+  const curr = currency.toUpperCase();
+  const rawStr = String(value).trim();
+  if (!/^-?\d+$/.test(rawStr)) {
+    throw new PaymentValidationError(`Valor monetário inválido no evento Adyen: ${value}`);
+  }
+  const rawVal = BigInt(rawStr);
+  const isNegative = rawVal < 0n;
+  const absVal = isNegative ? -rawVal : rawVal;
+
+  let scale = 2;
+  if (ZERO_DECIMAL_CURRENCIES.has(curr)) {
+    scale = 0;
+  } else if (THREE_DECIMAL_CURRENCIES.has(curr)) {
+    scale = 3;
+  }
+
+  if (scale === 0) {
+    return `${isNegative ? '-' : ''}${absVal.toString()}`;
+  }
+
+  const divisor = 10n ** BigInt(scale);
+  const whole = absVal / divisor;
+  const fraction = (absVal % divisor).toString().padStart(scale, '0');
+  return `${isNegative ? '-' : ''}${whole}.${fraction}`;
+}
+
 export class AdyenAdapter implements PaymentProviderAdapter {
   readonly providerKey = 'adyen' as const;
   readonly status = 'CONTRACT_READY' as const;
@@ -49,7 +87,7 @@ export class AdyenAdapter implements PaymentProviderAdapter {
   async authenticateWebhook(
     rawBody: Buffer | string,
     _headers: Record<string, string | string[] | undefined>,
-    config: PaymentProviderConfig,
+    _config: PaymentProviderConfig,
     secretValue?: string
   ): Promise<ProviderAuthResult> {
     const bodyStr = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : rawBody;
@@ -71,9 +109,6 @@ export class AdyenAdapter implements PaymentProviderAdapter {
     }
 
     if (!secretValue) {
-      if (config.environment === 'test') {
-        return { valid: true };
-      }
       return { valid: false, reason: 'Chave HMAC de validação Adyen não configurada.' };
     }
 
@@ -104,7 +139,7 @@ export class AdyenAdapter implements PaymentProviderAdapter {
   async parseAndNormalizeEvent(
     rawBody: Buffer | string,
     _headers: Record<string, string | string[] | undefined>,
-    _config: PaymentProviderConfig
+    config: PaymentProviderConfig
   ): Promise<ProviderNormalizedEvent | null> {
     const bodyStr = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : rawBody;
     let payload: any;
@@ -123,6 +158,14 @@ export class AdyenAdapter implements PaymentProviderAdapter {
     const pspReference = String(item.pspReference || '');
     if (!pspReference) return null;
 
+    // Strict tenant binding: verify event merchantAccountCode matches configuration merchantAccountRef
+    const eventMerchantAccount = String(item.merchantAccountCode || '').trim();
+    if (!eventMerchantAccount || eventMerchantAccount !== config.merchantAccountRef) {
+      throw new PaymentValidationError(
+        `Merchant account code do evento Adyen ("${eventMerchantAccount}") não corresponde à conta configurada da instituição ("${config.merchantAccountRef}").`
+      );
+    }
+
     const eventCode = String(item.eventCode || '');
     const success = String(item.success || '').toLowerCase() === 'true';
 
@@ -139,13 +182,17 @@ export class AdyenAdapter implements PaymentProviderAdapter {
       };
     }
 
-    const currency = String(item.amount?.currency || 'EUR').toUpperCase();
-    const rawValue = BigInt(item.amount?.value ?? 0);
-    const whole = rawValue / 100n;
-    const fraction = (rawValue % 100n).toString().padStart(2, '0');
-    const exactAmountStr = `${whole}.${fraction}`;
+    if (!item.amount?.currency || typeof item.amount.currency !== 'string') {
+      throw new PaymentValidationError('Moeda obrigatória no evento Adyen.');
+    }
+    const currency = item.amount.currency.toUpperCase();
+    const rawAmountValue = item.amount?.value;
+    if (rawAmountValue === undefined || rawAmountValue === null) {
+      throw new PaymentValidationError('Valor monetário obrigatório no evento Adyen.');
+    }
 
-    const money = Money.parse(exactAmountStr, currency);
+    const formattedAmount = formatAdyenMinorUnits(rawAmountValue, currency);
+    const money = Money.parse(formattedAmount, currency);
 
     // Method classification
     const rawMethod = String(item.paymentMethod || 'card').toLowerCase();
@@ -154,12 +201,12 @@ export class AdyenAdapter implements PaymentProviderAdapter {
     else if (rawMethod.includes('multicaixa')) method = 'multicaixa';
     else if (rawMethod.includes('bank') || rawMethod.includes('transfer')) method = 'bank_transfer';
 
-    let occurredAt: Date;
+    let occurredAt: Date | undefined = undefined;
     if (item.eventDate) {
-      occurredAt = new Date(item.eventDate);
-      if (Number.isNaN(occurredAt.getTime())) occurredAt = new Date();
-    } else {
-      occurredAt = new Date();
+      const parsed = new Date(item.eventDate);
+      if (!Number.isNaN(parsed.getTime())) {
+        occurredAt = parsed;
+      }
     }
 
     let financialAccountId: string | undefined = undefined;

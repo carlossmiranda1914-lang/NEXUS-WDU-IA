@@ -30,8 +30,23 @@
 - [x] Task 11: Build F3 aggregate, regression suite, and runtime-parity gate
 - [x] Task 12: Final independent review, sandbox evidence, and Human UAT preparation
 
+## Audit Remediation (Post-SHA: f190c9844c9f3e127fde7551add450962625b8cd)
+- **P0-01 (Adyen Auth Bypass Elimination):** CLOSED. Test mode auth bypass removed. Deterministic HMAC authentication enforced across all environments. Missing/invalid HMAC returns zero economic effect.
+- **P0-02 (EMIS Protocol Inventions Removed):** CLOSED. All guessed headers/payloads removed. Status set to `AWAITING_AUTHORIZED_PROTOCOL`.
+- **P0-03 (Provider Tenant Binding):** CLOSED. Webhook cryptographically authenticates and strictly binds external `merchantAccountCode` to configured `merchantAccountRef`. Mismatched merchant / cross-tenant replay fails closed.
+- **P0-04 (Provenance & Financial Context):** CLOSED. Effective profile resolved strictly via `PostgresFinancialProfileStore`. Migration 0036 establishes `actor_kind` (`human`, `system`, `provider`) with strict schema constraints. No fake persons or zero UUIDs.
+- **P1-05 (Adyen Minor Units):** CLOSED. Official ISO 4217 scales implemented for 0-decimal, 2-decimal, and 3-decimal currencies using exact BigInt math without floats or EUR defaults.
+- **P1-06 (Provider Occurrence Time):** CLOSED. Only set when explicitly and validly provided by provider; never fabricated with local NOW().
+- **P1-07 (Secret Reference Resolution):** CLOSED. `SecretResolver` resolves secrets strictly from `secretReferenceId` server-side. Distinct institution secret references proven without cross-acceptance.
+- **P1-08 (Payer Tenant Safety):** CLOSED. Payer person validated against institutional memberships and financial account parties. Foreign payers rejected.
+- **System Actor Extension Required:** NO (Handled via Migration 0036).
+- **EMIS Multicaixa Status:** `AWAITING_AUTHORIZED_PROTOCOL`
+- **Adyen Sandbox Status:** `BLOCKED_EXTERNAL_DEPENDENCY`
+- **Manual Payment UAT Ready:** `YES`
+- **Overall Finance-F3-01 Status:** `BLOCKED_EXTERNAL_DEPENDENCY`
+
 ## Final Verification & Evidence Summary
-- **Aggregate Test Suite:** `npm run test:finance:f3:payment-core` (13 test suites, PASS)
+- **Aggregate Test Suite:** `npm run test:finance:f3:payment-core` (PASS)
 - **F2 Regression:** `npm run test:finance:f2:account-obligation` (PASS)
 - **F1 Regression:** `npm run test:finance:f1:fee-catalogue` (PASS)
 - **Foundation Regression:** `npm run test:finance:foundation` (PASS)
@@ -40,6 +55,6 @@
 - **Production Build:** `npm run build` (`vite build && esbuild server.ts`, PASS)
 - **Secret & Artifact Audits:** `npm run test:secrets` (PASS), `npm run test:artifacts` (PASS)
 - **Adyen Sandbox Status:** `ADYEN_SANDBOX=BLOCKED_EXTERNAL_DEPENDENCY` (Real credentials absent in test environment)
-- **EMIS Multicaixa Status:** `EMIS_MULTICAIXA=CONTRACT_READY`
+- **EMIS Multicaixa Status:** `EMIS_MULTICAIXA=AWAITING_AUTHORIZED_PROTOCOL`
 - **Runtime Parity:** Validated at worktree `codex/finance-f3-payment-core-provider-adapter`
 

@@ -5,7 +5,7 @@ export interface ProviderPaymentCandidate {
   currency: string;
   method: string;
   providerTransactionRef: string;
-  providerOccurredAt: Date;
+  providerOccurredAt?: Date;
   rawPayloadDigest: string;
   financialAccountId?: string;
   payerPersonId?: string;
@@ -27,7 +27,7 @@ export interface ProviderAuthResult {
 
 export interface PaymentProviderAdapter {
   readonly providerKey: PaymentProviderKey;
-  readonly status: 'CONTRACT_READY' | 'LIVE_VERIFIED';
+  readonly status: 'CONTRACT_READY' | 'AWAITING_AUTHORIZED_PROTOCOL' | 'LIVE_VERIFIED';
 
   authenticateWebhook(
     rawBody: Buffer | string,

@@ -12,7 +12,8 @@ export class PaymentValidationError extends Error {
 export type PaymentSourceType = 'manual_offline' | 'provider';
 export type ManualPaymentMethod = 'cash' | 'bank_transfer' | 'external_reference';
 export type PaymentStatus = 'confirmed';
-export type PaymentAllocationStatus = 'unapplied';
+export type PaymentAllocationStatus = 'unapplied' | 'partially_applied' | 'fully_applied';
+export type PaymentActorKind = 'human' | 'system' | 'provider';
 
 export interface Payment {
   id: string;
@@ -37,7 +38,8 @@ export interface Payment {
   confirmedAt: string;
   createdAt: string;
   financialProfileVersion: number;
-  actorPersonId: string;
+  actorKind: PaymentActorKind;
+  actorPersonId?: string;
 }
 
 export interface ConfirmIncomingPaymentIntent {
@@ -54,7 +56,8 @@ export interface ConfirmIncomingPaymentIntent {
   providerOccurredAt?: Date;
   manualEvidenceRef?: string;
   notes?: string;
-  actorPersonId: string;
+  actorKind: PaymentActorKind;
+  actorPersonId?: string;
   financialProfileVersion: number;
 }
 
@@ -63,7 +66,8 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 export function normalizeConfirmIncomingPaymentIntent(
   rawInput: unknown,
   context: FinancialContext,
-  actorPersonId: string
+  actorPersonId?: string,
+  actorKind: PaymentActorKind = 'human'
 ): ConfirmIncomingPaymentIntent {
   if (typeof rawInput !== 'object' || rawInput === null) {
     throw new PaymentValidationError('Dados do recebimento inválidos.');
@@ -73,8 +77,10 @@ export function normalizeConfirmIncomingPaymentIntent(
     throw new PaymentValidationError('Contexto institucional inválido.');
   }
 
-  if (!actorPersonId || !UUID_REGEX.test(actorPersonId)) {
-    throw new PaymentValidationError('Identificador de operador/ator inválido.');
+  if (actorKind === 'human') {
+    if (!actorPersonId || !UUID_REGEX.test(actorPersonId)) {
+      throw new PaymentValidationError('Identificador de operador/ator humano inválido.');
+    }
   }
 
   if (!Number.isInteger(context.financialProfileVersion) || context.financialProfileVersion <= 0) {
@@ -184,12 +190,9 @@ export function normalizeConfirmIncomingPaymentIntent(
       providerOccurredAt = raw.providerOccurredAt;
     } else if (typeof raw.providerOccurredAt === 'string' && raw.providerOccurredAt.trim()) {
       providerOccurredAt = new Date(raw.providerOccurredAt);
-    } else {
-      providerOccurredAt = effectiveAt;
-    }
-
-    if (Number.isNaN(providerOccurredAt.getTime())) {
-      throw new PaymentValidationError('Data de ocorrência do provedor inválida.');
+      if (Number.isNaN(providerOccurredAt.getTime())) {
+        throw new PaymentValidationError('Data de ocorrência do provedor inválida.');
+      }
     }
   }
 
@@ -218,7 +221,8 @@ export function normalizeConfirmIncomingPaymentIntent(
     providerOccurredAt,
     manualEvidenceRef,
     notes,
-    actorPersonId,
+    actorKind,
+    actorPersonId: actorKind === 'human' ? actorPersonId : undefined,
     financialProfileVersion: context.financialProfileVersion,
   };
 }

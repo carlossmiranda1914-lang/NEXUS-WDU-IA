@@ -52,7 +52,7 @@ export function FinancePaymentProvidersView({
       key: 'emis_multicaixa',
       title: 'EMIS / Rede MULTICAIXA',
       description: 'MULTICAIXA Express, GPO e Pagamento por Referência (Angola).',
-      contractStatus: 'CONTRACT_READY',
+      contractStatus: 'AWAITING_AUTHORIZED_PROTOCOL',
       regionalRail: 'Angola (AOA)',
     },
   ];
