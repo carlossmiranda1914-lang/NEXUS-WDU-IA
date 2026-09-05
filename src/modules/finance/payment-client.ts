@@ -35,12 +35,19 @@ const defaultGetToken = async (): Promise<string | null> => {
   return user.getIdToken();
 };
 
+const defaultFetch: typeof fetch = (input, init) => {
+  if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+    return window.fetch(input, init);
+  }
+  return globalThis.fetch(input, init);
+};
+
 export class PaymentApiClient {
   private readonly fetcher: typeof fetch;
   private readonly getToken: () => Promise<string | null | undefined>;
 
   constructor(options?: PaymentClientOptions) {
-    this.fetcher = options?.fetcher || fetch;
+    this.fetcher = options?.fetcher || defaultFetch;
     this.getToken = options?.getToken || defaultGetToken;
   }
 
@@ -64,8 +71,10 @@ export class PaymentApiClient {
       } catch {
         // ignore parse error
       }
-      const code = errBody?.code || (res.status === 401 ? 'UNAUTHORIZED' : res.status === 403 ? 'PAYMENT_FORBIDDEN' : 'PAYMENT_ERROR');
-      const message = errBody?.error || `Erro HTTP ${res.status}`;
+      const code = errBody?.code 
+        || (typeof errBody?.error === 'string' && /^[A-Z0-9_]+$/.test(errBody.error) ? errBody.error : undefined)
+        || (res.status === 401 ? 'UNAUTHORIZED' : res.status === 403 ? 'PAYMENT_FORBIDDEN' : 'PAYMENT_ERROR');
+      const message = errBody?.message || errBody?.error || `Erro HTTP ${res.status}`;
       throw new PaymentApiError(res.status, code, message);
     }
 
