@@ -30,8 +30,8 @@ const allOperationalSrc = `${workspaceSrc}\n${headerSrc}\n${panelsSrc}\n${histor
 assert.match(allOperationalSrc, /Conta financeira/i, 'Must contain "Conta financeira"');
 assert.match(allOperationalSrc, /Responsável financeiro/i, 'Must contain "Responsável financeiro"');
 assert.match(allOperationalSrc, /Aluno/i, 'Must contain student reference');
-assert.match(allOperationalSrc, /Obrigações em aberto/i, 'Must contain "Obrigações em aberto"');
-assert.match(allOperationalSrc, /Recebimentos confirmados não aplicados|Recebimentos/i, 'Must contain unallocated payments section');
+assert.match(allOperationalSrc, /Cobranças em aberto/i, 'Must contain "Cobranças em aberto"');
+assert.match(allOperationalSrc, /Recebimentos por associar|Recebimentos/i, 'Must contain unallocated payments section');
 assert.match(allOperationalSrc, /Histórico financeiro/i, 'Must contain "Histórico financeiro"');
 assert.match(allOperationalSrc, /Registar recebimento/i, 'Must contain action "Registar recebimento"');
 

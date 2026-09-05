@@ -106,7 +106,28 @@ export class FinanceOperationalContextClient {
     );
   }
 
-  async listFinancialAccounts(status: string = 'active'): Promise<FinancialAccount[]> {
+  async searchFinancialAccounts(options: {
+    q?: string;
+    status?: string;
+    limit?: number;
+  }): Promise<FinancialAccount[]> {
+    const params = new URLSearchParams();
+    if (options.status) params.set('status', options.status);
+    if (options.q && options.q.trim()) params.set('q', options.q.trim());
+    if (typeof options.limit === 'number' && !Number.isNaN(options.limit)) {
+      params.set('limit', String(options.limit));
+    }
+    const queryStr = params.toString() ? `?${params.toString()}` : '';
+    return this.request<FinancialAccount[]>(`/api/finance/financial-accounts${queryStr}`);
+  }
+
+  async listFinancialAccounts(
+    statusOrOptions: string | { status?: string; q?: string; limit?: number } = 'active'
+  ): Promise<FinancialAccount[]> {
+    if (typeof statusOrOptions === 'object' && statusOrOptions !== null) {
+      return this.searchFinancialAccounts(statusOrOptions);
+    }
+    const status = typeof statusOrOptions === 'string' ? statusOrOptions : 'active';
     const encodedStatus = encodeURIComponent(status);
     return this.request<FinancialAccount[]>(
       `/api/finance/financial-accounts?status=${encodedStatus}`

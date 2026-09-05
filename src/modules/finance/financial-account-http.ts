@@ -89,7 +89,10 @@ export function registerFinancialAccountRoutes(
     if (!actorCtx) return;
     try {
       const status = typeof req.query.status === 'string' ? (req.query.status as any) : 'all';
-      const items = await repo.list(actorCtx, status);
+      const q = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
+      const parsedLimit = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : undefined;
+      const limit = Number.isNaN(parsedLimit) ? undefined : parsedLimit;
+      const items = await repo.list(actorCtx, status, { q, limit });
       res.json(items);
     } catch (e) {
       handle(res, e);

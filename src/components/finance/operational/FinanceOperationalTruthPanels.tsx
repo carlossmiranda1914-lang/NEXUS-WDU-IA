@@ -52,7 +52,7 @@ export function FinanceOperationalTruthPanels({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Panel 1: Obrigações em aberto */}
+      {/* Panel 1: Cobranças em aberto */}
       <div
         data-testid="finance-panel-open-obligations"
         className={`p-6 rounded-xl border flex flex-col justify-between ${
@@ -69,7 +69,7 @@ export function FinanceOperationalTruthPanels({
               </div>
               <div>
                 <h3 className={`font-semibold ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
-                  Obrigações em aberto
+                  Cobranças em aberto
                 </h3>
                 <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
                   Valores devidos pendentes nesta conta
@@ -99,7 +99,7 @@ export function FinanceOperationalTruthPanels({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <p className={`text-sm ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                  Não existem obrigações em aberto para esta conta.
+                  Não existem cobranças em aberto para esta conta.
                 </p>
               </div>
             ) : (
@@ -130,7 +130,7 @@ export function FinanceOperationalTruthPanels({
         </div>
       </div>
 
-      {/* Panel 2: Recebimentos confirmados não aplicados */}
+      {/* Panel 2: Recebimentos por associar */}
       <div
         data-testid="finance-panel-unallocated-payments"
         className={`p-6 rounded-xl border flex flex-col justify-between ${
@@ -147,10 +147,10 @@ export function FinanceOperationalTruthPanels({
               </div>
               <div>
                 <h3 className={`font-semibold ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
-                  Recebimentos confirmados não aplicados
+                  Recebimentos por associar
                 </h3>
                 <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                  Valores recebidos confirmados na instituição
+                  Pagamentos recebidos que ainda não foram associados a uma cobrança.
                 </p>
               </div>
             </div>
@@ -177,7 +177,7 @@ export function FinanceOperationalTruthPanels({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <p className={`text-sm ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                  Não existem recebimentos confirmados não aplicados.
+                  Não existem recebimentos por associar.
                 </p>
               </div>
             ) : (

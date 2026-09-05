@@ -64,7 +64,7 @@ export function FinanceOperationalHistory({
               Histórico financeiro
             </h3>
             <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-              Linha temporal cronológica de obrigações e recebimentos
+              Linha temporal cronológica de cobranças e recebimentos
             </p>
           </div>
         </div>
@@ -97,7 +97,7 @@ export function FinanceOperationalHistory({
                     <span className={`px-2 py-0.5 text-xs font-semibold rounded ${
                       isLight ? 'bg-amber-100 text-amber-800' : 'bg-amber-950/80 text-amber-300'
                     }`}>
-                      Obrigação
+                      Cobrança
                     </span>
                     <div>
                       <p className={`text-sm font-medium ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>

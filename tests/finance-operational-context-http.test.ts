@@ -308,6 +308,52 @@ async function runTests() {
       assert.equal(json.code, 'ENROLLMENT_NOT_FOUND');
     }
 
+    // 13. Server-side Bounded Search in GET /api/finance/financial-accounts?q=...&limit=...
+    {
+      // Search by account number (CTA-000001)
+      const resNum = await fetch(`${baseUrl}/api/finance/financial-accounts?status=active&q=CTA-000001`, {
+        headers: { Authorization: 'Bearer token-fin-a' },
+      });
+      assert.equal(resNum.status, 200);
+      const accountsNum = await resNum.json();
+      assert.equal(accountsNum.length, 1);
+      assert.equal(accountsNum[0].id, accountA.id);
+
+      // Search by account name
+      const resName = await fetch(`${baseUrl}/api/finance/financial-accounts?status=active&q=Aluno%20Test`, {
+        headers: { Authorization: 'Bearer token-fin-a' },
+      });
+      assert.equal(resName.status, 200);
+      const accountsName = await resName.json();
+      assert.equal(accountsName.length, 1);
+      assert.equal(accountsName[0].id, accountA.id);
+
+      // Search by primary responsible person name
+      const resPerson = await fetch(`${baseUrl}/api/finance/financial-accounts?status=active&q=Payer%20Test`, {
+        headers: { Authorization: 'Bearer token-fin-a' },
+      });
+      assert.equal(resPerson.status, 200);
+      const accountsPerson = await resPerson.json();
+      assert.equal(accountsPerson.length, 1);
+      assert.equal(accountsPerson[0].id, accountA.id);
+
+      // Search tenant isolation: Inst B searching for Inst A specific account yields 0 results
+      const resTenant = await fetch(`${baseUrl}/api/finance/financial-accounts?status=active&q=Aluno%20Test`, {
+        headers: { Authorization: 'Bearer token-fin-b' },
+      });
+      assert.equal(resTenant.status, 200);
+      const accountsTenant = await resTenant.json();
+      assert.equal(accountsTenant.length, 0);
+
+      // Limit bound
+      const resLimit = await fetch(`${baseUrl}/api/finance/financial-accounts?status=active&limit=1`, {
+        headers: { Authorization: 'Bearer token-fin-a' },
+      });
+      assert.equal(resLimit.status, 200);
+      const accountsLimit = await resLimit.json();
+      assert.ok(accountsLimit.length <= 1);
+    }
+
     console.log('FinanceOperationalContext HTTP contract tests passed successfully.');
   } finally {
     if (server) server.close();

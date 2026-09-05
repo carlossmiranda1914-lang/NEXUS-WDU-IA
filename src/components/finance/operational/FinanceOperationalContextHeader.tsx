@@ -160,7 +160,7 @@ export function FinanceOperationalContextHeader({
               </p>
               {responsiblePerson?.role && (
                 <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                  {responsiblePerson.role === 'primary_debtor' ? 'Titular principal' : responsiblePerson.role}
+                  {responsiblePerson.role === 'primary_debtor' ? 'Responsável principal' : responsiblePerson.role}
                 </p>
               )}
             </div>

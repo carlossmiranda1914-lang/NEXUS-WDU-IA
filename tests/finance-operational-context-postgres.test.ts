@@ -326,6 +326,33 @@ try {
       (err: any) => err instanceof AmbiguousFinancialAccountError
     );
 
+    // 8. PostgresFinancialAccountRepository bounded search verification
+    {
+      // Search by operational account number
+      const resultsNum = await accountRepo.list(contextA, 'active', { q: 'CTA-000001' });
+      assert.equal(resultsNum.length, 1);
+      assert.equal(resultsNum[0].id, accountA.id);
+
+      // Search by account name
+      const resultsName = await accountRepo.list(contextA, 'active', { q: 'Familiar' });
+      assert.equal(resultsName.length, 1);
+      assert.equal(resultsName[0].id, accountA.id);
+
+      // Search by primary person name
+      const resultsPerson = await accountRepo.list(contextA, 'active', { q: 'Payer A' });
+      assert.equal(resultsPerson.length, 2); // accountA and accountA2 both have primary person Payer A
+      assert.equal(resultsPerson[0].accountNumber, 'CTA-000001');
+      assert.equal(resultsPerson[1].accountNumber, 'CTA-000002');
+
+      // Search with limit
+      const resultsLimit = await accountRepo.list(contextA, 'active', { q: 'Payer A', limit: 1 });
+      assert.equal(resultsLimit.length, 1);
+
+      // Tenant isolation: contextB cannot find Inst A accounts
+      const resultsTenant = await accountRepo.list(contextB, 'active', { q: 'Familiar Payer A' });
+      assert.equal(resultsTenant.length, 0);
+    }
+
     console.log('PostgresFinanceOperationalContextRepository tests passed successfully.');
   } finally {
     await client.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`);

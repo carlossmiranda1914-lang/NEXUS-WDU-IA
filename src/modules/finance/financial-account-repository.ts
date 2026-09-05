@@ -72,9 +72,36 @@ function mapAccount(r: AccountRow): FinancialAccount {
 export class PostgresFinancialAccountRepository {
   constructor(private readonly pool: Pool) {}
 
-  async list(actor: InstitutionalContext, status: FinancialAccountStatus | 'all' = 'all'): Promise<FinancialAccount[]> {
+  async list(
+    actor: InstitutionalContext,
+    status: FinancialAccountStatus | 'all' = 'all',
+    options?: { q?: string; limit?: number }
+  ): Promise<FinancialAccount[]> {
     const statusClause = status === 'all' ? '' : 'AND a.status = $2';
-    const params = status === 'all' ? [actor.institutionId] : [actor.institutionId, status];
+    const params: any[] = status === 'all' ? [actor.institutionId] : [actor.institutionId, status];
+
+    let searchClause = '';
+    const q = options?.q?.trim();
+    if (q) {
+      params.push(`%${q}%`);
+      const qIndex = params.length;
+      searchClause = `AND (
+        a.account_number ILIKE $${qIndex}
+        OR a.name ILIKE $${qIndex}
+        OR pe.name ILIKE $${qIndex}
+      )`;
+    }
+
+    let limitClause = '';
+    const rawLimit = options?.limit;
+    if (typeof rawLimit === 'number' && !Number.isNaN(rawLimit)) {
+      const boundedLimit = Math.min(Math.max(1, rawLimit), 50);
+      params.push(boundedLimit);
+      limitClause = `LIMIT $${params.length}`;
+    } else if (q) {
+      params.push(20);
+      limitClause = `LIMIT $${params.length}`;
+    }
 
     const sql = `
       SELECT 
@@ -95,8 +122,9 @@ export class PostgresFinancialAccountRepository {
         ON p.financial_account_id = a.id AND p.role = 'primary_debtor' AND p.status = 'active'
       LEFT JOIN people pe 
         ON pe.id = p.person_id
-      WHERE a.institution_id = $1 ${statusClause}
+      WHERE a.institution_id = $1 ${statusClause} ${searchClause}
       ORDER BY a.account_number ASC
+      ${limitClause}
     `;
 
     const res = await this.pool.query<AccountRow>(sql, params);

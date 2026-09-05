@@ -267,6 +267,30 @@ async function runTests() {
     assert.equal(capturedUrl, '/api/finance/operational-context?financialAccountId=acc-123');
   }
 
+  // 10. searchFinancialAccounts calls canonical /api/finance/financial-accounts with q and limit
+  {
+    let capturedUrl = '';
+    const mockFetch: typeof fetch = async (input) => {
+      capturedUrl = String(input);
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    const client = new FinanceOperationalContextClient({
+      fetcher: mockFetch,
+      getToken: async () => 'staff-token',
+    });
+
+    await client.searchFinancialAccounts({ q: 'CTA-000001', status: 'active', limit: 20 });
+    assert.equal(
+      capturedUrl,
+      '/api/finance/financial-accounts?status=active&q=CTA-000001&limit=20',
+      'searchFinancialAccounts must call /api/finance/financial-accounts with q, status and limit'
+    );
+  }
+
   console.log('FinanceOperationalContextClient tests passed successfully.');
 }
 

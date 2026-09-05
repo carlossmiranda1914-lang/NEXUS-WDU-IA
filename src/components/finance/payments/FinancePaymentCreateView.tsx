@@ -77,7 +77,7 @@ export function FinancePaymentCreateView({
       <div className="flex items-center justify-between">
         <div>
           <h2 className={`text-xl font-bold ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
-            Registar Recebimento Manual / Offline
+            Registar recebimento
           </h2>
           <p className={`text-sm ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
             Registe a entrada de valores recebidos por numerário ou transferência.
@@ -200,7 +200,7 @@ export function FinancePaymentCreateView({
 
           <div>
             <label className="block text-sm font-semibold mb-1 text-zinc-900 dark:text-zinc-100">
-              Referência / Comprovativo
+              Referência do pagamento
               {method !== 'cash' && <span className="text-rose-500 ml-1">*</span>}
             </label>
             <input
@@ -217,7 +217,7 @@ export function FinancePaymentCreateView({
 
           <div>
             <label className="block text-sm font-semibold mb-1 text-zinc-900 dark:text-zinc-100">
-              Data Efetiva
+              Data do recebimento
             </label>
             <input
               type="date"
@@ -298,12 +298,12 @@ export function FinancePaymentCreateView({
             </div>
             {manualEvidenceRef && (
               <div className="py-2 flex justify-between">
-                <span className="text-zinc-500 text-sm">Comprovativo:</span>
+                <span className="text-zinc-500 text-sm">Referência do pagamento:</span>
                 <span className="font-mono text-sm">{manualEvidenceRef}</span>
               </div>
             )}
             <div className="py-2 flex justify-between">
-              <span className="text-zinc-500 text-sm">Data Efetiva:</span>
+              <span className="text-zinc-500 text-sm">Data do recebimento:</span>
               <span className="text-sm">{effectiveDate}</span>
             </div>
             <div className="py-2 flex justify-between">

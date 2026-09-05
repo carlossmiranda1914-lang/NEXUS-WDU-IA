@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { FinanceOperationalContext } from '../../../modules/finance/finance-operational-context-model.ts';
 import type { FinancialAccount } from '../../../modules/finance/financial-account-model.ts';
 import { FinanceOperationalContextClient } from '../../../modules/finance/finance-operational-context-client.ts';
@@ -22,90 +22,121 @@ export function FinanceOperationalContextWorkspace({
 }: FinanceOperationalContextWorkspaceProps) {
   const isLight = theme === 'light';
 
-  const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
+  // Request sequencing ref to prevent stale response overwrites
+  const requestSeq = useRef(0);
+
+  const [searchResults, setSearchResults] = useState<FinancialAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>(
     initialFinancialAccountId || initialContextQuery?.financialAccountId || ''
   );
   const [context, setContext] = useState<FinanceOperationalContext | null>(null);
 
-  const [loadingAccounts, setLoadingAccounts] = useState(true);
-  const [loadingContext, setLoadingContext] = useState(false);
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const [loadingContext, setLoadingContext] = useState(
+    Boolean(initialFinancialAccountId || (initialContextQuery && (initialContextQuery.studentRef || initialContextQuery.enrollmentId || initialContextQuery.financialAccountId)))
+  );
   const [error, setError] = useState<string | null>(null);
   const [accountSearchQuery, setAccountSearchQuery] = useState('');
+  const [hasSearched, setHasSearched] = useState(false);
 
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false);
   const [paymentSuccessNotice, setPaymentSuccessNotice] = useState<string | null>(null);
 
-  // 1. Load accounts list (without silent first account selection)
-  const loadAccounts = useCallback(async () => {
-    setLoadingAccounts(true);
+  // 1. Server-side bounded account search
+  const performSearch = useCallback(async (q: string) => {
+    setLoadingSearch(true);
+    setHasSearched(true);
     try {
-      const list = await client.listFinancialAccounts('active');
-      setAccounts(list);
+      const results = await client.searchFinancialAccounts({
+        q: q.trim() || undefined,
+        status: 'active',
+        limit: 20,
+      });
+      setSearchResults(results);
     } catch (err: any) {
-      setError(err?.message || 'Falha ao carregar as contas financeiras da instituição.');
+      setError(err?.message || 'Falha ao pesquisar contas financeiras.');
     } finally {
-      setLoadingAccounts(false);
+      setLoadingSearch(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadAccounts();
-  }, [loadAccounts]);
-
-  // 2. Load context by account ID
+  // 2. Load context by account ID with stale request sequencing protection
   const loadContext = useCallback(async (accountId: string) => {
     if (!accountId) return;
+    const seq = ++requestSeq.current;
     setLoadingContext(true);
     setError(null);
     try {
       const data = await client.getByFinancialAccountId(accountId);
-      setContext(data);
-      setSelectedAccountId(data.financialAccount.id);
+      if (seq === requestSeq.current) {
+        setContext(data);
+        setSelectedAccountId(data.financialAccount.id);
+      }
     } catch (err: any) {
-      setError(err?.message || 'Falha ao carregar a situação operacional da conta financeira.');
-      setContext(null);
+      if (seq === requestSeq.current) {
+        setError(err?.message || 'Falha ao carregar a situação financeira da conta.');
+        setContext(null);
+      }
     } finally {
-      setLoadingContext(false);
+      if (seq === requestSeq.current) {
+        setLoadingContext(false);
+      }
     }
   }, []);
 
-  // 3. Load initial context query (studentRef, enrollmentId, financialAccountId)
+  // 3. Direct cross-module entry (studentRef, enrollmentId, financialAccountId)
   useEffect(() => {
     if (initialContextQuery && (initialContextQuery.studentRef || initialContextQuery.enrollmentId || initialContextQuery.financialAccountId)) {
+      const seq = ++requestSeq.current;
       setLoadingContext(true);
       setError(null);
       client
         .getOperationalContext(initialContextQuery)
         .then((data) => {
-          setContext(data);
-          setSelectedAccountId(data.financialAccount.id);
+          if (seq === requestSeq.current) {
+            setContext(data);
+            setSelectedAccountId(data.financialAccount.id);
+          }
         })
         .catch((err: any) => {
-          setError(err?.message || 'Não foi possível resolver o contexto financeiro para a referência indicada.');
-          setContext(null);
+          if (seq === requestSeq.current) {
+            const msg = err?.code === 'AMBIGUOUS_FINANCIAL_ACCOUNT'
+              ? 'Existem múltiplas contas financeiras associadas a esta referência. Por favor selecione a conta pretendida.'
+              : (err?.message || 'Não foi encontrada nenhuma conta financeira associada a esta referência.');
+            setError(msg);
+            setContext(null);
+          }
         })
         .finally(() => {
-          setLoadingContext(false);
+          if (seq === requestSeq.current) {
+            setLoadingContext(false);
+          }
         });
     } else if (initialFinancialAccountId) {
       loadContext(initialFinancialAccountId);
     }
   }, [initialContextQuery, initialFinancialAccountId, loadContext]);
 
+  // Handle explicit account selection
   const handleSelectAccount = (id: string) => {
     setSelectedAccountId(id);
+    setContext(null); // Clear context atomically before loading new account
     setIsRegisteringPayment(false);
     setPaymentSuccessNotice(null);
     loadContext(id);
   };
 
+  // Handle clearing account selection
   const handleClearAccount = () => {
+    requestSeq.current++; // Invalidate in-flight requests
     setSelectedAccountId('');
     setContext(null);
     setError(null);
     setIsRegisteringPayment(false);
     setPaymentSuccessNotice(null);
+    setHasSearched(false);
+    setSearchResults([]);
+    setAccountSearchQuery('');
   };
 
   const handlePaymentSuccess = () => {
@@ -116,20 +147,13 @@ export function FinanceOperationalContextWorkspace({
     }
   };
 
-  // Filtered accounts for explicit search/selection
-  const filteredAccounts = useMemo(() => {
-    const q = accountSearchQuery.trim().toLowerCase();
-    if (!q) return accounts;
-    return accounts.filter((acc) => {
-      const numMatch = acc.accountNumber?.toLowerCase().includes(q);
-      const nameMatch = acc.name?.toLowerCase().includes(q);
-      const debtorMatch = acc.primaryDebtor?.personName?.toLowerCase().includes(q);
-      return numMatch || nameMatch || debtorMatch;
-    });
-  }, [accounts, accountSearchQuery]);
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    performSearch(accountSearchQuery);
+  };
 
-  // Loading accounts state
-  if (loadingAccounts) {
+  // Initial loading state for direct context resolution
+  if (loadingContext && !context && (initialFinancialAccountId || initialContextQuery)) {
     return (
       <div
         data-testid="finance-operational-loading"
@@ -139,13 +163,13 @@ export function FinanceOperationalContextWorkspace({
       >
         <div className="animate-spin w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full mx-auto mb-4" />
         <p className={`text-sm ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}>
-          A carregar contas financeiras...
+          A carregar situação financeira...
         </p>
       </div>
     );
   }
 
-  // Error state with retry
+  // Error state with controlled recovery
   if (error && !context) {
     return (
       <div
@@ -166,16 +190,15 @@ export function FinanceOperationalContextWorkspace({
           </p>
         </div>
         <div className="flex items-center justify-center gap-3 pt-2">
-          <button
-            type="button"
-            onClick={() => {
-              if (selectedAccountId) loadContext(selectedAccountId);
-              else loadAccounts();
-            }}
-            className="px-4 py-2 text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors"
-          >
-            Tentar novamente
-          </button>
+          {selectedAccountId && (
+            <button
+              type="button"
+              onClick={() => loadContext(selectedAccountId)}
+              className="px-4 py-2 text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors"
+            >
+              Tentar novamente
+            </button>
+          )}
           <button
             type="button"
             onClick={handleClearAccount}
@@ -188,28 +211,6 @@ export function FinanceOperationalContextWorkspace({
             Pesquisar contas da instituição
           </button>
         </div>
-      </div>
-    );
-  }
-
-  // Empty state: no accounts in institution
-  if (accounts.length === 0) {
-    return (
-      <div
-        data-testid="finance-operational-empty"
-        className={`p-12 text-center rounded-xl border ${
-          isLight ? 'bg-white border-zinc-200' : 'bg-zinc-900 border-zinc-800'
-        }`}
-      >
-        <svg className="w-12 h-12 mx-auto mb-3 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-        </svg>
-        <h3 className={`text-lg font-bold ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
-          Nenhuma conta financeira ativa
-        </h3>
-        <p className={`text-sm mt-1 ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-          Não foram encontradas contas financeiras nesta instituição.
-        </p>
       </div>
     );
   }
@@ -240,7 +241,7 @@ export function FinanceOperationalContextWorkspace({
     );
   }
 
-  // P1-03: Explicit Account Selection state when no account is selected
+  // Explicit Account Selection & Search view when no account is selected
   if (!selectedAccountId || !context) {
     return (
       <div
@@ -249,53 +250,62 @@ export function FinanceOperationalContextWorkspace({
           isLight ? 'bg-white border-zinc-200 shadow-sm' : 'bg-zinc-900 border-zinc-800'
         }`}
       >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h2 className={`text-xl font-bold tracking-tight ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
-              Selecionar Conta Financeira
-            </h2>
-            <p className={`text-sm mt-1 ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}>
-              Pesquise pelo número de conta, nome ou responsável para consultar a respetiva situação financeira operacional.
+        <div>
+          <h2 className={`text-xl font-bold tracking-tight ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
+            Selecionar Conta Financeira
+          </h2>
+          <p className={`text-sm mt-1 ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}>
+            Pesquise pelo número de conta (ex: CTA-000001), nome da conta ou responsável financeiro.
+          </p>
+        </div>
+
+        {/* Search form */}
+        <form onSubmit={handleSearchSubmit} className="flex gap-3">
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              value={accountSearchQuery}
+              onChange={(e) => setAccountSearchQuery(e.target.value)}
+              placeholder="Pesquisar por número de conta, nome ou responsável..."
+              data-testid="finance-account-search-input"
+              className={`w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border font-medium outline-none transition-all ${
+                isLight
+                  ? 'bg-zinc-50 border-zinc-200 text-zinc-900 placeholder-zinc-400 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20'
+                  : 'bg-zinc-800/80 border-zinc-700 text-zinc-100 placeholder-zinc-500 focus:bg-zinc-800 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20'
+              }`}
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={loadingSearch}
+            className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-xl shadow-sm transition-colors shrink-0"
+          >
+            {loadingSearch ? 'A pesquisar...' : 'Pesquisar'}
+          </button>
+        </form>
+
+        {/* Results */}
+        {loadingSearch ? (
+          <div className="py-12 text-center">
+            <div className="animate-spin w-6 h-6 border-3 border-emerald-600 border-t-transparent rounded-full mx-auto mb-2" />
+            <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+              A pesquisar contas...
             </p>
           </div>
-          <span className={`text-xs font-semibold px-3 py-1.5 rounded-full border self-start sm:self-auto ${
-            isLight ? 'bg-zinc-100 border-zinc-200 text-zinc-700' : 'bg-zinc-800 border-zinc-700 text-zinc-300'
-          }`}>
-            {accounts.length} conta{accounts.length === 1 ? '' : 's'} ativa{accounts.length === 1 ? '' : 's'}
-          </span>
-        </div>
-
-        {/* Search input */}
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <input
-            type="text"
-            value={accountSearchQuery}
-            onChange={(e) => setAccountSearchQuery(e.target.value)}
-            placeholder="Pesquisar por número de conta (ex: CTA-000001), nome ou titular..."
-            data-testid="finance-account-search-input"
-            className={`w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border font-medium outline-none transition-all ${
-              isLight
-                ? 'bg-zinc-50 border-zinc-200 text-zinc-900 placeholder-zinc-400 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20'
-                : 'bg-zinc-800/80 border-zinc-700 text-zinc-100 placeholder-zinc-500 focus:bg-zinc-800 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20'
-            }`}
-          />
-        </div>
-
-        {/* Filtered account list */}
-        {filteredAccounts.length === 0 ? (
+        ) : hasSearched && searchResults.length === 0 ? (
           <div className="py-12 text-center">
             <p className={`text-sm ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-              Nenhuma conta financeira corresponde à pesquisa &quot;{accountSearchQuery}&quot;.
+              Nenhuma conta financeira ativa encontrada para &quot;{accountSearchQuery}&quot;.
             </p>
           </div>
-        ) : (
+        ) : searchResults.length > 0 ? (
           <div className="divide-y rounded-xl border overflow-hidden max-h-[500px] overflow-y-auto">
-            {filteredAccounts.map((acc) => (
+            {searchResults.map((acc) => (
               <div
                 key={acc.id}
                 data-testid={`finance-account-row-${acc.id}`}
@@ -321,7 +331,7 @@ export function FinanceOperationalContextWorkspace({
                   </div>
                   {acc.primaryDebtor?.personName && (
                     <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                      Titular: <strong className={isLight ? 'text-zinc-700' : 'text-zinc-300'}>{acc.primaryDebtor.personName}</strong>
+                      Responsável: <strong className={isLight ? 'text-zinc-700' : 'text-zinc-300'}>{acc.primaryDebtor.personName}</strong>
                     </p>
                   )}
                 </div>
@@ -332,12 +342,12 @@ export function FinanceOperationalContextWorkspace({
                   data-testid={`finance-select-account-btn-${acc.id}`}
                   className="shrink-0 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors"
                 >
-                  Abrir situação operacional
+                  Abrir situação financeira
                 </button>
               </div>
             ))}
           </div>
-        )}
+        ) : null}
       </div>
     );
   }
@@ -369,7 +379,7 @@ export function FinanceOperationalContextWorkspace({
       <FinanceOperationalContextHeader
         theme={theme}
         context={context}
-        accounts={accounts}
+        accounts={searchResults.length > 0 ? searchResults : [context.financialAccount as any]}
         selectedAccountId={selectedAccountId}
         onSelectAccount={handleSelectAccount}
         onClearAccount={handleClearAccount}
