@@ -12,6 +12,30 @@ import type {
   FinanceOperationalContext,
 } from './finance-operational-context-model.ts';
 
+export class AmbiguousFinancialAccountError extends Error {
+  readonly code = 'AMBIGUOUS_FINANCIAL_ACCOUNT';
+  constructor(message = 'Existem múltiplas contas financeiras ativas associadas a este estudante.') {
+    super(message);
+    this.name = 'AmbiguousFinancialAccountError';
+  }
+}
+
+export class StudentNotFoundError extends Error {
+  readonly code = 'STUDENT_NOT_FOUND';
+  constructor(message = 'Estudante não encontrado.') {
+    super(message);
+    this.name = 'StudentNotFoundError';
+  }
+}
+
+export class EnrollmentNotFoundError extends Error {
+  readonly code = 'ENROLLMENT_NOT_FOUND';
+  constructor(message = 'Matrícula não encontrada.') {
+    super(message);
+    this.name = 'EnrollmentNotFoundError';
+  }
+}
+
 interface AccountRow {
   id: string;
   institution_id: string;
@@ -356,5 +380,70 @@ export class PostgresFinanceOperationalContextRepository {
       confirmedUnallocatedPayments,
       history,
     };
+  }
+
+  async getByStudentPersonId(
+    actor: InstitutionalContext,
+    studentPersonId: string,
+    client: Pool | PoolClient = this.pool
+  ): Promise<FinanceOperationalContext> {
+    const candidateSql = `
+      WITH candidate_accounts AS (
+        SELECT p.financial_account_id
+        FROM finance_financial_account_parties p
+        JOIN finance_financial_accounts a ON a.id = p.financial_account_id AND a.institution_id = p.institution_id
+        WHERE p.institution_id = $1 AND p.person_id = $2 AND p.status = 'active' AND a.status = 'active'
+        UNION
+        SELECT o.financial_account_id
+        FROM finance_obligations o
+        JOIN finance_financial_accounts a ON a.id = o.financial_account_id AND a.institution_id = o.institution_id
+        WHERE o.institution_id = $1 AND o.beneficiary_person_id = $2 AND a.status = 'active'
+      )
+      SELECT DISTINCT financial_account_id FROM candidate_accounts
+    `;
+    const candidateRes = await client.query<{ financial_account_id: string }>(candidateSql, [
+      actor.institutionId,
+      studentPersonId,
+    ]);
+
+    if (candidateRes.rows.length === 0) {
+      throw new FinancialAccountNotFoundError('Nenhuma conta financeira ativa encontrada para este estudante.');
+    }
+    if (candidateRes.rows.length > 1) {
+      throw new AmbiguousFinancialAccountError('Existem múltiplas contas financeiras ativas associadas a este estudante.');
+    }
+
+    const financialAccountId = candidateRes.rows[0].financial_account_id;
+    return this.getByFinancialAccountId(actor, financialAccountId, client);
+  }
+
+  async getByStudentRef(
+    actor: InstitutionalContext,
+    studentRef: string,
+    client: Pool | PoolClient = this.pool
+  ): Promise<FinanceOperationalContext> {
+    const profileRes = await client.query<{ person_id: string }>(
+      `SELECT person_id FROM student_profiles WHERE institution_id = $1 AND public_ref = $2 AND status = 'active'`,
+      [actor.institutionId, studentRef]
+    );
+    if (!profileRes.rows[0]) {
+      throw new StudentNotFoundError();
+    }
+    return this.getByStudentPersonId(actor, profileRes.rows[0].person_id, client);
+  }
+
+  async getByEnrollmentId(
+    actor: InstitutionalContext,
+    enrollmentId: string,
+    client: Pool | PoolClient = this.pool
+  ): Promise<FinanceOperationalContext> {
+    const enrollRes = await client.query<{ student_person_id: string }>(
+      `SELECT student_person_id FROM enrollment_applications WHERE institution_id = $1 AND id = $2`,
+      [actor.institutionId, enrollmentId]
+    );
+    if (!enrollRes.rows[0]) {
+      throw new EnrollmentNotFoundError();
+    }
+    return this.getByStudentPersonId(actor, enrollRes.rows[0].student_person_id, client);
   }
 }

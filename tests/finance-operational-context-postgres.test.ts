@@ -11,7 +11,12 @@ import { PostgresFinancialObligationRepository } from '../src/modules/finance/fi
 import { PostgresFinancialAccountRepository, FinancialAccountNotFoundError } from '../src/modules/finance/financial-account-repository.ts';
 import { PostgresFeeCatalogueRepository } from '../src/modules/finance/fee-catalogue-repository.ts';
 import { PostgresFeeTypeRepository } from '../src/modules/finance/fee-type-repository.ts';
-import { PostgresFinanceOperationalContextRepository } from '../src/modules/finance/finance-operational-context-repository.ts';
+import {
+  PostgresFinanceOperationalContextRepository,
+  AmbiguousFinancialAccountError,
+  StudentNotFoundError,
+  EnrollmentNotFoundError,
+} from '../src/modules/finance/finance-operational-context-repository.ts';
 import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 
 await verifyApprovedTestConnection();
@@ -90,10 +95,11 @@ try {
 
     // Student profile & Guardian relationship in Inst A
     const studentProfileId = randomUUID();
+    const studentRefA = 'stu_1234567890123456789012';
     await client.query(
-      `INSERT INTO student_profiles(id, institution_id, person_id, student_number, status)
-       VALUES ($1, $2, $3, 'ALU-001', 'active')`,
-      [studentProfileId, institutionA, personStudentA]
+      `INSERT INTO student_profiles(id, institution_id, person_id, student_number, public_ref, status)
+       VALUES ($1, $2, $3, 'ALU-001', $4, 'active')`,
+      [studentProfileId, institutionA, personStudentA, studentRefA]
     );
     await client.query(
       `INSERT INTO guardian_relationships(id, institution_id, guardian_person_id, student_person_id, relationship, status, is_primary, financial_responsible)
@@ -249,6 +255,75 @@ try {
         await opContextRepo.getByFinancialAccountId(contextA, randomUUID());
       },
       (err: any) => err instanceof FinancialAccountNotFoundError
+    );
+
+    // 2. Resolve operational context by Student Ref
+    const ctxByStudent = await opContextRepo.getByStudentRef(contextA, studentRefA);
+    assert.equal(ctxByStudent.financialAccount.id, accountA.id, 'Student A must resolve Account A');
+    assert.equal(ctxByStudent.openObligations.length, 1);
+
+    // 3. Resolve operational context by Enrollment ID
+    const ctxByEnrollment = await opContextRepo.getByEnrollmentId(contextA, enrollmentId);
+    assert.equal(ctxByEnrollment.financialAccount.id, accountA.id, 'Enrollment of Student A must resolve Account A');
+
+    // 4. Negative proof: Foreign tenant Student Ref fails closed
+    await assert.rejects(
+      async () => {
+        await opContextRepo.getByStudentRef(contextB, studentRefA);
+      },
+      (err: any) => err instanceof StudentNotFoundError
+    );
+
+    // 5. Negative proof: Foreign tenant Enrollment ID fails closed
+    await assert.rejects(
+      async () => {
+        await opContextRepo.getByEnrollmentId(contextB, enrollmentId);
+      },
+      (err: any) => err instanceof EnrollmentNotFoundError
+    );
+
+    // 6. Negative proof: Student with NO financial account fails closed with FinancialAccountNotFoundError
+    const personStudentNoAcc = randomUUID();
+    const studentRefNoAcc = 'stu_9999999999999999999999';
+    await client.query(`INSERT INTO people(id, name) VALUES ($1, 'Student No Account')`, [personStudentNoAcc]);
+    await client.query(
+      `INSERT INTO student_profiles(id, institution_id, person_id, student_number, public_ref, status)
+       VALUES ($1, $2, $3, 'ALU-NO-ACC', $4, 'active')`,
+      [randomUUID(), institutionA, personStudentNoAcc, studentRefNoAcc]
+    );
+    await assert.rejects(
+      async () => {
+        await opContextRepo.getByStudentRef(contextA, studentRefNoAcc);
+      },
+      (err: any) => err instanceof FinancialAccountNotFoundError
+    );
+
+    // 7. Negative proof: Ambiguous student associated with multiple accounts fails with AmbiguousFinancialAccountError
+    const personStudentAmbiguous = randomUUID();
+    const studentRefAmbiguous = 'stu_8888888888888888888888';
+    await client.query(`INSERT INTO people(id, name) VALUES ($1, 'Student Ambiguous')`, [personStudentAmbiguous]);
+    await client.query(
+      `INSERT INTO student_profiles(id, institution_id, person_id, student_number, public_ref, status)
+       VALUES ($1, $2, $3, 'ALU-AMB', $4, 'active')`,
+      [randomUUID(), institutionA, personStudentAmbiguous, studentRefAmbiguous]
+    );
+    // Create second account in Inst A
+    const accountA2 = await accountRepo.create(contextA, {
+      name: 'Segunda Conta Inst A',
+      primaryPersonId: personPayerA,
+    }, 'idemp-acc-003');
+    // Link ambiguous student to both accountA and accountA2 as active party
+    await client.query(
+      `INSERT INTO finance_financial_account_parties (id, institution_id, financial_account_id, person_id, role, status)
+       VALUES ($1, $2, $3, $4, 'beneficiary', 'active'), ($5, $2, $6, $4, 'beneficiary', 'active')`,
+      [randomUUID(), institutionA, accountA.id, personStudentAmbiguous, randomUUID(), accountA2.id]
+    );
+
+    await assert.rejects(
+      async () => {
+        await opContextRepo.getByStudentRef(contextA, studentRefAmbiguous);
+      },
+      (err: any) => err instanceof AmbiguousFinancialAccountError
     );
 
     console.log('PostgresFinanceOperationalContextRepository tests passed successfully.');

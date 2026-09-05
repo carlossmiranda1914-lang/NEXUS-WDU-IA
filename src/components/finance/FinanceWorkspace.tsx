@@ -10,12 +10,14 @@ export interface FinanceWorkspaceProps {
   theme?: string;
   initialTab?: FinanceTab;
   initialFinancialAccountId?: string;
+  initialContextQuery?: { financialAccountId?: string; studentRef?: string; enrollmentId?: string } | null;
 }
 
 export function FinanceWorkspace({
   theme = 'light',
   initialTab = 'operations',
   initialFinancialAccountId,
+  initialContextQuery,
 }: FinanceWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<FinanceTab>(initialTab);
 
@@ -96,6 +98,7 @@ export function FinanceWorkspace({
           <FinanceOperationalContextWorkspace
             theme={theme}
             initialFinancialAccountId={initialFinancialAccountId}
+            initialContextQuery={initialContextQuery}
           />
         )}
         {activeTab === 'catalogue' && <FinanceFeeCatalogueWorkspace theme={theme} />}

@@ -71,10 +71,45 @@ export class FinanceOperationalContextClient {
     );
   }
 
+  async getByStudentRef(studentRef: string): Promise<FinanceOperationalContext> {
+    const encodedRef = encodeURIComponent(studentRef);
+    return this.request<FinanceOperationalContext>(
+      `/api/finance/operational-context?studentRef=${encodedRef}`
+    );
+  }
+
+  async getByEnrollmentId(enrollmentId: string): Promise<FinanceOperationalContext> {
+    const encodedId = encodeURIComponent(enrollmentId);
+    return this.request<FinanceOperationalContext>(
+      `/api/finance/operational-context?enrollmentId=${encodedId}`
+    );
+  }
+
+  async getOperationalContext(query: {
+    financialAccountId?: string;
+    studentRef?: string;
+    enrollmentId?: string;
+  }): Promise<FinanceOperationalContext> {
+    if (query.financialAccountId) {
+      return this.getByFinancialAccountId(query.financialAccountId);
+    }
+    if (query.studentRef) {
+      return this.getByStudentRef(query.studentRef);
+    }
+    if (query.enrollmentId) {
+      return this.getByEnrollmentId(query.enrollmentId);
+    }
+    throw new FinanceOperationalContextApiError(
+      400,
+      'INVALID_CONTEXT_QUERY',
+      'É necessário indicar uma conta financeira, aluno ou matrícula para obter o contexto operacional.'
+    );
+  }
+
   async listFinancialAccounts(status: string = 'active'): Promise<FinancialAccount[]> {
     const encodedStatus = encodeURIComponent(status);
     return this.request<FinancialAccount[]>(
-      `/api/finance/accounts?status=${encodedStatus}`
+      `/api/finance/financial-accounts?status=${encodedStatus}`
     );
   }
 }

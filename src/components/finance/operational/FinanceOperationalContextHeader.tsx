@@ -8,6 +8,7 @@ export interface FinanceOperationalContextHeaderProps {
   accounts: FinancialAccount[];
   selectedAccountId: string;
   onSelectAccount: (accountId: string) => void;
+  onClearAccount?: () => void;
   onRegisterPayment: () => void;
   loading?: boolean;
 }
@@ -18,6 +19,7 @@ export function FinanceOperationalContextHeader({
   accounts,
   selectedAccountId,
   onSelectAccount,
+  onClearAccount,
   onRegisterPayment,
   loading = false,
 }: FinanceOperationalContextHeaderProps) {
@@ -96,6 +98,21 @@ export function FinanceOperationalContextHeader({
                   ))}
                 </select>
               </div>
+            )}
+
+            {onClearAccount && (
+              <button
+                type="button"
+                onClick={onClearAccount}
+                data-testid="finance-switch-account-btn"
+                className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                  isLight
+                    ? 'border-zinc-300 text-zinc-700 hover:bg-zinc-100'
+                    : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
+                }`}
+              >
+                Trocar de conta
+              </button>
             )}
           </div>
         </div>

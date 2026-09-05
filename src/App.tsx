@@ -387,6 +387,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [studentRecordRef, setStudentRecordRef] = useState<string | null>(null);
   const [financeAccountId, setFinanceAccountId] = useState<string | null>(null);
+  const [financeContextQuery, setFinanceContextQuery] = useState<{ financialAccountId?: string; studentRef?: string; enrollmentId?: string } | null>(null);
   // Until the backend resolves an active Membership, the client has no institutional authority.
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('student');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
@@ -621,10 +622,24 @@ export default function App() {
 
   useEffect(() => {
     const openFinance = (event: Event) => {
-      const detail = (event as CustomEvent<{ financialAccountId?: string } | string | undefined>).detail;
-      const accountId = typeof detail === 'string' ? detail : detail?.financialAccountId;
-      if (typeof accountId === 'string' && accountId.trim().length > 0) {
-        setFinanceAccountId(accountId.trim());
+      const detail = (event as CustomEvent<{ financialAccountId?: string; studentRef?: string; enrollmentId?: string } | string | undefined>).detail;
+      if (typeof detail === 'string' && detail.trim().length > 0) {
+        const id = detail.trim();
+        setFinanceAccountId(id);
+        setFinanceContextQuery({ financialAccountId: id });
+      } else if (typeof detail === 'object' && detail !== null) {
+        const id = detail.financialAccountId?.trim();
+        const studentRef = detail.studentRef?.trim();
+        const enrollmentId = detail.enrollmentId?.trim();
+        setFinanceAccountId(id || null);
+        setFinanceContextQuery({
+          ...(id ? { financialAccountId: id } : {}),
+          ...(studentRef ? { studentRef } : {}),
+          ...(enrollmentId ? { enrollmentId } : {}),
+        });
+      } else {
+        setFinanceAccountId(null);
+        setFinanceContextQuery(null);
       }
       setActiveTab('financials');
     };
@@ -2681,7 +2696,11 @@ export default function App() {
                   )}
 
                   {activeTab === 'financials' && (
-                    <FinanceWorkspace theme={theme} initialFinancialAccountId={financeAccountId} />
+                    <FinanceWorkspace
+                      theme={theme}
+                      initialFinancialAccountId={financeAccountId}
+                      initialContextQuery={financeContextQuery}
+                    />
                   )}
 
                   {activeTab === 'communications' && (

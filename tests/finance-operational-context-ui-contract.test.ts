@@ -45,4 +45,25 @@ assert.doesNotMatch(allOperationalSrc, /partially_applied|fully_applied/i, 'Must
 assert.match(topWorkspaceSrc, /FinanceOperationalContextWorkspace/, 'FinanceWorkspace must import FinanceOperationalContextWorkspace');
 assert.match(topWorkspaceSrc, /initialTab\s*=\s*'operations'/, 'FinanceWorkspace default tab must be operations');
 
+// 4. P1-03: No silent first-account default
+assert.ok(
+  !workspaceSrc.includes('setSelectedAccountId(list[0].id)'),
+  'Must NOT contain silent first-account selection default setSelectedAccountId(list[0].id)'
+);
+assert.match(
+  workspaceSrc,
+  /data-testid="finance-explicit-account-selection"/,
+  'Must render explicit account selection state when no account is selected'
+);
+assert.match(
+  workspaceSrc,
+  /data-testid="finance-account-search-input"/,
+  'Must provide account search input for institution-safe lookup'
+);
+assert.match(
+  workspaceSrc,
+  /initialContextQuery/,
+  'Must support initialContextQuery for direct resolved account flow'
+);
+
 console.log('Finance Operational Context UI contract tests passed successfully.');

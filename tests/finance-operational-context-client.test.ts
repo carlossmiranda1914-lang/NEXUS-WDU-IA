@@ -169,6 +169,104 @@ async function runTests() {
     assert.equal(owner.calls, 1);
   }
 
+  // 6. listFinancialAccounts calls canonical /api/finance/financial-accounts
+  {
+    let capturedUrl = '';
+    const mockFetch: typeof fetch = async (input) => {
+      capturedUrl = String(input);
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    const client = new FinanceOperationalContextClient({
+      fetcher: mockFetch,
+      getToken: async () => 'staff-token',
+    });
+
+    await client.listFinancialAccounts('active');
+    assert.equal(
+      capturedUrl,
+      '/api/finance/financial-accounts?status=active',
+      'listFinancialAccounts must hit canonical /api/finance/financial-accounts route'
+    );
+  }
+
+  // 7. getByStudentRef calls /api/finance/operational-context?studentRef=...
+  {
+    let capturedUrl = '';
+    const mockFetch: typeof fetch = async (input) => {
+      capturedUrl = String(input);
+      return new Response(JSON.stringify(fakeContext), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    const client = new FinanceOperationalContextClient({
+      fetcher: mockFetch,
+      getToken: async () => 'staff-token',
+    });
+
+    await client.getByStudentRef('stu_1234567890123456789012');
+    assert.equal(
+      capturedUrl,
+      '/api/finance/operational-context?studentRef=stu_1234567890123456789012',
+      'getByStudentRef must hit /api/finance/operational-context with studentRef query parameter'
+    );
+  }
+
+  // 8. getByEnrollmentId calls /api/finance/operational-context?enrollmentId=...
+  {
+    let capturedUrl = '';
+    const mockFetch: typeof fetch = async (input) => {
+      capturedUrl = String(input);
+      return new Response(JSON.stringify(fakeContext), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    const client = new FinanceOperationalContextClient({
+      fetcher: mockFetch,
+      getToken: async () => 'staff-token',
+    });
+
+    await client.getByEnrollmentId('00000000-0000-0000-0000-000000000004');
+    assert.equal(
+      capturedUrl,
+      '/api/finance/operational-context?enrollmentId=00000000-0000-0000-0000-000000000004',
+      'getByEnrollmentId must hit /api/finance/operational-context with enrollmentId query parameter'
+    );
+  }
+
+  // 9. getOperationalContext polymorphic delegation
+  {
+    let capturedUrl = '';
+    const mockFetch: typeof fetch = async (input) => {
+      capturedUrl = String(input);
+      return new Response(JSON.stringify(fakeContext), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    const client = new FinanceOperationalContextClient({
+      fetcher: mockFetch,
+      getToken: async () => 'staff-token',
+    });
+
+    await client.getOperationalContext({ studentRef: 'stu_test123' });
+    assert.equal(capturedUrl, '/api/finance/operational-context?studentRef=stu_test123');
+
+    await client.getOperationalContext({ enrollmentId: 'enroll-123' });
+    assert.equal(capturedUrl, '/api/finance/operational-context?enrollmentId=enroll-123');
+
+    await client.getOperationalContext({ financialAccountId: 'acc-123' });
+    assert.equal(capturedUrl, '/api/finance/operational-context?financialAccountId=acc-123');
+  }
+
   console.log('FinanceOperationalContextClient tests passed successfully.');
 }
 

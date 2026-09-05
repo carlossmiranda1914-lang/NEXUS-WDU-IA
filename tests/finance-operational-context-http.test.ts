@@ -87,6 +87,39 @@ async function runTests() {
       'idemp-acc-001'
     );
 
+    // Link studentPerson to accountA
+    await client.query(
+      `INSERT INTO finance_financial_account_parties (id, institution_id, financial_account_id, person_id, role, status)
+       VALUES ($1, $2, $3, $4, 'beneficiary', 'active')`,
+      [randomUUID(), institutionA, accountA.id, studentPerson]
+    );
+
+    const studentRefHttp = 'stu_1111222233334444555566';
+    await client.query(
+      `INSERT INTO student_profiles(id, institution_id, person_id, student_number, public_ref, status)
+       VALUES ($1, $2, $3, 'ALU-HTTP-01', $4, 'active')`,
+      [randomUUID(), institutionA, studentPerson, studentRefHttp]
+    );
+
+    const academicYearId = randomUUID();
+    await client.query(
+      `INSERT INTO academic_years(id, institution_id, name, starts_on, ends_on, status)
+       VALUES ($1, $2, '2026/2027', '2026-09-01', '2027-06-30', 'active')`,
+      [academicYearId, institutionA]
+    );
+    const offerId = randomUUID();
+    await client.query(
+      `INSERT INTO enrollment_offers(id, institution_id, academic_year_id, name, code, status)
+       VALUES ($1, $2, $3, 'Oferta HTTP', 'OFF-HTTP', 'active')`,
+      [offerId, institutionA, academicYearId]
+    );
+    const enrollmentIdHttp = randomUUID();
+    await client.query(
+      `INSERT INTO enrollment_applications(id, institution_id, student_person_id, guardian_person_id, academic_year_id, offer_id, status, created_by, updated_by)
+       VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $7)`,
+      [enrollmentIdHttp, institutionA, studentPerson, payerPerson, academicYearId, offerId, personA]
+    );
+
     const accountB = await accountRepo.create(
       {
         institutionId: institutionB,
@@ -157,14 +190,14 @@ async function runTests() {
       assert.equal(json.code, 'FINANCE_FORBIDDEN');
     }
 
-    // 3. 400 Bad Request - Missing financialAccountId parameter
+    // 3. 400 Bad Request - Missing query parameters (financialAccountId, studentRef, or enrollmentId)
     {
       const res = await fetch(`${baseUrl}/api/finance/operational-context`, {
         headers: { Authorization: 'Bearer token-fin-a' },
       });
       assert.equal(res.status, 400);
       const json = await res.json();
-      assert.equal(json.code, 'INVALID_FINANCIAL_ACCOUNT_ID');
+      assert.equal(json.code, 'INVALID_QUERY_PARAMS');
     }
 
     // 4. 400 Bad Request - Invalid financialAccountId format (not a UUID)
@@ -220,6 +253,59 @@ async function runTests() {
       assert.equal(res.status, 404);
       const json = await res.json();
       assert.equal(json.code, 'FINANCIAL_ACCOUNT_NOT_FOUND');
+    }
+
+    // 8. Canonical Financial Accounts list route contract: GET /api/finance/financial-accounts?status=active
+    {
+      const res = await fetch(`${baseUrl}/api/finance/financial-accounts?status=active`, {
+        headers: { Authorization: 'Bearer token-fin-a' },
+      });
+      assert.equal(res.status, 200);
+      const accounts = await res.json();
+      assert.ok(Array.isArray(accounts), 'financial-accounts must return an array');
+      assert.ok(accounts.some((a: any) => a.id === accountA.id), 'Must include account A');
+      assert.ok(!accounts.some((a: any) => a.id === accountB.id), 'Must NOT include account B (tenant isolation)');
+    }
+
+    // 9. Contextual resolution via Student Ref: GET /api/finance/operational-context?studentRef=...
+    {
+      const res = await fetch(`${baseUrl}/api/finance/operational-context?studentRef=${studentRefHttp}`, {
+        headers: { Authorization: 'Bearer token-fin-a' },
+      });
+      assert.equal(res.status, 200);
+      const json = await res.json();
+      assert.equal(json.financialAccount.id, accountA.id);
+      assert.equal(json.financialAccount.accountNumber, 'CTA-000001');
+    }
+
+    // 10. Contextual resolution via Enrollment ID: GET /api/finance/operational-context?enrollmentId=...
+    {
+      const res = await fetch(`${baseUrl}/api/finance/operational-context?enrollmentId=${enrollmentIdHttp}`, {
+        headers: { Authorization: 'Bearer token-fin-a' },
+      });
+      assert.equal(res.status, 200);
+      const json = await res.json();
+      assert.equal(json.financialAccount.id, accountA.id);
+    }
+
+    // 11. Tenant isolation on Student Ref: Inst B reading Inst A student returns 404
+    {
+      const res = await fetch(`${baseUrl}/api/finance/operational-context?studentRef=${studentRefHttp}`, {
+        headers: { Authorization: 'Bearer token-fin-b' },
+      });
+      assert.equal(res.status, 404);
+      const json = await res.json();
+      assert.equal(json.code, 'STUDENT_NOT_FOUND');
+    }
+
+    // 12. Tenant isolation on Enrollment ID: Inst B reading Inst A enrollment returns 404
+    {
+      const res = await fetch(`${baseUrl}/api/finance/operational-context?enrollmentId=${enrollmentIdHttp}`, {
+        headers: { Authorization: 'Bearer token-fin-b' },
+      });
+      assert.equal(res.status, 404);
+      const json = await res.json();
+      assert.equal(json.code, 'ENROLLMENT_NOT_FOUND');
     }
 
     console.log('FinanceOperationalContext HTTP contract tests passed successfully.');

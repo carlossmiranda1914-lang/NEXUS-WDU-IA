@@ -51,7 +51,8 @@
   - RED test: `tests/finance-operational-consolidation-runner.test.mjs`
   - Implementation Commit: `b086643`
   - Findings: Aggregate runner in `scripts/run-finance-operational-consolidation.mjs`, registered as `test:finance:operational-consolidation` script.
-- [x] Task 10: Independent Review, Runtime Parity and Human UAT
-  - Full Regression Suite: PASS (`test:finance:operational-consolidation`, `test:finance:f3:payment-core`, `test:finance:f2:account-obligation`, `test:finance:f1:fee-catalogue`, `test:finance:foundation`, `test:fnd03`, `test:foundation`, `lint`, `build`, `test:secrets`, `test:artifacts`, `committed-diff`).
-  - Remote Head Parity: `b086643aae7ad39c1114d65933f731d065668df2` pushed to `origin/codex/finance-operational-consolidation`.
-  - Server Readiness: Dev test server running on `http://localhost:3000` (HTTP 200 OK).
+- [ ] Task 10: Independent Review, Runtime Parity and Human UAT
+  - AUTOMATED_VERIFICATION=PASS
+  - RUNTIME_READY=PASS
+  - HUMAN_UAT=PENDING_RETRY
+  - Status: Remediation of P1-01 (canonical financial-accounts route), P1-02 (student/enrollment contextual navigation), P1-03 (explicit account selection without silent default), P1-04 (honest UAT ledger truth). Ready for PO human UAT workflow in browser.
