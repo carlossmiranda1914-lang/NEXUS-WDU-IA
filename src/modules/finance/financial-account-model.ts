@@ -33,8 +33,8 @@ export interface FinancialAccount {
 }
 
 export interface CreateFinancialAccountInput {
-  name: string;
   primaryPersonId: string;
+  name?: string;
 }
 
 export interface UpdateFinancialAccountInput {
@@ -47,17 +47,26 @@ export function normalizeCreateFinancialAccount(input: unknown): CreateFinancial
   if (typeof input !== 'object' || input === null) {
     throw new FinancialAccountValidationError('Dados da conta financeira inválidos.');
   }
-  const raw = input as Partial<CreateFinancialAccountInput>;
-  const name = typeof raw.name === 'string' ? raw.name.trim() : '';
-  if (!name || name.length < 2 || name.length > 255) {
-    throw new FinancialAccountValidationError('O nome da conta financeira deve ter entre 2 e 255 caracteres.');
-  }
-  const primaryPersonId = typeof raw.primaryPersonId === 'string' ? raw.primaryPersonId.trim() : '';
+  const raw = input as Partial<CreateFinancialAccountInput> & { personId?: string };
+  const primaryPersonId = typeof raw.primaryPersonId === 'string'
+    ? raw.primaryPersonId.trim()
+    : typeof raw.personId === 'string'
+      ? raw.personId.trim()
+      : '';
   if (!primaryPersonId || !UUID_REGEX.test(primaryPersonId)) {
     throw new FinancialAccountValidationError('Identificador de pessoa responsável principal inválido.');
   }
 
-  return { name, primaryPersonId };
+  let name: string | undefined = undefined;
+  if (typeof raw.name === 'string' && raw.name.trim().length > 0) {
+    const trimmed = raw.name.trim();
+    if (trimmed.length < 2 || trimmed.length > 255) {
+      throw new FinancialAccountValidationError('O nome da conta financeira deve ter entre 2 e 255 caracteres.');
+    }
+    name = trimmed;
+  }
+
+  return { primaryPersonId, ...(name ? { name } : {}) };
 }
 
 export function normalizeUpdateFinancialAccount(input: unknown): UpdateFinancialAccountInput {

@@ -17,8 +17,7 @@ export function FinancialAccountsView({ onBack }: FinancialAccountsViewProps) {
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
-    personId: '',
-    role: 'primary_payer',
+    primaryPersonId: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -48,7 +47,7 @@ export function FinancialAccountsView({ onBack }: FinancialAccountsViewProps) {
     e.preventDefault();
     setFormError(null);
 
-    if (!form.personId) {
+    if (!form.primaryPersonId) {
       setFormError('Selecione uma pessoa para titular de responsabilidade financeira.');
       return;
     }
@@ -56,10 +55,9 @@ export function FinancialAccountsView({ onBack }: FinancialAccountsViewProps) {
     setSubmitting(true);
     try {
       await financialObligationClient.createAccount({
-        personId: form.personId,
-        role: form.role,
+        primaryPersonId: form.primaryPersonId,
       });
-      setForm({ personId: '', role: 'primary_payer' });
+      setForm({ primaryPersonId: '' });
       await loadData();
     } catch (err: any) {
       if (err instanceof FinancialObligationApiError) {
@@ -114,7 +112,10 @@ export function FinancialAccountsView({ onBack }: FinancialAccountsViewProps) {
 
       {/* Creation form */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 mb-8">
-        <h2 className="text-sm font-semibold text-white mb-4">Nova Conta Financeira</h2>
+        <h2 className="text-sm font-semibold text-white mb-2">Nova Conta Financeira</h2>
+        <p className="text-xs text-zinc-400 mb-4">
+          Selecione o titular responsável. O número operacional da conta (ex.: CTA-000001) é gerado automaticamente pelo sistema.
+        </p>
         {formError && (
           <div className="mb-4 p-3 bg-red-950/40 border border-red-900 rounded-lg text-xs text-red-300">
             {formError}
@@ -123,18 +124,18 @@ export function FinancialAccountsView({ onBack }: FinancialAccountsViewProps) {
         <form onSubmit={handleCreateAccount} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
           <div className="sm:col-span-2">
             <label className="block text-xs font-medium text-zinc-300 mb-1">
-              Pessoa / Titular de Responsabilidade <span className="text-red-400">*</span>
+              Titular Responsável <span className="text-red-400">*</span>
             </label>
             <select
-              value={form.personId}
-              onChange={(e) => setForm({ ...form, personId: e.target.value })}
+              value={form.primaryPersonId}
+              onChange={(e) => setForm({ ...form, primaryPersonId: e.target.value })}
               className="w-full px-3 py-2 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-100 focus:outline-none focus:border-emerald-500"
               required
             >
-              <option value="">Selecione a pessoa...</option>
+              <option value="">Selecione o encarregado ou responsável...</option>
               {persons.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({p.email || p.id})
+                  {p.name} {p.email ? `(${p.email})` : ''}
                 </option>
               ))}
             </select>
@@ -143,7 +144,7 @@ export function FinancialAccountsView({ onBack }: FinancialAccountsViewProps) {
           <div>
             <button
               type="submit"
-              disabled={submitting || !form.personId}
+              disabled={submitting || !form.primaryPersonId}
               className="w-full px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-sm transition-colors cursor-pointer"
             >
               {submitting ? 'A criar conta...' : 'Criar Conta Financeira'}
@@ -172,10 +173,10 @@ export function FinancialAccountsView({ onBack }: FinancialAccountsViewProps) {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-zinc-800 text-zinc-400 bg-zinc-900/60">
-                  <th className="py-3 px-4 font-semibold">Referência Operacional</th>
-                  <th className="py-3 px-4 font-semibold">ID Técnico</th>
-                  <th className="py-3 px-4 font-semibold">Titular / Relação</th>
-                  <th className="py-3 px-4 font-semibold">Data Criação</th>
+                  <th className="py-3 px-4 font-semibold">Conta Financeira</th>
+                  <th className="py-3 px-4 font-semibold">Titular Responsável</th>
+                  <th className="py-3 px-4 font-semibold">Relação de Responsabilidade</th>
+                  <th className="py-3 px-4 font-semibold">Data de Criação</th>
                   <th className="py-3 px-4 font-semibold">Estado</th>
                   <th className="py-3 px-4 font-semibold text-right">Ação</th>
                 </tr>
@@ -184,20 +185,20 @@ export function FinancialAccountsView({ onBack }: FinancialAccountsViewProps) {
                 {accounts.map((acc) => (
                   <tr key={acc.id} className="hover:bg-zinc-800/30 transition-colors">
                     <td className="py-3.5 px-4 font-medium text-white font-mono">
-                      {acc.displayReference}
+                      {acc.accountNumber}
                     </td>
-                    <td className="py-3.5 px-4 text-zinc-400 font-mono text-[11px]">
-                      {acc.id}
+                    <td className="py-3.5 px-4 text-zinc-200">
+                      <div className="font-medium text-white">
+                        {acc.primaryParty?.personName || acc.name}
+                      </div>
+                      {acc.name && acc.name !== `Conta de ${acc.primaryParty?.personName}` && (
+                        <div className="text-[11px] text-zinc-400">{acc.name}</div>
+                      )}
                     </td>
                     <td className="py-3.5 px-4 text-zinc-300">
-                      {acc.parties && acc.parties.length > 0 ? (
-                        <div>
-                          <div className="text-zinc-200">{acc.parties[0].personId}</div>
-                          <div className="text-[11px] text-zinc-500">{acc.parties[0].role}</div>
-                        </div>
-                      ) : (
-                        <span className="text-zinc-500 italic">Sem partes</span>
-                      )}
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-zinc-800 text-zinc-300 border border-zinc-700/60">
+                        Responsável Principal
+                      </span>
                     </td>
                     <td className="py-3.5 px-4 text-zinc-400">
                       {new Date(acc.createdAt).toLocaleDateString('pt-PT')}

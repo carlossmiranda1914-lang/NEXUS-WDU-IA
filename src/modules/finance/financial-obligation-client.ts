@@ -78,7 +78,7 @@ export const financialObligationClient = {
     const { fetcher, getToken } = resolveOptions(options);
     return request(`/api/finance/financial-accounts/${id}`, undefined, fetcher, getToken);
   },
-  createAccount: (body: { personId: string; role?: string }, options?: FinancialObligationRequestOptions | typeof fetch) => {
+  createAccount: (body: { primaryPersonId: string; name?: string } | { personId: string; role?: string }, options?: FinancialObligationRequestOptions | typeof fetch) => {
     const { fetcher, getToken } = resolveOptions(options);
     return request('/api/finance/financial-accounts', { method: 'POST', headers: { 'Idempotency-Key': key() }, body: JSON.stringify(body) }, fetcher, getToken);
   },

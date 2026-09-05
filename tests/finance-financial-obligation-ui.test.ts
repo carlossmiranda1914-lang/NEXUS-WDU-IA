@@ -114,14 +114,14 @@ test('FinancialObligationsWorkspace renders list of obligations with correct dat
   const jsonStr = JSON.stringify(tree);
   assert.ok(jsonStr.includes('PROP-000001'), 'Fee code displayed');
   assert.ok(jsonStr.includes('120.00'), 'Obligation amount displayed');
-  assert.ok(jsonStr.includes('FA-2026-000001'), 'Account display reference displayed');
+  assert.ok(jsonStr.includes('FA-2026-000001'), 'Account number displayed');
   assert.ok(jsonStr.includes('João Pedro Silva (Aluno)'), 'Beneficiary displayed');
-  assert.ok(jsonStr.includes('manual_finance'), 'Source type displayed');
+  assert.ok(jsonStr.includes('Emissão Manual'), 'Operational source type displayed');
 
   financialObligationClient.listObligations = origListOb;
 });
 
-test('FinancialObligationsWorkspace subview transition to Create Obligation and back', async () => {
+test('FinancialObligationsWorkspace subview transition to Create Obligation and progressive selection sequence', async () => {
   const origListOb = financialObligationClient.listObligations;
   const origListAcc = financialObligationClient.listAccounts;
   const origListFee = feeCatalogueClient.list;
@@ -150,9 +150,29 @@ test('FinancialObligationsWorkspace subview transition to Create Obligation and 
   const createViewTitle = root.findByProps({ 'data-testid': 'create-obligation-title' });
   assert.ok(createViewTitle, 'Navigated to create view');
 
-  // Verify amount is not a freely editable input but read-only snapshot info
+  // Submit button MUST be disabled initially (no silent auto-preselection)
+  const submitBtn = root.findByProps({ 'data-testid': 'submit-obligation-button' });
+  assert.equal(submitBtn.props.disabled, true, 'Submit must be disabled before selections');
+
+  // Select account
+  const selectAcc = root.findByProps({ 'data-testid': 'select-financial-account' });
+  await act(async () => {
+    selectAcc.props.onChange({ target: { value: 'acc-001' } });
+  });
+
+  // Still disabled because fee item is not chosen
+  assert.equal(submitBtn.props.disabled, true, 'Submit must remain disabled without fee item');
+
+  // Select fee item
+  const selectFee = root.findByProps({ 'data-testid': 'select-fee-item' });
+  await act(async () => {
+    selectFee.props.onChange({ target: { value: 'fee-001' } });
+  });
+
+  // Now amount snapshot display is visible and submit is enabled
   const amountInput = root.findAllByProps({ 'data-testid': 'fee-amount-display' });
   assert.ok(amountInput.length > 0, 'Amount display element exists');
+  assert.equal(submitBtn.props.disabled, false, 'Submit is enabled once required fields are selected');
 
   // Cancel back to list
   const cancelBtn = root.findByProps({ 'data-testid': 'cancel-obligation-button' });

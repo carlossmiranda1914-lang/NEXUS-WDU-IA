@@ -176,8 +176,8 @@ export class PostgresFinancialAccountRepository {
         operationNamespace: 'finance.account.create',
         idempotencyKey,
         canonicalFingerprint: createCanonicalFinanceFingerprint({
-          name: input.name,
           primaryPersonId: input.primaryPersonId,
+          ...(input.name ? { name: input.name } : {}),
         }),
       },
       execute: async (client) => {
@@ -194,6 +194,9 @@ export class PostgresFinancialAccountRepository {
         if (!personRes.rows[0]) {
           throw new FinancialAccountValidationError('Pessoa responsável não encontrada ou não pertence à instituição ativa.');
         }
+
+        const personName = personRes.rows[0].name || 'Titular';
+        const accountName = input.name || `Conta de ${personName}`;
 
         // Increment sequence atomically
         const counterRes = await client.query<{ last_sequence: number }>(
@@ -212,7 +215,7 @@ export class PostgresFinancialAccountRepository {
           `INSERT INTO finance_financial_accounts (institution_id, account_number, name, status)
            VALUES ($1, $2, $3, 'active')
            RETURNING id, institution_id, account_number, name, status, created_at, updated_at`,
-          [actor.institutionId, accountNumber, input.name],
+          [actor.institutionId, accountNumber, accountName],
         );
         const acc = accountRes.rows[0];
 

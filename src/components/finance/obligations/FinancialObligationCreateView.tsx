@@ -44,24 +44,18 @@ export function FinancialObligationCreateView({
       setAccounts(accList || []);
       setFeeItems(feeList || []);
       setPersons(personList || []);
-
-      if (accList && accList.length > 0 && !form.financialAccountId) {
-        setForm((prev) => ({ ...prev, financialAccountId: accList[0].id }));
-      }
-      if (feeList && feeList.length > 0 && !form.feeCatalogueItemId) {
-        setForm((prev) => ({ ...prev, feeCatalogueItemId: feeList[0].id }));
-      }
     } catch {
       setError('Falha ao carregar contas financeiras e catálogo de emolumentos.');
     } finally {
       setLoadingData(false);
     }
-  }, [form.financialAccountId, form.feeCatalogueItemId]);
+  }, []);
 
   useEffect(() => {
     void loadData();
   }, [loadData]);
 
+  const selectedAccount = accounts.find((a) => a.id === form.financialAccountId);
   const selectedFeeItem = feeItems.find((f) => f.id === form.feeCatalogueItemId);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -69,7 +63,7 @@ export function FinancialObligationCreateView({
     setError(null);
 
     if (!form.financialAccountId) {
-      setError('Por favor selecione uma conta financeira.');
+      setError('Por favor selecione uma conta financeira de responsabilidade.');
       return;
     }
     if (!form.feeCatalogueItemId) {
@@ -115,10 +109,10 @@ export function FinancialObligationCreateView({
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
         <div className="border-b border-zinc-800 pb-4 mb-6">
           <h1 data-testid="create-obligation-title" className="text-xl font-bold text-white">
-            Nova obrigação financeira
+            Nova Obrigação Financeira
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
-            Emita uma obrigação financeira canónica. O montante é determinado exclusivamente pelo item do catálogo de emolumentos selecionado.
+            Emissão de obrigação financeira canónica para uma conta de responsabilidade. O montante é determinado exclusivamente pelo item do catálogo de emolumentos selecionado.
           </p>
         </div>
 
@@ -135,22 +129,23 @@ export function FinancialObligationCreateView({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Step 1 & 2: Account Selection & Responsible Context */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Account Selection */}
               <div>
                 <label className="block text-xs font-medium text-zinc-300 mb-1">
-                  Conta Financeira de Responsabilidade <span className="text-red-400">*</span>
+                  1. Conta Financeira de Responsabilidade <span className="text-red-400">*</span>
                 </label>
                 <select
+                  data-testid="select-financial-account"
                   value={form.financialAccountId}
                   onChange={(e) => setForm({ ...form, financialAccountId: e.target.value })}
                   className="w-full px-3 py-2 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-100 focus:outline-none focus:border-emerald-500"
                   required
                 >
-                  <option value="">Selecione a conta...</option>
+                  <option value="">Selecione uma conta financeira...</option>
                   {accounts.map((acc) => (
                     <option key={acc.id} value={acc.id}>
-                      {acc.displayReference} ({acc.parties?.length ? `${acc.parties[0].personId}` : 'Sem titular'})
+                      {acc.accountNumber} — {acc.primaryParty?.personName || acc.name}
                     </option>
                   ))}
                 </select>
@@ -161,38 +156,53 @@ export function FinancialObligationCreateView({
                 )}
               </div>
 
-              {/* Beneficiary Selection */}
+              {/* Step 3: Beneficiary Selection */}
               <div>
                 <label className="block text-xs font-medium text-zinc-300 mb-1">
-                  Beneficiário / Aluno (Opcional)
+                  2. Beneficiário / Aluno (Opcional)
                 </label>
                 <select
+                  data-testid="select-beneficiary"
                   value={form.beneficiaryPersonId}
                   onChange={(e) => setForm({ ...form, beneficiaryPersonId: e.target.value })}
                   className="w-full px-3 py-2 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-100 focus:outline-none focus:border-emerald-500"
                 >
-                  <option value="">Titular da Conta / Geral</option>
+                  <option value="">O próprio titular da conta</option>
                   {persons.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.email || p.id})
+                      {p.name} {p.email ? `(${p.email})` : ''}
                     </option>
                   ))}
                 </select>
               </div>
             </div>
 
-            {/* Fee Catalogue Selection */}
+            {/* Confirmed Responsible Context */}
+            {selectedAccount && (
+              <div className="p-3 bg-zinc-800/40 border border-zinc-700/60 rounded-lg flex items-center justify-between text-xs">
+                <div className="text-zinc-400">
+                  Titular Responsável Confirmado:
+                </div>
+                <div className="font-medium text-white flex items-center gap-2">
+                  <span>{selectedAccount.primaryParty?.personName || selectedAccount.name}</span>
+                  <span className="text-[11px] text-zinc-400 font-mono">({selectedAccount.accountNumber})</span>
+                </div>
+              </div>
+            )}
+
+            {/* Step 4: Fee Catalogue Selection */}
             <div>
               <label className="block text-xs font-medium text-zinc-300 mb-1">
-                Item do Catálogo de Emolumentos <span className="text-red-400">*</span>
+                3. Item do Catálogo de Emolumentos <span className="text-red-400">*</span>
               </label>
               <select
+                data-testid="select-fee-item"
                 value={form.feeCatalogueItemId}
                 onChange={(e) => setForm({ ...form, feeCatalogueItemId: e.target.value })}
                 className="w-full px-3 py-2 text-xs bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-100 focus:outline-none focus:border-emerald-500"
                 required
               >
-                <option value="">Selecione o emolumento...</option>
+                <option value="">Selecione um emolumento...</option>
                 {feeItems.map((fee) => (
                   <option key={fee.id} value={fee.id}>
                     [{fee.code}] {fee.current.name} — {fee.current.money.amount} {fee.current.money.currency} (v{fee.currentVersion})
@@ -201,7 +211,7 @@ export function FinancialObligationCreateView({
               </select>
             </div>
 
-            {/* Read-Only Fee Snapshot Authority (Money cannot be typed) */}
+            {/* Step 5: Read-Only Fee Snapshot Authority (Money cannot be typed) */}
             {selectedFeeItem && (
               <div
                 data-testid="fee-amount-display"
@@ -230,7 +240,7 @@ export function FinancialObligationCreateView({
               </div>
             )}
 
-            {/* Operational Context Fields */}
+            {/* Step 6: Operational Context Fields */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-xs font-medium text-zinc-300 mb-1">
@@ -257,7 +267,7 @@ export function FinancialObligationCreateView({
               </div>
             </div>
 
-            {/* Submit & Cancel */}
+            {/* Step 7 & 8: Review & Submit */}
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-800">
               <button
                 type="button"
@@ -268,10 +278,11 @@ export function FinancialObligationCreateView({
               </button>
               <button
                 type="submit"
+                data-testid="submit-obligation-button"
                 disabled={submitting || !form.financialAccountId || !form.feeCatalogueItemId}
                 className="px-5 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white shadow-sm transition-colors cursor-pointer"
               >
-                {submitting ? 'A emitir obrigação...' : 'Emitir obrigação financeira'}
+                {submitting ? 'A emitir obrigação...' : 'Emitir Obrigação Financeira'}
               </button>
             </div>
           </form>

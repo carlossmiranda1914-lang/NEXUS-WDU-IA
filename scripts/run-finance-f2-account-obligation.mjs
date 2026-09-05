@@ -16,6 +16,7 @@ const files = [
   'tests/finance-financial-obligation-http.test.ts',
   'tests/finance-financial-obligation-client.test.ts',
   'tests/finance-financial-obligation-ui.test.ts',
+  'tests/finance-f2-real-flow-integration.test.ts',
 ];
 
 for (const file of files) {

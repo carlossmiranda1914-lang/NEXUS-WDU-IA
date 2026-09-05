@@ -171,8 +171,12 @@ export function FinancialObligationsListView({
                     <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-400">
                       {item.money.amount} {item.money.currency}
                     </td>
-                    <td className="py-3.5 px-4 text-zinc-400 font-mono text-[11px]">
-                      {item.sourceType}
+                    <td className="py-3.5 px-4 text-zinc-400 text-xs">
+                      {item.sourceType === 'manual_finance'
+                        ? 'Emissão Manual'
+                        : item.sourceType === 'enrollment'
+                          ? 'Matrícula'
+                          : item.sourceType}
                     </td>
                     <td className="py-3.5 px-4 text-zinc-400">
                       {new Date(item.effectiveAt).toLocaleDateString('pt-PT')}
@@ -181,8 +185,14 @@ export function FinancialObligationsListView({
                       {item.dueAt ? new Date(item.dueAt).toLocaleDateString('pt-PT') : <span className="text-zinc-500">-</span>}
                     </td>
                     <td className="py-3.5 px-4 text-right">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-950/60 border border-emerald-800/80 text-emerald-300">
-                        Aberta
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${
+                          item.status === 'open'
+                            ? 'bg-emerald-950/60 border border-emerald-800/80 text-emerald-300'
+                            : 'bg-zinc-800 border border-zinc-700 text-zinc-400'
+                        }`}
+                      >
+                        {item.status === 'open' ? 'Aberta' : 'Cancelada (Histórico)'}
                       </span>
                     </td>
                   </tr>

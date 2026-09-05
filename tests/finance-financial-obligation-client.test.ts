@@ -22,7 +22,7 @@ assert.equal(capturedUrl, '/api/finance/financial-accounts?status=active');
 assert.equal(capturedInit?.headers?.Authorization, 'Bearer test-bearer-token');
 
 // 2. Create account sends Idempotency-Key
-await financialObligationClient.createAccount({ personId: '00000000-0000-0000-0000-000000000001' }, { fetcher: fakeFetcher, getToken: fakeGetToken });
+await financialObligationClient.createAccount({ primaryPersonId: '00000000-0000-0000-0000-000000000001' }, { fetcher: fakeFetcher, getToken: fakeGetToken });
 assert.equal(capturedUrl, '/api/finance/financial-accounts');
 assert.equal(capturedInit?.method, 'POST');
 assert.ok(capturedInit?.headers?.['Idempotency-Key']);
