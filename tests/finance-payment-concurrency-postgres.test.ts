@@ -31,7 +31,16 @@ try {
     await client.query(`INSERT INTO finance_profile_versions(institution_id,version,effective_from,primary_jurisdiction,functional_currency,financial_timezone,monetary_policy_version,enabled_currencies) VALUES ($1,1,now() - interval '1 day','PT','EUR','Europe/Lisbon','v1','["EUR"]')`, [institutionA]);
 
     const profileStore = new PostgresFinancialProfileStore(pool);
-    const actor = { institutionId: institutionA, personId: actorA, role: 'financial' as const };
+    const actor = {
+      institutionId: institutionA,
+      personId: actorA,
+      personName: 'Actor A',
+      identityEmail: 'actor.a@test.local',
+      membershipId: randomUUID(),
+      institutionName: 'Inst A',
+      institutionSlug: 'inst-a',
+      role: 'financial' as const,
+    };
 
     // 1. Concurrency Test: 20 simultaneous duplicate confirmations with same idempotency key
     const inputDuplicate = {

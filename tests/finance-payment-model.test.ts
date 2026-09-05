@@ -139,7 +139,7 @@ const validFinancialContext = {
   assert.equal(canAccessPayments('director', 'read'), true);
   assert.equal(canAccessPayments('teacher', 'read'), false);
   assert.equal(canAccessPayments('student', 'read'), false);
-  assert.equal(canAccessPayments('guardian', 'read'), false);
+  assert.equal(canAccessPayments('parent', 'read'), false);
 
   assert.equal(canAccessPayments('institution_admin', 'write'), true);
   assert.equal(canAccessPayments('financial', 'write'), true);

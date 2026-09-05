@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { auth } from '../../lib/firebase.ts';
 import type { Payment, ManualPaymentMethod } from './payment-model.ts';
 import type {
@@ -91,7 +90,7 @@ export class PaymentApiClient {
     input: CreateManualPaymentClientInput,
     idempotencyKey?: string
   ): Promise<{ payment: Payment; replayed: boolean }> {
-    const idemp = idempotencyKey || `pay-manual-${randomUUID()}`;
+    const idemp = idempotencyKey || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? `pay-manual-${crypto.randomUUID()}` : `pay-manual-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`);
     return this.request<{ payment: Payment; replayed: boolean }>('/api/finance/payments/manual', {
       method: 'POST',
       headers: {

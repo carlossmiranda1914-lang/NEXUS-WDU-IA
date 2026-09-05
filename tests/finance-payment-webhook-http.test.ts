@@ -25,12 +25,30 @@ const actorAdminA = '00000000-0000-0000-0000-000000000911';
 const actorTeacherA = '00000000-0000-0000-0000-000000000912';
 const actorSystem = '00000000-0000-0000-0000-000000000913';
 
-const tokenMap: Record<string, { uid: string; institutionId: string; personId: string; role: string }> = {
-  'token-admin-a': { uid: 'u-1', institutionId: institutionA, personId: actorAdminA, role: 'institution_admin' },
-  'token-teacher-a': { uid: 'u-2', institutionId: institutionA, personId: actorTeacherA, role: 'teacher' },
+const tokenMap: Record<string, any> = {
+  'token-admin-a': {
+    institutionId: institutionA,
+    personId: actorAdminA,
+    personName: 'Admin A',
+    identityEmail: 'admin.a@test.local',
+    membershipId: randomUUID(),
+    institutionName: 'Inst A',
+    institutionSlug: 'inst-a',
+    role: 'institution_admin',
+  },
+  'token-teacher-a': {
+    institutionId: institutionA,
+    personId: actorTeacherA,
+    personName: 'Teacher A',
+    identityEmail: 'teach.a@test.local',
+    membershipId: randomUUID(),
+    institutionName: 'Inst A',
+    institutionSlug: 'inst-a',
+    role: 'teacher',
+  },
 };
 
-const testAuth = (req: any, _res: any, next: any) => {
+const testAuth: any = (req: any, _res: any, next: any) => {
   const header = req.header('Authorization');
   if (header && header.startsWith('Bearer ')) {
     const token = header.slice(7);

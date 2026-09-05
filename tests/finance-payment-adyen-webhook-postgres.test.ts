@@ -43,7 +43,16 @@ try {
 
     const providerRepo = new PostgresPaymentProviderRepository(pool);
     const config = await providerRepo.save(
-      { institutionId: institutionA, personId: actorSystem, role: 'institution_admin' },
+      {
+        institutionId: institutionA,
+        personId: actorSystem,
+        personName: 'System Actor',
+        identityEmail: 'system@test.local',
+        membershipId: randomUUID(),
+        institutionName: 'Inst A',
+        institutionSlug: 'inst-a',
+        role: 'institution_admin',
+      },
       {
         providerKey: 'adyen',
         environment: 'test',

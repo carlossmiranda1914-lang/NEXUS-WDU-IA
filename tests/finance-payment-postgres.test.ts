@@ -32,6 +32,28 @@ const actorA = '00000000-0000-0000-0000-000000000311';
 const actorB = '00000000-0000-0000-0000-000000000312';
 const personPayerA = '00000000-0000-0000-0000-000000000321';
 
+const contextA = {
+  institutionId: institutionA,
+  personId: actorA,
+  personName: 'Actor A',
+  identityEmail: 'actor.a@test.local',
+  membershipId: randomUUID(),
+  institutionName: 'Inst A',
+  institutionSlug: 'inst-a',
+  role: 'financial' as const,
+};
+
+const contextB = {
+  institutionId: institutionB,
+  personId: actorB,
+  personName: 'Actor B',
+  identityEmail: 'actor.b@test.local',
+  membershipId: randomUUID(),
+  institutionName: 'Inst B',
+  institutionSlug: 'inst-b',
+  role: 'financial' as const,
+};
+
 try {
   const client = await pool.connect();
   try {
@@ -71,7 +93,7 @@ try {
     const confirmRes1 = await confirmIncomingPayment(
       pool,
       profileStore,
-      { institutionId: institutionA, personId: actorA, role: 'financial' },
+      contextA,
       input1,
       'idemp-pay-001'
     );
@@ -111,7 +133,7 @@ try {
     const replayRes = await confirmIncomingPayment(
       pool,
       profileStore,
-      { institutionId: institutionA, personId: actorA, role: 'financial' },
+      contextA,
       input1,
       'idemp-pay-001'
     );
@@ -124,7 +146,7 @@ try {
       () => confirmIncomingPayment(
         pool,
         profileStore,
-        { institutionId: institutionA, personId: actorA, role: 'financial' },
+        contextA,
         { ...input1, amount: '200.00' },
         'idemp-pay-001'
       ),
@@ -143,7 +165,7 @@ try {
     const confirmRes2 = await confirmIncomingPayment(
       pool,
       profileStore,
-      { institutionId: institutionA, personId: actorA, role: 'financial' },
+      contextA,
       input2,
       'idemp-pay-002'
     );
@@ -151,14 +173,14 @@ try {
 
     // 5. Tenant isolation check: Inst B cannot read Inst A payment
     await assert.rejects(
-      () => paymentRepo.getById({ institutionId: institutionB, personId: actorB, role: 'financial' }, confirmRes1.payment.id),
+      () => paymentRepo.getById(contextB, confirmRes1.payment.id),
       (err: any) => err instanceof PaymentNotFoundError
     );
 
-    const listInstB = await paymentRepo.list({ institutionId: institutionB, personId: actorB, role: 'financial' });
+    const listInstB = await paymentRepo.list(contextB);
     assert.equal(listInstB.length, 0);
 
-    const listInstA = await paymentRepo.list({ institutionId: institutionA, personId: actorA, role: 'financial' });
+    const listInstA = await paymentRepo.list(contextA);
     assert.equal(listInstA.length, 2);
 
     // Cross-tenant account rejection: Inst A trying to use Account of Inst B
@@ -166,7 +188,7 @@ try {
       () => confirmIncomingPayment(
         pool,
         profileStore,
-        { institutionId: institutionA, personId: actorA, role: 'financial' },
+        contextA,
         { ...input1, financialAccountId: accountB },
         'idemp-pay-cross-tenant'
       ),
@@ -180,7 +202,7 @@ try {
 
       await assert.rejects(
         () => failRepo.confirmPaymentInCommand(
-          { institutionId: institutionA, personId: actorA, role: 'financial' },
+          contextA,
           { ...input1, amount: '999.00' },
           failIdemp
         ),

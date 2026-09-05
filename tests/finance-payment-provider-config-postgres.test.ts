@@ -25,6 +25,28 @@ const institutionB = '00000000-0000-0000-0000-000000000502';
 const actorA = '00000000-0000-0000-0000-000000000511';
 const actorB = '00000000-0000-0000-0000-000000000512';
 
+const contextA = {
+  institutionId: institutionA,
+  personId: actorA,
+  personName: 'Actor A',
+  identityEmail: 'actor.a@test.local',
+  membershipId: randomUUID(),
+  institutionName: 'Inst A',
+  institutionSlug: 'inst-a',
+  role: 'institution_admin' as const,
+};
+
+const contextB = {
+  institutionId: institutionB,
+  personId: actorB,
+  personName: 'Actor B',
+  identityEmail: 'actor.b@test.local',
+  membershipId: randomUUID(),
+  institutionName: 'Inst B',
+  institutionSlug: 'inst-b',
+  role: 'institution_admin' as const,
+};
+
 try {
   const client = await pool.connect();
   try {
@@ -41,7 +63,7 @@ try {
 
     // 1. Save Adyen sandbox config for Inst A
     const adyenConfig = await repo.save(
-      { institutionId: institutionA, personId: actorA, role: 'institution_admin' },
+      contextA,
       {
         providerKey: 'adyen',
         environment: 'test',
@@ -77,7 +99,7 @@ try {
 
     // 4. Inactive config resolution returns null
     await repo.save(
-      { institutionId: institutionA, personId: actorA, role: 'institution_admin' },
+      contextA,
       {
         providerKey: 'emis_multicaixa',
         environment: 'test',
@@ -103,7 +125,7 @@ try {
     // 6. Validation: reject invalid provider key
     await assert.rejects(
       () => repo.save(
-        { institutionId: institutionA, personId: actorA, role: 'institution_admin' },
+        contextA,
         {
           providerKey: 'stripe' as any,
           environment: 'test',
