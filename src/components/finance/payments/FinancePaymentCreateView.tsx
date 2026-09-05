@@ -4,12 +4,16 @@ import { paymentClient } from '../../../modules/finance/payment-client.ts';
 
 export interface FinancePaymentCreateViewProps {
   theme?: string;
+  financialAccount?: { id: string; accountNumber: string; name: string };
+  payerPerson?: { personId: string; displayName: string } | null;
   onSuccess: (payment: Payment) => void;
   onCancel: () => void;
 }
 
 export function FinancePaymentCreateView({
   theme = 'light',
+  financialAccount,
+  payerPerson,
   onSuccess,
   onCancel,
 }: FinancePaymentCreateViewProps) {
@@ -52,6 +56,8 @@ export function FinancePaymentCreateView({
         method,
         amount: amount.trim(),
         currency: currency.trim(),
+        financialAccountId: financialAccount?.id,
+        payerPersonId: payerPerson?.personId,
         manualEvidenceRef: manualEvidenceRef.trim() || undefined,
         notes: notes.trim() || undefined,
         effectiveAt: new Date(effectiveDate),
@@ -85,9 +91,38 @@ export function FinancePaymentCreateView({
             isLight ? 'border-zinc-300 text-zinc-600 hover:bg-zinc-50' : 'border-zinc-700 text-zinc-300 hover:bg-zinc-800'
           }`}
         >
-          Voltar à Lista
+          Voltar
         </button>
       </div>
+
+      {/* Context Banner: Selected Financial Account and Payer */}
+      {financialAccount && (
+        <div
+          data-testid="finance-payment-account-context"
+          className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+            isLight ? 'bg-zinc-50 border-zinc-200' : 'bg-zinc-850 border-zinc-750'
+          }`}
+        >
+          <div>
+            <span className={`text-xs font-semibold uppercase tracking-wider ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+              Conta financeira de destino
+            </span>
+            <p className={`text-sm font-bold ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
+              {financialAccount.accountNumber} — {financialAccount.name}
+            </p>
+          </div>
+          {payerPerson && (
+            <div className="sm:text-right">
+              <span className={`text-xs font-semibold uppercase tracking-wider ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                Responsável / Pagador
+              </span>
+              <p className={`text-sm font-medium ${isLight ? 'text-zinc-800' : 'text-zinc-200'}`}>
+                {payerPerson.displayName}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Info notice */}
       <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-sm text-blue-800 dark:text-blue-300 flex items-start gap-3">
@@ -239,6 +274,18 @@ export function FinancePaymentCreateView({
           </h3>
 
           <div className={`p-4 rounded-lg divide-y ${isLight ? 'bg-zinc-50 divide-zinc-200' : 'bg-zinc-800 divide-zinc-700'}`}>
+            {financialAccount && (
+              <div className="py-2 flex justify-between">
+                <span className="text-zinc-500 text-sm">Conta financeira:</span>
+                <span className="font-semibold text-sm">{financialAccount.accountNumber} — {financialAccount.name}</span>
+              </div>
+            )}
+            {payerPerson && (
+              <div className="py-2 flex justify-between">
+                <span className="text-zinc-500 text-sm">Pagador:</span>
+                <span className="font-semibold text-sm">{payerPerson.displayName}</span>
+              </div>
+            )}
             <div className="py-2 flex justify-between">
               <span className="text-zinc-500 text-sm">Método:</span>
               <span className="font-semibold text-sm capitalize">{method.replace('_', ' ')}</span>

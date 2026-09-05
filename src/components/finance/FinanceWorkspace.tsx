@@ -1,16 +1,22 @@
 import React, { useState } from 'react';
+import { FinanceOperationalContextWorkspace } from './operational/FinanceOperationalContextWorkspace.tsx';
 import { FinanceFeeCatalogueWorkspace } from './fee-catalogue/FinanceFeeCatalogueWorkspace.tsx';
 import { FinancialObligationsWorkspace } from './obligations/FinancialObligationsWorkspace.tsx';
 import { FinancePaymentsWorkspace } from './payments/FinancePaymentsWorkspace.tsx';
 
-export type FinanceTab = 'catalogue' | 'obligations' | 'recebimentos';
+export type FinanceTab = 'operations' | 'catalogue' | 'obligations' | 'recebimentos';
 
 export interface FinanceWorkspaceProps {
   theme?: string;
   initialTab?: FinanceTab;
+  initialFinancialAccountId?: string;
 }
 
-export function FinanceWorkspace({ theme = 'light', initialTab = 'catalogue' }: FinanceWorkspaceProps) {
+export function FinanceWorkspace({
+  theme = 'light',
+  initialTab = 'operations',
+  initialFinancialAccountId,
+}: FinanceWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<FinanceTab>(initialTab);
 
   const isLight = theme === 'light';
@@ -18,12 +24,28 @@ export function FinanceWorkspace({ theme = 'light', initialTab = 'catalogue' }: 
   return (
     <div className="space-y-6 w-full max-w-[1700px] mx-auto">
       {/* Top-Level Finance Sub-Navigation */}
-      <div className={`flex items-center gap-2 border-b ${isLight ? 'border-zinc-200 bg-white' : 'border-zinc-800 bg-zinc-900'} px-4 pt-3 rounded-t-xl`}>
+      <div className={`flex items-center gap-2 border-b ${isLight ? 'border-zinc-200 bg-white' : 'border-zinc-800 bg-zinc-900'} px-4 pt-3 rounded-t-xl overflow-x-auto`}>
+        <button
+          type="button"
+          onClick={() => setActiveTab('operations')}
+          data-testid="finance-tab-operations"
+          className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'operations'
+              ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
+              : 'border-transparent text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+          }`}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+          </svg>
+          Conta Financeira
+        </button>
+
         <button
           type="button"
           onClick={() => setActiveTab('catalogue')}
           data-testid="finance-tab-catalogue"
-          className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px flex items-center gap-2 ${
+          className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'catalogue'
               ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
               : 'border-transparent text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
@@ -39,7 +61,7 @@ export function FinanceWorkspace({ theme = 'light', initialTab = 'catalogue' }: 
           type="button"
           onClick={() => setActiveTab('obligations')}
           data-testid="finance-tab-obligations"
-          className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px flex items-center gap-2 ${
+          className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'obligations'
               ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
               : 'border-transparent text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
@@ -55,7 +77,7 @@ export function FinanceWorkspace({ theme = 'light', initialTab = 'catalogue' }: 
           type="button"
           onClick={() => setActiveTab('recebimentos')}
           data-testid="finance-tab-recebimentos"
-          className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px flex items-center gap-2 ${
+          className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'recebimentos'
               ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
               : 'border-transparent text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
@@ -70,6 +92,12 @@ export function FinanceWorkspace({ theme = 'light', initialTab = 'catalogue' }: 
 
       {/* Active Finance Surface */}
       <div>
+        {activeTab === 'operations' && (
+          <FinanceOperationalContextWorkspace
+            theme={theme}
+            initialFinancialAccountId={initialFinancialAccountId}
+          />
+        )}
         {activeTab === 'catalogue' && <FinanceFeeCatalogueWorkspace theme={theme} />}
         {activeTab === 'obligations' && <FinancialObligationsWorkspace theme={theme} />}
         {activeTab === 'recebimentos' && <FinancePaymentsWorkspace theme={theme} />}

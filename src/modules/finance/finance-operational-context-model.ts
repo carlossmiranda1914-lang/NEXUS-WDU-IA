@@ -1,4 +1,7 @@
-import type { MoneyAmount } from './money.ts';
+export interface FinanceMoneyAmount {
+  amount: string;
+  currency: string;
+}
 
 export interface FinanceOperationalAccount {
   id: string;
@@ -26,7 +29,7 @@ export interface FinanceOperationalObligation {
   description: string;
   feeItemCode?: string;
   feeItemName?: string;
-  amount: MoneyAmount;
+  amount: FinanceMoneyAmount;
   effectiveAt: string;
   dueAt?: string | null;
   status: string;
@@ -36,7 +39,7 @@ export interface FinanceOperationalObligation {
 export interface FinanceOperationalPayment {
   id: string;
   paymentReference: string;
-  amount: MoneyAmount;
+  amount: FinanceMoneyAmount;
   method: string;
   effectiveAt: string;
   payerPersonId?: string;
