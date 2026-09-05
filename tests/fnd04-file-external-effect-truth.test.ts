@@ -9,7 +9,7 @@ const genericFence = fs.readFileSync('tests/fnd03-document-storage-fence.test.ts
 assert.match(app, /Arquivo documental genérico indisponível/);
 assert.match(app, /Assinaturas digitais indisponíveis/);
 assert.match(app, /Integração Google Sheets indisponível/);
-assert.match(app, /Operações financeiras indisponíveis/);
+assert.match(app, /FinanceWorkspace/);
 assert.doesNotMatch(app, /activeTab === 'sheets'[\s\S]{0,500}<GoogleSheetsCenter/);
 assert.doesNotMatch(app, /activeTab === 'financials'[\s\S]{0,500}<FinancialPanel/);
 

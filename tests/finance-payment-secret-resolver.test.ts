@@ -54,9 +54,9 @@ import {
   ];
 
   // Set values in process.env to ensure they are NOT resolved despite being in process.env
-  process.env.DATABASE_URL = 'postgres://user:pass@host:5432/dbname';
-  process.env.FIREBASE_PRIVATE_KEY = '-----BEGIN PRIVATE KEY-----\nMIIEv...';
-  process.env.GEMINI_API_KEY = 'AIzaSyFakeGeminiKey12345';
+  process.env.DATABASE_URL = 'dummy-db-connection-string';
+  process.env.FIREBASE_PRIVATE_KEY = 'dummy-private-key-mock';
+  process.env.GEMINI_API_KEY = 'dummy-gemini-key-mock';
 
   const resolver = new DefaultSecretResolver();
 

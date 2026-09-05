@@ -44,7 +44,7 @@ async function runTests() {
 
     // Fixtures
     await client.query(`
-      INSERT INTO institutions (id, name, slug) VALUES 
+      INSERT INTO institutions (id, name, slug) VALUES
         ('${institutionA}', 'Inst A', 'inst-a'),
         ('${institutionB}', 'Inst B', 'inst-b')
       ON CONFLICT (id) DO NOTHING;
@@ -64,7 +64,7 @@ async function runTests() {
       ON CONFLICT DO NOTHING;
 
       INSERT INTO finance_profile_versions(institution_id, version, effective_from, primary_jurisdiction, functional_currency, financial_timezone, monetary_policy_version, enabled_currencies)
-      VALUES 
+      VALUES
         ('${institutionA}', 1, now() - interval '1 day', 'PT', 'EUR', 'Europe/Lisbon', 'v1', '["EUR"]'),
         ('${institutionB}', 1, now() - interval '1 day', 'PT', 'EUR', 'Europe/Lisbon', 'v1', '["EUR"]')
       ON CONFLICT DO NOTHING;

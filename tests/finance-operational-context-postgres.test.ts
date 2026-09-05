@@ -69,7 +69,7 @@ try {
       [actorA, actorB, personPayerA, personStudentA, personPayerB]
     );
     await client.query(
-      `INSERT INTO memberships(id,institution_id,person_id,role,status) VALUES 
+      `INSERT INTO memberships(id,institution_id,person_id,role,status) VALUES
        ($1,$2,$3,'financial','active'),
        ($4,$5,$6,'financial','active'),
        ($7,$8,$9,'parent','active'),

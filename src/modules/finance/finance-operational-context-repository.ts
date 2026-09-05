@@ -113,9 +113,9 @@ export class PostgresFinanceOperationalContextRepository {
         UNION
         SELECT gr.student_person_id AS person_id
         FROM finance_financial_account_parties p
-        JOIN guardian_relationships gr 
-          ON gr.guardian_person_id = p.person_id 
-         AND gr.institution_id = p.institution_id 
+        JOIN guardian_relationships gr
+          ON gr.guardian_person_id = p.person_id
+         AND gr.institution_id = p.institution_id
          AND gr.status = 'active'
         WHERE p.institution_id = $1 AND p.financial_account_id = $2 AND p.status = 'active'
         UNION
@@ -123,7 +123,7 @@ export class PostgresFinanceOperationalContextRepository {
         FROM finance_obligations o
         WHERE o.institution_id = $1 AND o.financial_account_id = $2 AND o.beneficiary_person_id IS NOT NULL
       )
-      SELECT 
+      SELECT
         asp.person_id,
         pe.name AS display_name,
         sp.id AS student_profile_id,
@@ -154,7 +154,7 @@ export class PostgresFinanceOperationalContextRepository {
 
     // 4. Open obligations
     const obligationsSql = `
-      SELECT 
+      SELECT
         o.id,
         o.amount,
         o.currency,
@@ -165,9 +165,9 @@ export class PostgresFinanceOperationalContextRepository {
         fci.code AS fee_item_code,
         fcv.name AS fee_item_name
       FROM finance_obligations o
-      JOIN finance_fee_catalogue_items fci 
+      JOIN finance_fee_catalogue_items fci
         ON (fci.institution_id = o.institution_id AND fci.id = o.fee_catalogue_item_id)
-      JOIN finance_fee_catalogue_versions fcv 
+      JOIN finance_fee_catalogue_versions fcv
         ON (fcv.institution_id = o.institution_id AND fcv.item_id = o.fee_catalogue_item_id AND fcv.version = o.fee_catalogue_version)
       WHERE o.institution_id = $1 AND o.financial_account_id = $2 AND o.status = 'open'
       ORDER BY o.due_at ASC NULLS LAST, o.created_at DESC
@@ -200,7 +200,7 @@ export class PostgresFinanceOperationalContextRepository {
 
     // 5. Confirmed unallocated payments
     const paymentsSql = `
-      SELECT 
+      SELECT
         p.id,
         p.payment_reference,
         p.amount,
@@ -213,9 +213,9 @@ export class PostgresFinanceOperationalContextRepository {
         pe.name AS payer_person_name
       FROM finance_payments p
       LEFT JOIN people pe ON pe.id = p.payer_person_id
-      WHERE p.institution_id = $1 
-        AND p.financial_account_id = $2 
-        AND p.status = 'confirmed' 
+      WHERE p.institution_id = $1
+        AND p.financial_account_id = $2
+        AND p.status = 'confirmed'
         AND p.allocation_status = 'unapplied'
       ORDER BY p.effective_at DESC, p.created_at DESC
     `;
@@ -240,7 +240,7 @@ export class PostgresFinanceOperationalContextRepository {
 
     // 6. History composition (all obligations + all payments)
     const allObligationsSql = `
-      SELECT 
+      SELECT
         o.id,
         o.amount,
         o.currency,
@@ -251,9 +251,9 @@ export class PostgresFinanceOperationalContextRepository {
         fci.code AS fee_item_code,
         fcv.name AS fee_item_name
       FROM finance_obligations o
-      JOIN finance_fee_catalogue_items fci 
+      JOIN finance_fee_catalogue_items fci
         ON (fci.institution_id = o.institution_id AND fci.id = o.fee_catalogue_item_id)
-      JOIN finance_fee_catalogue_versions fcv 
+      JOIN finance_fee_catalogue_versions fcv
         ON (fcv.institution_id = o.institution_id AND fcv.item_id = o.fee_catalogue_item_id AND fcv.version = o.fee_catalogue_version)
       WHERE o.institution_id = $1 AND o.financial_account_id = $2
     `;
@@ -263,7 +263,7 @@ export class PostgresFinanceOperationalContextRepository {
     ]);
 
     const allPaymentsSql = `
-      SELECT 
+      SELECT
         p.id,
         p.payment_reference,
         p.amount,

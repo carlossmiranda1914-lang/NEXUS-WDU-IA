@@ -71,7 +71,7 @@ export class PaymentApiClient {
       } catch {
         // ignore parse error
       }
-      const code = errBody?.code 
+      const code = errBody?.code
         || (typeof errBody?.error === 'string' && /^[A-Z0-9_]+$/.test(errBody.error) ? errBody.error : undefined)
         || (res.status === 401 ? 'UNAUTHORIZED' : res.status === 403 ? 'PAYMENT_FORBIDDEN' : 'PAYMENT_ERROR');
       const message = errBody?.message || errBody?.error || `Erro HTTP ${res.status}`;
