@@ -36,12 +36,3 @@ ALTER TABLE finance_obligations
   ADD CONSTRAINT fk_finance_obligations_fee_version_tenant
     FOREIGN KEY (institution_id, fee_catalogue_item_id, fee_catalogue_version)
     REFERENCES finance_fee_catalogue_versions(institution_id, item_id, version) ON DELETE RESTRICT;
-
--- 5. Delete any transient test rows if needed and restrict status to 'open' only
-DELETE FROM finance_obligations WHERE status != 'open';
-
-ALTER TABLE finance_obligations
-  DROP CONSTRAINT IF EXISTS finance_obligations_status_check;
-
-ALTER TABLE finance_obligations
-  ADD CONSTRAINT finance_obligations_status_check CHECK (status = 'open');

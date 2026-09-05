@@ -294,6 +294,43 @@ async function runTests() {
       await obligationRepo.getById(actorB, obl1.id);
     }, (err: any) => err.code === 'FINANCIAL_OBLIGATION_NOT_FOUND');
 
+    // 14. Non-Destructive Migration & Historical Obligation Preservation Proof
+    // 14a. Existing legacy cancelled obligation survives in PostgreSQL and is recoverable
+    const legacyCancelledId = '00000000-0000-0000-0000-000000000999';
+    await client.query(
+      `INSERT INTO finance_obligations (
+        id, institution_id, financial_account_id, beneficiary_person_id, fee_catalogue_item_id, fee_catalogue_version,
+        source_type, source_ref, amount, currency, effective_at, status, notes, financial_profile_version,
+        created_by_person_id, idempotency_key
+      ) VALUES (
+        $1, $2, $3, $4, $5, 1,
+        'manual_finance', 'legacy-001', 99.99, 'EUR', NOW(), 'cancelled', 'Histórico cancelado prévio', 1,
+        $6, 'idem-legacy-cancelled'
+      )`,
+      [legacyCancelledId, institutionA, acc.id, studentPersonId, feeItem.id, personA],
+    );
+
+    const legacyRecovered = await obligationRepo.getById(actorA, legacyCancelledId);
+    assert.equal(legacyRecovered.id, legacyCancelledId);
+    assert.equal(legacyRecovered.status, 'cancelled', 'Historical cancelled obligation must be preserved as cancelled');
+    assert.equal(legacyRecovered.money.amount, '99.99', 'Historical amount must not be rewritten');
+    assert.equal(legacyRecovered.notes, 'Histórico cancelado prévio');
+
+    // 14b. Listing obligations preserves historical cancelled rows without filtering them away
+    const listWithLegacy = await obligationRepo.list(actorA);
+    assert.ok(listWithLegacy.some((o) => o.id === legacyCancelledId && o.status === 'cancelled'));
+
+    // 14c. New obligation can only be issued as 'open'
+    const newObl = await obligationRepo.issue(actorA, {
+      financialAccountId: acc.id,
+      feeCatalogueItemId: feeItem.id,
+      beneficiaryPersonId: studentPersonId,
+    }, `key-obl-new-open-${uid}`);
+    assert.equal(newObl.status, 'open', 'New obligations must only be issued as open');
+
+    // 14d. Repository does NOT expose any mutable cancel operation
+    assert.equal((obligationRepo as any).cancel, undefined, 'Runtime must expose no mutable cancel operation');
+
     console.log('Finance financial obligation PostgreSQL tests: PASS');
   } finally {
     client.release();
