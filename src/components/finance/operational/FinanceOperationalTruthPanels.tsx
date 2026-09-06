@@ -8,12 +8,13 @@ export interface FinanceOperationalTruthPanelsProps {
   theme?: string;
   openObligations: FinanceOperationalObligation[];
   confirmedUnallocatedPayments: FinanceOperationalPayment[];
+  onAllocatePayment?: (paymentId: string) => void;
 }
 
 function formatMoney(amount: string, currency: string): string {
-  const num = Number(amount);
-  if (isNaN(num)) return `${amount} ${currency}`;
-  return `${num.toLocaleString('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+  // Values here are canonical Money strings; presentation must not turn them
+  // into floating-point authority.
+  return `${amount} ${currency}`;
 }
 
 function formatDate(iso: string): string {
@@ -47,6 +48,7 @@ export function FinanceOperationalTruthPanels({
   theme = 'light',
   openObligations,
   confirmedUnallocatedPayments,
+  onAllocatePayment,
 }: FinanceOperationalTruthPanelsProps) {
   const isLight = theme === 'light';
 
@@ -120,8 +122,9 @@ export function FinanceOperationalTruthPanels({
                   </div>
                   <div className="text-right">
                     <span className={`text-sm font-bold ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
-                      {formatMoney(ob.amount.amount, ob.amount.currency)}
+                      Original: {formatMoney((ob.original || ob.amount).amount, (ob.original || ob.amount).currency)}
                     </span>
+                    {ob.covered && ob.uncovered && <span className="block text-xs text-zinc-500">Coberto: {formatMoney(ob.covered.amount, ob.covered.currency)} · Por cobrir: {formatMoney(ob.uncovered.amount, ob.uncovered.currency)}</span>}
                   </div>
                 </div>
               ))
@@ -189,7 +192,7 @@ export function FinanceOperationalTruthPanels({
                         {pay.paymentReference}
                       </span>
                       <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40">
-                        Confirmado · Não aplicado
+                        Confirmado · {pay.allocationPosition === 'partially_allocated' ? 'Parcialmente associado' : 'Por associar'}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap">
@@ -200,8 +203,10 @@ export function FinanceOperationalTruthPanels({
                   </div>
                   <div className="text-right">
                     <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                      +{formatMoney(pay.amount.amount, pay.amount.currency)}
+                      Valor recebido: +{formatMoney((pay.received || pay.amount).amount, (pay.received || pay.amount).currency)}
                     </span>
+                    {pay.allocated && pay.unapplied && <span className="block text-xs text-zinc-500">Já associado: {formatMoney(pay.allocated.amount, pay.allocated.currency)} · Por associar: {formatMoney(pay.unapplied.amount, pay.unapplied.currency)}</span>}
+                    {pay.status === 'confirmed' && (pay.unapplied || pay.amount).amount !== '0' && onAllocatePayment && <button type="button" data-testid={`allocate-payment-${pay.id}`} onClick={() => onAllocatePayment(pay.id)} className="mt-2 text-xs font-semibold text-emerald-700">Associar recebimento</button>}
                   </div>
                 </div>
               ))

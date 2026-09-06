@@ -6,6 +6,8 @@ import { FinanceOperationalContextHeader } from './FinanceOperationalContextHead
 import { FinanceOperationalTruthPanels } from './FinanceOperationalTruthPanels.tsx';
 import { FinanceOperationalHistory } from './FinanceOperationalHistory.tsx';
 import { FinancePaymentCreateView } from '../payments/FinancePaymentCreateView.tsx';
+import { FinanceAllocationCreateView } from './FinanceAllocationCreateView.tsx';
+import { FinanceAllocationHistory } from './FinanceAllocationHistory.tsx';
 
 export interface FinanceOperationalContextWorkspaceProps {
   theme?: string;
@@ -40,6 +42,7 @@ export function FinanceOperationalContextWorkspace({
   const [hasSearched, setHasSearched] = useState(false);
 
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false);
+  const [allocationPaymentId, setAllocationPaymentId] = useState<string | null>(null);
   const [paymentSuccessNotice, setPaymentSuccessNotice] = useState<string | null>(null);
 
   // 1. Server-side bounded account search
@@ -122,6 +125,7 @@ export function FinanceOperationalContextWorkspace({
     setSelectedAccountId(id);
     setContext(null); // Clear context atomically before loading new account
     setIsRegisteringPayment(false);
+    setAllocationPaymentId(null);
     setPaymentSuccessNotice(null);
     loadContext(id);
   };
@@ -133,6 +137,7 @@ export function FinanceOperationalContextWorkspace({
     setContext(null);
     setError(null);
     setIsRegisteringPayment(false);
+    setAllocationPaymentId(null);
     setPaymentSuccessNotice(null);
     setHasSearched(false);
     setSearchResults([]);
@@ -239,6 +244,17 @@ export function FinanceOperationalContextWorkspace({
         />
       </div>
     );
+  }
+
+  const allocationPayment = context?.confirmedUnallocatedPayments.find((payment) => payment.id === allocationPaymentId);
+  if (allocationPayment && context) {
+    return <FinanceAllocationCreateView
+      theme={theme}
+      payment={allocationPayment}
+      obligations={context.openObligations}
+      onCancel={() => setAllocationPaymentId(null)}
+      onSuccess={() => { setAllocationPaymentId(null); loadContext(selectedAccountId); }}
+    />;
   }
 
   // Explicit Account Selection & Search view when no account is selected
@@ -400,7 +416,10 @@ export function FinanceOperationalContextWorkspace({
             theme={theme}
             openObligations={context.openObligations}
             confirmedUnallocatedPayments={context.confirmedUnallocatedPayments}
+            onAllocatePayment={(paymentId) => setAllocationPaymentId(paymentId)}
           />
+
+          <FinanceAllocationHistory history={context.history} />
 
           <FinanceOperationalHistory
             theme={theme}
