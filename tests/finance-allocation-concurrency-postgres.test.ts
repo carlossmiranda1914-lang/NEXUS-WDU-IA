@@ -56,6 +56,7 @@ try {
     const feeTypeId = randomUUID(); feeItemId = randomUUID();
     await client.query(`INSERT INTO finance_fee_types(id,institution_id,source,display_name,code_prefix) VALUES($1,$2,'institution_custom','Concurrency fee','RACE')`, [feeTypeId, institutionId]);
     await client.query(`INSERT INTO finance_fee_catalogue_items(id,institution_id,fee_type_id,code,current_version,created_by_person_id) VALUES($1,$2,$3,'RACE-000001',1,$4)`, [feeItemId, institutionId, feeTypeId, personId]);
+    await client.query(`INSERT INTO finance_fee_catalogue_versions(institution_id,item_id,fee_type_id,version,name,kind,amount,currency,effective_from,created_by_person_id) VALUES($1,$2,$3,1,'Concurrency fee','fee',100,'EUR',now(),$4)`, [institutionId, feeItemId, feeTypeId, personId]);
   } finally { client.release(); }
 
   // A: one locked Payment permits at most its 100 EUR net allocation.

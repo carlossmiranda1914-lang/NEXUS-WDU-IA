@@ -1,6 +1,20 @@
 -- NEXUS EDU IA — MIGRATION 0037
 -- FINANCE-F4-01: Canonical immutable Allocation and Allocation Reversal authority.
 
+ALTER TABLE finance_journal_transactions
+  DROP CONSTRAINT finance_journal_transactions_journal_type_check;
+ALTER TABLE finance_journal_transactions
+  ADD CONSTRAINT finance_journal_transactions_journal_type_check CHECK (
+    journal_type IN ('foundation_value_received', 'foundation_reversal', 'payment_allocation', 'allocation_reversal')
+  );
+
+ALTER TABLE finance_journal_entries
+  DROP CONSTRAINT finance_journal_entries_position_type_check;
+ALTER TABLE finance_journal_entries
+  ADD CONSTRAINT finance_journal_entries_position_type_check CHECK (
+    position_type IN ('received_value', 'reversed_value', 'allocated_value', 'released_value')
+  );
+
 -- A composite tenant FK must reference an explicit matching unique constraint.
 -- `id` remains the global primary key; this constraint authorizes the tenant pair
 -- used by Allocation without weakening the tenant boundary.
