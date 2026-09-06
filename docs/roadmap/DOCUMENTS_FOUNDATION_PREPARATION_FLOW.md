@@ -45,19 +45,59 @@ This flow governs the work still required to close preparation. It does not supe
 
 No later phase can be marked complete by assuming the result of an earlier phase.
 
-## 4. P1 — Source-domain integration contract
+## 4. P1 — Generic source-domain integration contract — CLOSED
 
-For each future consumer, the implementation package must specify:
+### 4.1 Upload-authorisation proof
 
-1. **Create/upload intent**: source-process reference, institution context, entity reference, category and acting role.
-2. **Link rule**: exactly which immutable document version is linked to which source process.
-3. **Business-validity boundary**: source domain owns accept/reject/replace-as-evidence decisions.
-4. **State query**: source can query authoritative technical state without duplicating document metadata.
-5. **Events**: received, verified, quarantined, expired and deleted, with idempotent delivery and correlation identifiers.
-6. **Removal**: withdrawing a pending link cancels and deletes pending data; historical evidence follows category policy.
-7. **Failure handling**: source behaviour when document is pending, quarantined, unavailable, expired or deleted.
+Before an upload begins, the source domain validates the requested business process and issues a signed proof valid for **15 minutes**. Documents Foundation validates that proof and refuses the request without creating file data when the process is missing, expired, invalid, incompatible or outside the stated institution.
 
-A source-domain integration cannot be scheduled until its contract is reviewed against this list.
+The proof must bind:
+
+- institution;
+- source process;
+- entity reference;
+- document category;
+- acting actor;
+- expiration.
+
+Documents Foundation does not query, recreate or own the underlying business process.
+
+### 4.2 Two-stage process relationship
+
+The integration uses two distinct relationships:
+
+1. **Provisional association** — created immediately after upload completion in `received_pending_review`, enabling the source process to receive and review the file.
+2. **Evidence link** — created or activated only after the source domain confirms business validity.
+
+A rejected document remains historical according to the applicable category-retention policy. Removing a provisional association while verification is pending cancels the upload and deletes pending bytes.
+
+### 4.3 Business decision contract
+
+The source domain is the only authority for evidence validity. It sends a signed, audited decision event to Documents Foundation. A valid decision must identify the institution, source process, entity reference, document version, decision, acting authority, applicable policy version, event timestamp, event identifier and causal/correlation identifier.
+
+Documents Foundation records the decision and updates only its document-link/evidence status. It never interprets the business rule.
+
+A correction creates a new immutable decision event; it does not overwrite prior history. The source-domain contract must provide ordering/version semantics so an older event cannot reverse a newer decision.
+
+### 4.4 State-event contract
+
+Documents Foundation publishes state events for received, verified, quarantined, expired and deleted outcomes.
+
+- Delivery guarantee: **at least once**.
+- Recipient duty: idempotent handling.
+- Source-domain capability: receive events and query authoritative state.
+- Event delivery failure: retry with audit; after repeated failure, place in a durable failure queue for operational resolution.
+- Invalid, expired, incompatible or unverifiable signed events: reject without state mutation and notify the source domain.
+
+### 4.5 P1 closure
+
+```
+GENERIC_SOURCE_INTEGRATION_CONTRACT_CLOSED = YES
+SOURCE_SPECIFIC_INTEGRATION_CONTRACT_CLOSED = NO
+IMPLEMENTATION_AUTHORIZED = NO
+```
+
+Every future consumer requires a source-specific contract derived from this generic contract. No consumer is automatically integrated by the existence of this document.
 
 ## 5. P2 — Jurisdiction and policy package
 
