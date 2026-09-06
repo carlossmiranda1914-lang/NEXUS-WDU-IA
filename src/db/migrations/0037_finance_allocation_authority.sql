@@ -1,6 +1,12 @@
 -- NEXUS EDU IA — MIGRATION 0037
 -- FINANCE-F4-01: Canonical immutable Allocation and Allocation Reversal authority.
 
+-- A composite tenant FK must reference an explicit matching unique constraint.
+-- `id` remains the global primary key; this constraint authorizes the tenant pair
+-- used by Allocation without weakening the tenant boundary.
+ALTER TABLE finance_obligations
+  ADD CONSTRAINT uq_finance_obligations_institution_id UNIQUE (institution_id, id);
+
 CREATE TABLE IF NOT EXISTS finance_allocations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE RESTRICT,

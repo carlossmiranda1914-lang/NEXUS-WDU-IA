@@ -43,6 +43,7 @@ try {
 
     const floatingMoney = await client.query(`SELECT table_name,column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name IN ('finance_allocations','finance_allocation_reversals') AND column_name='amount' AND data_type IN ('real','double precision')`, [schema]);
     assert.equal(floatingMoney.rowCount, 0, 'allocation authority cannot use floating point Money');
+    assert.equal(await constraintExists(client, 'finance_obligations', 'uq_finance_obligations_institution_id'), true, 'Allocation obligation tenant FK requires a matching tenant-pair unique constraint');
     for (const [table, name] of [
       ['finance_allocations', 'fk_finance_allocations_payment_tenant'],
       ['finance_allocations', 'fk_finance_allocations_obligation_tenant'],
