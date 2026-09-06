@@ -143,21 +143,77 @@ IMPLEMENTATION_AUTHORIZED = NO
 
 The data model and governance flow are closed. Actual jurisdiction profiles still require documented legal validation before they can be activated.
 
-## 6. P3 — Security and operational design
+## 6. P3 — Security and operational design — CLOSED
 
-The preparation package must prove these invariants:
+### 6.1 Encryption and access
 
-- every request has validated Institutional Context;
-- storage bytes are private; no public object URL exists;
-- upload authorisation is scoped and expires after 15 minutes;
-- resumable uploads expire after 24 hours;
-- server calculates the final SHA-256 hash;
-- actual type, limits and malware detection are required before technical availability;
-- verification unavailability retries for no more than 24 hours, then quarantines;
-- quarantined bytes cannot be opened or downloaded;
-- future access is denied immediately after permission revocation;
-- audit is complete, while post-deletion evidence is minimised and pseudonymised;
-- transfers create a controlled destination copy with immutable provenance when policy permits.
+- File bytes are encrypted in transit and at rest.
+- The platform manages encryption keys with isolation by institution.
+- Open/download authority is evaluated at the moment of access; if it cannot be confirmed, access is denied.
+- A successful open/download authorisation lasts **5 minutes**.
+- No public URL, cached prior permission or browser-held claim can bypass current authorisation.
+
+### 6.2 Tenant-boundary defence
+
+A request targeting another institution is denied, recorded and alerted to central security. No response may disclose whether the target document exists.
+
+Repeated denied access to sensitive documents is automatically classified by policy rules, subject to human review:
+
+| Severity | Required response |
+|---|---|
+| Low | Temporary block with short automatic expiry |
+| High / critical | Block remains until security review authorises reactivation |
+| Cross-institution attempt | Deny, audit and alert central security; classify under incident rules |
+
+### 6.3 Audit integrity and visibility
+
+Audit records are append-only, integrity-verifiable and never edited. Corrections and later decisions are new events, not alterations of prior events.
+
+Complete security/access audit is visible only to authorised institutional roles and central security. Audit access itself is auditable.
+
+### 6.4 Incident operations
+
+- Initial severity is assigned by automatic rules and reviewed by a human.
+- A critical confirmed incident notifies central security and the authorised institutional contact.
+- Technical details exposed to end users must be non-disclosing; the audit/incident system retains diagnostic evidence for authorised responders.
+- Security and access-revocation events take precedence over convenience or availability.
+
+### 6.5 Backup and restoration
+
+Backup retention follows the approved global jurisdiction-and-category profile.
+
+| Rule | Requirement |
+|---|---|
+| Restore request | Initiated by an authorised institutional role; request is audited |
+| Restore approval | Central security approves against current policy |
+| Restored bytes | Return to normal storage only after approval |
+| Post-restore state | `received_pending_review`; current technical and policy verification is mandatory |
+| Legally deleted / retention-expired bytes | Never restored from backup |
+| Restore testing | Monthly, with evidence retained |
+
+No administrator receives direct access to backup infrastructure.
+
+### 6.6 Operational non-negotiables
+
+The implementation package must prove:
+
+- secret/key material never appears in client code, logs or audit views;
+- upload/download grants are scoped, temporary and revocable;
+- malware/quarantine controls cannot be bypassed by restoration;
+- audit events use trusted server time and correlation identifiers;
+- storage, verification, audit and event failures fail closed for privileged access;
+- security alerts, blocked actors and failure queues have a documented operational owner.
+
+### 6.7 P3 closure
+
+```
+SECURITY_OPERATIONAL_DESIGN_CLOSED = YES
+THREAT_MODEL_REVIEW_GREEN = NO
+OPERATIONAL_TEST_EVIDENCE_GREEN = NO
+IMPLEMENTATION_AUTHORIZED = NO
+```
+
+The required security design is closed. A formal threat-model review and future operational test evidence remain mandatory before implementation authorisation.
 
 ## 7. P4 — Product and UX contract
 
