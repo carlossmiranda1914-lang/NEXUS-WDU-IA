@@ -96,7 +96,7 @@ try {
 
     await client.query(`INSERT INTO institutions(id,name,slug,status) VALUES ($1,'Inst A','inst-a','active'),($2,'Inst B','inst-b','active'),($3,'Inst No Profile','inst-no-prof','active')`, [institutionA, institutionB, institutionNoProfile]);
     await client.query(`INSERT INTO people(id,name) VALUES ($1,'Admin A'),($2,'Teacher A'),($3,'System'),($4,'Admin B')`, [actorAdminA, actorTeacherA, actorSystem, actorAdminB]);
-    await client.query(`INSERT INTO finance_profile_versions(institution_id,version,effective_from,primary_jurisdiction,functional_currency,financial_timezone,monetary_policy_version,enabled_currencies) VALUES ($1,1,now() - interval '1 day','PT','EUR','Europe/Lisbon','v1','["EUR","USD"]'),($2,1,now() - interval '1 day','AO','AOA','Africa/Luanda','v1','["AOA"]')`, [institutionA, institutionB]);
+    await client.query(`INSERT INTO finance_profile_versions(institution_id,version,effective_from,primary_jurisdiction,functional_currency,financial_timezone,monetary_policy_version,enabled_currencies) VALUES ($1,1,'2026-09-01T00:00:00Z','PT','EUR','Europe/Lisbon','v1','["EUR","USD"]'),($2,1,'2026-09-01T00:00:00Z','AO','AOA','Africa/Luanda','v1','["AOA"]')`, [institutionA, institutionB]);
 
     server = http.createServer(app);
     server.listen(0, '127.0.0.1');
