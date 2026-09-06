@@ -11,6 +11,7 @@ import { PostgresFinancialObligationRepository } from '../src/modules/finance/fi
 import { PostgresFinancialAccountRepository, FinancialAccountNotFoundError } from '../src/modules/finance/financial-account-repository.ts';
 import { PostgresFeeCatalogueRepository } from '../src/modules/finance/fee-catalogue-repository.ts';
 import { PostgresFeeTypeRepository } from '../src/modules/finance/fee-type-repository.ts';
+import { PostgresAllocationRepository } from '../src/modules/finance/allocation-repository.ts';
 import {
   PostgresFinanceOperationalContextRepository,
   AmbiguousFinancialAccountError,
@@ -232,6 +233,38 @@ try {
     assert.ok(ctxA.history.length >= 2);
     assert.ok(ctxA.history.some(h => h.kind === 'obligation' && h.id === obligationRes.id));
     assert.ok(ctxA.history.some(h => h.kind === 'payment' && h.id === paymentRes.payment.id));
+
+    // Allocation positions are reconstructed from immutable Allocation minus Reversal facts.
+    const allocationRepo = new PostgresAllocationRepository(pool);
+    const confirmed = await allocationRepo.confirmAllocationInCommand(contextA, {
+      paymentId: paymentRes.payment.id,
+      effectiveAt: new Date().toISOString(),
+      lines: [{ obligationId: obligationRes.id, amount: '50.00', currency: 'EUR' }],
+    }, 'idemp-projection-allocation');
+    await allocationRepo.reverseAllocationInCommand(contextA, {
+      originalAllocationId: confirmed.allocations[0]!.id,
+      amount: '20.00',
+      currency: 'EUR',
+      reason: 'Correção da associação',
+      effectiveAt: new Date().toISOString(),
+    }, 'idemp-projection-reversal');
+    const rebuilt = await opContextRepo.getByFinancialAccountId(contextA, accountA.id);
+    const rebuiltAgain = await opContextRepo.getByFinancialAccountId(contextA, accountA.id);
+    const projectedPayment = rebuilt.confirmedUnallocatedPayments.find((payment) => payment.id === paymentRes.payment.id)!;
+    const projectedObligation = rebuilt.openObligations.find((obligation) => obligation.id === obligationRes.id)!;
+    assert.deepEqual(projectedPayment.received, { amount: '50', currency: 'EUR' });
+    assert.deepEqual(projectedPayment.allocated, { amount: '30', currency: 'EUR' });
+    assert.deepEqual(projectedPayment.unapplied, { amount: '20', currency: 'EUR' });
+    assert.equal(projectedPayment.allocationPosition, 'partially_allocated');
+    assert.deepEqual(projectedObligation.original, { amount: '150', currency: 'EUR' });
+    assert.deepEqual(projectedObligation.covered, { amount: '30', currency: 'EUR' });
+    assert.deepEqual(projectedObligation.uncovered, { amount: '120', currency: 'EUR' });
+    assert.equal(projectedObligation.coveragePosition, 'partially_covered');
+    const allocationHistory = rebuilt.history.find((item) => item.kind === 'allocation' && item.id === confirmed.allocations[0]!.id);
+    assert.ok(allocationHistory && allocationHistory.kind === 'allocation');
+    assert.equal(allocationHistory.allocation.reversals.length, 1);
+    assert.equal(allocationHistory.allocation.reversals[0]!.reason, 'Correção da associação');
+    assert.deepEqual(rebuilt, rebuiltAgain, 'A refetch rebuilds the same projection solely from canonical facts');
 
     // Multi-tenant isolation: Inst A cannot access accountB
     await assert.rejects(

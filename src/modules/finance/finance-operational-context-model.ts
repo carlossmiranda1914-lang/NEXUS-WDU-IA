@@ -30,6 +30,11 @@ export interface FinanceOperationalObligation {
   feeItemCode?: string;
   feeItemName?: string;
   amount: FinanceMoneyAmount;
+  /** Immutable issued value, repeated under the allocation projection vocabulary. */
+  original?: FinanceMoneyAmount;
+  covered?: FinanceMoneyAmount;
+  uncovered?: FinanceMoneyAmount;
+  coveragePosition?: 'open' | 'partially_covered' | 'covered';
   effectiveAt: string;
   dueAt?: string | null;
   status: string;
@@ -40,6 +45,11 @@ export interface FinanceOperationalPayment {
   id: string;
   paymentReference: string;
   amount: FinanceMoneyAmount;
+  /** Immutable confirmed receipt, repeated under the allocation projection vocabulary. */
+  received?: FinanceMoneyAmount;
+  allocated?: FinanceMoneyAmount;
+  unapplied?: FinanceMoneyAmount;
+  allocationPosition?: 'unapplied' | 'partially_allocated' | 'fully_allocated';
   method: string;
   effectiveAt: string;
   payerPersonId?: string;
@@ -60,6 +70,25 @@ export type FinanceOperationalHistoryItem =
       id: string;
       occurredAt: string;
       payment: FinanceOperationalPayment;
+    }
+  | {
+      kind: 'allocation';
+      id: string;
+      occurredAt: string;
+      allocation: {
+        id: string;
+        paymentId: string;
+        obligationId: string;
+        amount: FinanceMoneyAmount;
+        effectiveAt: string;
+        reversals: Array<{
+          id: string;
+          amount: FinanceMoneyAmount;
+          reason: string;
+          effectiveAt: string;
+          occurredAt: string;
+        }>;
+      };
     };
 
 export interface FinanceOperationalContext {

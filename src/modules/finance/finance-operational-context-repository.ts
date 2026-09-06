@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { Money } from './money.ts';
+import { deriveObligationCoveragePosition, derivePaymentAllocationPosition } from './allocation-model.ts';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
 import { FinancialAccountNotFoundError } from './financial-account-repository.ts';
 import type {
@@ -69,6 +70,7 @@ interface ObligationRow {
   due_at: string | Date | null;
   status: string;
   notes: string | null;
+  covered?: string | number;
 }
 
 interface PaymentRow {
@@ -82,6 +84,27 @@ interface PaymentRow {
   payer_person_name: string | null;
   status: string;
   allocation_status: string;
+  allocated?: string | number;
+}
+
+interface AllocationHistoryRow {
+  id: string;
+  payment_id: string;
+  obligation_id: string;
+  amount: string | number;
+  currency: string;
+  effective_at: string | Date;
+  recorded_at: string | Date;
+}
+
+interface AllocationReversalHistoryRow {
+  id: string;
+  original_allocation_id: string;
+  amount: string | number;
+  currency: string;
+  reason: string;
+  effective_at: string | Date;
+  recorded_at: string | Date;
 }
 
 export class PostgresFinanceOperationalContextRepository {
@@ -186,6 +209,16 @@ export class PostgresFinanceOperationalContextRepository {
         o.due_at,
         o.status,
         o.notes,
+        COALESCE((
+          SELECT SUM(a.amount - COALESCE(r.reversed_amount, 0))
+          FROM finance_allocations a
+          LEFT JOIN LATERAL (
+            SELECT SUM(ar.amount) AS reversed_amount
+            FROM finance_allocation_reversals ar
+            WHERE ar.institution_id = a.institution_id AND ar.original_allocation_id = a.id
+          ) r ON true
+          WHERE a.institution_id = o.institution_id AND a.obligation_id = o.id
+        ), 0)::text AS covered,
         fci.code AS fee_item_code,
         fcv.name AS fee_item_name
       FROM finance_obligations o
@@ -199,15 +232,22 @@ export class PostgresFinanceOperationalContextRepository {
     const obligationsRes = await client.query<ObligationRow>(obligationsSql, [actor.institutionId, financialAccountId]);
     const openObligations: FinanceOperationalObligation[] = obligationsRes.rows.map((row) => {
       const desc = row.fee_item_name ? `${row.fee_item_name} (${row.fee_item_code})` : row.fee_item_code;
+      const original = Money.parse(String(row.amount), String(row.currency));
+      const position = deriveObligationCoveragePosition(
+        original.canonicalAmount(),
+        String(row.covered ?? '0'),
+        String(row.currency)
+      );
       return {
         id: String(row.id),
         description: desc,
         feeItemCode: String(row.fee_item_code),
         feeItemName: String(row.fee_item_name),
-        amount: {
-          amount: Money.parse(String(row.amount), String(row.currency)).canonicalAmount(),
-          currency: String(row.currency),
-        },
+        amount: original.serialize(),
+        original: original.serialize(),
+        covered: position.covered.serialize(),
+        uncovered: position.uncovered.serialize(),
+        coveragePosition: position.state,
         effectiveAt:
           row.effective_at instanceof Date
             ? row.effective_at.toISOString()
@@ -234,23 +274,46 @@ export class PostgresFinanceOperationalContextRepository {
         p.payer_person_id,
         p.status,
         p.allocation_status,
+        COALESCE((
+          SELECT SUM(a.amount - COALESCE(r.reversed_amount, 0))
+          FROM finance_allocations a
+          LEFT JOIN LATERAL (
+            SELECT SUM(ar.amount) AS reversed_amount
+            FROM finance_allocation_reversals ar
+            WHERE ar.institution_id = a.institution_id AND ar.original_allocation_id = a.id
+          ) r ON true
+          WHERE a.institution_id = p.institution_id AND a.payment_id = p.id
+        ), 0)::text AS allocated,
         pe.name AS payer_person_name
       FROM finance_payments p
       LEFT JOIN people pe ON pe.id = p.payer_person_id
       WHERE p.institution_id = $1
         AND p.financial_account_id = $2
         AND p.status = 'confirmed'
-        AND p.allocation_status = 'unapplied'
+        AND p.amount > COALESCE((
+          SELECT SUM(a.amount - COALESCE(r.reversed_amount, 0))
+          FROM finance_allocations a
+          LEFT JOIN LATERAL (
+            SELECT SUM(ar.amount) AS reversed_amount
+            FROM finance_allocation_reversals ar
+            WHERE ar.institution_id = a.institution_id AND ar.original_allocation_id = a.id
+          ) r ON true
+          WHERE a.institution_id = p.institution_id AND a.payment_id = p.id
+        ), 0)
       ORDER BY p.effective_at DESC, p.created_at DESC
     `;
     const paymentsRes = await client.query<PaymentRow>(paymentsSql, [actor.institutionId, financialAccountId]);
-    const confirmedUnallocatedPayments: FinanceOperationalPayment[] = paymentsRes.rows.map((row) => ({
+    const confirmedUnallocatedPayments: FinanceOperationalPayment[] = paymentsRes.rows.map((row) => {
+      const received = Money.parse(String(row.amount), String(row.currency));
+      const position = derivePaymentAllocationPosition(received.canonicalAmount(), String(row.allocated ?? '0'), String(row.currency));
+      return ({
       id: String(row.id),
       paymentReference: String(row.payment_reference),
-      amount: {
-        amount: Money.parse(String(row.amount), String(row.currency)).canonicalAmount(),
-        currency: String(row.currency),
-      },
+      amount: received.serialize(),
+      received: received.serialize(),
+      allocated: position.allocated.serialize(),
+      unapplied: position.unapplied.serialize(),
+      allocationPosition: position.state,
       method: String(row.method),
       effectiveAt:
         row.effective_at instanceof Date
@@ -260,7 +323,8 @@ export class PostgresFinanceOperationalContextRepository {
       payerPersonName: row.payer_person_name ? String(row.payer_person_name) : undefined,
       status: String(row.status),
       allocationStatus: String(row.allocation_status),
-    }));
+    });
+    });
 
     // 6. History composition (all obligations + all payments)
     const allObligationsSql = `
@@ -272,6 +336,7 @@ export class PostgresFinanceOperationalContextRepository {
         o.due_at,
         o.status,
         o.notes,
+        COALESCE((SELECT SUM(a.amount - COALESCE(r.reversed_amount, 0)) FROM finance_allocations a LEFT JOIN LATERAL (SELECT SUM(ar.amount) AS reversed_amount FROM finance_allocation_reversals ar WHERE ar.institution_id = a.institution_id AND ar.original_allocation_id = a.id) r ON true WHERE a.institution_id = o.institution_id AND a.obligation_id = o.id), 0)::text AS covered,
         fci.code AS fee_item_code,
         fcv.name AS fee_item_name
       FROM finance_obligations o
@@ -297,6 +362,7 @@ export class PostgresFinanceOperationalContextRepository {
         p.payer_person_id,
         p.status,
         p.allocation_status,
+        COALESCE((SELECT SUM(a.amount - COALESCE(r.reversed_amount, 0)) FROM finance_allocations a LEFT JOIN LATERAL (SELECT SUM(ar.amount) AS reversed_amount FROM finance_allocation_reversals ar WHERE ar.institution_id = a.institution_id AND ar.original_allocation_id = a.id) r ON true WHERE a.institution_id = p.institution_id AND a.payment_id = p.id), 0)::text AS allocated,
         pe.name AS payer_person_name
       FROM finance_payments p
       LEFT JOIN people pe ON pe.id = p.payer_person_id
@@ -317,10 +383,11 @@ export class PostgresFinanceOperationalContextRepository {
         description: desc,
         feeItemCode: String(row.fee_item_code),
         feeItemName: String(row.fee_item_name),
-        amount: {
-          amount: Money.parse(String(row.amount), String(row.currency)).canonicalAmount(),
-          currency: String(row.currency),
-        },
+        amount: Money.parse(String(row.amount), String(row.currency)).serialize(),
+        original: Money.parse(String(row.amount), String(row.currency)).serialize(),
+        covered: deriveObligationCoveragePosition(String(row.amount), String(row.covered ?? '0'), String(row.currency)).covered.serialize(),
+        uncovered: deriveObligationCoveragePosition(String(row.amount), String(row.covered ?? '0'), String(row.currency)).uncovered.serialize(),
+        coveragePosition: deriveObligationCoveragePosition(String(row.amount), String(row.covered ?? '0'), String(row.currency)).state,
         effectiveAt,
         dueAt: row.due_at
           ? row.due_at instanceof Date
@@ -346,10 +413,11 @@ export class PostgresFinanceOperationalContextRepository {
       const payment: FinanceOperationalPayment = {
         id: String(row.id),
         paymentReference: String(row.payment_reference),
-        amount: {
-          amount: Money.parse(String(row.amount), String(row.currency)).canonicalAmount(),
-          currency: String(row.currency),
-        },
+        amount: Money.parse(String(row.amount), String(row.currency)).serialize(),
+        received: Money.parse(String(row.amount), String(row.currency)).serialize(),
+        allocated: derivePaymentAllocationPosition(String(row.amount), String(row.allocated ?? '0'), String(row.currency)).allocated.serialize(),
+        unapplied: derivePaymentAllocationPosition(String(row.amount), String(row.allocated ?? '0'), String(row.currency)).unapplied.serialize(),
+        allocationPosition: derivePaymentAllocationPosition(String(row.amount), String(row.allocated ?? '0'), String(row.currency)).state,
         method: String(row.method),
         effectiveAt,
         payerPersonId: row.payer_person_id ? String(row.payer_person_id) : undefined,
@@ -362,6 +430,63 @@ export class PostgresFinanceOperationalContextRepository {
         id: payment.id,
         occurredAt: effectiveAt,
         payment,
+      });
+    }
+
+    // Allocation facts are deliberately read from their own append-only authority.
+    // Reversals remain attached to the original Allocation so the correction causality
+    // is preserved without creating a competing balance or history authority.
+    const allocationsRes = await client.query<AllocationHistoryRow>(
+      `SELECT a.id, a.payment_id, a.obligation_id, a.amount, a.currency, a.effective_at, a.recorded_at
+       FROM finance_allocations a
+       WHERE a.institution_id = $1 AND a.financial_account_id = $2
+       ORDER BY a.recorded_at DESC, a.id DESC`,
+      [actor.institutionId, financialAccountId]
+    );
+    const reversalsRes = await client.query<AllocationReversalHistoryRow>(
+      `SELECT ar.id, ar.original_allocation_id, ar.amount, ar.currency, ar.reason, ar.effective_at, ar.recorded_at
+       FROM finance_allocation_reversals ar
+       JOIN finance_allocations a
+         ON a.institution_id = ar.institution_id AND a.id = ar.original_allocation_id
+       WHERE ar.institution_id = $1 AND a.financial_account_id = $2
+       ORDER BY ar.recorded_at ASC, ar.id ASC`,
+      [actor.institutionId, financialAccountId]
+    );
+    const reversalsByAllocation = new Map<string, AllocationReversalHistoryRow[]>();
+    for (const reversal of reversalsRes.rows) {
+      const entries = reversalsByAllocation.get(reversal.original_allocation_id) ?? [];
+      entries.push(reversal);
+      reversalsByAllocation.set(reversal.original_allocation_id, entries);
+    }
+    for (const allocation of allocationsRes.rows) {
+      const occurredAt = allocation.recorded_at instanceof Date
+        ? allocation.recorded_at.toISOString()
+        : new Date(String(allocation.recorded_at)).toISOString();
+      const effectiveAt = allocation.effective_at instanceof Date
+        ? allocation.effective_at.toISOString()
+        : new Date(String(allocation.effective_at)).toISOString();
+      history.push({
+        kind: 'allocation',
+        id: String(allocation.id),
+        occurredAt,
+        allocation: {
+          id: String(allocation.id),
+          paymentId: String(allocation.payment_id),
+          obligationId: String(allocation.obligation_id),
+          amount: Money.parse(String(allocation.amount), String(allocation.currency)).serialize(),
+          effectiveAt,
+          reversals: (reversalsByAllocation.get(allocation.id) ?? []).map((reversal) => ({
+            id: String(reversal.id),
+            amount: Money.parse(String(reversal.amount), String(reversal.currency)).serialize(),
+            reason: String(reversal.reason),
+            effectiveAt: reversal.effective_at instanceof Date
+              ? reversal.effective_at.toISOString()
+              : new Date(String(reversal.effective_at)).toISOString(),
+            occurredAt: reversal.recorded_at instanceof Date
+              ? reversal.recorded_at.toISOString()
+              : new Date(String(reversal.recorded_at)).toISOString(),
+          })),
+        },
       });
     }
 
