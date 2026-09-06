@@ -8,6 +8,8 @@ import { FinanceOperationalHistory } from './FinanceOperationalHistory.tsx';
 import { FinancePaymentCreateView } from '../payments/FinancePaymentCreateView.tsx';
 import { FinanceAllocationCreateView } from './FinanceAllocationCreateView.tsx';
 import { FinanceAllocationHistory } from './FinanceAllocationHistory.tsx';
+import { FinanceAllocationReverseView } from './FinanceAllocationReverseView.tsx';
+import { allocationClient } from '../../../modules/finance/allocation-client.ts';
 
 export interface FinanceOperationalContextWorkspaceProps {
   theme?: string;
@@ -43,6 +45,7 @@ export function FinanceOperationalContextWorkspace({
 
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false);
   const [allocationPaymentId, setAllocationPaymentId] = useState<string | null>(null);
+  const [reversalAllocation, setReversalAllocation] = useState<Extract<NonNullable<FinanceOperationalContext>['history'][number], { kind: 'allocation' }>['allocation'] | null>(null);
   const [paymentSuccessNotice, setPaymentSuccessNotice] = useState<string | null>(null);
 
   // 1. Server-side bounded account search
@@ -126,6 +129,7 @@ export function FinanceOperationalContextWorkspace({
     setContext(null); // Clear context atomically before loading new account
     setIsRegisteringPayment(false);
     setAllocationPaymentId(null);
+    setReversalAllocation(null);
     setPaymentSuccessNotice(null);
     loadContext(id);
   };
@@ -138,6 +142,7 @@ export function FinanceOperationalContextWorkspace({
     setError(null);
     setIsRegisteringPayment(false);
     setAllocationPaymentId(null);
+    setReversalAllocation(null);
     setPaymentSuccessNotice(null);
     setHasSearched(false);
     setSearchResults([]);
@@ -255,6 +260,9 @@ export function FinanceOperationalContextWorkspace({
       onCancel={() => setAllocationPaymentId(null)}
       onSuccess={() => { setAllocationPaymentId(null); loadContext(selectedAccountId); }}
     />;
+  }
+  if (reversalAllocation && context) {
+    return <FinanceAllocationReverseView allocation={reversalAllocation} onCancel={() => setReversalAllocation(null)} onSuccess={() => { setReversalAllocation(null); loadContext(selectedAccountId); }} onReverse={(request) => allocationClient.reverse(reversalAllocation.id, { ...request, effectiveAt: new Date().toISOString() }).then(() => undefined)} />;
   }
 
   // Explicit Account Selection & Search view when no account is selected
@@ -419,7 +427,7 @@ export function FinanceOperationalContextWorkspace({
             onAllocatePayment={(paymentId) => setAllocationPaymentId(paymentId)}
           />
 
-          <FinanceAllocationHistory history={context.history} />
+          <FinanceAllocationHistory history={context.history} onReverse={setReversalAllocation} />
 
           <FinanceOperationalHistory
             theme={theme}
