@@ -99,24 +99,49 @@ IMPLEMENTATION_AUTHORIZED = NO
 
 Every future consumer requires a source-specific contract derived from this generic contract. No consumer is automatically integrated by the existence of this document.
 
-## 5. P2 — Jurisdiction and policy package
+## 5. P2 — Jurisdiction and policy model — CLOSED
 
-Central governance must publish a versioned policy structure containing:
+### 5.1 Jurisdiction selection and conflict
 
-- jurisdiction profile;
-- category;
-- minimum classification;
-- permitted safe formats;
-- central file-size ceiling;
-- permitted institutional lower limit;
-- retention rule;
-- legal-hold rule;
-- transfer eligibility and conditions;
-- role/action bounds;
-- notification requirements;
-- policy version and effective date.
+A document's primary jurisdiction is the institution's operational jurisdiction. When more than one mandatory jurisdiction applies, the system applies the most restrictive applicable profile.
 
-Institutional configuration is valid only when it is within the applicable central global policy version. Any stricter mandatory local legal rule takes precedence and must be represented by a jurisdiction profile, not an undocumented institutional exception.
+The institution may propose a jurisdiction profile; the platform approves and publishes it. Institutions do not self-publish legal rules.
+
+### 5.2 Profile lifecycle and applicability
+
+Every central profile is versioned, approved, dated and auditable. A new or stricter profile applies to existing documents only where the legal obligation requires it; the historic profile/version supporting prior decisions remains recorded.
+
+If no approved profile exists for the institution's operational jurisdiction, operations that require that profile are blocked. There is no temporary exception to a jurisdictional block: a new approved profile is required.
+
+Changing an institution's operational jurisdiction requires platform approval and an approved new profile; it is not a direct institution setting change.
+
+### 5.3 Cross-jurisdiction transfer
+
+Before a permitted international transfer, the system must establish:
+
+- compatible approved origin and destination profiles;
+- a policy-authorised transfer basis;
+- category eligibility;
+- authorised initiating role;
+- controlled destination copy with immutable provenance.
+
+A transfer cannot rely merely on institutional request or individual consent where the required policy basis/profile is absent.
+
+### 5.4 Re-evaluation of existing documents
+
+When a new legal obligation applies to existing documents, the system marks affected documents and creates an auditable re-evaluation task. It never silently rewrites the historical policy record.
+
+The concrete legal action remains governed by the approved jurisdiction-and-category profile and may include access restriction, retention adjustment, transfer block or other lawful lifecycle action.
+
+### 5.5 P2 closure
+
+```
+JURISDICTION_POLICY_MODEL_CLOSED = YES
+JURISDICTION_PROFILE_LEGAL_VALIDATION_COMPLETE = NO
+IMPLEMENTATION_AUTHORIZED = NO
+```
+
+The data model and governance flow are closed. Actual jurisdiction profiles still require documented legal validation before they can be activated.
 
 ## 6. P3 — Security and operational design
 
