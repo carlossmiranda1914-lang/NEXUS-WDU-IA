@@ -39,6 +39,7 @@
     "test:finance:f2:account-obligation": "node scripts/run-finance-f2-account-obligation.mjs",
     "test:finance:f3:payment-core": "node scripts/run-finance-f3-payment-core.mjs",
     "test:finance:operational-consolidation": "node scripts/run-finance-operational-consolidation.mjs",
+    "test:finance:f4:allocation": "node scripts/run-finance-f4-allocation.mjs",
     "test:artifacts": "node scripts/check-artifacts.mjs",
     "test:postgres-foundation": "node scripts/run-postgres-foundation.mjs",
     "quality-gate": "node scripts/run-quality-gate.mjs",

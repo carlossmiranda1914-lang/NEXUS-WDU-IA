@@ -69,3 +69,4 @@
 - task_8_test_commit: `30ded7a` (`test(finance): specify allocation reversal workflow`).
 - task_8_implementation_commit: `35530ca` (`feat(finance): add immutable allocation reversal workflow`).
 - task_8: complete — no Finance workspace redesign or new economic authority was introduced.
+- task_9: Allocation v1 aggregate gate added. `scripts/run-finance-f4-allocation.mjs` loads only the existing `.env.test.local` authorization and executes the safety, model, schema PostgreSQL, command PostgreSQL, concurrency PostgreSQL, HTTP, client, allocation UI, and reversal UI suites in fail-fast order. `tests/finance-allocation-safety.test.ts` statically fences destructive/mutable Allocation HTTP routes and prohibited Credit, Refund, Reconciliation, and automatic-allocation scope while asserting account/currency boundaries remain explicit. Fresh approved-target execution passed all constituent suites; `npm run lint` and `git diff --check` PASS.
