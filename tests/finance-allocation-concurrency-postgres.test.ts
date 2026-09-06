@@ -25,7 +25,7 @@ const effectiveAt = '2026-09-06T10:00:00.000Z';
 async function seedPayment(amount: string) {
   const id = randomUUID(); const journalId = randomUUID();
   await pool.query(`INSERT INTO finance_journal_transactions(id,institution_id,status,currency,amount,command_id,journal_type,actor_person_id,financial_profile_version,confirmed_at) VALUES($1,$2,'confirmed','EUR',$3,$4,'foundation_value_received',$5,1,now())`, [journalId, institutionId, amount, `payment-${id}`, personId]);
-  await pool.query(`INSERT INTO finance_payments(id,institution_id,payment_reference,journal_transaction_id,source_type,method,amount,currency,status,allocation_status,financial_account_id,payer_person_id,effective_at,financial_profile_version,actor_person_id) VALUES($1,$2,$3,$4,'manual_offline','cash',$5,'EUR','confirmed','unapplied',$6,$7,now(),1,$7)`, [id, institutionId, `PAY-${id}`, journalId, amount, accountId, personId]);
+  await pool.query(`INSERT INTO finance_payments(id,institution_id,payment_reference,journal_transaction_id,source_type,method,amount,currency,status,allocation_status,financial_account_id,payer_person_id,effective_at,financial_profile_version,actor_person_id) VALUES($1,$2,$3,$4,'manual_offline','cash',$5,'EUR','confirmed','unapplied',$6,$7,now(),1,$7)`, [id, institutionId, `PAY-${id.replaceAll('-', '').slice(0, 28)}`, journalId, amount, accountId, personId]);
   return id;
 }
 
