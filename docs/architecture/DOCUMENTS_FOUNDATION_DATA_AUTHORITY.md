@@ -145,11 +145,47 @@ There is one global policy, approved centrally and versioned. It contains mandat
 
 For file size, central governance defines a safe maximum ceiling for each category. Institutions may select a lower limit by category, but cannot exceed that ceiling. Exact numeric ceilings remain a centrally governed configuration decision, not a hard-coded domain rule.
 
-## 8. Transfer rule
+## 9. Upload, verification and quarantine contract
+
+### 9.1 Private resumable upload
+
+- File bytes are sent directly to private storage through a scoped, temporary upload authorisation; no public URL is created.
+- An authorisation lasts 15 minutes and may be renewed only for a valid resumable-upload session.
+- The storage target is bound to the authorised institution, actor, category, intended process reference and upload session. It cannot be reused for another target.
+- Interrupted uploads may resume for 24 hours.
+- If the user explicitly cancels, retention of partial bytes is decided by institutional policy within a centrally governed limit; partial data must be deleted automatically when its allowed resume window ends.
+- Repeated client requests are idempotent and must not create duplicate uploads or links.
+
+### 9.2 Completion and technical verification
+
+After receipt completes, the server calculates the definitive SHA-256 hash and creates a process link in `received_pending_review` state with a visible warning. The source process may continue, but cannot treat that version as automatically valid evidence.
+
+Before a version reaches `verified_available`, all of these checks are mandatory:
+
+1. server-side hash and integrity calculation;
+2. detected content type versus declared extension/type;
+3. category and institution size limits;
+4. malware detection.
+
+A type mismatch, malware detection or other verification failure moves the file to `quarantined` and blocks access. If verification infrastructure is unavailable, the file remains pending and retries automatically for up to 24 hours; after that it is quarantined and the sender plus authorised institutional roles are notified.
+
+### 9.3 Cancellation, recovery and re-submission
+
+If the source-process link is removed while a file is pending verification, the upload is cancelled and pending file data is deleted. No unlinked verified asset remains from that attempt.
+
+After quarantine, a sender may submit a new version to the same process only where the category policy permits it. This creates a new auditable version/attempt; it never reactivates the quarantined bytes.
+
+### 9.4 State propagation and notifications
+
+Documents Foundation publishes a durable state event for received, verified, quarantined, expired and deleted outcomes. The source domain receives the event and may also query the authoritative document state.
+
+The sender is notified immediately when a file becomes technically available. Quarantine notifies the sender and authorised institutional roles. These notifications do not imply business acceptance or validity as evidence.
+
+## 10. Transfer rule
 
 Transfer is not sharing an original across institutions. When the global policy permits a category transfer, Documents Foundation creates a controlled destination copy and preserves immutable provenance to its origin. The policy must state the eligible category, actor, legal basis, destination condition and audit requirements.
 
-## 9. Non-goals
+## 11. Non-goals
 
 - No document validity engine for Enrollment, Attendance, Academic or Finance.
 - No parallel student, guardian, enrollment, financial or academic datastore.
@@ -157,15 +193,14 @@ Transfer is not sharing an original across institutions. When the global policy 
 - No automatic cross-process reuse merely because hashes match.
 - No implementation authorisation.
 
-## 10. Remaining preparation work before implementation readiness
+## 12. Remaining preparation work before implementation readiness
 
 1. Complete the global category-policy matrix: file types, size limits, retention, replacement and transfer rules.
-2. Define the upload/verification/quarantine technical contract, error handling and service-level expectations.
-3. Define source-domain integration contracts and acceptance criteria.
-4. Validate international legal/jurisdictional requirements for retention, deletion, transfer and access policies.
-5. Produce the mission pack, implementation plan and obtain explicit implementation authorisation.
+2. Define source-domain integration contracts and acceptance criteria.
+3. Validate international legal/jurisdictional requirements for retention, deletion, transfer and access policies.
+4. Produce the mission pack, implementation plan and obtain explicit implementation authorisation.
 
-## 11. Readiness marker
+## 13. Readiness marker
 
 ```
 DESIGN_CLOSED = NO
