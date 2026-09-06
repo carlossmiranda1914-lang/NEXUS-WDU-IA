@@ -12,7 +12,7 @@ export class PostgresJournalRepository implements JournalRepository {
     throw new Error('Journal confirmation must execute through the canonical idempotent command boundary');
   }
   async confirmInTransaction(client: PoolClient, input: ConfirmJournalInput): Promise<{ transactionId: string }> {
-    if (input.journalType !== 'foundation_value_received') throw new Error('Foundation reversal confirmation is guarded by executeFoundationReversal');
+    if (input.journalType === 'foundation_reversal') throw new Error('Foundation reversal confirmation is guarded by executeFoundationReversal');
     return this.persistConfirmed(client, input);
   }
   private async persistConfirmed(client: PoolClient, input: ConfirmJournalInput): Promise<{ transactionId: string }> {
