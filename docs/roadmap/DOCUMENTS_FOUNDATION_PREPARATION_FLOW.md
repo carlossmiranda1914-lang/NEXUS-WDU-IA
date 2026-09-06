@@ -215,23 +215,61 @@ IMPLEMENTATION_AUTHORIZED = NO
 
 The required security design is closed. A formal threat-model review and future operational test evidence remain mandatory before implementation authorisation.
 
-## 7. P4 — Product and UX contract
+## 7. P4 — Product, UX and error contract — CLOSED
 
-The design must define, at minimum:
+### 7.1 State presentation
 
-| Situation | Required user outcome |
+The interface always shows two separate, plain-language states:
+
+1. **Technical state** — upload, pending verification, technically available, quarantined, expired or deleted.
+2. **Business state** — provisional association, accepted as evidence, rejected as evidence or superseded, owned by the source process.
+
+Technical availability never implies business acceptance. The wording must make this distinction clear to every user.
+
+### 7.2 Sender experience
+
+| Situation | Required experience |
 |---|---|
-| Upload begins | Clear progress, category and process context |
-| Connection interruption | Clear resume option for up to 24 hours |
-| Authorisation expiry | Re-authorise only the valid upload session; never expose storage directly |
-| Upload completed | Pending-verification warning; not evidence-valid automatically |
-| Verification successful | Immediate sender notification; source receives state event |
-| Verification unavailable | Pending status with retry indication |
-| Verification deadline exceeded | Quarantine status and notifications |
-| Quarantine | No access; explain next permitted action without exposing security internals |
-| Re-submission | Only if category policy allows; create new auditable attempt |
-| Access revoked | Immediate future-access denial |
-| Deleted document | No file access; minimal audit trace only |
+| Verification pending | State, explicit non-validation warning and option to follow progress |
+| Technical availability | Immediate in-product notification; additional channels only if policy permits |
+| Quarantine | Generic non-disclosing message plus next permitted action |
+| Rejection as evidence | Source process communicates reason and next action |
+| Permission revoked | Generic message and direction to contact the institution |
+| Interrupted upload | Resume option and remaining 24-hour window |
+| Historic versions | Visible to sender only when category policy permits |
+
+### 7.3 Institutional review experience
+
+- The review queue is ordered by policy-defined priority and then age.
+- When business review exceeds the policy deadline, the responsible role is alerted and the case escalates under policy.
+- Institutional users see only the technical/security detail permitted by their role and category.
+- A source-process decision is presented as a business decision, not as an action taken by Documents Foundation.
+
+### 7.4 Notifications and language
+
+- User-visible states, warnings and notifications use the user's interface language.
+- Notification content must not expose technical-security details, cross-institution existence or internal investigation data.
+- Critical incident communication follows the P3 recipient rule and is separate from normal product notifications.
+
+### 7.5 Accessibility baseline
+
+The first implementation cut requires:
+
+- complete keyboard navigation;
+- screen-reader-compatible state, progress and error semantics;
+- adequate colour contrast;
+- no colour-only meaning for technical or business status.
+
+### 7.6 P4 closure
+
+```
+UX_ERROR_CONTRACT_CLOSED = YES
+ACCESSIBILITY_BASELINE_DEFINED = YES
+VISUAL_IMPLEMENTATION_COMPLETE = NO
+IMPLEMENTATION_AUTHORIZED = NO
+```
+
+The behavioural UX contract is closed. Visual implementation, usability validation and accessibility testing remain future evidence gates.
 
 ## 8. P5 — Acceptance package
 
