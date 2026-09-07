@@ -4,6 +4,7 @@ import type { FinanceOperationalHistoryItem } from '../../../modules/finance/fin
 export interface FinanceOperationalHistoryProps {
   theme?: string;
   history: FinanceOperationalHistoryItem[];
+  onReverse?: (allocation: Extract<FinanceOperationalHistoryItem, { kind: 'allocation' }>['allocation']) => void;
 }
 
 function formatMoney(amount: string, currency: string): string {
@@ -42,6 +43,7 @@ function methodLabel(method: string): string {
 export function FinanceOperationalHistory({
   theme = 'light',
   history,
+  onReverse,
 }: FinanceOperationalHistoryProps) {
   const isLight = theme === 'light';
 
@@ -147,6 +149,32 @@ export function FinanceOperationalHistory({
                     </span>
                   </div>
                 </div>
+              );
+            }
+
+            if (item.kind === 'allocation') {
+              const allocation = item.allocation;
+              return (
+                <article
+                  key={`allocation-${item.id}`}
+                  data-testid={`history-item-allocation-${item.id}`}
+                  className="rounded-lg border border-sky-200 bg-white p-4 text-zinc-900 shadow-sm dark:border-sky-900 dark:bg-zinc-900 dark:text-zinc-100"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-800 dark:bg-sky-950 dark:text-sky-200">Recebimento associado</span>
+                      <div><p className="text-sm font-medium">Associação registada</p><p className="text-xs text-zinc-600 dark:text-zinc-300">{formatDate(item.occurredAt)}</p></div>
+                    </div>
+                    <strong className="shrink-0 text-sm text-sky-800 dark:text-sky-200">{formatMoney(allocation.amount.amount, allocation.amount.currency)}</strong>
+                  </div>
+                  {allocation.reversals.map((reversal) => (
+                    <div key={reversal.id} data-testid={`history-item-reversal-${reversal.id}`} className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100">
+                      <div className="flex items-center justify-between gap-3"><span className="font-semibold">Associação revertida</span><strong>{formatMoney(reversal.amount.amount, reversal.amount.currency)}</strong></div>
+                      <p className="mt-1 text-xs">{formatDate(reversal.occurredAt || reversal.effectiveAt)} · Motivo: {reversal.reason}</p>
+                    </div>
+                  ))}
+                  {onReverse && <button data-testid={`allocation-reverse-action-${allocation.id}`} type="button" onClick={() => onReverse(allocation)} className="mt-3 rounded-md border border-sky-300 bg-white px-3 py-2 text-sm font-medium text-sky-900 dark:border-sky-800 dark:bg-zinc-800 dark:text-sky-100">Reverter associação</button>}
+                </article>
               );
             }
 

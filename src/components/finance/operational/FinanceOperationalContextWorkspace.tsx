@@ -7,7 +7,6 @@ import { FinanceOperationalTruthPanels } from './FinanceOperationalTruthPanels.t
 import { FinanceOperationalHistory } from './FinanceOperationalHistory.tsx';
 import { FinancePaymentCreateView } from '../payments/FinancePaymentCreateView.tsx';
 import { FinanceAllocationCreateView } from './FinanceAllocationCreateView.tsx';
-import { FinanceAllocationHistory } from './FinanceAllocationHistory.tsx';
 import { FinanceAllocationReverseView } from './FinanceAllocationReverseView.tsx';
 import { allocationClient } from '../../../modules/finance/allocation-client.ts';
 
@@ -427,11 +426,10 @@ export function FinanceOperationalContextWorkspace({
             onAllocatePayment={(paymentId) => setAllocationPaymentId(paymentId)}
           />
 
-          <FinanceAllocationHistory history={context.history} onReverse={setReversalAllocation} />
-
           <FinanceOperationalHistory
             theme={theme}
             history={context.history}
+            onReverse={setReversalAllocation}
           />
         </>
       )}

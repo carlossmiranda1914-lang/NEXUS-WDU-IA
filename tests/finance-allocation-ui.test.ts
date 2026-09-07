@@ -18,6 +18,7 @@ const renderer = await render();
 assert.match(JSON.stringify(renderer.toJSON()), /Distribua o valor recebido pelas cobranças que pretende cobrir/);
 assert.match(JSON.stringify(renderer.toJSON()), /Disponível para associar/);
 assert.match(JSON.stringify(renderer.toJSON()), /O valor original do recebimento e das cobranças não é alterado/);
+assert.match(renderer.root.findByProps({ 'data-testid': 'allocation-amount-a' }).props.className, /dark:bg-zinc-950/);
 assert.equal(renderer.root.findAllByProps({ 'data-testid': 'allocation-obligation-a' }).length, 1);
 assert.equal(renderer.root.findAllByProps({ 'data-testid': 'allocation-obligation-b' }).length, 1);
 assert.equal(renderer.root.findAllByProps({ 'data-testid': 'allocation-obligation-wrong-currency' }).length, 0);
