@@ -42,6 +42,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Confirmation completeness | Presence or absence required for every eligible learner |
 | Late session rule | Institutional policy chooses automatic confirmed absence or human decision |
 | Automatic confirmed absence | Audit and immediately notify teacher and coordination |
+| Correction history | New immutable revision; preserve original, reason, author and timestamp |
+| Teacher after confirmation | May only propose a correction; approval follows institutional policy |
+| Guardian correction notice | Notify immediately when a visible outcome or justification state changes |
 
 ## 4. Authority boundary
 
@@ -126,4 +129,14 @@ A session is not a timetable. It records that an authorised attendance occasion 
 6. The maximum offline cache validity is configured by registration unit and must be explicit in institutional policy; no indefinite cache is permitted.
 7. Local data is stored only in encrypted operating-system-protected storage.
 8. Institutional policy identifies the human actor for each offline synchronization conflict.
+
+
+## 12. Correction and notification decisions
+
+1. A confirmed attendance record is never overwritten. Each accepted correction creates a new immutable revision linked to the original record and preserves the original value, mandatory reason, proposing actor, approving actor and timestamps.
+2. After a teacher confirms a session, the teacher may only propose a correction. The institutional policy determines the approving authority, eligibility and deadline.
+3. A correction is not effective merely because it is proposed; it remains pending until the policy-authorised approval decision is recorded.
+4. If an effective correction changes a presence/absence outcome or a justification state already visible to the guardian, Attendance notifies the guardian immediately in the guardian's interface language.
+5. The notification identifies that the record changed and directs the guardian to the updated record; it must not disclose internal notes, security details or unauthorised information.
+6. Every proposal, approval, rejection, withdrawal, effective revision and notification attempt is auditable.
 
