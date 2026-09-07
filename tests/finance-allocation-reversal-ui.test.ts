@@ -10,6 +10,26 @@ const allocation = {
   amount: { amount: '100.00', currency: 'EUR' }, effectiveAt: '2026-09-06T10:00:00.000Z', reversals: [],
 };
 
+const renderTheme = async (theme: 'light' | 'dark') => {
+  let themed!: ReturnType<typeof create>;
+  await act(async () => { themed = create(React.createElement(FinanceAllocationReverseView, {
+    theme, allocation, onReverse: async () => undefined, onSuccess: () => undefined, onCancel: () => undefined,
+  })); });
+  return JSON.stringify(themed.toJSON());
+};
+
+const lightTheme = await renderTheme('light');
+assert.match(lightTheme, /bg-white/);
+assert.match(lightTheme, /text-zinc-900/);
+assert.match(lightTheme, /bg-zinc-50/);
+assert.doesNotMatch(lightTheme, /dark:/);
+
+const darkTheme = await renderTheme('dark');
+assert.match(darkTheme, /bg-zinc-900/);
+assert.match(darkTheme, /text-zinc-100/);
+assert.match(darkTheme, /bg-zinc-950/);
+assert.doesNotMatch(darkTheme, /dark:/);
+
 let reversed: unknown;
 let success = 0;
 let renderer: ReturnType<typeof create>;

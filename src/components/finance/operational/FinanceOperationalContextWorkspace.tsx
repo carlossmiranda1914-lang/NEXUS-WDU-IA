@@ -261,7 +261,7 @@ export function FinanceOperationalContextWorkspace({
     />;
   }
   if (reversalAllocation && context) {
-    return <FinanceAllocationReverseView allocation={reversalAllocation} onCancel={() => setReversalAllocation(null)} onSuccess={() => { setReversalAllocation(null); loadContext(selectedAccountId); }} onReverse={(request) => allocationClient.reverse(reversalAllocation.id, { ...request, effectiveAt: new Date().toISOString() }).then(() => undefined)} />;
+    return <FinanceAllocationReverseView theme={theme} allocation={reversalAllocation} onCancel={() => setReversalAllocation(null)} onSuccess={() => { setReversalAllocation(null); loadContext(selectedAccountId); }} onReverse={(request) => allocationClient.reverse(reversalAllocation.id, { ...request, effectiveAt: new Date().toISOString() }).then(() => undefined)} />;
   }
 
   // Explicit Account Selection & Search view when no account is selected
