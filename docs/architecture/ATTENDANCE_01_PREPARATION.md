@@ -38,6 +38,10 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Justification delegation | Coordination may delegate by institutional policy |
 | Justification evidence | File attachments allowed |
 | Attachment dependency | Documents Foundation; no local/browser upload substitute |
+| Eligible roster | Updates while session is open; fixed historical roster after confirmation |
+| Confirmation completeness | Presence or absence required for every eligible learner |
+| Late session rule | Institutional policy chooses automatic confirmed absence or human decision |
+| Automatic confirmed absence | Audit and immediately notify teacher and coordination |
 
 ## 4. Authority boundary
 
@@ -80,3 +84,17 @@ A session is not a timetable. It records that an authorised attendance occasion 
 5. Offline capture, conflict resolution and synchronisation authority.
 6. Threshold policy, alerts and required human action.
 7. Permissions, notifications, UX, acceptance evidence and Mission Pack.
+
+
+## 8. Session lifecycle decisions
+
+1. An authorised teacher initiates an attendance session from an active TeacherAssignment.
+2. While open, the eligible roster follows valid placement changes.
+3. Before confirmation, every eligible learner needs a primary outcome: presence or absence.
+4. Confirmation freezes the eligible roster and creates historical session context.
+5. Tardiness and missing material are separate occurrences attached to the primary outcome.
+6. If the deadline passes without confirmation, the institutional policy selects either:
+   - automatic confirmed absence, with immediate audit/teacher/coordination notification; or
+   - a human decision by the policy-authorised actor.
+7. Corrections after confirmation remain governed by institutional policy and must preserve history.
+
