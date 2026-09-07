@@ -38,4 +38,8 @@ The post-closeout audit identified proof gaps rather than a new Finance phase. T
 
 AUDIT_REMEDIATION=PASS; P0_OPEN=0; P1_OPEN=0; FINAL_AUTOMATED_VERIFICATION=PASS.
 
+The final audit adjudicated its proposed unconfirmed-Payment case as invalid: Payment Core deliberately materializes only canonical `confirmed` Payments (`PaymentStatus = 'confirmed'` and migration 0035 enforces the same). No Payment lifecycle, migration 0035, or impossible pending fixture was introduced. The valid P1-A finding was fixed through real `AllocationApiClient → Express → PostgreSQL` confirmation and reversal proof. Client requests now include the displayed canonical currency, while PostgreSQL still verifies it against the locked Payment and Obligation.
+
+AUDIT_FINAL_CLOSURE=PASS; PAYMENT_STATUS_DOMAIN=CONFIRMED_ONLY; UNCONFIRMED_PAYMENT_CANONICAL_STATE=NOT_MODELED; P1_B_FINDING=WITHDRAWN_INVALID_ASSUMPTION.
+
 HUMAN_UAT=PENDING. Prepare one same-institution/account/currency scenario with a confirmed unapplied Payment and at least two eligible Obligations. The Product Owner explicitly allocates, refreshes, inspects history, performs a reasoned partial/full reversal, and confirms original Payment/Obligation Money remains unchanged.
