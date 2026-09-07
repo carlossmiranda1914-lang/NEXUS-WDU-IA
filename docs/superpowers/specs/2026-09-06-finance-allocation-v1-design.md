@@ -1,6 +1,6 @@
 # Nexus Edu IA — Finance Allocation v1 Design
 
-**Status:** PRODUCT DESIGN CONSOLIDATED — AWAITING FINAL PRODUCT OWNER SPEC APPROVAL
+**Status:** PRODUCT DESIGN APPROVED — IMPLEMENTATION AUTHORIZED
 **Date:** 2026-09-06
 **Baseline:** `90c62bb5ae0656bb99c847149f3bb6618f8fe600`
 **Planning branch:** `codex/finance-allocation-v1-plan`
@@ -580,4 +580,4 @@ with immutable compensating reversal for correction.
 It completes the missing settlement relationship without prematurely introducing reconciliation, credits, refunds, automation or provider operations.
 
 **DESIGN_READY_FOR_PRODUCT_OWNER_SPEC_APPROVAL=YES**
-**IMPLEMENTATION_AUTHORIZED=NO**
+**IMPLEMENTATION_AUTHORIZED=YES**

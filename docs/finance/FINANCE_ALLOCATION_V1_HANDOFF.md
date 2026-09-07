@@ -32,4 +32,10 @@ F3, F2, F1, Foundation, FND03, lint, build, diff, secrets, artifacts, F4 aggrega
 
 F3 test-only corrections: `91ad5559f76b5b10dd27ed8e930e88c49bce4601` makes the webhook fixture effective at its event timestamp; `bd416ff0edee747b8d8f27751607cc211cdd8120` limits the F3 allocation prohibition to its dedicated branch. PRODUCTION_CODE_CHANGED_BY_F3_FIXES=NO.
 
+## Bounded audit remediation
+
+The post-closeout audit identified proof gaps rather than a new Finance phase. They are closed by executable evidence: Task 3 now performs real migrated-schema PostgreSQL confirmation, rollback, Journal atomicity and idempotency proof; Task 5 mounts Express routes against PostgreSQL for authorization, tenancy, conflict and reversal behavior; the command boundary rejects JavaScript-number Money inputs; the concurrency suite includes the Allocation-versus-Reversal race; and the rendered confirmation workflow proves multi-line review, exact remainder, client transport and canonical refetch. Allocation policy reuse is canonical because the existing `payment-policy.ts` is the established Finance write-capability boundary for confirmed received value. No separate capability was introduced.
+
+AUDIT_REMEDIATION=PASS; P0_OPEN=0; P1_OPEN=0; FINAL_AUTOMATED_VERIFICATION=PASS.
+
 HUMAN_UAT=PENDING. Prepare one same-institution/account/currency scenario with a confirmed unapplied Payment and at least two eligible Obligations. The Product Owner explicitly allocates, refreshes, inspects history, performs a reasoned partial/full reversal, and confirms original Payment/Obligation Money remains unchanged.
