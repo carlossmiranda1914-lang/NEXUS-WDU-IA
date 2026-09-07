@@ -11,7 +11,7 @@ const obligation: any = {
   remainingCoverable: { amount: '40.00', currency: 'EUR' }, uncovered: { amount: '40.00', currency: 'EUR' },
 };
 
-const render = async (theme: 'light' | 'dark' = 'light', onSubmit = async () => undefined) => {
+const render = async (theme: 'light' | 'dark' = 'light', onSubmit: (id: string, input: any) => Promise<any> = async () => undefined) => {
   let renderer!: ReturnType<typeof create>;
   await act(async () => { renderer = create(React.createElement(FinanceObligationAdjustmentView, { theme, obligations: [obligation], onCancel: () => undefined, onSubmit })); });
   return renderer;
