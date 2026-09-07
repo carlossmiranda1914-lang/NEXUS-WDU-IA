@@ -18,10 +18,13 @@ function date(value: unknown): Date {
 function money(value: unknown, currency?: string): Money {
   if (!value || typeof value !== 'object') throw new AllocationCommandValidationError('Allocation amount is required');
   const raw = value as { amount?: unknown; currency?: unknown };
-  if (typeof raw.amount !== 'string' && typeof raw.amount !== 'number') throw new AllocationCommandValidationError('Allocation amount is required');
+  // The transport boundary is intentionally lexical.  JavaScript numbers are
+  // not an authority for canonical Finance Money because their binary value can
+  // silently differ from the decimal amount the operator intended.
+  if (typeof raw.amount !== 'string') throw new AllocationCommandValidationError('Allocation amount must be an exact decimal string');
   const parsedCurrency = typeof raw.currency === 'string' ? raw.currency.trim().toUpperCase() : currency;
   if (!parsedCurrency) throw new AllocationCommandValidationError('Allocation currency is required');
-  const parsed = Money.parse(String(raw.amount), parsedCurrency);
+  const parsed = Money.parse(raw.amount, parsedCurrency);
   if (parsed.compare(Money.parse('0', parsedCurrency)) <= 0) throw new AllocationCommandValidationError('Allocation amount must be strictly positive');
   return parsed;
 }
