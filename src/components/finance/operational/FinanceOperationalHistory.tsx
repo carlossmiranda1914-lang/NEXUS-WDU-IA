@@ -180,6 +180,30 @@ export function FinanceOperationalHistory({
               );
             }
 
+            if (item.kind === 'adjustment') {
+              const adjustment = item.adjustment;
+              const direction = adjustment.direction === 'increase' ? 'Aumento do valor devido' : 'Redução do valor devido';
+              return (
+                <article
+                  key={`adjustment-${item.id}`}
+                  data-testid={`history-item-adjustment-${item.id}`}
+                  className={`border-l-2 py-3.5 pl-4 ${
+                    isLight ? 'border-violet-300 text-zinc-900' : 'border-violet-700 text-zinc-100'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <span className={`rounded px-2 py-0.5 text-xs font-semibold ${isLight ? 'bg-violet-100 text-violet-800' : 'bg-violet-950/80 text-violet-200'}`}>Correção registada</span>
+                      <p className="mt-2 text-sm font-medium">{adjustment.obligationDescription} · {direction}</p>
+                      <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>{formatDate(item.occurredAt)} · Motivo: {adjustment.reason}</p>
+                      {adjustment.compensatesAdjustmentId && <p className={`mt-1 text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>Compensa uma correção anterior.</p>}
+                    </div>
+                    <strong className={`shrink-0 text-sm ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>{adjustment.direction === 'increase' ? '+' : '-'}{formatMoney(adjustment.amount.amount, adjustment.amount.currency)}</strong>
+                  </div>
+                </article>
+              );
+            }
+
             return null;
           })
         )}

@@ -92,6 +92,19 @@ export type FinanceOperationalHistoryItem =
           occurredAt: string;
         }>;
       };
+    }
+  | {
+      kind: 'adjustment';
+      id: string;
+      occurredAt: string;
+      adjustment: {
+        obligationId: string;
+        obligationDescription: string;
+        direction: 'increase' | 'decrease';
+        amount: FinanceMoneyAmount;
+        reason: string;
+        compensatesAdjustmentId?: string;
+      };
     };
 
 export interface FinanceOperationalContext {

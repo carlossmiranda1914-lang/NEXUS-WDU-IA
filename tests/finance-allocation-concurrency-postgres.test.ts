@@ -113,6 +113,15 @@ try {
   const positionE = await adjustments.getPosition(institutionId, obligationE);
   assert.ok(positionE.effectiveDue.compare(positionE.netCovered) >= 0);
   assert.ok(positionE.remainingCoverable.compare(Money.parse('0', 'EUR')) >= 0);
+  if (adjustmentAllocationRace[0]!.status === 'fulfilled') {
+    assert.equal(positionE.effectiveDue.canonicalAmount(), '30');
+    assert.equal(positionE.netCovered.canonicalAmount(), '0');
+    assert.equal(positionE.remainingCoverable.canonicalAmount(), '30');
+  } else {
+    assert.equal(positionE.effectiveDue.canonicalAmount(), '100');
+    assert.equal(positionE.netCovered.canonicalAmount(), '40');
+    assert.equal(positionE.remainingCoverable.canonicalAmount(), '60');
+  }
 
   // F: a decrease and reversal serialize against a real confirmed Allocation.
   const paymentF = await seedPayment('100'); const obligationF = await seedObligation('100');
@@ -125,6 +134,12 @@ try {
   const positionF = await adjustments.getPosition(institutionId, obligationF);
   assert.ok(positionF.effectiveDue.compare(positionF.netCovered) >= 0);
   assert.ok(positionF.remainingCoverable.compare(Money.parse('0', 'EUR')) >= 0);
+  const adjustmentSucceeded = adjustmentReversalRace[0]!.status === 'fulfilled';
+  const reversalSucceeded = adjustmentReversalRace[1]!.status === 'fulfilled';
+  assert.equal(reversalSucceeded, true, 'the valid reversal must restore covered capacity');
+  assert.equal(positionF.netCovered.canonicalAmount(), '0');
+  assert.equal(positionF.effectiveDue.canonicalAmount(), adjustmentSucceeded ? '50' : '100');
+  assert.equal(positionF.remainingCoverable.canonicalAmount(), adjustmentSucceeded ? '50' : '100');
 
   // E: line normalization is ID ordered, and the repository uses ORDER BY id FOR UPDATE for every target.
   const source = await import('node:fs/promises').then((fs) => fs.readFile(new URL('../src/modules/finance/allocation-repository.ts', import.meta.url), 'utf8'));

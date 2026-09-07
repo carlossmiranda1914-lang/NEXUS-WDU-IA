@@ -109,6 +109,17 @@ interface AllocationReversalHistoryRow {
   recorded_at: string | Date;
 }
 
+interface AdjustmentHistoryRow {
+  id: string;
+  obligation_id: string;
+  direction: 'increase' | 'decrease';
+  amount: string | number;
+  currency: string;
+  reason: string;
+  compensates_adjustment_id: string | null;
+  recorded_at: string | Date;
+}
+
 export class PostgresFinanceOperationalContextRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -490,6 +501,38 @@ export class PostgresFinanceOperationalContextRepository {
               ? reversal.recorded_at.toISOString()
               : new Date(String(reversal.recorded_at)).toISOString(),
           })),
+        },
+      });
+    }
+
+    // Adjustments are immutable obligation facts.  They are listed independently
+    // so operational users can see the correction without mistaking it for a new charge.
+    const obligationDescriptions = new Map(allObligationsRes.rows.map((row) => [
+      String(row.id),
+      row.fee_item_name ? `${row.fee_item_name} (${row.fee_item_code})` : String(row.fee_item_code),
+    ]));
+    const adjustmentsRes = await client.query<AdjustmentHistoryRow>(
+      `SELECT id, obligation_id, direction, amount, currency, reason, compensates_adjustment_id, recorded_at
+       FROM finance_obligation_adjustments
+       WHERE institution_id = $1 AND financial_account_id = $2
+       ORDER BY recorded_at DESC, id DESC`,
+      [actor.institutionId, financialAccountId]
+    );
+    for (const adjustment of adjustmentsRes.rows) {
+      const occurredAt = adjustment.recorded_at instanceof Date
+        ? adjustment.recorded_at.toISOString()
+        : new Date(String(adjustment.recorded_at)).toISOString();
+      history.push({
+        kind: 'adjustment',
+        id: String(adjustment.id),
+        occurredAt,
+        adjustment: {
+          obligationId: String(adjustment.obligation_id),
+          obligationDescription: obligationDescriptions.get(String(adjustment.obligation_id)) ?? 'Cobrança',
+          direction: adjustment.direction,
+          amount: Money.parse(String(adjustment.amount), String(adjustment.currency)).serialize(),
+          reason: String(adjustment.reason),
+          compensatesAdjustmentId: adjustment.compensates_adjustment_id ?? undefined,
         },
       });
     }
