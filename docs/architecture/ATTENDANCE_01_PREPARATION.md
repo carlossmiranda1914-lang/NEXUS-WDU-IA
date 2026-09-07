@@ -48,6 +48,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Session initiation and confirmation | Only the teacher who holds the active assignment |
 | Detailed history access | Active assigned teacher, coordination and the learner's own guardian |
 | Recording for another teacher | Prohibited; every record requires the actor's own active assignment |
+| Pre-confirmation cancellation | Institutional policy determines authorised actor and conditions |
+| Cancellation history | Preserve session, mandatory reason, author and timestamp; no attendance effects |
+| Guardian notice for automatic absence | Immediate, as for any confirmed absence |
 
 ## 4. Authority boundary
 
@@ -100,7 +103,7 @@ A session is not a timetable. It records that an authorised attendance occasion 
 4. Confirmation freezes the eligible roster and creates historical session context.
 5. Tardiness and missing material are separate occurrences attached to the primary outcome.
 6. If the deadline passes without confirmation, the institutional policy selects either:
-   - automatic confirmed absence, with immediate audit/teacher/coordination notification; or
+   - automatic confirmed absence, with immediate audit/teacher/coordination/guardian notification; or
    - a human decision by the policy-authorised actor.
 7. Corrections after confirmation remain governed by institutional policy and must preserve history.
 
@@ -152,4 +155,11 @@ A session is not a timetable. It records that an authorised attendance occasion 
    - coordination, within institution and policy scope; and
    - the guardian, limited strictly to their own learner.
 4. Every access decision is institution-scoped, policy-evaluated and auditable. Access must be denied if the assignment, relationship or role cannot be confirmed at the time of the request.
+
+## 14. Cancellation and automatic-absence decisions
+
+1. Before confirmation, the policy institutionally defines which authorised actor may cancel a session and the applicable conditions.
+2. Cancellation requires a reason and preserves the cancelled session, reason, actor and timestamp in immutable audit history.
+3. A cancelled session produces no presence, absence, occurrence, threshold or academic effect.
+4. When institutional policy selects automatic confirmed absence after a missed deadline, the guardian is notified immediately, exactly as for another confirmed absence. Teacher and coordination are also immediately notified.
 
