@@ -32,8 +32,11 @@ export interface FinanceOperationalObligation {
   amount: FinanceMoneyAmount;
   /** Immutable issued value, repeated under the allocation projection vocabulary. */
   original?: FinanceMoneyAmount;
+  netAdjustments?: FinanceMoneyAmount;
+  effectiveDue?: FinanceMoneyAmount;
   covered?: FinanceMoneyAmount;
   uncovered?: FinanceMoneyAmount;
+  remainingCoverable?: FinanceMoneyAmount;
   coveragePosition?: 'open' | 'partially_covered' | 'covered';
   effectiveAt: string;
   dueAt?: string | null;

@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { Money } from './money.ts';
 import { deriveObligationCoveragePosition, derivePaymentAllocationPosition } from './allocation-model.ts';
+import { deriveObligationFinancialPosition } from './obligation-financial-position.ts';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
 import { FinancialAccountNotFoundError } from './financial-account-repository.ts';
 import type {
@@ -71,6 +72,7 @@ interface ObligationRow {
   status: string;
   notes: string | null;
   covered?: string | number;
+  net_adjustments?: string | number;
 }
 
 interface PaymentRow {
@@ -219,6 +221,7 @@ export class PostgresFinanceOperationalContextRepository {
           ) r ON true
           WHERE a.institution_id = o.institution_id AND a.obligation_id = o.id
         ), 0)::text AS covered,
+        COALESCE((SELECT SUM(CASE WHEN oa.direction='increase' THEN oa.amount ELSE -oa.amount END) FROM finance_obligation_adjustments oa WHERE oa.institution_id=o.institution_id AND oa.obligation_id=o.id),0)::text AS net_adjustments,
         fci.code AS fee_item_code,
         fcv.name AS fee_item_name
       FROM finance_obligations o
@@ -233,11 +236,9 @@ export class PostgresFinanceOperationalContextRepository {
     const openObligations: FinanceOperationalObligation[] = obligationsRes.rows.map((row) => {
       const desc = row.fee_item_name ? `${row.fee_item_name} (${row.fee_item_code})` : row.fee_item_code;
       const original = Money.parse(String(row.amount), String(row.currency));
-      const position = deriveObligationCoveragePosition(
-        original.canonicalAmount(),
-        String(row.covered ?? '0'),
-        String(row.currency)
-      );
+      const netAdjustment = Money.parse(String(row.net_adjustments ?? '0'), String(row.currency));
+      const position = deriveObligationFinancialPosition({ original, adjustments: netAdjustment.compare(Money.parse('0', String(row.currency))) === 0 ? [] : [{ direction: netAdjustment.compare(Money.parse('0', String(row.currency))) > 0 ? 'increase' : 'decrease', amount: Money.parse(netAdjustment.canonicalAmount().replace(/^-/, ''), String(row.currency)) }], allocations: [Money.parse(String(row.covered ?? '0'), String(row.currency))], allocationReversals: [] });
+      const coverage = deriveObligationCoveragePosition(position.effectiveDue.canonicalAmount(), String(row.covered ?? '0'), String(row.currency));
       return {
         id: String(row.id),
         description: desc,
@@ -245,9 +246,12 @@ export class PostgresFinanceOperationalContextRepository {
         feeItemName: String(row.fee_item_name),
         amount: original.serialize(),
         original: original.serialize(),
-        covered: position.covered.serialize(),
-        uncovered: position.uncovered.serialize(),
-        coveragePosition: position.state,
+        netAdjustments: position.netAdjustments.serialize(),
+        effectiveDue: position.effectiveDue.serialize(),
+        covered: Money.parse(String(row.covered ?? '0'), String(row.currency)).serialize(),
+        uncovered: position.remainingCoverable.serialize(),
+        remainingCoverable: position.remainingCoverable.serialize(),
+        coveragePosition: coverage.state,
         effectiveAt:
           row.effective_at instanceof Date
             ? row.effective_at.toISOString()
