@@ -23,16 +23,16 @@ const set = async (renderer: ReturnType<typeof create>, label: string, value: st
 const decrease = await render();
 await set(decrease, 'Valor', '20.00');
 let view = JSON.stringify(decrease.toJSON());
-assert.match(view, /Valor da redução/); assert.match(view, /Novo valor efetivo/); assert.match(view, /"60"/); assert.match(view, /Novo valor por cobrir/); assert.match(view, /"20"/);
+assert.match(view, /O que pretende corrigir/); assert.match(view, /Quanto pretende corrigir/); assert.match(view, /80\.00/); assert.match(view, /60/); assert.match(view, /Ficará por cobrar/); assert.match(view, /20/);
 await set(decrease, 'Valor', '50.00');
-assert.match(JSON.stringify(decrease.toJSON()), /abaixo do valor já coberto/);
+assert.match(JSON.stringify(decrease.toJSON()), /Este valor não pode ser reduzido/);
 await act(async () => { decrease.root.findByProps({ 'data-testid': 'obligation-adjustment-form' }).props.onSubmit({ preventDefault() {} }); });
-assert.match(JSON.stringify(decrease.toJSON()), /abaixo do valor já coberto/);
+assert.match(JSON.stringify(decrease.toJSON()), /Este valor não pode ser reduzido/);
 
 const increase = await render();
-await set(increase, 'Tipo de correção', 'increase'); await set(increase, 'Valor', '0.10');
+await act(async () => { increase.root.findAllByType('button').find(button => button.children.join('') === '↑ Aumentar valor')!.props.onClick(); }); await set(increase, 'Valor', '0.10');
 view = JSON.stringify(increase.toJSON());
-assert.match(view, /Valor do aumento/); assert.match(view, /80\.1/); assert.match(view, /40\.1/);
+assert.match(view, /↑ Aumentar valor/); assert.match(view, /80\.1/); assert.match(view, /40\.1/);
 await act(async () => { increase.root.findByProps({ 'data-testid': 'obligation-adjustment-form' }).props.onSubmit({ preventDefault() {} }); });
 assert.match(JSON.stringify(increase.toJSON()), /Indique obrigação, valor e motivo/);
 
