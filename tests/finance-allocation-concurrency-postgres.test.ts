@@ -5,6 +5,7 @@ import path from 'node:path';
 import pg from 'pg';
 import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
 import { PostgresAllocationRepository } from '../src/modules/finance/allocation-repository.ts';
+import { PostgresObligationAdjustmentRepository } from '../src/modules/finance/obligation-adjustment-repository.ts';
 import { Money } from '../src/modules/finance/money.ts';
 import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 
@@ -20,6 +21,7 @@ const actor = { personId, personName: 'Concurrency actor', identityEmail: null, 
 const pool = new pg.Pool({ connectionString: process.env.TEST_DATABASE_URL, options: `-c search_path=${quote(schema)},public` });
 const migrations = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations');
 const repository = new PostgresAllocationRepository(pool);
+const adjustments = new PostgresObligationAdjustmentRepository(pool);
 const effectiveAt = '2026-09-06T10:00:00.000Z';
 
 async function seedPayment(amount: string) {
@@ -100,11 +102,35 @@ try {
   const reversedD = await netFor(`SELECT COALESCE(SUM(amount),0)::text value FROM finance_allocation_reversals WHERE institution_id=$1 AND original_allocation_id=$2`, originalD.id);
   assert.ok(reversedD.compare(Money.parse('60', 'EUR')) <= 0, 'allocation cannot be over-reversed');
 
+  // E: a decrease and Allocation each pass alone, but cannot jointly create an
+  // effective due lower than net covered.
+  const paymentE = await seedPayment('100'); const obligationE = await seedObligation('100');
+  const adjustmentAllocationRace = await Promise.allSettled([
+    adjustments.recordAdjustment(actor, { obligationId: obligationE, direction: 'decrease', amount: '70', currency: 'EUR', reason: 'Concurrent correction' }, 'adjustment-v-allocation'),
+    confirm(paymentE, obligationE, '40', 'allocation-v-adjustment'),
+  ]);
+  assert.equal(adjustmentAllocationRace.filter((result) => result.status === 'fulfilled').length, 1, 'one competing command must be rejected to preserve the covered floor');
+  const positionE = await adjustments.getPosition(institutionId, obligationE);
+  assert.ok(positionE.effectiveDue.compare(positionE.netCovered) >= 0);
+  assert.ok(positionE.remainingCoverable.compare(Money.parse('0', 'EUR')) >= 0);
+
+  // F: a decrease and reversal serialize against a real confirmed Allocation.
+  const paymentF = await seedPayment('100'); const obligationF = await seedObligation('100');
+  const originalF = (await confirm(paymentF, obligationF, '60', 'allocation-for-adjustment-reversal')).allocations[0]!;
+  const adjustmentReversalRace = await Promise.allSettled([
+    adjustments.recordAdjustment(actor, { obligationId: obligationF, direction: 'decrease', amount: '50', currency: 'EUR', reason: 'Concurrent correction' }, 'adjustment-v-reversal'),
+    repository.reverseAllocationInCommand(actor, { originalAllocationId: originalF.id, amount: '60', currency: 'EUR', reason: 'Concurrent reversal', effectiveAt }, 'reversal-v-adjustment'),
+  ]);
+  assert.ok(adjustmentReversalRace.some((result) => result.status === 'fulfilled'));
+  const positionF = await adjustments.getPosition(institutionId, obligationF);
+  assert.ok(positionF.effectiveDue.compare(positionF.netCovered) >= 0);
+  assert.ok(positionF.remainingCoverable.compare(Money.parse('0', 'EUR')) >= 0);
+
   // E: line normalization is ID ordered, and the repository uses ORDER BY id FOR UPDATE for every target.
   const source = await import('node:fs/promises').then((fs) => fs.readFile(new URL('../src/modules/finance/allocation-repository.ts', import.meta.url), 'utf8'));
   assert.match(source, /ORDER BY id FOR UPDATE/);
   assert.doesNotMatch(source, /SERIALIZABLE|Mutex|mutex/);
-  console.log('ALLOCATION_REVERSAL_RACE=PASS NEGATIVE_DERIVED_POSITION=NO OVERALLOCATION_AFTER_RACE=NO OVERCOVERAGE_AFTER_RACE=NO OVERREVERSAL_AFTER_RACE=NO');
+  console.log('ALLOCATION_REVERSAL_RACE=PASS ADJUSTMENT_VS_ALLOCATION=PASS ADJUSTMENT_VS_ALLOCATION_REVERSAL=PASS NEGATIVE_DERIVED_POSITION=NO OVERALLOCATION_AFTER_RACE=NO OVERCOVERAGE_AFTER_RACE=NO OVERREVERSAL_AFTER_RACE=NO');
 } finally {
   const cleanup = await pool.connect().catch(() => undefined);
   if (cleanup) { try { await cleanup.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`); } finally { cleanup.release(); } }
