@@ -271,24 +271,55 @@ IMPLEMENTATION_AUTHORIZED = NO
 
 The behavioural UX contract is closed. Visual implementation, usability validation and accessibility testing remain future evidence gates.
 
-## 8. P5 — Acceptance package
+## 8. P5 — Acceptance and evidence package — CLOSED
 
-The future mission pack must include evidence for:
+### 8.1 Required evidence
 
-- allowed versus prohibited format;
-- actual type mismatch;
-- malware detection result;
-- size ceiling and institution lower limit;
-- interrupted, resumed, cancelled and duplicate upload;
-- expired temporary authorisation;
-- server hash persistence;
-- verification retry and 24-hour quarantine deadline;
-- access by allowed role, disallowed role and revoked role;
-- tenant-isolation attempts;
-- source-event delivery and idempotent replay;
-- legal hold and deletion;
-- permitted and denied transfer;
-- audit completeness and post-deletion minimisation.
+Each future implementation unit requires all of:
+
+- automated tests;
+- integration tests;
+- security tests;
+- manual validation.
+
+The final readiness decision belongs to the Product Owner. Technical and security reviews remain mandatory evidence to support that decision.
+
+### 8.2 Quality gates
+
+| Gate | Rule |
+|---|---|
+| Open issues | No P0/P1; P2 only with registered decision |
+| Regression | Critical tests for every change; complete suite before acceptance |
+| Mandatory test failure | Block unit until correction and new evidence |
+| Test data | Synthetic or anonymised only |
+| Tenant isolation | Negative attempts across at least two institutions |
+| Manual validation personas | Sender, institutional role, security/audit role |
+| Evidence location | Versioned or referenced in repository, without personal data |
+
+### 8.3 Mandatory acceptance scenarios
+
+The acceptance package must prove:
+
+1. allowed and prohibited format handling;
+2. actual-type mismatch, malware, size limit and verification timeout quarantine;
+3. temporary authorisation expiry, interruption/resume, cancellation and duplicate request;
+4. private access, role/category denial, immediate revocation and cross-institution non-disclosure;
+5. version replacement, provisional association, business acceptance/rejection and immutable decision correction;
+6. state events, at-least-once delivery, idempotent replay and failure queue escalation;
+7. retention, legal hold, deletion, backup rule and revalidated restore;
+8. jurisdiction profile absence, conflict, change and re-evaluation task;
+9. notifications, language, accessibility and review-queue escalation;
+10. audit completeness, append-only integrity and post-deletion minimisation.
+
+### 8.4 P5 closure
+
+```
+ACCEPTANCE_PACKAGE_CLOSED = YES
+FUTURE_TEST_EVIDENCE_GREEN = NO
+IMPLEMENTATION_AUTHORIZED = NO
+```
+
+The testable requirements are closed. Passing evidence can only exist after future authorised implementation.
 
 ## 9. P6/P7 implementation-control gate
 
