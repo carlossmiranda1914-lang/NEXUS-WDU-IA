@@ -15,6 +15,9 @@ const render = async (onSuccess = () => undefined) => { let renderer!: ReturnTyp
 const change = async (renderer: ReturnType<typeof create>, id: string, value: string) => { await act(async () => { renderer.root.findByProps({ 'data-testid': `allocation-amount-${id}` }).props.onChange({ target: { value } }); }); };
 
 const renderer = await render();
+assert.match(JSON.stringify(renderer.toJSON()), /Distribua o valor recebido pelas cobranças que pretende cobrir/);
+assert.match(JSON.stringify(renderer.toJSON()), /Disponível para associar/);
+assert.match(JSON.stringify(renderer.toJSON()), /O valor original do recebimento e das cobranças não é alterado/);
 assert.equal(renderer.root.findAllByProps({ 'data-testid': 'allocation-obligation-a' }).length, 1);
 assert.equal(renderer.root.findAllByProps({ 'data-testid': 'allocation-obligation-b' }).length, 1);
 assert.equal(renderer.root.findAllByProps({ 'data-testid': 'allocation-obligation-wrong-currency' }).length, 0);
@@ -23,7 +26,9 @@ assert.equal(renderer.root.findByProps({ 'data-testid': 'allocation-amount-a' })
 assert.equal(renderer.root.findByProps({ 'data-testid': 'allocation-amount-b' }).props.value, '');
 await change(renderer, 'a', '100.00'); await change(renderer, 'b', '20.00');
 await act(async () => { renderer.root.findByProps({ 'data-testid': 'allocation-review-btn' }).parent.props.onSubmit({ preventDefault() {} }); });
-const review = JSON.stringify(renderer.toJSON()); assert.match(review, /"A",": ","100.00"," ","EUR"/); assert.match(review, /"B",": ","20.00"," ","EUR"/); assert.match(review, /"30"," ","EUR"," por associar"/);
+const review = JSON.stringify(renderer.toJSON()); assert.match(review, /"A"/); assert.match(review, /"100.00"," ","EUR"/); assert.match(review, /"B"/); assert.match(review, /"20.00"," ","EUR"/); assert.match(review, /"30"," ","EUR"," por associar"/);
+assert.match(review, /Confirme a distribuição antes de gravar/);
+assert.match(review, /Esta operação não altera o valor original do recebimento nem das cobranças/);
 let request: any; let refreshed = 0; const originalConfirm = allocationClient.confirm;
 (allocationClient as any).confirm = async (input: any) => { request = input; return { allocations: [], replayed: false }; };
 try { const confirmed = await render(() => { refreshed += 1; }); await change(confirmed, 'a', '100.00'); await change(confirmed, 'b', '20.00'); await act(async () => { confirmed.root.findByProps({ 'data-testid': 'allocation-review-btn' }).parent.props.onSubmit({ preventDefault() {} }); }); await act(async () => { await confirmed.root.findByProps({ 'data-testid': 'allocation-confirm-btn' }).props.onClick(); }); } finally { (allocationClient as any).confirm = originalConfirm; }

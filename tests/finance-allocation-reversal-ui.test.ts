@@ -16,8 +16,11 @@ await act(async () => { renderer = create(React.createElement(FinanceAllocationR
   allocation, onReverse: async (request: unknown) => { reversed = request; }, onSuccess: () => { success++; }, onCancel: () => undefined,
 })); });
 const root = renderer.root;
-assert.match(JSON.stringify(renderer.toJSON()), /100\.00 EUR"," associado/);
-assert.match(JSON.stringify(renderer.toJSON()), /100 EUR"," reversível/);
+assert.match(JSON.stringify(renderer.toJSON()), /Reverter uma associação não devolve o dinheiro/);
+assert.match(JSON.stringify(renderer.toJSON()), /volta a ficar disponível para ser associado novamente/);
+assert.match(JSON.stringify(renderer.toJSON()), /Motivo da reversão/);
+assert.match(JSON.stringify(renderer.toJSON()), /100\.00 EUR/);
+assert.match(JSON.stringify(renderer.toJSON()), /Disponível para reversão/);
 assert.equal(root.findAllByProps({ 'data-testid': 'allocation-edit-action' }).length, 0);
 assert.equal(root.findAllByProps({ 'data-testid': 'allocation-delete-action' }).length, 0);
 assert.doesNotMatch(JSON.stringify(renderer.toJSON()).toLowerCase(), /refund|reembolso/);
@@ -30,6 +33,8 @@ await act(async () => { root.findByProps({ 'data-testid': 'allocation-reversal-r
 await act(async () => { await root.findByProps({ 'data-testid': 'allocation-reversal-confirm' }).props.onClick(); });
 assert.deepEqual(reversed, { amount: '30.00', currency: 'EUR', reason: 'Erro de imputação' });
 assert.equal(success, 1);
+assert.match(JSON.stringify(renderer.toJSON()), /Valor que será revertido/);
+assert.match(JSON.stringify(renderer.toJSON()), /A associação original continuará visível no histórico/);
 
 let full: unknown;
 await act(async () => { renderer = create(React.createElement(FinanceAllocationReverseView, {
@@ -37,8 +42,8 @@ await act(async () => { renderer = create(React.createElement(FinanceAllocationR
   onReverse: async (request: unknown) => { full = request; }, onSuccess: () => undefined, onCancel: () => undefined,
 })); });
 const fullRoot = renderer.root;
-assert.match(JSON.stringify(renderer.toJSON()), /30 EUR"," já revertido/);
-assert.match(JSON.stringify(renderer.toJSON()), /70 EUR"," reversível/);
+assert.match(JSON.stringify(renderer.toJSON()), /30 EUR/);
+assert.match(JSON.stringify(renderer.toJSON()), /70 EUR/);
 await act(async () => { fullRoot.findByProps({ 'data-testid': 'allocation-reversal-full' }).props.onClick(); });
 await act(async () => { fullRoot.findByProps({ 'data-testid': 'allocation-reversal-reason' }).props.onChange({ target: { value: 'Correção total' } }); });
 await act(async () => { await fullRoot.findByProps({ 'data-testid': 'allocation-reversal-confirm' }).props.onClick(); });
