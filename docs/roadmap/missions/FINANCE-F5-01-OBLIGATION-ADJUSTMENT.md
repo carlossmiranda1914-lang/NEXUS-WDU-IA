@@ -10,12 +10,12 @@ Implement one authorized, immutable, obligation-linked administrative Adjustment
 
 `effectiveDue = original + Σ increases − Σ decreases`; `remainingCoverable = effectiveDue − (Σ allocations − Σ allocation reversals)`.
 
-A decrease is rejected when effective due after the command would be below net covered value. The fact is tenant-scoped, account/obligation-linked, reasoned, provenance-bearing, idempotent and represented by a new typed Journal transaction/position.
+A decrease is rejected when effective due after the command would be below net covered value. This is the one server-authoritative position used by Adjustment commands, future Allocation remaining-capacity validation and Financial Account reads; Allocation facts remain immutable. The fact is tenant-scoped, account/obligation-linked, reasoned, provenance-bearing, idempotent and represented by a new typed Journal transaction/position.
 
 ## Required execution contract
 
-- Roles allowed: `institution_admin`, `financial`, `director`; all other listed institutional roles are denied.
-- One command endpoint only; no edit/delete CRUD.
+- Read roles: `institution_admin`, `financial`, `director`. Create/correct roles: `institution_admin`, `financial`. `director`, `secretariat`, `teacher`, `student`, and `parent` are denied mutation.
+- One command endpoint only; normal and explicit linked-compensation bodies; no edit/delete CRUD or user-supplied effective time.
 - PostgreSQL transaction locks account → obligation → allocation rows → allocation reversal rows → adjustment rows in that order.
 - Dedicated immutable Adjustment table with tenant composite FKs, exact positive numeric envelope, direction/reason/currency/provenance/idempotency/journal constraints.
 - Extend Journal only with `obligation_adjustment`, `obligation_due_increased`, and `obligation_due_decreased`; retain rejection of every unsupported vocabulary value.
@@ -23,7 +23,7 @@ A decrease is rejected when effective due after the command would be below net c
 
 ## Required proofs
 
-Fresh migration; tenant fences; Money and currency; original fact immutability; atomic Journal/Adjustment and rollback; replay/fingerprint conflict; concurrent decrease, Adjustment/Allocation, and Adjustment/Reversal races; derived rebuild/no-negative remaining; real HTTP/PostgreSQL; rendered operational UI/theme/responsive behavior; the UAT 100/40/−20/rejected −50/+10 scenario; then F5 plus Allocation/Payment/Obligation/Fee/Foundation/FND03/lint/build/diff/secrets/artifacts final gates.
+Fresh migration; tenant fences; Money and currency; original fact immutability; atomic Journal/Adjustment and rollback; replay/fingerprint conflict; concurrent decrease, competing partial compensation, Adjustment/Allocation, and Adjustment/Reversal races; adjustment-aware Allocation proof (100/−20/covered 40: reject 41, accept 40); derived rebuild/no-negative remaining; real HTTP/PostgreSQL; rendered operational UI/theme/responsive behavior; the UAT 100/40/−20/rejected −50/+10 scenario; then F5 plus Allocation/Payment/Obligation/Fee/Foundation/FND03/lint/build/diff/secrets/artifacts final gates.
 
 ## Out of scope
 
