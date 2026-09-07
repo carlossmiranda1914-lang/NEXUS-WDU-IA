@@ -47,7 +47,7 @@ export function FinanceOperationalContextWorkspace({
   const [isRegisteringPayment, setIsRegisteringPayment] = useState(false);
   const [allocationPaymentId, setAllocationPaymentId] = useState<string | null>(null);
   const [reversalAllocation, setReversalAllocation] = useState<Extract<NonNullable<FinanceOperationalContext>['history'][number], { kind: 'allocation' }>['allocation'] | null>(null);
-  const [isRegisteringAdjustment, setIsRegisteringAdjustment] = useState(false);
+  const [adjustmentObligationId, setAdjustmentObligationId] = useState<string | null>(null);
   const [paymentSuccessNotice, setPaymentSuccessNotice] = useState<string | null>(null);
 
   // 1. Server-side bounded account search
@@ -132,7 +132,7 @@ export function FinanceOperationalContextWorkspace({
     setIsRegisteringPayment(false);
     setAllocationPaymentId(null);
     setReversalAllocation(null);
-    setIsRegisteringAdjustment(false);
+    setAdjustmentObligationId(null);
     setPaymentSuccessNotice(null);
     loadContext(id);
   };
@@ -146,7 +146,7 @@ export function FinanceOperationalContextWorkspace({
     setIsRegisteringPayment(false);
     setAllocationPaymentId(null);
     setReversalAllocation(null);
-    setIsRegisteringAdjustment(false);
+    setAdjustmentObligationId(null);
     setPaymentSuccessNotice(null);
     setHasSearched(false);
     setSearchResults([]);
@@ -268,7 +268,7 @@ export function FinanceOperationalContextWorkspace({
   if (reversalAllocation && context) {
     return <FinanceAllocationReverseView theme={theme} allocation={reversalAllocation} onCancel={() => setReversalAllocation(null)} onSuccess={() => { setReversalAllocation(null); loadContext(selectedAccountId); }} onReverse={(request) => allocationClient.reverse(reversalAllocation.id, { ...request, effectiveAt: new Date().toISOString() }).then(() => undefined)} />;
   }
-  if (isRegisteringAdjustment && context) return <FinanceObligationAdjustmentView theme={theme} obligations={context.openObligations} onCancel={() => setIsRegisteringAdjustment(false)} onSubmit={(obligationId,input) => obligationAdjustmentClient.record(obligationId,input,`adjustment-${crypto.randomUUID()}`).then(() => { setIsRegisteringAdjustment(false); return loadContext(selectedAccountId); })} />;
+  if (adjustmentObligationId && context) return <FinanceObligationAdjustmentView theme={theme} obligations={context.openObligations.filter((item) => item.id === adjustmentObligationId)} onCancel={() => setAdjustmentObligationId(null)} onSubmit={(obligationId,input) => obligationAdjustmentClient.record(obligationId,input,`adjustment-${crypto.randomUUID()}`).then(() => { setAdjustmentObligationId(null); return loadContext(selectedAccountId); })} />;
 
   // Explicit Account Selection & Search view when no account is selected
   if (!selectedAccountId || !context) {
@@ -415,7 +415,6 @@ export function FinanceOperationalContextWorkspace({
         onRegisterPayment={() => setIsRegisteringPayment(true)}
         loading={loadingContext}
       />
-      {context.openObligations.length > 0 && <button type="button" onClick={() => setIsRegisteringAdjustment(true)} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white">Registar correção</button>}
 
       {loadingContext ? (
         <div className="py-12 text-center">
@@ -431,6 +430,7 @@ export function FinanceOperationalContextWorkspace({
             openObligations={context.openObligations}
             confirmedUnallocatedPayments={context.confirmedUnallocatedPayments}
             onAllocatePayment={(paymentId) => setAllocationPaymentId(paymentId)}
+            onRegisterAdjustment={(obligation) => setAdjustmentObligationId(obligation.id)}
           />
 
           <FinanceOperationalHistory

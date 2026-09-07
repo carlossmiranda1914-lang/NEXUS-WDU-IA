@@ -9,6 +9,7 @@ export interface FinanceOperationalTruthPanelsProps {
   openObligations: FinanceOperationalObligation[];
   confirmedUnallocatedPayments: FinanceOperationalPayment[];
   onAllocatePayment?: (paymentId: string) => void;
+  onRegisterAdjustment?: (obligation: FinanceOperationalObligation) => void;
 }
 
 function formatMoney(amount: string, currency: string): string {
@@ -49,6 +50,7 @@ export function FinanceOperationalTruthPanels({
   openObligations,
   confirmedUnallocatedPayments,
   onAllocatePayment,
+  onRegisterAdjustment,
 }: FinanceOperationalTruthPanelsProps) {
   const isLight = theme === 'light';
 
@@ -125,6 +127,7 @@ export function FinanceOperationalTruthPanels({
                       Original: {formatMoney((ob.original || ob.amount).amount, (ob.original || ob.amount).currency)}
                     </span>
                     {ob.covered && ob.uncovered && <span className="block text-xs text-zinc-500">Coberto: {formatMoney(ob.covered.amount, ob.covered.currency)} · Por cobrir: {formatMoney(ob.uncovered.amount, ob.uncovered.currency)}</span>}
+                    {onRegisterAdjustment && <button type="button" data-testid={`obligation-actions-${ob.id}`} aria-label={`Mais ações para ${ob.description}`} onClick={() => onRegisterAdjustment(ob)} className={`mt-2 rounded px-2 py-1 text-xs font-semibold ${isLight?'text-amber-800 hover:bg-amber-50':'text-amber-300 hover:bg-zinc-800'}`}>… <span className="sr-only">Registar correção</span></button>}
                   </div>
                 </div>
               ))
