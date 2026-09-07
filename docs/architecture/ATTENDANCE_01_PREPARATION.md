@@ -107,3 +107,11 @@ A session is not a timetable. It records that an authorised attendance occasion 
 5. File evidence is attached through Documents Foundation only. Documents Foundation verifies file technical state; Attendance owns justification decision.
 6. Every proposal, decision, delegation, late submission, coverage change and evidence link is auditable.
 
+## 10. Threshold and alert decisions
+
+1. Institutional policy determines whether thresholds count absences, tardiness or configured combinations.
+2. When a threshold is reached, teacher, coordination and guardian are always alerted.
+3. The institution configures the required human action after an alert.
+4. A later justification recalculates threshold state while preserving the complete historical alert trail; an alert is never silently erased.
+5. Attendance does not impose an academic consequence. Any consequence remains an explicit institutional academic-policy decision.
+
