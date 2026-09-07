@@ -6,8 +6,8 @@ export class AllocationApiError extends Error {
 }
 
 export type AllocationClientOptions = { fetcher?: typeof fetch; getToken?: () => Promise<string | null | undefined> };
-export type ConfirmAllocationRequest = { paymentId: string; lines: Array<{ obligationId: string; amount: string }>; effectiveAt?: string | Date };
-export type ReverseAllocationRequest = { amount: string; reason: string; effectiveAt?: string | Date };
+export type ConfirmAllocationRequest = { paymentId: string; lines: Array<{ obligationId: string; amount: string; currency: string }>; effectiveAt?: string | Date };
+export type ReverseAllocationRequest = { amount: string; currency: string; reason: string; effectiveAt?: string | Date };
 export type AllocationClientFact = { id: string; financialAccountId: string; paymentId: string; obligationId: string; money: FinanceMoneyAmount; effectiveAt: string; recordedAt: string; status: 'confirmed' };
 
 const defaultFetch: typeof fetch = (input, init) => typeof window !== 'undefined' && typeof window.fetch === 'function' ? window.fetch(input, init) : globalThis.fetch(input, init);

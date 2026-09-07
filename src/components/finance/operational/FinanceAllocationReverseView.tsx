@@ -5,7 +5,7 @@ import type { FinanceOperationalHistoryItem } from '../../../modules/finance/fin
 type AllocationHistory = Extract<FinanceOperationalHistoryItem, { kind: 'allocation' }>['allocation'];
 export interface FinanceAllocationReverseViewProps {
   allocation: AllocationHistory;
-  onReverse: (request: { amount: string; reason: string }) => Promise<void>;
+  onReverse: (request: { amount: string; currency: string; reason: string }) => Promise<void>;
   onSuccess: () => void;
   onCancel: () => void;
 }
@@ -28,7 +28,7 @@ export function FinanceAllocationReverseView({ allocation, onReverse, onSuccess,
       if (requested.compare(Money.parse('0', allocation.amount.currency)) <= 0 || requested.compare(remaining) > 0) throw new Error();
     } catch { setError('Indique um valor positivo que não exceda o valor reversível.'); return; }
     setSubmitting(true); setError(null);
-    try { await onReverse({ amount: cleanAmount, reason: reason.trim() }); onSuccess(); }
+    try { await onReverse({ amount: cleanAmount, currency: allocation.amount.currency, reason: reason.trim() }); onSuccess(); }
     catch (cause: any) { setError(cause?.message || 'Não foi possível confirmar a reversão.'); }
     finally { setSubmitting(false); }
   };

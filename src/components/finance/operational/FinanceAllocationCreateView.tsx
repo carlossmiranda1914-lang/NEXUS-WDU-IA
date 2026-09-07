@@ -12,7 +12,7 @@ export function FinanceAllocationCreateView({ theme = 'light', payment, obligati
   const [review, setReview] = useState(false); const [error, setError] = useState<string | null>(null); const [submitting, setSubmitting] = useState(false);
   const received = payment.received || payment.amount; const unapplied = payment.unapplied || payment.amount;
   const eligible = useMemo(() => obligations.filter((ob) => (ob.uncovered || ob.amount).currency === unapplied.currency && ob.status === 'open' && (ob.uncovered || ob.amount).amount !== '0'), [obligations, unapplied.currency]);
-  const lines = eligible.flatMap((ob) => values[ob.id]?.trim() ? [{ obligationId: ob.id, amount: values[ob.id].trim() }] : []);
+  const lines = eligible.flatMap((ob) => values[ob.id]?.trim() ? [{ obligationId: ob.id, amount: values[ob.id].trim(), currency: unapplied.currency }] : []);
   const total = useMemo(() => { try { return lines.reduce((sum, line) => sum.add(Money.parse(line.amount, unapplied.currency)), Money.parse('0', unapplied.currency)); } catch { return null; } }, [lines, unapplied.currency]);
   const remainder = total ? Money.parse(unapplied.amount, unapplied.currency).subtract(total) : null;
   const validate = () => {

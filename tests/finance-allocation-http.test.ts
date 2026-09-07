@@ -8,6 +8,7 @@ import express from 'express';
 import pg from 'pg';
 import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
 import { registerFinanceAllocationRoutes } from '../src/modules/finance/allocation-http.ts';
+import { AllocationApiClient } from '../src/modules/finance/allocation-client.ts';
 import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 
 await verifyApprovedTestConnection();
@@ -36,6 +37,13 @@ try {
   } finally {client.release();}
   const app=express(); app.use(express.json()); registerFinanceAllocationRoutes(app,pool,auth); server=http.createServer(app); server.listen(0,'127.0.0.1'); await once(server,'listening'); const base=`http://127.0.0.1:${(server.address() as any).port}`;
   const request=async(token:string|undefined,route:string,options:any={})=>{const headers:Record<string,string>={'Content-Type':'application/json',...(options.headers||{})};if(token)headers.Authorization=`Bearer ${token}`;const response=await fetch(base+route,{method:options.method||'GET',headers,body:options.body?JSON.stringify(options.body):undefined});return {status:response.status,body:await response.json().catch(()=>({}))};};
+  const realClient = new AllocationApiClient({ getToken: async () => 'adminA', fetcher: (input, init) => fetch(`${base}${String(input)}`, init) });
+  const clientPayment = await seedPayment(institutionA, accountA, adminA); const clientObligation = await seedObligation(accountA, '50');
+  const clientConfirmation = await realClient.confirm({ paymentId: clientPayment, effectiveAt, lines: [{ obligationId: clientObligation, amount: '50.00', currency: 'EUR' }] }, 'real-client-confirm');
+  assert.equal(clientConfirmation.replayed, false); assert.equal(clientConfirmation.allocations.length, 1);
+  assert.equal((await pool.query(`SELECT count(*)::int count FROM finance_allocations WHERE institution_id=$1 AND payment_id=$2`, [institutionA, clientPayment])).rows[0].count, 1);
+  const clientReversal = await realClient.reverse(clientConfirmation.allocations[0]!.id, { amount: '20.00', currency: 'EUR', reason: 'Real client correction', effectiveAt }, 'real-client-reverse');
+  assert.equal(clientReversal.replayed, false); assert.equal((await pool.query(`SELECT count(*)::int count FROM finance_allocation_reversals WHERE institution_id=$1`, [institutionA])).rows[0].count, 1);
   const p=await seedPayment(institutionA,accountA,adminA); const a=await seedObligation(accountA,'100'), b=await seedObligation(accountA,'30'); const body={paymentId:p,effectiveAt,lines:[{obligationId:a,amount:'100.00',currency:'EUR'},{obligationId:b,amount:'20.00',currency:'EUR'}]};
   const created=await request('adminA','/api/finance/allocations',{method:'POST',headers:{'Idempotency-Key':'http-main'},body}); assert.equal(created.status,201); assert.equal(created.body.allocations.length,2);
   const replay=await request('adminA','/api/finance/allocations',{method:'POST',headers:{'Idempotency-Key':'http-main'},body}); assert.equal(replay.status,200); assert.equal(replay.body.replayed,true);
@@ -49,5 +57,5 @@ try {
   const unconfirmed=await seedPayment(institutionA,null,adminA,'10'); assert.equal((await request('adminA','/api/finance/allocations',{method:'POST',headers:{'Idempotency-Key':'unconfirmed'},body:{paymentId:unconfirmed,effectiveAt,lines:[{obligationId:await seedObligation(accountA),amount:'1',currency:'EUR'}]}})).status,409);
   const closed=await seedObligation(accountA,'10','EUR','cancelled'); assert.equal((await request('adminA','/api/finance/allocations',{method:'POST',headers:{'Idempotency-Key':'closed'},body:{paymentId:await seedPayment(institutionA,accountA,adminA),effectiveAt,lines:[{obligationId:closed,amount:'1',currency:'EUR'}]}})).status,409);
   const allocationId=created.body.allocations.find((item:any)=>item.money.amount==='100')!.id; const reversal={amount:'30.00',currency:'EUR',reason:'HTTP correction',effectiveAt}; const reversed=await request('adminA',`/api/finance/allocations/${allocationId}/reversals`,{method:'POST',headers:{'Idempotency-Key':'reverse-main'},body:reversal}); assert.equal(reversed.status,201); const reverseReplay=await request('adminA',`/api/finance/allocations/${allocationId}/reversals`,{method:'POST',headers:{'Idempotency-Key':'reverse-main'},body:reversal}); assert.equal(reverseReplay.status,200); assert.equal((await request('adminA',`/api/finance/allocations/${allocationId}/reversals`,{method:'POST',headers:{'Idempotency-Key':'reverse-over'},body:{...reversal,amount:'80'}})).status,409);
-  console.log('TASK5_HTTP_POSTGRES=PASS AUTHORIZED_ALLOCATION_HTTP=PASS IDEMPOTENT_REPLAY_HTTP=PASS FINGERPRINT_CONFLICT_HTTP=PASS ROLE_DENIAL_HTTP=PASS TENANT_NON_DISCLOSURE_HTTP=PASS CROSS_ACCOUNT_HTTP=PASS CROSS_CURRENCY_HTTP=PASS INVALID_LIFECYCLE_HTTP=PASS REVERSAL_HTTP=PASS OVER_REVERSAL_HTTP=PASS');
+  console.log('TASK5_HTTP_POSTGRES=PASS REAL_CLIENT_CONFIRM_HTTP_POSTGRES=PASS REAL_CLIENT_REVERSAL_HTTP_POSTGRES=PASS AUTHORIZED_ALLOCATION_HTTP=PASS IDEMPOTENT_REPLAY_HTTP=PASS FINGERPRINT_CONFLICT_HTTP=PASS ROLE_DENIAL_HTTP=PASS TENANT_NON_DISCLOSURE_HTTP=PASS CROSS_ACCOUNT_HTTP=PASS CROSS_CURRENCY_HTTP=PASS INVALID_LIFECYCLE_HTTP=PASS REVERSAL_HTTP=PASS OVER_REVERSAL_HTTP=PASS');
 } finally { if(server)server.close(); const client=await pool.connect().catch(()=>undefined);if(client){try{await client.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`);}finally{client.release();}}await pool.end(); }
