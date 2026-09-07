@@ -98,3 +98,12 @@ A session is not a timetable. It records that an authorised attendance occasion 
    - a human decision by the policy-authorised actor.
 7. Corrections after confirmation remain governed by institutional policy and must preserve history.
 
+## 9. Justification decisions
+
+1. An approved justification does not erase or replace the factual absence; it records the absence as `justified`.
+2. The standard decision route remains teacher proposal and coordination decision, with delegation where institutional policy permits.
+3. A guardian may submit after the configured deadline only where policy permits; the late submission triggers a new decision and cannot silently change the record.
+4. A justification may cover multiple absences of the same learner only within policy-defined interval and scope.
+5. File evidence is attached through Documents Foundation only. Documents Foundation verifies file technical state; Attendance owns justification decision.
+6. Every proposal, decision, delegation, late submission, coverage change and evidence link is auditable.
+
