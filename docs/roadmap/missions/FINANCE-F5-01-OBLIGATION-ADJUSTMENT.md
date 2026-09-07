@@ -2,7 +2,7 @@
 
 ## Status
 
-`SPECIFICATION / NOT READY FOR EXECUTION`. Canonical design: [2026-09-07-finance-obligation-adjustment-v1-design.md](../../superpowers/specs/2026-09-07-finance-obligation-adjustment-v1-design.md).
+`READY_FOR_EXECUTION`. Product Owner approved the specification review. Canonical design: [2026-09-07-finance-obligation-adjustment-v1-design.md](../../superpowers/specs/2026-09-07-finance-obligation-adjustment-v1-design.md). Executable plan: [2026-09-07-finance-obligation-adjustment-v1.md](../../superpowers/plans/2026-09-07-finance-obligation-adjustment-v1.md). Implementation must use a clean dedicated `codex/finance-f5-obligation-adjustment-v1` worktree from the approved F4 baseline.
 
 ## Mission boundary
 
