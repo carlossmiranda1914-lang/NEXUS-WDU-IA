@@ -28,7 +28,7 @@ assert.match(JSON.stringify(renderer.toJSON()), /obrigatória/i);
 
 await act(async () => { root.findByProps({ 'data-testid': 'allocation-reversal-reason' }).props.onChange({ target: { value: 'Erro de imputação' } }); });
 await act(async () => { await root.findByProps({ 'data-testid': 'allocation-reversal-confirm' }).props.onClick(); });
-assert.deepEqual(reversed, { amount: '30.00', reason: 'Erro de imputação' });
+assert.deepEqual(reversed, { amount: '30.00', currency: 'EUR', reason: 'Erro de imputação' });
 assert.equal(success, 1);
 
 let full: unknown;
@@ -42,7 +42,7 @@ assert.match(JSON.stringify(renderer.toJSON()), /70 EUR"," reversível/);
 await act(async () => { fullRoot.findByProps({ 'data-testid': 'allocation-reversal-full' }).props.onClick(); });
 await act(async () => { fullRoot.findByProps({ 'data-testid': 'allocation-reversal-reason' }).props.onChange({ target: { value: 'Correção total' } }); });
 await act(async () => { await fullRoot.findByProps({ 'data-testid': 'allocation-reversal-confirm' }).props.onClick(); });
-assert.deepEqual(full, { amount: '70', reason: 'Correção total' });
+assert.deepEqual(full, { amount: '70', currency: 'EUR', reason: 'Correção total' });
 
 let history: ReturnType<typeof create>;
 await act(async () => { history = create(React.createElement(FinanceAllocationHistory, { history: [{ kind: 'allocation', id: 'history-1', occurredAt: '', allocation: { ...allocation, reversals: [{ id: 'reversal-1', amount: { amount: '30.00', currency: 'EUR' }, reason: 'Erro', effectiveAt: '', occurredAt: '' }] } }] as any })); });
