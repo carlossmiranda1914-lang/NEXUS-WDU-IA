@@ -80,11 +80,31 @@ try {
   assert.equal(reversalRace.filter((result) => result.status === 'fulfilled').length, 1);
   assert.ok((await netFor(`SELECT COALESCE(SUM(amount),0)::text value FROM finance_allocation_reversals WHERE institution_id=$1 AND original_allocation_id=$2`, allocation.id)).compare(Money.parse('100', 'EUR')) <= 0);
 
-  // D: line normalization is ID ordered, and the repository uses ORDER BY id FOR UPDATE for every target.
+  // D: a new allocation and a reversal contend on the same payment/obligation
+  // resources.  Either serial order is legitimate, but no derived position may
+  // escape its exact [0, original] envelope.
+  const paymentD = await seedPayment('100'); const obligationD = await seedObligation('100');
+  const originalD = (await confirm(paymentD, obligationD, '60', 'allocation-reversal-original')).allocations[0]!;
+  const allocationReversalRace = await Promise.allSettled([
+    confirm(paymentD, obligationD, '70', 'allocation-during-reversal'),
+    repository.reverseAllocationInCommand(actor, { originalAllocationId: originalD.id, amount: '60', currency: 'EUR', reason: 'concurrent correction', effectiveAt }, 'reversal-during-allocation'),
+  ]);
+  assert.ok(allocationReversalRace.some((result) => result.status === 'fulfilled'));
+  const paymentDPosition = await repository.getPaymentPosition(actor, paymentD);
+  const obligationDPosition = await repository.getObligationPosition(actor, obligationD);
+  for (const value of [paymentDPosition.allocated, paymentDPosition.unapplied, obligationDPosition.covered, obligationDPosition.uncovered]) {
+    assert.ok(value.compare(Money.parse('0', 'EUR')) >= 0, 'derived position must never be negative');
+  }
+  assert.ok(paymentDPosition.allocated.compare(Money.parse('100', 'EUR')) <= 0, 'payment cannot be over-allocated');
+  assert.ok(obligationDPosition.covered.compare(Money.parse('100', 'EUR')) <= 0, 'obligation cannot be over-covered');
+  const reversedD = await netFor(`SELECT COALESCE(SUM(amount),0)::text value FROM finance_allocation_reversals WHERE institution_id=$1 AND original_allocation_id=$2`, originalD.id);
+  assert.ok(reversedD.compare(Money.parse('60', 'EUR')) <= 0, 'allocation cannot be over-reversed');
+
+  // E: line normalization is ID ordered, and the repository uses ORDER BY id FOR UPDATE for every target.
   const source = await import('node:fs/promises').then((fs) => fs.readFile(new URL('../src/modules/finance/allocation-repository.ts', import.meta.url), 'utf8'));
   assert.match(source, /ORDER BY id FOR UPDATE/);
   assert.doesNotMatch(source, /SERIALIZABLE|Mutex|mutex/);
-  console.log('Finance Allocation PostgreSQL concurrency: PASS');
+  console.log('ALLOCATION_REVERSAL_RACE=PASS NEGATIVE_DERIVED_POSITION=NO OVERALLOCATION_AFTER_RACE=NO OVERCOVERAGE_AFTER_RACE=NO OVERREVERSAL_AFTER_RACE=NO');
 } finally {
   const cleanup = await pool.connect().catch(() => undefined);
   if (cleanup) { try { await cleanup.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`); } finally { cleanup.release(); } }
