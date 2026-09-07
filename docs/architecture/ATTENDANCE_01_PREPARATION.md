@@ -115,3 +115,11 @@ A session is not a timetable. It records that an authorised attendance occasion 
 4. A later justification recalculates threshold state while preserving the complete historical alert trail; an alert is never silently erased.
 5. Attendance does not impose an academic consequence. Any consequence remains an explicit institutional academic-policy decision.
 
+## 11. Offline registration decisions
+
+1. Offline attendance starts only with a previously verified, still-valid cached active TeacherAssignment.
+2. A server/offline edit conflict is created for human decision; no timestamp-only or client-wins merge is allowed.
+3. After successful synchronization, local attendance data may remain only until the actor signs out; sign-out removes it from the device.
+4. Offline records remain pending until server-side authorization, assignment, roster and policy validation succeeds.
+5. Offline capability does not bypass later notifications, audit, thresholds or correction policy.
+
