@@ -7,6 +7,7 @@ import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts
 import { PostgresAllocationRepository } from '../src/modules/finance/allocation-repository.ts';
 import { AllocationCommandValidationError, createConfirmAllocationFingerprint, normalizeConfirmAllocationCommand } from '../src/modules/finance/allocation-service.ts';
 import { Money } from '../src/modules/finance/money.ts';
+import { PostgresObligationAdjustmentRepository } from '../src/modules/finance/obligation-adjustment-repository.ts';
 import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 
 await verifyApprovedTestConnection();
@@ -71,6 +72,10 @@ try {
   await assert.rejects(() => confirm(rollbackPayment, [{ obligationId: rollbackObligation, amount: '50' }], 'allocation-rollback', failing), /Injected allocation failure/);
   assert.equal((await pool.query(`SELECT count(*)::int AS count FROM finance_allocations WHERE institution_id=$1 AND payment_id=$2`, [institutionId, rollbackPayment])).rows[0].count, 0);
   assert.equal((await pool.query(`SELECT count(*)::int AS count FROM finance_journal_transactions WHERE institution_id=$1 AND command_id='allocation-rollback'`, [institutionId])).rows[0].count, 0);
+  const adjustmentPayment=await payment('100'); const adjustmentObligation=await obligation('100'); const adjustments=new PostgresObligationAdjustmentRepository(pool);
+  await adjustments.recordAdjustment(actor,{obligationId:adjustmentObligation,direction:'decrease',amount:'20',currency:'EUR',reason:'Authoritative correction'},'adjustment-allocation');
+  await confirm(adjustmentPayment,[{obligationId:adjustmentObligation,amount:'40'}],'adjustment-allocation-40');
+  await assert.rejects(()=>confirm(adjustmentPayment,[{obligationId:adjustmentObligation,amount:'41'}],'adjustment-allocation-41'),/remaining coverable/i);
   assert.equal((await pool.query(`SELECT to_regclass('finance_reconciliations') IS NULL AS absent`)).rows[0].absent, true, 'Allocation introduces no Reconciliation side effect authority');
   console.log('TASK3_STATEFUL_POSTGRES=PASS PARTIAL_ALLOCATION=PASS MULTI_OBLIGATION_ALLOCATION=PASS PAYMENT_ORIGINAL_MONEY_IMMUTABLE=PASS OBLIGATION_ORIGINAL_MONEY_IMMUTABLE=PASS ALLOCATION_JOURNAL_ATOMICITY=PASS ROLLBACK_INJECTION=PASS IDEMPOTENCY_REPLAY=PASS IDEMPOTENCY_CONFLICT=PASS');
 } finally {
