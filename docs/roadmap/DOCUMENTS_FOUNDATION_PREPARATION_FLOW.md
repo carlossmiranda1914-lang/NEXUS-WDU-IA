@@ -340,6 +340,20 @@ IMPLEMENTATION_AUTHORIZED = explicit Product Owner decision
 
 Without all required values, only documentation preparation may continue.
 
+### P6 closure — Mission Pack created
+
+The future implementation plan is recorded in:
+
+- `docs/roadmap/missions/DOCUMENTS-FOUNDATION-01.md`
+
+```
+MISSION_PACK_DRAFT_CREATED = YES
+IMPLEMENTATION_PLAN_DEFINED = YES
+IMPLEMENTATION_AUTHORIZED = NO
+```
+
+P7 remains a Product Owner decision after external legal validation, threat-model review and final review of this Mission Pack.
+
 ## 10. Future implementation order, after authorisation
 
 The future implementation must be split into independently verifiable units:
