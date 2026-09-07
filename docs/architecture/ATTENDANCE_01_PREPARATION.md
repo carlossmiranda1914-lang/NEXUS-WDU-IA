@@ -51,6 +51,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Pre-confirmation cancellation | Institutional policy determines authorised actor and conditions |
 | Cancellation history | Preserve session, mandatory reason, author and timestamp; no attendance effects |
 | Guardian notice for automatic absence | Immediate, as for any confirmed absence |
+| Time zone | Institution configures within global rules |
+| Historical data | Controlled, audited migration only |
+| Default notifications | In-system notification; additional channels by institutional policy |
 
 ## 4. Authority boundary
 
@@ -162,4 +165,10 @@ A session is not a timetable. It records that an authorised attendance occasion 
 2. Cancellation requires a reason and preserves the cancelled session, reason, actor and timestamp in immutable audit history.
 3. A cancelled session produces no presence, absence, occurrence, threshold or academic effect.
 4. When institutional policy selects automatic confirmed absence after a missed deadline, the guardian is notified immediately, exactly as for another confirmed absence. Teacher and coordination are also immediately notified.
+
+## 15. Time, migration and notification decisions
+
+1. Institutional policy configures the timezone used for deadlines, school-day boundaries and confirmation within platform global rules. Every recorded timestamp remains stored in an unambiguous canonical form and rendered in the applicable institutional timezone.
+2. Attendance-01 may receive historical records only through a controlled, auditable migration. Manual bulk import, untraceable backfill and silent overwrite are out of scope.
+3. Every operational alert and attendance-change notification is delivered in the system. Institutional policy may enable additional channels, which must not replace the in-system audit trail.
 
