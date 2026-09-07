@@ -41,8 +41,8 @@ React/TypeScript, existing Tailwind utility conventions, exact `Money`, existing
 
 **Files:** `tests/finance-adjustment-browser.test.ts` (new); inspect `FinanceOperationalContextWorkspace.tsx`, `obligation-adjustment-client.ts` and browser wiring. **Consumes:** selected charge action and current fetch client. **Produces:** a precise failing real-browser regression and documented call boundary.
 
-- [ ] Provision the approved local fixture and navigate Financial Account → charge → `…` → Registar correção; capture the exact `Illegal invocation` reproduction, request state and stack boundary.
-- [ ] Add a browser regression that invokes the same bound/unbound client path; run it and require RED with the original browser error.
+- [ ] Reproduce from the existing browser/runtime state where available; otherwise add the smallest browser/client characterization that invokes the exact bound/unbound Adjustment client path. Capture the exact `Illegal invocation` request state and stack boundary. This task does not depend on the final Finance UAT fixture.
+- [ ] Run the characterization and require RED with the original browser error; retain the real-browser reproduction requirement for Task 6 once the canonical fixture exists.
 - [ ] Trace whether the failing value is `window.fetch`, client method binding, or event callback; record the concrete cause in the test assertion.
 - [ ] Apply only the minimal root-cause correction in the owning frontend/client file; no catch-and-mask or speculative fetch replacement.
 - [ ] Re-run the browser regression GREEN, then `npx tsx tests/finance-adjustment-ui.test.ts`. Commit `fix(finance): preserve adjustment browser fetch binding`.
@@ -83,15 +83,17 @@ React/TypeScript, existing Tailwind utility conventions, exact `Money`, existing
 - [ ] Implement purposeful state transitions and responsive drawer geometry; do not redesign unrelated Finance surfaces.
 - [ ] Run focused UI tests GREEN. Commit `feat(finance): complete adjustment drawer accessibility`.
 
-### Task 6 — Real-browser integration gate and closure
+### Task 6 — Canonical local Finance UAT fixture, real-browser gate and closure
 
-**Files:** browser test and UAT infrastructure only when needed to establish the approved fixture; no product schema/API files. **Consumes:** final contextual UI, existing command and local UAT runtime. **Produces:** fresh browser evidence, not Human UAT.
+**Files:** `scripts/provision-local-finance-uat.ts` (new local/test-only helper), focused provisioning test, browser test and existing UAT infrastructure; no product schema/API files. **Consumes:** existing F2 Account, F1 catalogue prerequisite, F2 Obligation, F3 Payment and F4 Allocation authorities plus final contextual UI. **Produces:** safely repeatable canonical fixture and fresh browser evidence, not Human UAT.
 
-- [ ] Run real browser: account → correct charge → `…` → drawer → −20 preview → explicit submit → HTTP → PostgreSQL → canonical reload/history.
+- [ ] Write RED provisioning characterization for the authorized local test DB: canonical active UAT context, Account, original 100 EUR Obligation, confirmed Payment, canonical 40 EUR Allocation, effective 100, covered 40, remaining 60 and zero Adjustments. Run it twice and require no duplicate economic facts.
+- [ ] Implement the smallest `scripts/provision-local-finance-uat.ts` helper only if absent. It must fail closed outside the approved local test DB, compose existing F1/F2/F3/F4 repositories/commands rather than manufacture Journal or economic rows with ad-hoc SQL, be tenant-safe, secret-safe and idempotent/safely reusable, and never become browser or production authority.
+- [ ] Re-run the provisioning proof GREEN, then run real browser: account → correct charge → `…` → drawer → −20 preview → explicit submit → HTTP → PostgreSQL → canonical reload/history.
 - [ ] Prove floor rejection creates no fact; positive Adjustment, linked compensation, server failure/retry, desktop/narrow and light/dark all behave correctly.
 - [ ] Run once: targeted UX/browser tests, `node scripts/run-finance-f5-obligation-adjustment.mjs`, `npm run test:finance:f4:allocation`, `npm run test:finance:operational-consolidation`, lint, build, diff-check, secrets and artifacts.
 - [ ] Commit/push, prove local/remote SHA and clean worktree, restart exact runtime, prove frontend/backend SHA plus HTTP 200 and UAT fixture readiness. Human UAT remains pending.
 
 ## Plan self-review
 
-`SPEC_COVERAGE=COMPLETE`; `PLACEHOLDERS=0`; `TYPE_CONTRADICTIONS=0`; `VAGUE_VISUAL_STEPS=0`; `UNTESTED_APPROVED_REQUIREMENTS=0`; `OUT_OF_SCOPE_TASKS=0`. Database and HTTP changes are neither planned nor required.
+`SPEC_COVERAGE=COMPLETE`; `PLACEHOLDERS=0`; `TYPE_CONTRADICTIONS=0`; `VAGUE_VISUAL_STEPS=0`; `UNTESTED_APPROVED_REQUIREMENTS=0`; `OUT_OF_SCOPE_TASKS=0`; `TASKS_1_TO_5_FIXTURE_INDEPENDENT=PASS`. Database and HTTP changes are neither planned nor required.
