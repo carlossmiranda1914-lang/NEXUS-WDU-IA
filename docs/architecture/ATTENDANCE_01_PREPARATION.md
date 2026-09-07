@@ -123,3 +123,7 @@ A session is not a timetable. It records that an authorised attendance occasion 
 4. Offline records remain pending until server-side authorization, assignment, roster and policy validation succeeds.
 5. Offline capability does not bypass later notifications, audit, thresholds or correction policy.
 
+6. The maximum offline cache validity is configured by registration unit and must be explicit in institutional policy; no indefinite cache is permitted.
+7. Local data is stored only in encrypted operating-system-protected storage.
+8. Institutional policy identifies the human actor for each offline synchronization conflict.
+
