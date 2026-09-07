@@ -45,6 +45,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Correction history | New immutable revision; preserve original, reason, author and timestamp |
 | Teacher after confirmation | May only propose a correction; approval follows institutional policy |
 | Guardian correction notice | Notify immediately when a visible outcome or justification state changes |
+| Session initiation and confirmation | Only the teacher who holds the active assignment |
+| Detailed history access | Active assigned teacher, coordination and the learner's own guardian |
+| Recording for another teacher | Prohibited; every record requires the actor's own active assignment |
 
 ## 4. Authority boundary
 
@@ -139,4 +142,14 @@ A session is not a timetable. It records that an authorised attendance occasion 
 4. If an effective correction changes a presence/absence outcome or a justification state already visible to the guardian, Attendance notifies the guardian immediately in the guardian's interface language.
 5. The notification identifies that the record changed and directs the guardian to the updated record; it must not disclose internal notes, security details or unauthorised information.
 6. Every proposal, approval, rejection, withdrawal, effective revision and notification attempt is auditable.
+
+## 13. Operational permissions decisions
+
+1. Only the teacher who holds the active TeacherAssignment may initiate or confirm a session bound to that assignment.
+2. No actor may record attendance in another teacher's name. Each attendance action requires the acting teacher's own active assignment; no implicit proxy or shared credential is permitted.
+3. Detailed attendance history for a class or activity is available only to:
+   - the teacher with the active relevant assignment;
+   - coordination, within institution and policy scope; and
+   - the guardian, limited strictly to their own learner.
+4. Every access decision is institution-scoped, policy-evaluated and auditable. Access must be denied if the assignment, relationship or role cannot be confirmed at the time of the request.
 
