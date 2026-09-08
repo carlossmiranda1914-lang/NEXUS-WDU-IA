@@ -84,13 +84,13 @@ Each integration contract must specify:
 - producer/consumer identity and signature/authentication;
 - institution, actor and business-reference fields;
 - event/request identifier and idempotency strategy; every client creation action requires an idempotency key;
-- creation/expiry times; offline audit retains both device-recorded time and server-receipt/synchronisation time;
+- creation/expiry times; offline audit retains both device-recorded time and server-receipt/synchronisation time; offline authority expires only at the server-signed expiry;
 - ordering and replay behaviour; an out-of-order signed placement event is not applied until Attendance requests/reconciles authoritative state;
 - retry, timeout and failure-queue rules: repeated delivery failure is recorded, retried and escalated to a failure queue;
 - audit fields; and
 - invalid-reference response.
 
-Asynchronous events are delivered at least once; Attendance must implement idempotent recipient processing. Duplicate delivery cannot create duplicate roster changes, evidence links, alerts, decisions or audit outcomes.
+Asynchronous events are delivered at least once; Attendance must implement idempotent recipient processing. Duplicate delivery cannot create duplicate roster changes, evidence links, alerts, decisions or audit outcomes. Reuse of one idempotency key with different content is rejected, audited and signalled as a security incident.
 
 ## 7. Explicit exclusions
 
