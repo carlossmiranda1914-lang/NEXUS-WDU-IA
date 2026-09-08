@@ -43,6 +43,9 @@ test('F7-01 PostgreSQL issuance replays idempotently and allocates a series numb
     assert.equal(first.id, replay.id); assert.equal(first.sequenceNumber, 1);
     const documents = await pool.query('SELECT count(*)::int count FROM finance_financial_documents WHERE institution_id=$1', [institutionId]);
     assert.equal(documents.rows[0].count, 1);
+    const audit = await pool.query('SELECT count(*)::int count FROM finance_audit_records WHERE institution_id=$1 AND event_type=$2', [institutionId, 'financial_document_issued']);
+    const outbox = await pool.query('SELECT count(*)::int count FROM finance_outbox WHERE institution_id=$1 AND topic=$2', [institutionId, 'financial_document_issued']);
+    assert.equal(audit.rows[0].count, 1); assert.equal(outbox.rows[0].count, 1);
   } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(() => undefined); await pool.end(); }
 });
 
