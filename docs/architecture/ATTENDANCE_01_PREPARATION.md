@@ -90,6 +90,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Online assignment validation | Synchronous Academic Core query at initiation and confirmation |
 | Open-session placement changes | Signed Academic Core event; reconcile before confirmation |
 | Justification attachment linking | Documents Foundation provisional association; business validity only after decision |
+| Offline device data | Cached valid assignment, required session/roster and unsynchronised records only |
+| Export-recipient validation | One-time code sent to the specified address before every delivery |
+| Device protection failure | Offline register blocked until operating-system protection requirements are restored |
 
 ## 4. Authority boundary
 
@@ -312,4 +315,11 @@ A report export request has the required states **REQUESTED**, **AUTHORISED**, *
 2. While a session is open, Academic Core delivers placement changes through signed events. Attendance reconciles the roster against authoritative Academic Core context before confirmation.
 3. Justification evidence may be linked immediately through a Documents Foundation provisional association. It is not business-valid evidence until Attendance records the authorised justification decision.
 4. These contracts must later define identity, institution, assignment/placement references, expiry, signature verification, idempotency, event replay and failure responses. No implementation is authorised.
+
+## 24. Initial security-control decisions
+
+1. The offline device cache contains only the previously validated assignment, the session/roster strictly necessary for the active offline work, and unsynchronised attendance records. No class attendance history is cached.
+2. Before each report e-mail delivery, the address indicated by the authorised requester is validated with a one-time code sent to that same address.
+3. If the device no longer satisfies operating-system protection requirements, offline attendance is blocked until those requirements are restored. A warning-only continuation is not permitted.
+4. These controls supplement encrypted operating-system-protected storage, cache-expiry policy and sign-out removal; they do not replace server-side authorisation and audit on synchronisation.
 
