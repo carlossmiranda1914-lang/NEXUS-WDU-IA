@@ -16,7 +16,7 @@
 | State | Meaning | Permitted exit |
 |---|---|---|
 | OPEN | Session is in the teacher's permitted editing window. | CONFIRMED, CANCELLED, PENDING_DECISION, EXPIRED |
-| PENDING_DECISION | A required human decision exists after deadline; ordinary editing is locked. | Policy-authorised resolution to CONFIRMED, CANCELLED or EXPIRED |
+| PENDING_DECISION | A required human decision exists after deadline; ordinary editing is locked. | Policy-authorised resolution to CONFIRMED with complete outcomes or CANCELLED without effects |
 | CONFIRMED | Historical roster and primary outcomes are fixed. | No direct edit; correction revision only |
 | CANCELLED | Pre-confirmation cancellation with reason/audit; no attendance effect. | Terminal |
 | EXPIRED | Terminal expiry where the policy does not create automatic absence or human-decision handling. | Terminal |
@@ -33,7 +33,7 @@ A policy-selected automatic confirmed absence transitions the session to CONFIRM
 | APPROVED | Absence remains factual and is marked justified |
 | REJECTED | Justification refused; history retained |
 
-A proposal cannot be withdrawn. It must be expressly decided or rejected. A late permitted guardian submission creates a new decision path; it never silently changes a prior state.
+A guardian submission always requires a teacher proposal before coordination decision; it cannot directly enter coordination decision. A proposal cannot be withdrawn. It must be expressly decided or rejected by the policy-authorised decision actor. A late permitted guardian submission creates a new decision path; it never silently changes a prior state.
 
 ## 4. Correction lifecycle
 
@@ -46,7 +46,7 @@ A correction is a proposal over a confirmed historical record. It cannot overwri
 | EFFECTIVE | Approved immutable revision, effective immediately |
 | REJECTED | Refused proposal; source revision remains effective |
 
-The exact actor/deadline is institutional-policy controlled. Deadline expiry alerts/escalates; it does not approve the correction.
+The exact actor/deadline is institutional-policy controlled. Only the policy-authorised decision actor may reject a correction or justification proposal. Deadline expiry alerts/escalates; it does not approve the correction.
 
 ## 5. Offline-conflict lifecycle
 
