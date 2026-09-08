@@ -200,18 +200,15 @@ test('FinanceDiscountPolicyView opens Nova Política modal and submits', async (
     component = create(React.createElement(FinanceDiscountPolicyView, { client: mockClient }));
   });
 
-  // Click Nova Política button
   const newBtn = component.root.find((el: any) => el.props.id === 'btn-nova-politica-desconto');
   await act(async () => {
     newBtn.props.onClick();
   });
 
-  // Verify modal is open
   const modal = component.root.find((el: any) => el.props.role === 'dialog');
   assert.ok(modal, 'Modal dialog is mounted');
   assert.equal(modal.props['aria-label'], 'Nova Política de Desconto');
 
-  // Fill in form inputs
   const codeInput = component.root.find((el: any) => el.props.id === 'policy-code');
   const nameInput = component.root.find((el: any) => el.props.id === 'policy-name');
   const valueInput = component.root.find((el: any) => el.props.id === 'policy-value');
@@ -222,7 +219,6 @@ test('FinanceDiscountPolicyView opens Nova Política modal and submits', async (
     valueInput.props.onChange({ target: { value: '15.00' } });
   });
 
-  // Submit form
   const form = component.root.find((el: any) => el.type === 'form');
   await act(async () => {
     form.props.onSubmit({ preventDefault: () => {} });
@@ -242,7 +238,6 @@ test('FinanceDiscountPolicyView handles keyboard Escape to close modal', async (
     component = create(React.createElement(FinanceDiscountPolicyView, { client: mockClient }));
   });
 
-  // Open modal
   const newBtn = component.root.find((el: any) => el.props.id === 'btn-nova-politica-desconto');
   await act(async () => {
     newBtn.props.onClick();
@@ -250,7 +245,6 @@ test('FinanceDiscountPolicyView handles keyboard Escape to close modal', async (
 
   assert.ok(component.root.findAll((el: any) => el.props.role === 'dialog').length > 0, 'Modal opened');
 
-  // Press Escape on main container
   const main = component.root.find((el: any) => el.type === 'main');
   await act(async () => {
     main.props.onKeyDown({ key: 'Escape' });
@@ -271,7 +265,6 @@ test('FinanceDiscountPolicyView opens Nova Versão modal with policy prefilled',
     component = create(React.createElement(FinanceDiscountPolicyView, { client: mockClient }));
   });
 
-  // Find Nova Versão button for BOLSA-20
   const versionBtn = component.root.find(
     (el: any) => el.type === 'button' && el.props['aria-label'] === 'Criar nova versão para BOLSA-20'
   );
@@ -281,7 +274,6 @@ test('FinanceDiscountPolicyView opens Nova Versão modal with policy prefilled',
     versionBtn.props.onClick();
   });
 
-  // Verify modal is open with prefilled policy code
   const text = JSON.stringify(component.toJSON());
   assert.ok(text.includes('Nova Versão da Política'), 'Nova Versão modal is rendered');
   assert.ok(text.includes('BOLSA-20'), 'Prefilled policy code BOLSA-20 is visible');
@@ -301,7 +293,6 @@ test('FinanceDiscountPolicyView opens archive confirmation dialog and confirms',
     component = create(React.createElement(FinanceDiscountPolicyView, { client: mockClient }));
   });
 
-  // Click Arquivar for BOLSA-20
   const archiveBtn = component.root.find(
     (el: any) => el.type === 'button' && el.props['aria-label'] === 'Arquivar política BOLSA-20'
   );
@@ -309,11 +300,9 @@ test('FinanceDiscountPolicyView opens archive confirmation dialog and confirms',
     archiveBtn.props.onClick();
   });
 
-  // Verify confirmation modal
   const text = JSON.stringify(component.toJSON());
   assert.ok(text.includes('Arquivar Política?'), 'Archive confirmation modal opened');
 
-  // Click Confirmar Arquivamento
   const confirmBtn = component.root.find(
     (el: any) => el.type === 'button' && el.children && el.children.includes('Confirmar Arquivamento')
   );
@@ -330,11 +319,9 @@ test('FinanceFeeCatalogueWorkspace allows switching to Políticas de Desconto an
     component = create(React.createElement(FinanceFeeCatalogueWorkspace, {}));
   });
 
-  // Check initial workspace renders Emolumentos
   let text = JSON.stringify(component.toJSON());
   assert.ok(text.includes('Catálogo de Emolumentos'), 'Catalogue is active');
 
-  // Find the Políticas de Desconto workspace tab
   const discountTabBtn = component.root.findAll(
     (el: any) => el.type === 'button' && el.children && el.children.includes('Políticas de Desconto')
   )[0];
@@ -344,7 +331,27 @@ test('FinanceFeeCatalogueWorkspace allows switching to Políticas de Desconto an
     discountTabBtn.props.onClick();
   });
 
-  // Verify workspace now shows discount policy surface
   text = JSON.stringify(component.toJSON());
   assert.ok(text.includes('Políticas de Desconto Institucionais'), 'Discount policies view is active');
+});
+
+test('F6 product polish gives policy creation a structured financial operation hierarchy', async () => {
+  const mockClient = createMockClient();
+  let component: any;
+
+  await act(async () => {
+    component = create(React.createElement(FinanceDiscountPolicyView, { client: mockClient }));
+  });
+
+  const newBtn = component.root.find((el: any) => el.props.id === 'btn-nova-politica-desconto');
+  await act(async () => {
+    newBtn.props.onClick();
+  });
+
+  const text = JSON.stringify(component.toJSON());
+  assert.ok(text.includes('1. Identificação'), 'Creation dialog separates identification');
+  assert.ok(text.includes('2. Regra financeira'), 'Creation dialog separates the financial rule');
+  assert.ok(text.includes('3. Vigência'), 'Creation dialog separates effective dating');
+  assert.ok(text.includes('4. Resumo'), 'Creation dialog exposes an operator-facing summary');
+  assert.ok(text.includes('data-testid":"policy-value-unit"'), 'Financial value input exposes a dedicated unit adornment');
 });
