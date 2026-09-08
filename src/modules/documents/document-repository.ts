@@ -145,7 +145,7 @@ export class PostgresDocumentRepository {
       [input.institutionId, input.documentId],
     );
     const nextVersionNumber = seqResult.rows[0].next_version;
-    const versionStatus: DocumentVersionStatus = input.status ?? 'available';
+    const versionStatus: DocumentVersionStatus = input.status ?? 'content_received';
 
     // 3. Insert immutable version record
     const versionResult = await client.query<{

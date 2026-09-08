@@ -54,7 +54,7 @@ try {
     [personId],
   );
 
-  // 1. Initial Creation
+  // 1. Initial Sequential Creation & Replay
   const key1 = 'key-doc-creation-001';
   const initialPayload = {
     category: 'legal_guardian_consent',
@@ -85,8 +85,8 @@ try {
   assert.strictEqual(firstRun.replayed, false, 'First command execution must not be replayed');
   assert.ok(firstRun.result.document.id);
   assert.strictEqual(firstRun.result.version.versionNumber, 1);
+  assert.strictEqual(firstRun.result.version.status, 'content_received');
 
-  // 2. Replay with identical key and payload
   const replayRun = await createDocumentWithInitialVersionCommand({
     pool,
     context,
@@ -98,7 +98,7 @@ try {
   assert.strictEqual(replayRun.result.document.id, firstRun.result.document.id, 'Replayed document ID must match');
   assert.strictEqual(replayRun.result.version.id, firstRun.result.version.id, 'Replayed version ID must match');
 
-  // 3. Mismatched fingerprint rejection
+  // 2. Mismatched fingerprint rejection
   const mismatchedPayload = {
     ...initialPayload,
     byteSize: 999999, // Mismatched size
@@ -117,7 +117,68 @@ try {
     'Same key with different payload must fail closed with IDEMPOTENCY_CONFLICT',
   );
 
-  // 4. Concurrent Version Creation (Race Condition Safety)
+  // 3. True Concurrent Idempotency Race (Same Key, Same Fingerprint)
+  const raceKey = 'key-concurrent-race-same-fingerprint';
+  const racePayload = {
+    category: 'identity_proof',
+    classification: 'id_card',
+    mimeType: 'image/png',
+    byteSize: 4096,
+    sha256Hash: 'e'.repeat(64),
+    provenance: {
+      originType: 'user_upload' as const,
+      sourceDomain: 'portal',
+      method: 'concurrent_race',
+      correlationId: 'req-race-001',
+    },
+  };
+
+  const concurrentCount = 4;
+  const racePromises = Array.from({ length: concurrentCount }).map(() =>
+    createDocumentWithInitialVersionCommand({
+      pool,
+      context,
+      idempotencyKey: raceKey,
+      input: racePayload,
+    }),
+  );
+
+  const raceResults = await Promise.all(racePromises);
+
+  // Verify exactly 1 execution and remainder replayed
+  const executedCount = raceResults.filter((r) => !r.replayed).length;
+  const replayedCount = raceResults.filter((r) => r.replayed).length;
+  assert.strictEqual(executedCount, 1, 'Exactly one concurrent request must perform canonical logical execution');
+  assert.strictEqual(replayedCount, concurrentCount - 1, 'Remaining concurrent requests must resolve by replay');
+
+  // Verify all returned identical canonical document ID and version ID
+  const uniqueDocIds = new Set(raceResults.map((r) => r.result.document.id));
+  const uniqueVersionIds = new Set(raceResults.map((r) => r.result.version.id));
+  assert.strictEqual(uniqueDocIds.size, 1, 'All concurrent requests must return identical document ID');
+  assert.strictEqual(uniqueVersionIds.size, 1, 'All concurrent requests must return identical version ID');
+
+  // 4. Concurrent Conflict Race (Same Key, Different Fingerprint)
+  const conflictKey = 'key-concurrent-race-conflict';
+  const payloadA = { ...racePayload, byteSize: 1000 };
+  const payloadB = { ...racePayload, byteSize: 2000 };
+
+  const conflictResults = await Promise.allSettled([
+    createDocumentWithInitialVersionCommand({ pool, context, idempotencyKey: conflictKey, input: payloadA }),
+    createDocumentWithInitialVersionCommand({ pool, context, idempotencyKey: conflictKey, input: payloadB }),
+  ]);
+
+  const fulfilled = conflictResults.filter((r) => r.status === 'fulfilled');
+  const rejected = conflictResults.filter((r) => r.status === 'rejected');
+
+  assert.strictEqual(fulfilled.length, 1, 'Exactly one contestant in conflict race must succeed');
+  assert.strictEqual(rejected.length, 1, 'Contestant with conflicting fingerprint must fail closed');
+  assert.match(
+    (rejected[0] as PromiseRejectedResult).reason.message,
+    /IDEMPOTENCY_CONFLICT/,
+    'Rejection reason must be IDEMPOTENCY_CONFLICT',
+  );
+
+  // 5. Concurrent Version Creation with Distinct Keys (Sequential Versioning)
   const docId = firstRun.result.document.id;
   const parallelVersionCount = 5;
 
@@ -155,7 +216,7 @@ try {
   const allPersisted = await repo.listVersions(client, institutionId, docId);
   assert.strictEqual(allPersisted.length, 6, 'Document must now have 6 versions persisted in total');
 
-  console.log('[DOCUMENTS-IDEMPOTENCY-CONCURRENCY] PASS: Idempotency replay, conflict rejection, and concurrency safety verified.');
+  console.log('[DOCUMENTS-IDEMPOTENCY-CONCURRENCY] PASS: Idempotency replay, true concurrency race, conflict rejection, and version sequencing verified.');
 } finally {
   try {
     await client.query('RESET search_path');

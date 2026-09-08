@@ -146,6 +146,11 @@ export async function executeIdempotentDocumentsCommand<T>(input: {
   try {
     await client.query('BEGIN');
 
+    // 1. Transactional advisory lock serialized on (institutionId, commandScope, idempotencyKey)
+    const lockKey = `${identity.institutionId}:${identity.commandScope}:${identity.idempotencyKey}`;
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [lockKey]);
+
+    // 2. Check for existing idempotency record
     const existing = await client.query<{
       request_fingerprint: string;
       result_ref: string;
@@ -171,23 +176,67 @@ export async function executeIdempotentDocumentsCommand<T>(input: {
       return { replayed: true, result };
     }
 
-    const { resultRef, result } = await execute(client);
+    // 3. Execute domain action within transaction
+    let executionResult: { resultRef: string; result: T };
+    try {
+      executionResult = await execute(client);
+    } catch (execError) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw execError;
+    }
 
-    await client.query(
-      `INSERT INTO document_idempotency_records (
-        institution_id, command_scope, idempotency_key, request_fingerprint, result_ref, status
-      ) VALUES ($1, $2, $3, $4, $5, 'completed')`,
-      [
-        identity.institutionId,
-        identity.commandScope,
-        identity.idempotencyKey,
-        identity.canonicalFingerprint,
-        resultRef,
-      ],
-    );
+    // 4. Record idempotency ledger
+    try {
+      await client.query(
+        `INSERT INTO document_idempotency_records (
+          institution_id, command_scope, idempotency_key, request_fingerprint, result_ref, status
+        ) VALUES ($1, $2, $3, $4, $5, 'completed')`,
+        [
+          identity.institutionId,
+          identity.commandScope,
+          identity.idempotencyKey,
+          identity.canonicalFingerprint,
+          executionResult.resultRef,
+        ],
+      );
 
-    await client.query('COMMIT');
-    return { replayed: false, result };
+      await client.query('COMMIT');
+      return { replayed: false, result: executionResult.result };
+    } catch (insertError: any) {
+      // Fallback in case of unique constraint race
+      await client.query('ROLLBACK').catch(() => undefined);
+
+      if (insertError?.code === '23505') {
+        // Query committed record in new read transaction
+        const fallbackClient = await pool.connect();
+        try {
+          const fallbackQuery = await fallbackClient.query<{
+            request_fingerprint: string;
+            result_ref: string;
+          }>(
+            `SELECT request_fingerprint, result_ref
+               FROM document_idempotency_records
+              WHERE institution_id = $1 AND command_scope = $2 AND idempotency_key = $3`,
+            [identity.institutionId, identity.commandScope, identity.idempotencyKey],
+          );
+
+          if (fallbackQuery.rows.length > 0) {
+            const fallbackRecord = fallbackQuery.rows[0];
+            if (fallbackRecord.request_fingerprint !== identity.canonicalFingerprint) {
+              throw new Error(
+                `IDEMPOTENCY_CONFLICT: Key "${identity.idempotencyKey}" was already used with a different request payload.`,
+              );
+            }
+            const replayedResult = await loadResult(fallbackClient, fallbackRecord.result_ref);
+            return { replayed: true, result: replayedResult };
+          }
+        } finally {
+          fallbackClient.release();
+        }
+      }
+
+      throw insertError;
+    }
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw error;

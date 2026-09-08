@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 export type DocumentStatus = 'active' | 'archived' | 'deprecating' | 'restricted';
-export type DocumentVersionStatus = 'available' | 'quarantined' | 'superseded' | 'withdrawn';
+export type DocumentVersionStatus = 'content_received' | 'available' | 'quarantined' | 'superseded' | 'withdrawn';
 export type ProvenanceOriginType =
   | 'user_upload'
   | 'system_generated'

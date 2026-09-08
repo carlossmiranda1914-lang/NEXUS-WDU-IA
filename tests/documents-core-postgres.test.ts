@@ -80,6 +80,11 @@ try {
 
   assert.strictEqual(v1.version.versionNumber, 1);
   assert.strictEqual(v1.version.documentId, doc.id);
+  assert.strictEqual(
+    v1.version.status,
+    'content_received',
+    'New DocumentVersion must default to content_received (NOT automatically available)',
+  );
   assert.strictEqual(v1.provenance.originType, 'user_upload');
   assert.strictEqual(v1.storageReference?.storageKey, 'tenants/1/docs/v1.pdf');
 
@@ -107,6 +112,7 @@ try {
 
   assert.strictEqual(v2.version.versionNumber, 2);
   assert.strictEqual(v2.version.documentId, doc.id);
+  assert.strictEqual(v2.version.status, 'content_received');
 
   // 4. List and verify immutability
   const allVersions = await docRepo.listVersions(client, institutionId, doc.id);

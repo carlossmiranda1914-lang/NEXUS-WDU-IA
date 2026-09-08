@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS document_versions (
   mime_type TEXT NOT NULL CHECK (length(trim(mime_type)) BETWEEN 3 AND 128),
   byte_size BIGINT NOT NULL CHECK (byte_size >= 0),
   sha256_hash TEXT NOT NULL CHECK (sha256_hash ~ '^[a-f0-9]{64}$'),
-  status TEXT NOT NULL DEFAULT 'available' CHECK (status IN ('available', 'quarantined', 'superseded', 'withdrawn')),
+  status TEXT NOT NULL DEFAULT 'content_received' CHECK (status IN ('content_received', 'available', 'quarantined', 'superseded', 'withdrawn')),
   created_by_person_id UUID NOT NULL REFERENCES people(id) ON DELETE RESTRICT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT document_versions_document_tenant_fk
@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS document_versions (
     ON DELETE RESTRICT,
   CONSTRAINT document_versions_institution_id_unique
     UNIQUE (institution_id, id),
+  CONSTRAINT document_versions_institution_document_id_unique
+    UNIQUE (institution_id, document_id, id),
   CONSTRAINT document_versions_document_version_unique
     UNIQUE (institution_id, document_id, version_number)
 );
@@ -57,13 +59,9 @@ CREATE TABLE IF NOT EXISTS document_provenance (
   method TEXT NOT NULL CHECK (length(trim(method)) BETWEEN 2 AND 64),
   occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   correlation_id TEXT CHECK (correlation_id IS NULL OR length(trim(correlation_id)) BETWEEN 4 AND 128),
-  CONSTRAINT document_provenance_document_tenant_fk
-    FOREIGN KEY (institution_id, document_id)
-    REFERENCES documents(institution_id, id)
-    ON DELETE RESTRICT,
-  CONSTRAINT document_provenance_version_tenant_fk
-    FOREIGN KEY (institution_id, version_id)
-    REFERENCES document_versions(institution_id, id)
+  CONSTRAINT document_provenance_version_doc_tenant_fk
+    FOREIGN KEY (institution_id, document_id, version_id)
+    REFERENCES document_versions(institution_id, document_id, id)
     ON DELETE RESTRICT
 );
 
@@ -116,6 +114,10 @@ CREATE TABLE IF NOT EXISTS document_audit_events (
   CONSTRAINT document_audit_events_document_tenant_fk
     FOREIGN KEY (institution_id, document_id)
     REFERENCES documents(institution_id, id)
+    ON DELETE RESTRICT,
+  CONSTRAINT document_audit_events_version_tenant_fk
+    FOREIGN KEY (institution_id, version_id)
+    REFERENCES document_versions(institution_id, id)
     ON DELETE RESTRICT
 );
 
@@ -125,3 +127,7 @@ CREATE INDEX IF NOT EXISTS document_audit_events_tenant_occurred_idx
 CREATE INDEX IF NOT EXISTS document_audit_events_document_idx
   ON document_audit_events (institution_id, document_id)
   WHERE document_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS document_audit_events_version_idx
+  ON document_audit_events (institution_id, version_id)
+  WHERE version_id IS NOT NULL;
