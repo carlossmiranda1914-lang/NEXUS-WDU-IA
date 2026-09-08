@@ -81,6 +81,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Required session states | Open, pending decision, confirmed, cancelled and expired |
 | Human-decision late session | Pending decision and locked for editing |
 | Withdrawal of justification/correction proposal | Not allowed; proposal must be decided or rejected |
+| Required justification states | Submitted, teacher-proposed, pending decision, approved and rejected |
+| Approved correction | Effective immediately; earlier revision retained |
+| Offline-conflict states | Detected, pending decision, resolved and rejected |
 
 ## 4. Authority boundary
 
@@ -266,4 +269,24 @@ When a late session requires human decision, it transitions to **PENDING_DECISIO
 ### 22.2 Proposals
 
 A justification proposal and a correction proposal cannot be withdrawn by the proponent. Each must reach an explicit authorised decision or rejection; the full history remains auditable.
+
+### 22.3 Justification
+
+The required first-cut justification states are:
+
+- **SUBMITTED** — a permitted guardian submission exists;
+- **TEACHER_PROPOSED** — the teacher has made the required proposal;
+- **PENDING_DECISION** — awaiting policy-authorised coordination decision;
+- **APPROVED** — factual absence remains and has the justified state; and
+- **REJECTED** — the decision refuses the justification without deleting its history.
+
+The technical state of a Documents Foundation attachment is separate from these business states. An attachment never changes a justification decision automatically.
+
+### 22.4 Correction revision
+
+Once a correction is approved by the policy-authorised actor, its new immutable revision becomes **EFFECTIVE** immediately. The earlier revision remains historical evidence.
+
+### 22.5 Offline synchronisation conflict
+
+The required conflict states are **DETECTED**, **PENDING_DECISION**, **RESOLVED** and **REJECTED**. No automatic-resolution state or implicit client/server winner is allowed.
 
