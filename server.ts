@@ -73,6 +73,8 @@ import { registerPaymentWebhookRoutes } from './src/modules/finance/payment-webh
 import { registerPaymentProviderRoutes } from './src/modules/finance/payment-provider-http.ts';
 import { registerFinanceAllocationRoutes } from './src/modules/finance/allocation-http.ts';
 import { registerObligationAdjustmentRoutes } from './src/modules/finance/obligation-adjustment-http.ts';
+import { registerDiscountPolicyRoutes } from './src/modules/finance/discount-policy-http.ts';
+import { registerObligationDiscountRoutes } from './src/modules/finance/obligation-discount-http.ts';
 import { registerFinanceOperationalContextRoutes } from './src/modules/finance/finance-operational-context-http.ts';
 import type { FinancialProfileStore } from './src/modules/finance/financial-context.ts';
 import { isInstitutionOwned, resolveInstitutionOwnedResourceIds } from './src/auth/institution-resource-ownership.ts';
@@ -347,6 +349,8 @@ async function startServer() {
     registerPaymentRoutes(app, pool, financialProfiles);
     registerFinanceAllocationRoutes(app, pool);
     registerObligationAdjustmentRoutes(app, pool);
+    registerDiscountPolicyRoutes(app, pool);
+    registerObligationDiscountRoutes(app, pool);
     registerPaymentWebhookRoutes(app, pool);
     registerPaymentProviderRoutes(app, pool);
     registerFinanceOperationalContextRoutes(app, pool);
