@@ -83,9 +83,9 @@ Each integration contract must specify:
 
 - producer/consumer identity and signature/authentication;
 - institution, actor and business-reference fields;
-- event/request identifier and idempotency strategy;
-- creation/expiry times;
-- ordering and replay behaviour;
+- event/request identifier and idempotency strategy; every client creation action requires an idempotency key;
+- creation/expiry times; offline audit retains both device-recorded time and server-receipt/synchronisation time;
+- ordering and replay behaviour; an out-of-order signed placement event is not applied until Attendance requests/reconciles authoritative state;
 - retry, timeout and failure-queue rules: repeated delivery failure is recorded, retried and escalated to a failure queue;
 - audit fields; and
 - invalid-reference response.
