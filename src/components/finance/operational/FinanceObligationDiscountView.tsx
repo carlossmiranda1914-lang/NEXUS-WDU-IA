@@ -9,7 +9,6 @@ import { Money } from '../../../modules/finance/money.ts';
 import { ExactDecimal } from '../../../modules/finance/exact-decimal.ts';
 import { quantizeMoneyCandidate } from '../../../modules/finance/quantization.ts';
 
-
 export interface FinanceObligationDiscountViewProps {
   theme?: string;
   mode?: 'apply' | 'revoke';
@@ -184,7 +183,7 @@ export function FinanceObligationDiscountView({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-[2px] motion-reduce:backdrop-blur-none transition-opacity duration-200"
+      className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-[2px] motion-reduce:backdrop-blur-none transition-opacity duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
@@ -193,7 +192,7 @@ export function FinanceObligationDiscountView({
         ref={drawerRef}
         role="dialog"
         aria-modal="true"
-        aria-label={isRevokeMode ? 'Revogar desconto' : 'Aplicar desconto institucional'}
+        aria-label={isRevokeMode ? 'Revogar desconto institucional' : 'Aplicar desconto institucional'}
         onKeyDown={(e) => {
           if (e.key === 'Escape') onCancel();
         }}
@@ -203,28 +202,28 @@ export function FinanceObligationDiscountView({
             : 'border-zinc-800 bg-zinc-900 text-zinc-100'
         }`}
       >
-        {/* Drawer Header */}
+        {/* Drawer Header (UX-01) */}
         <div
           className={`flex items-start justify-between border-b px-6 py-5 ${
-            isLight ? 'border-zinc-100 bg-zinc-50/50' : 'border-zinc-800/80 bg-zinc-950/40'
+            isLight ? 'border-zinc-100 bg-zinc-50/70' : 'border-zinc-800 bg-zinc-950/40'
           }`}
         >
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <span
-                className={`inline-flex items-center justify-center rounded-md p-1.5 ${
+                className={`inline-flex items-center justify-center h-8 w-8 rounded-xl font-bold text-xs ${
                   isRevokeMode
-                    ? isLight ? 'bg-amber-50 text-amber-700' : 'bg-amber-950/60 text-amber-400'
-                    : isLight ? 'bg-emerald-50 text-emerald-700' : 'bg-emerald-950/60 text-emerald-400'
+                    ? isLight ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-amber-950/60 text-amber-400 border border-amber-800/60'
+                    : isLight ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/60'
                 }`}
               >
-                <span className="font-bold text-xs">%</span>
+                {isRevokeMode ? '↺' : '%'}
               </span>
               <h2 className="text-base font-bold tracking-tight">
                 {isRevokeMode ? 'Revogar desconto institucional' : 'Aplicar desconto institucional'}
               </h2>
             </div>
-            <p className={`text-xs leading-relaxed ${isLight ? 'text-zinc-600' : 'text-zinc-300'}`}>
+            <p className={`text-xs leading-relaxed ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}>
               <span className="font-semibold text-zinc-900 dark:text-zinc-100">{obligation.description}</span>
               {' · '}Concessão fundamentada e registada em histórico financeiro.
             </p>
@@ -249,50 +248,55 @@ export function FinanceObligationDiscountView({
           data-testid="obligation-discount-form"
           className="flex flex-1 flex-col justify-between overflow-y-auto"
         >
-          <div className="space-y-5 p-6">
-            {/* Obligation Financial Context Card */}
-            <div
-              data-testid="discount-current-position"
-              className={`grid grid-cols-2 gap-3 rounded-xl border p-3.5 text-xs ${
-                isLight
-                  ? 'border-zinc-200/80 bg-zinc-50/80 text-zinc-700'
-                  : 'border-zinc-800 bg-zinc-950/60 text-zinc-300'
-              }`}
-            >
-              <div className="space-y-0.5">
-                <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Valor original</span>
-                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  {`${originalStr} ${currency}`}
-                </p>
-              </div>
-              <div className="space-y-0.5">
-                <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Já coberto</span>
-                <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-                  {`${coveredStr} ${currency}`}
-                </p>
-              </div>
-              <div className="space-y-0.5">
-                <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Valor devido atual</span>
-                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  {`${effectiveDueStr} ${currency}`}
-                </p>
-              </div>
-              <div className="space-y-0.5">
-                <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Restante por cobrir</span>
-                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  {`${remainingStr} ${currency}`}
-                </p>
+          <div className="space-y-5 p-6 text-xs">
+            {/* Obligation Financial Context Card (UX-02) */}
+            <div>
+              <span className={`block font-bold uppercase tracking-wider text-[11px] mb-2 ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                1. Enquadramento da Cobrança
+              </span>
+              <div
+                data-testid="discount-current-position"
+                className={`grid grid-cols-2 gap-3 rounded-xl border p-3.5 ${
+                  isLight
+                    ? 'border-zinc-200 bg-zinc-50/80 text-zinc-700'
+                    : 'border-zinc-800 bg-zinc-950/60 text-zinc-300'
+                }`}
+              >
+                <div className="space-y-0.5">
+                  <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Valor original</span>
+                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {`${originalStr} ${currency}`}
+                  </p>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Já coberto</span>
+                  <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                    {`${coveredStr} ${currency}`}
+                  </p>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Valor devido atual</span>
+                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {`${effectiveDueStr} ${currency}`}
+                  </p>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Restante por cobrir</span>
+                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {`${remainingStr} ${currency}`}
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* Apply Mode: Policy Selector */}
+            {/* Apply Mode: Policy Selector (UX-02, UX-03) */}
             {!isRevokeMode && (
               <div className="space-y-2">
                 <label
                   htmlFor="policy-select"
-                  className="block text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400"
+                  className={`block font-bold uppercase tracking-wider text-[11px] ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}
                 >
-                  Política de desconto *
+                  2. Política Institucional de Desconto *
                 </label>
                 {loadingPolicies ? (
                   <div className="animate-pulse h-10 bg-zinc-200 dark:bg-zinc-800 rounded-xl"></div>
@@ -329,128 +333,145 @@ export function FinanceObligationDiscountView({
               </div>
             )}
 
-            {/* Revoke Mode: Active Discount Summary */}
+            {/* Revoke Mode: Active Discount Summary (UX-02) */}
             {isRevokeMode && obligation.activeDiscount && (
-              <div
-                className={`rounded-xl border p-4 space-y-2 ${
-                  isLight
-                    ? 'border-amber-200 bg-amber-50/60 text-amber-900'
-                    : 'border-amber-800/60 bg-amber-950/40 text-amber-200'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider">Desconto Ativo</span>
-                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-amber-200/60 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
-                    {obligation.activeDiscount.policyCode}
-                  </span>
-                </div>
-                <p className="text-sm font-semibold">{obligation.activeDiscount.policyName}</p>
-                <div className="flex items-center justify-between text-xs pt-1 border-t border-amber-200 dark:border-amber-800/60">
-                  <span>Valor concedido:</span>
-                  <span className="font-bold font-mono">
-                    {`-${obligation.activeDiscount.amount.amount} ${obligation.activeDiscount.amount.currency}`}
-                  </span>
-                </div>
-                {obligation.activeDiscount.reason && (
-                  <p className="text-[11px] italic text-zinc-600 dark:text-zinc-400">
-                    {`Motivo anterior: ${obligation.activeDiscount.reason}`}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Live Financial Projection */}
-            {!isRevokeMode && applyPreview && !('invalid' in applyPreview) && (
-              <div
-                data-testid="discount-projected-position"
-                className={`rounded-xl border p-4 space-y-2.5 transition-all duration-150 motion-reduce:transition-none ${
-                  applyPreview.belowCovered
-                    ? isLight
-                      ? 'border-rose-300 bg-rose-50/80 text-rose-900'
-                      : 'border-rose-800 bg-rose-950/40 text-rose-200'
-                    : isLight
-                    ? 'border-emerald-200/90 bg-emerald-50/50 text-zinc-900'
-                    : 'border-emerald-800/60 bg-emerald-950/30 text-zinc-100'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                    Projeção Financeira
-                  </span>
-                  <span
-                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                      applyPreview.belowCovered
-                        ? 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200'
-                        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
-                    }`}
-                  >
-                    {`Desconto: -${applyPreview.discountAmount} ${currency}`}
-                  </span>
-                </div>
-
-                <p className="text-base font-bold tracking-tight">
-                  {`${effectiveDueStr} ${currency} → ${applyPreview.newDue} ${currency}`}
-                </p>
-
-                <div className="flex items-center justify-between text-xs pt-1 border-t border-zinc-200/60 dark:border-zinc-800/80">
-                  <span className="text-zinc-600 dark:text-zinc-400">
-                    Já coberto <strong>{`${coveredStr} ${currency}`}</strong>
-                  </span>
-                  <span className="text-zinc-900 dark:text-zinc-100 font-semibold">
-                    {`Restante a liquidar: ${applyPreview.newRemaining} ${currency}`}
-                  </span>
-                </div>
-
-                {applyPreview.belowCovered && (
-                  <p className="text-xs font-semibold text-rose-700 dark:text-rose-300 pt-1">
-                    {`Aviso de Limite: O desconto (-${applyPreview.discountAmount} ${currency}) excede o valor por cobrir (${remainingStr} ${currency}).`}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Revoke Mode: Restored Balance Projection */}
-            {isRevokeMode && revokePreview && (
-              <div
-                data-testid="discount-revoked-projected-position"
-                className={`rounded-xl border p-4 space-y-2.5 ${
-                  isLight
-                    ? 'border-zinc-200/90 bg-zinc-50/50 text-zinc-900'
-                    : 'border-zinc-800/60 bg-zinc-950/30 text-zinc-100'
-                }`}
-              >
-                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                  Restauro de Saldo
+              <div className="space-y-2">
+                <span className={`block font-bold uppercase tracking-wider text-[11px] ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                  2. Desconto Ativo a Revogar
                 </span>
-                <p className="text-base font-bold tracking-tight">
-                  {`${effectiveDueStr} ${currency} → ${revokePreview.restoredDue} ${currency}`}
-                </p>
-                <div className="flex items-center justify-between text-xs pt-1 border-t border-zinc-200/60 dark:border-zinc-800/80">
-                  <span className="text-zinc-600 dark:text-zinc-400">
-                    Já coberto <strong>{`${coveredStr} ${currency}`}</strong>
-                  </span>
-                  <span className="text-zinc-900 dark:text-zinc-100 font-semibold">
-                    {`Novo restante: ${revokePreview.restoredRemaining} ${currency}`}
-                  </span>
+                <div
+                  className={`rounded-xl border p-4 space-y-2 ${
+                    isLight
+                      ? 'border-amber-200 bg-amber-50/60 text-amber-900'
+                      : 'border-amber-800/60 bg-amber-950/40 text-amber-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider">Desconto Ativo</span>
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-amber-200/60 dark:bg-amber-900 text-amber-900 dark:text-amber-200">
+                      {obligation.activeDiscount.policyCode}
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold">{obligation.activeDiscount.policyName}</p>
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-amber-200 dark:border-amber-800/60">
+                    <span>Valor concedido:</span>
+                    <span className="font-bold font-mono">
+                      {`-${obligation.activeDiscount.amount.amount} ${obligation.activeDiscount.amount.currency}`}
+                    </span>
+                  </div>
+                  {obligation.activeDiscount.reason && (
+                    <p className="text-[11px] italic text-zinc-600 dark:text-zinc-400">
+                      {`Motivo anterior: ${obligation.activeDiscount.reason}`}
+                    </p>
+                  )}
                 </div>
               </div>
             )}
 
+            {/* Live Financial Projection (UX-02, UX-03) */}
+            {!isRevokeMode && applyPreview && !('invalid' in applyPreview) && (
+              <div className="space-y-2">
+                <span className={`block font-bold uppercase tracking-wider text-[11px] ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                  3. Projeção do Impacto Financeiro
+                </span>
+                <div
+                  data-testid="discount-projected-position"
+                  className={`rounded-xl border p-4 space-y-2.5 transition-all duration-150 motion-reduce:transition-none ${
+                    applyPreview.belowCovered
+                      ? isLight
+                        ? 'border-rose-300 bg-rose-50/80 text-rose-900'
+                        : 'border-rose-800 bg-rose-950/40 text-rose-200'
+                      : isLight
+                      ? 'border-emerald-200/90 bg-emerald-50/50 text-zinc-900'
+                      : 'border-emerald-800/60 bg-emerald-950/30 text-zinc-100'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                      Projeção Financeira
+                    </span>
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                        applyPreview.belowCovered
+                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200'
+                          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                      }`}
+                    >
+                      {`Desconto: -${applyPreview.discountAmount} ${currency}`}
+                    </span>
+                  </div>
 
-            {/* Reason */}
-            <div className="space-y-1.5">
+                  <p className="text-base font-bold tracking-tight">
+                    {`${effectiveDueStr} ${currency} → ${applyPreview.newDue} ${currency}`}
+                  </p>
+
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-zinc-200/60 dark:border-zinc-800/80">
+                    <span className="text-zinc-600 dark:text-zinc-400">
+                      Já coberto <strong>{`${coveredStr} ${currency}`}</strong>
+                    </span>
+                    <span className="text-zinc-900 dark:text-zinc-100 font-semibold">
+                      {`Restante a liquidar: ${applyPreview.newRemaining} ${currency}`}
+                    </span>
+                  </div>
+
+                  {applyPreview.belowCovered && (
+                    <div className="p-2.5 rounded-lg bg-rose-100/80 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs">
+                      <p className="font-bold">⚠️ Aviso de Limite (Covered Floor):</p>
+                      <p className="mt-0.5">
+                        {`O desconto (-${applyPreview.discountAmount} ${currency}) excede o valor por cobrir (${remainingStr} ${currency}).`}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Revoke Mode: Restored Balance Projection (UX-02) */}
+            {isRevokeMode && revokePreview && (
+              <div className="space-y-2">
+                <span className={`block font-bold uppercase tracking-wider text-[11px] ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                  3. Restauro de Saldo Projetado
+                </span>
+                <div
+                  data-testid="discount-revoked-projected-position"
+                  className={`rounded-xl border p-4 space-y-2.5 ${
+                    isLight
+                      ? 'border-zinc-200/90 bg-zinc-50/50 text-zinc-900'
+                      : 'border-zinc-800/60 bg-zinc-950/30 text-zinc-100'
+                  }`}
+                >
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                    Restauro de Saldo
+                  </span>
+                  <p className="text-base font-bold tracking-tight">
+                    {`${effectiveDueStr} ${currency} → ${revokePreview.restoredDue} ${currency}`}
+                  </p>
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-zinc-200/60 dark:border-zinc-800/80">
+                    <span className="text-zinc-600 dark:text-zinc-400">
+                      Já coberto <strong>{`${coveredStr} ${currency}`}</strong>
+                    </span>
+                    <span className="text-zinc-900 dark:text-zinc-100 font-semibold">
+                      {`Novo restante: ${revokePreview.restoredRemaining} ${currency}`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Reason & Guidance (UX-02, UX-04) */}
+            <div className="space-y-2">
               <label
                 htmlFor="discount-reason-input"
-                className="block text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400"
+                className={`block font-bold uppercase tracking-wider text-[11px] ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}
               >
-                Motivo / Justificação *
+                4. Motivo / Justificação Operacional *
               </label>
               <textarea
                 id="discount-reason-input"
                 ref={isRevokeMode ? (firstInputRef as any) : undefined}
                 aria-label="Motivo obrigatório"
                 rows={2}
-                placeholder="Indique a justificação..."
+                placeholder="Indique a justificação formal..."
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 required
@@ -460,36 +481,36 @@ export function FinanceObligationDiscountView({
                     : 'border-zinc-700 bg-zinc-950 text-zinc-100 placeholder:text-zinc-600'
                 }`}
               />
-            </div>
 
-            {/* Suggestions */}
-            <div className="space-y-1">
-              <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
-                Sugestões frequentes
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {suggestions.map((val) => (
-                  <button
-                    type="button"
-                    key={val}
-                    onClick={() => setReason(val)}
-                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all duration-150 motion-reduce:transition-none ${
-                      reason === val
-                        ? isLight
-                          ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-                          : 'border-emerald-700 bg-emerald-950/60 text-emerald-300'
-                        : isLight
-                        ? 'border-zinc-200 bg-zinc-50/60 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-900'
-                        : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200'
-                    }`}
-                  >
-                    {val}
-                  </button>
-                ))}
+              {/* Suggestions */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                  Sugestões frequentes
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {suggestions.map((val) => (
+                    <button
+                      type="button"
+                      key={val}
+                      onClick={() => setReason(val)}
+                      className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all duration-150 motion-reduce:transition-none ${
+                        reason === val
+                          ? isLight
+                            ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                            : 'border-emerald-700 bg-emerald-950/60 text-emerald-300'
+                          : isLight
+                          ? 'border-zinc-200 bg-zinc-50/60 text-zinc-600 hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-900'
+                          : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200'
+                      }`}
+                    >
+                      {val}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Error Message with preserved form state */}
+            {/* Error Message with preserved form state (UX-04) */}
             {error && (
               <div
                 role="alert"

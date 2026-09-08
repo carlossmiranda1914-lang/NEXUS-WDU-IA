@@ -348,3 +348,51 @@ test('FinanceFeeCatalogueWorkspace allows switching to Políticas de Desconto an
   text = JSON.stringify(component.toJSON());
   assert.ok(text.includes('Políticas de Desconto Institucionais'), 'Discount policies view is active');
 });
+
+test('FinanceDiscountPolicyCreateDialog renders structured section hierarchy and financial input semantics (UX-01, UX-02, UX-03)', async () => {
+  const mockClient = createMockClient();
+  let component: any;
+  await act(async () => {
+    component = create(React.createElement(FinanceDiscountPolicyView, { client: mockClient }));
+  });
+
+  // Open modal
+  const newBtn = component.root.find((el: any) => el.props.id === 'btn-nova-politica-desconto');
+  await act(async () => {
+    newBtn.props.onClick();
+  });
+
+  const text = JSON.stringify(component.toJSON());
+  // UX-01 Financial dialog grammar
+  assert.ok(text.includes('Nova Política de Desconto'), 'Renders financial header');
+  // UX-02 Section hierarchy
+  assert.ok(text.includes('Identificação') || text.includes('Identificação da Política'), 'Renders Identificação section');
+  assert.ok(text.includes('Regra Financeira') || text.includes('Regra de Desconto'), 'Renders Regra Financeira section');
+  assert.ok(text.includes('Vigência') || text.includes('Período de Vigência'), 'Renders Vigência section');
+  // UX-03 Financial input semantics (% / Currency)
+  assert.ok(text.includes('%') || text.includes('Percentagem'), 'Renders percentage semantic indicator');
+});
+
+test('FinanceDiscountPolicyCreateDialog provides guided field-level validation (UX-04)', async () => {
+  const mockClient = createMockClient();
+  let component: any;
+  await act(async () => {
+    component = create(React.createElement(FinanceDiscountPolicyView, { client: mockClient }));
+  });
+
+  // Open modal
+  const newBtn = component.root.find((el: any) => el.props.id === 'btn-nova-politica-desconto');
+  await act(async () => {
+    newBtn.props.onClick();
+  });
+
+  // Try submitting empty form
+  const form = component.root.find((el: any) => el.type === 'form');
+  await act(async () => {
+    form.props.onSubmit({ preventDefault: () => {} });
+  });
+
+  const text = JSON.stringify(component.toJSON());
+  // Guided validation message in Portuguese
+  assert.ok(text.includes('obrigatório') || text.includes('Obrigatório'), 'Shows guided validation message');
+});

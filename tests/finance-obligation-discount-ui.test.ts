@@ -157,7 +157,7 @@ test('FinanceOperationalTruthPanels renders contextual actions correctly based o
 
   // Trigger apply discount
   const applyBtn = component.root.findAll(
-    (el: any) => el.type === 'button' && el.children && el.children.includes('Aplicar desconto institucional')
+    (el: any) => el.type === 'button' && el.props.role === 'menuitem'
   )[0];
   await act(async () => {
     applyBtn.props.onClick();
@@ -376,4 +376,30 @@ test('FinanceObligationDiscountView handles Escape key to cancel', async () => {
   });
 
   assert.ok(cancelled, 'onCancel triggered on Escape key');
+});
+
+test('FinanceOperationalTruthPanels renders contextual actions with distinct semantic hierarchy (UX-05)', async () => {
+  let component: any;
+  await act(async () => {
+    component = create(
+      React.createElement(FinanceOperationalTruthPanels, {
+        openObligations: [sampleObligation, sampleObligationWithActiveDiscount],
+        confirmedUnallocatedPayments: [],
+        onRegisterAdjustment: (_ob) => {},
+        onApplyDiscount: (_ob) => {},
+        onRevokeDiscount: (_ob) => {},
+      })
+    );
+  });
+
+  // Open menu for obligation with active discount
+  const menuBtn2 = component.root.find((el: any) => el.props['data-testid'] === 'obligation-actions-ob-200');
+  await act(async () => {
+    menuBtn2.props.onClick();
+  });
+
+  const text = JSON.stringify(component.toJSON());
+  // Both adjustment and revoke actions are present with semantic distinction
+  assert.ok(text.includes('Registar correção'), 'Adjustment action is available');
+  assert.ok(text.includes('Revogar desconto'), 'Revoke action is present for discounted obligation');
 });

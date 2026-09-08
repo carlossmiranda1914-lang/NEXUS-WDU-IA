@@ -19,6 +19,8 @@ function formatDate(iso: string): string {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   } catch {
     return iso;
@@ -63,14 +65,16 @@ export function FinanceOperationalHistory({
           </div>
           <div>
             <h3 className={`font-semibold ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
-              Histórico financeiro
+              Histórico Financeiro
             </h3>
             <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-              Linha temporal cronológica de cobranças e recebimentos
+              Movimentos cronológicos imutáveis: cobranças, recebimentos, correções e concessões
             </p>
           </div>
         </div>
-        <span className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+        <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${
+          isLight ? 'bg-zinc-100 text-zinc-600' : 'bg-zinc-800 text-zinc-400'
+        }`}>
           {history.length} {history.length === 1 ? 'registo' : 'registos'}
         </span>
       </div>
@@ -93,7 +97,7 @@ export function FinanceOperationalHistory({
                 <div
                   key={`ob-${item.id}`}
                   data-testid={`history-item-obligation-${item.id}`}
-                  className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-4"
+                  className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-4 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 px-2 rounded-lg transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <span className={`px-2 py-0.5 text-xs font-semibold rounded ${
@@ -111,7 +115,7 @@ export function FinanceOperationalHistory({
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className={`text-sm font-semibold ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
+                    <span className={`text-sm font-semibold font-mono ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
                       {formatMoney(ob.amount.amount, ob.amount.currency)}
                     </span>
                   </div>
@@ -125,7 +129,7 @@ export function FinanceOperationalHistory({
                 <div
                   key={`pay-${item.id}`}
                   data-testid={`history-item-payment-${item.id}`}
-                  className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-4"
+                  className="py-3.5 first:pt-0 last:pb-0 flex items-center justify-between gap-4 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 px-2 rounded-lg transition-colors"
                 >
                   <div className="flex items-center gap-3">
                     <span className={`px-2 py-0.5 text-xs font-semibold rounded ${
@@ -144,7 +148,7 @@ export function FinanceOperationalHistory({
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                    <span className="text-sm font-semibold font-mono text-emerald-600 dark:text-emerald-400">
                       +{formatMoney(pay.amount.amount, pay.amount.currency)}
                     </span>
                   </div>
@@ -158,24 +162,49 @@ export function FinanceOperationalHistory({
                 <article
                   key={`allocation-${item.id}`}
                   data-testid={`history-item-allocation-${item.id}`}
-                  className={`border-l-2 py-3.5 pl-4 ${
+                  className={`border-l-2 py-3.5 pl-4 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 rounded-r-lg transition-colors ${
                     isLight ? 'border-sky-300 text-zinc-900' : 'border-sky-700 text-zinc-100'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className={`rounded px-2 py-0.5 text-xs font-semibold ${isLight ? 'bg-sky-100 text-sky-800' : 'bg-sky-950/80 text-sky-200'}`}>Recebimento associado</span>
-                      <div><p className="text-sm font-medium">Associação registada</p><p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>{formatDate(item.occurredAt)}</p></div>
+                      <span className={`rounded px-2 py-0.5 text-xs font-semibold ${isLight ? 'bg-sky-100 text-sky-800' : 'bg-sky-950/80 text-sky-200'}`}>
+                        Associação
+                      </span>
+                      <div>
+                        <p className="text-sm font-medium">Recebimento associado à cobrança</p>
+                        <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                          {formatDate(item.occurredAt)}
+                        </p>
+                      </div>
                     </div>
-                    <strong className={`shrink-0 text-sm ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>{formatMoney(allocation.amount.amount, allocation.amount.currency)}</strong>
+                    <strong className={`shrink-0 text-sm font-mono ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
+                      {formatMoney(allocation.amount.amount, allocation.amount.currency)}
+                    </strong>
                   </div>
                   {allocation.reversals.map((reversal) => (
                     <div key={reversal.id} data-testid={`history-item-reversal-${reversal.id}`} className={`ml-5 mt-2 border-l-2 py-2 pl-3 text-sm ${isLight ? 'border-amber-300 text-zinc-700' : 'border-amber-700 text-zinc-200'}`}>
-                      <div className="flex items-center justify-between gap-3"><span className="font-semibold">Associação revertida</span><strong>{formatMoney(reversal.amount.amount, reversal.amount.currency)}</strong></div>
-                      <p className={`mt-1 text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>{formatDate(reversal.occurredAt || reversal.effectiveAt)} · Motivo: {reversal.reason}</p>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-semibold text-xs text-amber-700 dark:text-amber-400">↺ Associação revertida</span>
+                        <strong className="font-mono text-xs">{formatMoney(reversal.amount.amount, reversal.amount.currency)}</strong>
+                      </div>
+                      <p className={`mt-1 text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                        {formatDate(reversal.occurredAt || reversal.effectiveAt)} · Motivo: {reversal.reason}
+                      </p>
                     </div>
                   ))}
-                  {onReverse && <button data-testid={`allocation-reverse-action-${allocation.id}`} type="button" onClick={() => onReverse(allocation)} className={`mt-3 rounded-md border px-3 py-2 text-sm font-medium ${isLight ? 'border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50' : 'border-zinc-600 bg-zinc-800 text-zinc-100 hover:bg-zinc-700'}`}>Reverter associação</button>}
+                  {onReverse && (
+                    <button
+                      data-testid={`allocation-reverse-action-${allocation.id}`}
+                      type="button"
+                      onClick={() => onReverse(allocation)}
+                      className={`mt-3 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        isLight ? 'border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50' : 'border-zinc-600 bg-zinc-800 text-zinc-100 hover:bg-zinc-700'
+                      }`}
+                    >
+                      Reverter associação
+                    </button>
+                  )}
                 </article>
               );
             }
@@ -187,18 +216,27 @@ export function FinanceOperationalHistory({
                 <article
                   key={`adjustment-${item.id}`}
                   data-testid={`history-item-adjustment-${item.id}`}
-                  className={`border-l-2 py-3.5 pl-4 ${
+                  className={`border-l-2 py-3.5 pl-4 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/20 rounded-r-lg transition-colors ${
                     isLight ? 'border-violet-300 text-zinc-900' : 'border-violet-700 text-zinc-100'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                      <span className={`rounded px-2 py-0.5 text-xs font-semibold ${isLight ? 'bg-violet-100 text-violet-800' : 'bg-violet-950/80 text-violet-200'}`}>Correção registada</span>
-                      <p className="mt-2 text-sm font-medium">{adjustment.obligationDescription} · {direction}</p>
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded px-2 py-0.5 text-xs font-semibold ${isLight ? 'bg-violet-100 text-violet-800' : 'bg-violet-950/80 text-violet-200'}`}>
+                          Correção registada
+                        </span>
+                        <span className="text-xs font-bold text-violet-600 dark:text-violet-400">
+                          {adjustment.direction === 'increase' ? '↑ Aumento' : '↓ Redução'}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-sm font-medium">{adjustment.obligationDescription} · {direction}</p>
                       <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>{formatDate(item.occurredAt)} · Motivo: {adjustment.reason}</p>
                       {adjustment.compensatesAdjustmentId && <p className={`mt-1 text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>Compensa uma correção anterior.</p>}
                     </div>
-                    <strong className={`shrink-0 text-sm ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>{adjustment.direction === 'increase' ? '+' : '-'}{formatMoney(adjustment.amount.amount, adjustment.amount.currency)}</strong>
+                    <strong className={`shrink-0 text-sm font-mono ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
+                      {adjustment.direction === 'increase' ? '+' : '-'}{formatMoney(adjustment.amount.amount, adjustment.amount.currency)}
+                    </strong>
                   </div>
                 </article>
               );
@@ -210,17 +248,17 @@ export function FinanceOperationalHistory({
                 <article
                   key={`discount-applied-${item.id}`}
                   data-testid={`history-item-discount-applied-${item.id}`}
-                  className={`border-l-2 py-3.5 pl-4 ${
-                    isLight ? 'border-emerald-400 text-zinc-900' : 'border-emerald-600 text-zinc-100'
+                  className={`border-l-2 py-3.5 pl-4 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 rounded-r-lg transition-colors ${
+                    isLight ? 'border-emerald-500 text-zinc-900' : 'border-emerald-500 text-zinc-100'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className={`rounded px-2 py-0.5 text-xs font-semibold ${isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-950/80 text-emerald-300'}`}>
-                          Desconto aplicado
+                          % Desconto aplicado
                         </span>
-                        <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                        <span className="font-mono text-xs font-bold px-1.5 py-0.2 rounded bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                           {discount.policyCode}
                         </span>
                       </div>
@@ -233,7 +271,7 @@ export function FinanceOperationalHistory({
                         {discount.actorName ? ` · Operador: ${discount.actorName}` : ''}
                       </p>
                     </div>
-                    <strong className="shrink-0 text-sm text-emerald-600 dark:text-emerald-400">
+                    <strong className="shrink-0 text-sm font-mono text-emerald-600 dark:text-emerald-400 font-bold">
                       -{formatMoney(discount.amount.amount, discount.amount.currency)}
                     </strong>
                   </div>
@@ -247,24 +285,29 @@ export function FinanceOperationalHistory({
                 <article
                   key={`discount-revoked-${item.id}`}
                   data-testid={`history-item-discount-revoked-${item.id}`}
-                  className={`border-l-2 py-3.5 pl-4 ${
-                    isLight ? 'border-amber-400 text-zinc-900' : 'border-amber-600 text-zinc-100'
+                  className={`border-l-2 py-3.5 pl-4 hover:bg-amber-50/30 dark:hover:bg-amber-950/10 rounded-r-lg transition-colors ${
+                    isLight ? 'border-amber-500 text-zinc-900' : 'border-amber-500 text-zinc-100'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                      <span className={`rounded px-2 py-0.5 text-xs font-semibold ${isLight ? 'bg-amber-100 text-amber-800' : 'bg-amber-950/80 text-amber-300'}`}>
-                        Desconto revogado
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded px-2 py-0.5 text-xs font-semibold ${isLight ? 'bg-amber-100 text-amber-800' : 'bg-amber-950/80 text-amber-300'}`}>
+                          ↺ Desconto revogado
+                        </span>
+                        <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                          Restauro de saldo devido
+                        </span>
+                      </div>
                       <p className="mt-1.5 text-sm font-medium">
-                        {revocation.obligationDescription ? `${revocation.obligationDescription} · ` : ''}Restauro de saldo devido
+                        {revocation.obligationDescription ? `${revocation.obligationDescription} · ` : ''}Compensação financeira
                       </p>
                       <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
                         {formatDate(item.occurredAt)} · Motivo: {revocation.reason}
                         {revocation.actorName ? ` · Operador: ${revocation.actorName}` : ''}
                       </p>
                     </div>
-                    <strong className={`shrink-0 text-sm ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
+                    <strong className={`shrink-0 text-sm font-mono ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
                       +{formatMoney(revocation.amount.amount, revocation.amount.currency)}
                     </strong>
                   </div>

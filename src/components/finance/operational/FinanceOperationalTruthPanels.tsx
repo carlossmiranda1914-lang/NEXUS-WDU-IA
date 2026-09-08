@@ -147,45 +147,25 @@ export function FinanceOperationalTruthPanels({
                           onKeyDown={(event) => {
                             if (event.key === 'Escape') setOpenMenuId(null);
                           }}
-                          className={`rounded px-2 py-1 text-xs font-semibold ${
-                            isLight ? 'text-amber-800 hover:bg-amber-50' : 'text-amber-300 hover:bg-zinc-800'
+                          className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                            isLight
+                              ? 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 shadow-xs'
+                              : 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700'
                           }`}
                         >
-                          …
+                          Ações ▾
                         </button>
                         {openMenuId === ob.id && (
                           <div
                             role="menu"
-                            className={`absolute right-0 z-20 mt-1 min-w-48 rounded-lg border p-1 shadow-lg ${
+                            className={`absolute right-0 z-20 mt-1 min-w-56 rounded-xl border p-1.5 shadow-xl ${
                               isLight ? 'border-zinc-200 bg-white text-zinc-900' : 'border-zinc-700 bg-zinc-900 text-zinc-100'
                             }`}
                           >
-                            {onRegisterAdjustment && (
-                              <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => {
-                                  setOpenMenuId(null);
-                                  onRegisterAdjustment(ob);
-                                }}
-                                className="w-full rounded px-3 py-2 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                              >
-                                Registar correção
-                              </button>
-                            )}
-                            {ob.activeDiscount && onRevokeDiscount && (
-                              <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => {
-                                  setOpenMenuId(null);
-                                  onRevokeDiscount(ob);
-                                }}
-                                className="w-full rounded px-3 py-2 text-left text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                              >
-                                Revogar desconto
-                              </button>
-                            )}
+                            <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-100 dark:border-zinc-800 mb-1">
+                              Operações da Cobrança
+                            </div>
+
                             {!ob.activeDiscount && onApplyDiscount && (
                               <button
                                 type="button"
@@ -194,9 +174,67 @@ export function FinanceOperationalTruthPanels({
                                   setOpenMenuId(null);
                                   onApplyDiscount(ob);
                                 }}
-                                className="w-full rounded px-3 py-2 text-left text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                className="w-full rounded-lg px-2.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors group"
                               >
-                                Aplicar desconto institucional
+                                <span className="inline-flex items-center justify-center h-5 w-5 rounded font-bold text-[11px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
+                                  %
+                                </span>
+                                <div>
+                                  <p className="font-semibold text-emerald-700 dark:text-emerald-400">
+                                    Aplicar desconto institucional
+                                  </p>
+                                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                                    Conceder bolsa ou redução regrada
+                                  </p>
+                                </div>
+                              </button>
+                            )}
+
+                            {onRegisterAdjustment && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  onRegisterAdjustment(ob);
+                                }}
+                                className="w-full rounded-lg px-2.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                              >
+                                <span className="inline-flex items-center justify-center h-5 w-5 rounded font-bold text-[11px] bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200">
+                                  ±
+                                </span>
+                                <div>
+                                  <p className="font-medium text-zinc-800 dark:text-zinc-200">
+                                    Registar correção
+                                  </p>
+                                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                                    Ajuste de valor por erro ou retificação
+                                  </p>
+                                </div>
+                              </button>
+                            )}
+
+                            {ob.activeDiscount && onRevokeDiscount && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  onRevokeDiscount(ob);
+                                }}
+                                className="w-full rounded-lg px-2.5 py-2 text-left text-xs flex items-center gap-2 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors border-t border-zinc-100 dark:border-zinc-800 mt-1 pt-1.5"
+                              >
+                                <span className="inline-flex items-center justify-center h-5 w-5 rounded font-bold text-[11px] bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                                  ↺
+                                </span>
+                                <div>
+                                  <p className="font-semibold text-amber-700 dark:text-amber-400">
+                                    Revogar desconto
+                                  </p>
+                                  <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                                    Restaurar saldo ({ob.activeDiscount.policyCode})
+                                  </p>
+                                </div>
                               </button>
                             )}
                           </div>
