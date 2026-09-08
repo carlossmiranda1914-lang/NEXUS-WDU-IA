@@ -9,7 +9,7 @@
 - Attendance is the authority for attendance business decisions only.
 - Every request/event is institution-scoped, authenticated, auditable and idempotency-aware.
 - No browser input proves academic authority.
-- A dependency outage cannot be silently treated as authorisation.
+- A dependency outage cannot be silently treated as authorisation; online initiation or confirmation is denied until Academic Core/IAM confirmation succeeds.
 - Contract implementation remains out of scope.
 
 ## 2. Academic Core
@@ -90,7 +90,7 @@ Each integration contract must specify:
 - audit fields; and
 - invalid-reference response.
 
-At least-once delivery with idempotent recipient processing is the minimum baseline for asynchronous events unless a later approved contract states a stricter delivery guarantee.
+Asynchronous events are delivered at least once; Attendance must implement idempotent recipient processing. Duplicate delivery cannot create duplicate roster changes, evidence links, alerts, decisions or audit outcomes.
 
 ## 7. Explicit exclusions
 
