@@ -61,6 +61,9 @@ A subsequent attendance change requires a revision under the correction workflow
 ## 6. Temporal and institutional context
 
 - Every record is scoped to one institution.
+- A session keeps the institutional-policy version effective when it was initiated; that policy governs its confirmation.
+- Only an institutionally authorised role may publish/change Attendance policy, through auditable approval and within global/jurisdictional limits.
+- A more restrictive global or jurisdictional rule may re-evaluate pending work when required. The prior version, new rule and re-evaluation remain historical evidence.
 - Institutional policy selects the operational timezone within platform global rules.
 - Canonical timestamps must remain unambiguous; user-facing rendering follows the applicable institutional timezone.
 - Attendance uses a global jurisdictional retention profile. An institution may configure only within that profile.
