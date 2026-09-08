@@ -63,6 +63,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Policy for session confirmation | Version effective at session initiation |
 | More restrictive global/jurisdictional rule | May re-evaluate pending work when required; preserve history |
 | Attendance policy publication | Institution-authorised role with audited approval |
+| First-cut required experiences | Teacher register/confirm; coordination justification/conflict decisions and alert queue; guardian consultation/justification; learner own consultation |
+| First-cut reports | File export |
+| Learner attendance access | Own attendance information only |
 
 ## 4. Authority boundary
 
@@ -199,4 +202,15 @@ A session is not a timetable. It records that an authorised attendance occasion 
 1. A session is governed at confirmation by the institutional-policy version effective when the session was initiated. Its reference is immutable on the session record.
 2. A new global or jurisdictional rule that is more restrictive may re-evaluate already-pending sessions, justifications or corrections when legally or globally required. The original policy reference and all resulting actions remain historical evidence.
 3. Attendance policy may be published or changed only by an institutionally authorised role through an auditable approval process, and only within global/jurisdictional limits.
+
+## 19. First-cut experience and reporting decisions
+
+1. Attendance-01 must provide, in its first implementation cut:
+   - teacher initiation, registration and confirmation of attendance;
+   - coordination decision flows for justifications and offline synchronization conflicts;
+   - a coordination queue for alerts and required pending actions;
+   - guardian consultation of their own learner and permitted justification submission; and
+   - learner consultation limited strictly to their own attendance information.
+2. The first cut includes report export to file. The export authorisation, scope, content, format, expiry and audit remain to be specified before implementation; no uncontrolled export is implied by this decision.
+3. Learner access can never reveal another learner's attendance, a guardian's private submission, staff-only notes, internal decision rationale or unapproved evidence.
 
