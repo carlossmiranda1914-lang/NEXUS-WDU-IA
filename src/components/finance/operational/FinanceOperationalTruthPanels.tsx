@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type {
   FinanceOperationalObligation,
   FinanceOperationalPayment,
@@ -53,6 +53,7 @@ export function FinanceOperationalTruthPanels({
   onRegisterAdjustment,
 }: FinanceOperationalTruthPanelsProps) {
   const isLight = theme === 'light';
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -127,7 +128,7 @@ export function FinanceOperationalTruthPanels({
                       Original: {formatMoney((ob.original || ob.amount).amount, (ob.original || ob.amount).currency)}
                     </span>
                     {ob.covered && ob.uncovered && <span className="block text-xs text-zinc-500">Coberto: {formatMoney(ob.covered.amount, ob.covered.currency)} · Por cobrir: {formatMoney(ob.uncovered.amount, ob.uncovered.currency)}</span>}
-                    {onRegisterAdjustment && <button type="button" data-testid={`obligation-actions-${ob.id}`} aria-label={`Mais ações para ${ob.description}`} onClick={() => onRegisterAdjustment(ob)} className={`mt-2 rounded px-2 py-1 text-xs font-semibold ${isLight?'text-amber-800 hover:bg-amber-50':'text-amber-300 hover:bg-zinc-800'}`}>… <span className="sr-only">Registar correção</span></button>}
+                    {onRegisterAdjustment && <div className="relative mt-2 inline-block"><button type="button" data-testid={`obligation-actions-${ob.id}`} aria-label={`Mais ações para ${ob.description}`} aria-expanded={openMenuId === ob.id} onClick={() => setOpenMenuId(openMenuId === ob.id ? null : ob.id)} onKeyDown={(event) => { if (event.key === 'Escape') setOpenMenuId(null); }} className={`rounded px-2 py-1 text-xs font-semibold ${isLight?'text-amber-800 hover:bg-amber-50':'text-amber-300 hover:bg-zinc-800'}`}>…</button>{openMenuId === ob.id && <div role="menu" className={`absolute right-0 z-20 mt-1 min-w-44 rounded-lg border p-1 shadow-lg ${isLight?'border-zinc-200 bg-white':'border-zinc-700 bg-zinc-900'}`}><button type="button" role="menuitem" onClick={() => { setOpenMenuId(null); onRegisterAdjustment(ob); }} className="w-full rounded px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800">Registar correção</button></div>}</div>}
                   </div>
                 </div>
               ))

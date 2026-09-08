@@ -268,7 +268,6 @@ export function FinanceOperationalContextWorkspace({
   if (reversalAllocation && context) {
     return <FinanceAllocationReverseView theme={theme} allocation={reversalAllocation} onCancel={() => setReversalAllocation(null)} onSuccess={() => { setReversalAllocation(null); loadContext(selectedAccountId); }} onReverse={(request) => allocationClient.reverse(reversalAllocation.id, { ...request, effectiveAt: new Date().toISOString() }).then(() => undefined)} />;
   }
-  if (adjustmentObligationId && context) return <FinanceObligationAdjustmentView theme={theme} obligations={context.openObligations.filter((item) => item.id === adjustmentObligationId)} onCancel={() => setAdjustmentObligationId(null)} onSubmit={(obligationId,input) => obligationAdjustmentClient.record(obligationId,input,`adjustment-${crypto.randomUUID()}`).then(() => { setAdjustmentObligationId(null); return loadContext(selectedAccountId); })} />;
 
   // Explicit Account Selection & Search view when no account is selected
   if (!selectedAccountId || !context) {
@@ -439,6 +438,17 @@ export function FinanceOperationalContextWorkspace({
             onReverse={setReversalAllocation}
           />
         </>
+      )}
+      {adjustmentObligationId && (
+        <FinanceObligationAdjustmentView
+          theme={theme}
+          obligations={context.openObligations.filter((item) => item.id === adjustmentObligationId)}
+          onCancel={() => setAdjustmentObligationId(null)}
+          onSubmit={(obligationId, input) => obligationAdjustmentClient.record(obligationId, input, `adjustment-${crypto.randomUUID()}`).then(() => {
+            setAdjustmentObligationId(null);
+            return loadContext(selectedAccountId);
+          })}
+        />
       )}
     </div>
   );
