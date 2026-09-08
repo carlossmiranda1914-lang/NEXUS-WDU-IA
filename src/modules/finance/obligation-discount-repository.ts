@@ -471,22 +471,19 @@ export class PostgresObligationDiscountRepository {
   ): Promise<ObligationDiscountRevocation> {
     const revocationInstant = new Date();
 
-    // 1. Find target discount
-    const discountRes = await client.query<DiscountRow>(
-      `SELECT * FROM finance_obligation_discounts
-       WHERE institution_id = $1 AND obligation_id = $2 AND id = $3
-       FOR UPDATE`,
-      [actor.institutionId, input.obligationId, input.discountId]
-    );
-    if (discountRes.rows.length === 0) {
-      throw new ObligationDiscountValidationError('Target discount fact not found', 'DISCOUNT_NOT_FOUND');
-    }
-    const targetDiscount = mapDiscount(discountRes.rows[0]);
+    // 1. Candidate lookup
+    const candidate = (
+      await client.query<{ financial_account_id: string }>(
+        `SELECT financial_account_id FROM finance_obligations WHERE institution_id = $1 AND id = $2`,
+        [actor.institutionId, input.obligationId]
+      )
+    ).rows[0];
+    if (!candidate) throw new ObligationDiscountValidationError('Obligation not found', 'DISCOUNT_NOT_FOUND');
 
     // Lock hierarchy Step 1: Account
     await client.query(
       `SELECT id FROM finance_financial_accounts WHERE institution_id = $1 AND id = $2 FOR UPDATE`,
-      [actor.institutionId, targetDiscount.financialAccountId]
+      [actor.institutionId, candidate.financial_account_id]
     );
 
     // Lock hierarchy Step 2: Obligation
@@ -498,7 +495,18 @@ export class PostgresObligationDiscountRepository {
     ).rows[0];
     if (!obligation) throw new ObligationDiscountValidationError('Obligation not found', 'DISCOUNT_NOT_FOUND');
 
-    // Lock hierarchy Step 5: Check if already revoked
+    // Lock hierarchy Step 5: Discounts & Revocations
+    const discountRes = await client.query<DiscountRow>(
+      `SELECT * FROM finance_obligation_discounts
+       WHERE institution_id = $1 AND obligation_id = $2 AND id = $3
+       FOR UPDATE`,
+      [actor.institutionId, input.obligationId, input.discountId]
+    );
+    if (discountRes.rows.length === 0) {
+      throw new ObligationDiscountValidationError('Target discount fact not found', 'DISCOUNT_NOT_FOUND');
+    }
+    const targetDiscount = mapDiscount(discountRes.rows[0]);
+
     const existingRevRes = await client.query(
       `SELECT id FROM finance_obligation_discount_revocations
        WHERE institution_id = $1 AND original_discount_id = $2

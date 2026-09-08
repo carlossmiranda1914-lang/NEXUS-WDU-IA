@@ -144,4 +144,3 @@ export function registerObligationDiscountRoutes(app: Express, pool: Pool, auth 
     }
   );
 }
-

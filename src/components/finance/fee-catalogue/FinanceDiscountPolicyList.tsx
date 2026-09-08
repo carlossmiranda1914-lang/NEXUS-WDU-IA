@@ -50,7 +50,7 @@ export function FinanceDiscountPolicyList({
               >
                 <td className="py-3.5 px-4">
                   <div className="font-semibold text-white tracking-wide">{p.code}</div>
-                  <div className="text-zinc-400 text-[11px] truncate max-w-xs">{p.name}</div>
+                  <div className="text-zinc-400 text-[11px] truncate max-w-xs">{activeVer.name}</div>
                 </td>
                 <td className="py-3.5 px-4">
                   <span

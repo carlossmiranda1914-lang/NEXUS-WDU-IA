@@ -8,7 +8,12 @@ import {
   CreateDiscountPolicyVersionInput,
   validateDiscountPolicyInputs,
 } from './discount-policy-model.ts';
-import { AuthenticatedActor } from './financial-context.ts';
+
+export interface AuthenticatedActor {
+  readonly institutionId: string;
+  readonly personId?: string | null;
+  readonly userId?: string | null;
+}
 
 export interface DiscountPolicyRepository {
   createDiscountPolicy(

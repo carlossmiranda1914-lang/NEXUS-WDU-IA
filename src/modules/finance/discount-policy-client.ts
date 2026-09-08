@@ -7,6 +7,14 @@ import type {
   CreateDiscountPolicyVersionInput,
 } from './discount-policy-model.ts';
 
+export type {
+  DiscountPolicySummary,
+  DiscountPolicy,
+  DiscountPolicyVersion,
+  CreateDiscountPolicyInput,
+  CreateDiscountPolicyVersionInput,
+};
+
 export class DiscountPolicyApiError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) {
     super(message);

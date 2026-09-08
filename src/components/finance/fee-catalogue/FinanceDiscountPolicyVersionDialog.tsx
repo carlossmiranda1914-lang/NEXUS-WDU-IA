@@ -30,8 +30,8 @@ export function FinanceDiscountPolicyVersionDialog({
 
   useEffect(() => {
     if (policy) {
-      setFormName(policy.name);
-      setFormDescription(policy.description || '');
+      setFormName(policy.latestVersion.name);
+      setFormDescription(policy.latestVersion.description || '');
       setFormMode(policy.latestVersion.calculationMode);
       setFormValue(policy.latestVersion.value);
       setFormCurrency(policy.latestVersion.currency || 'EUR');

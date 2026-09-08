@@ -468,7 +468,7 @@ export function FinanceOperationalContextWorkspace({
           onCancel={() => setDiscountObligation(null)}
           onApply={async (obligationId, policyId, reason) => {
             const key = `discount-apply-${crypto.randomUUID()}`;
-            await obligationDiscountClient.apply(
+            await obligationDiscountClient.applyDiscount(
               obligationId,
               { discountPolicyId: policyId, reason },
               key
@@ -478,9 +478,10 @@ export function FinanceOperationalContextWorkspace({
           }}
           onRevoke={async (obligationId, discountId, reason) => {
             const key = `discount-revoke-${crypto.randomUUID()}`;
-            await obligationDiscountClient.revoke(
+            await obligationDiscountClient.revokeDiscount(
               obligationId,
-              { discountId, reason },
+              discountId,
+              reason,
               key
             );
             setDiscountObligation(null);

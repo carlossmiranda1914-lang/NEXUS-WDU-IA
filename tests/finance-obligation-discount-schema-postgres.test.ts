@@ -45,7 +45,7 @@ try {
     // 1. Journal validation for obligation_discount
     const journalRepo = new PostgresJournalRepository(c);
     const actor = { personId, personName: 'Actor', identityEmail: null, membershipId: randomUUID(), institutionId: instA, institutionName: 'Inst A', institutionSlug: 'inst-a', role: 'financial' as const };
-    
+
     const journalTx = await journalRepo.confirmInTransaction(c, {
       institutionId: instA,
       commandId: randomUUID(),
