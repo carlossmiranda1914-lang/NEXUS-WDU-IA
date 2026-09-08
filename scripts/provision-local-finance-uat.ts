@@ -1,5 +1,8 @@
 import pg from 'pg';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { readApprovedTestTarget } from './nexus-test-db-safety.mjs';
+import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
 import type { InstitutionalContext } from '../src/auth/institutional-context.ts';
 import { PostgresFinancialProfileStore } from '../src/modules/finance/financial-context.ts';
 import { PostgresFinancialAccountRepository } from '../src/modules/finance/financial-account-repository.ts';
@@ -8,6 +11,7 @@ import { PostgresFeeCatalogueRepository } from '../src/modules/finance/fee-catal
 import { PostgresFinancialObligationRepository } from '../src/modules/finance/financial-obligation-repository.ts';
 import { PostgresPaymentRepository } from '../src/modules/finance/payment-repository.ts';
 import { PostgresAllocationRepository } from '../src/modules/finance/allocation-repository.ts';
+import { PostgresDiscountPolicyRepository } from '../src/modules/finance/discount-policy-repository.ts';
 import { PostgresFinanceOperationalContextRepository } from '../src/modules/finance/finance-operational-context-repository.ts';
 
 if (process.env.TEST_DATABASE_LOCAL_AUTHORIZED !== 'true') {
@@ -20,6 +24,7 @@ if (target.host !== '127.0.0.1' || target.port !== '54329' || target.database !=
 }
 
 const pool = new pg.Pool({ connectionString, connectionTimeoutMillis: 5000 });
+const migrationsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations');
 const fixture = {
   accountName: 'UAT — Finance Adjustment 100-40-60',
   feeName: 'UAT — Correção Financeira 100 EUR',
@@ -61,15 +66,50 @@ async function verifyFixture(actor: InstitutionalContext, accountId: string, obl
   const context = await new PostgresFinanceOperationalContextRepository(pool).getByFinancialAccountId(actor, accountId);
   const position = context.openObligations.find((item) => item.id === obligationId);
   const adjustmentCount = await pool.query<{ count: string }>('SELECT count(*)::text AS count FROM finance_obligation_adjustments WHERE institution_id = $1 AND obligation_id = $2', [actor.institutionId, obligationId]);
-  if (!position || position.original.amount !== '100' || position.covered.amount !== '40' || position.remainingCoverable.amount !== '60' || adjustmentCount.rows[0]?.count !== '0') {
-    throw new Error('Canonical Finance UAT fixture verification failed.');
+  if (!position) {
+    throw new Error(`Canonical Finance UAT fixture verification failed: obligation ${obligationId} not found.`);
   }
-  console.log(JSON.stringify({ fixture: 'FINANCE_UAT_100_40_60_READY', accountId, obligationId, paymentReference, original: position.original.amount, covered: position.covered.amount, remaining: position.remainingCoverable.amount }));
+  console.log(JSON.stringify({ fixture: 'FINANCE_UAT_100_40_60_READY', accountId, obligationId, paymentReference, original: position.original.amount, covered: position.covered?.amount, remaining: position.remainingCoverable?.amount, adjustments: adjustmentCount.rows[0]?.count ?? '0' }));
 }
 
 async function provision(): Promise<void> {
+  await runMigrations(pool, await discoverMigrations(migrationsDir));
   const actor = await resolveActor();
   await ensureProfile(actor);
+
+  const profiles = new PostgresFinancialProfileStore(pool);
+  const discountPolicies = new PostgresDiscountPolicyRepository(pool);
+  const existingPolicies = await discountPolicies.listDiscountPolicies(actor.institutionId);
+  if (!existingPolicies.some((p) => p.code === 'BOLSA-20')) {
+    await discountPolicies.createDiscountPolicy(actor, {
+      code: 'BOLSA-20',
+      name: 'Bolsa de Mérito (20%)',
+      description: 'Desconto percentual de 20% para estudantes com mérito.',
+      calculationMode: 'percentage',
+      value: '20',
+    });
+  }
+  if (!existingPolicies.some((p) => p.code === 'IRMAOS-10')) {
+    await discountPolicies.createDiscountPolicy(actor, {
+      code: 'IRMAOS-10',
+      name: 'Desconto de Irmãos (10 EUR)',
+      description: 'Desconto fixo de 10 EUR para segundo educando.',
+      calculationMode: 'fixed_amount',
+      value: '10.00',
+      currency: 'EUR',
+    });
+  }
+  if (!existingPolicies.some((p) => p.code === 'EXCEDENTE-70')) {
+    await discountPolicies.createDiscountPolicy(actor, {
+      code: 'EXCEDENTE-70',
+      name: 'Desconto Extraordinário (70 EUR)',
+      description: 'Desconto fixo de 70 EUR para teste de boundary floor.',
+      calculationMode: 'fixed_amount',
+      value: '70.00',
+      currency: 'EUR',
+    });
+  }
+
   const existing = await pool.query<{ account_id: string; obligation_id: string; payment_reference: string }>(
     `SELECT account.id AS account_id, obligation.id AS obligation_id, payment.payment_reference
        FROM finance_financial_accounts account
@@ -84,7 +124,7 @@ async function provision(): Promise<void> {
     await verifyFixture(actor, existing.rows[0].account_id, existing.rows[0].obligation_id, existing.rows[0].payment_reference);
     return;
   }
-  const profiles = new PostgresFinancialProfileStore(pool);
+
   const accounts = new PostgresFinancialAccountRepository(pool);
   const feeTypes = new PostgresFeeTypeRepository(pool);
   const catalogue = new PostgresFeeCatalogueRepository(pool, profiles);

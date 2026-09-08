@@ -204,6 +204,74 @@ export function FinanceOperationalHistory({
               );
             }
 
+            if (item.kind === 'discount_applied') {
+              const discount = item.discount;
+              return (
+                <article
+                  key={`discount-applied-${item.id}`}
+                  data-testid={`history-item-discount-applied-${item.id}`}
+                  className={`border-l-2 py-3.5 pl-4 ${
+                    isLight ? 'border-emerald-400 text-zinc-900' : 'border-emerald-600 text-zinc-100'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded px-2 py-0.5 text-xs font-semibold ${isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-950/80 text-emerald-300'}`}>
+                          Desconto aplicado
+                        </span>
+                        <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                          {discount.policyCode}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-sm font-medium">
+                        {discount.policyName}
+                        {discount.obligationDescription ? ` · ${discount.obligationDescription}` : ''}
+                      </p>
+                      <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                        {formatDate(item.occurredAt)} · Motivo: {discount.reason}
+                        {discount.actorName ? ` · Operador: ${discount.actorName}` : ''}
+                      </p>
+                    </div>
+                    <strong className="shrink-0 text-sm text-emerald-600 dark:text-emerald-400">
+                      -{formatMoney(discount.amount.amount, discount.amount.currency)}
+                    </strong>
+                  </div>
+                </article>
+              );
+            }
+
+            if (item.kind === 'discount_revoked') {
+              const revocation = item.revocation;
+              return (
+                <article
+                  key={`discount-revoked-${item.id}`}
+                  data-testid={`history-item-discount-revoked-${item.id}`}
+                  className={`border-l-2 py-3.5 pl-4 ${
+                    isLight ? 'border-amber-400 text-zinc-900' : 'border-amber-600 text-zinc-100'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <span className={`rounded px-2 py-0.5 text-xs font-semibold ${isLight ? 'bg-amber-100 text-amber-800' : 'bg-amber-950/80 text-amber-300'}`}>
+                        Desconto revogado
+                      </span>
+                      <p className="mt-1.5 text-sm font-medium">
+                        {revocation.obligationDescription ? `${revocation.obligationDescription} · ` : ''}Restauro de saldo devido
+                      </p>
+                      <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                        {formatDate(item.occurredAt)} · Motivo: {revocation.reason}
+                        {revocation.actorName ? ` · Operador: ${revocation.actorName}` : ''}
+                      </p>
+                    </div>
+                    <strong className={`shrink-0 text-sm ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
+                      +{formatMoney(revocation.amount.amount, revocation.amount.currency)}
+                    </strong>
+                  </div>
+                </article>
+              );
+            }
+
             return null;
           })
         )}
@@ -211,3 +279,5 @@ export function FinanceOperationalHistory({
     </div>
   );
 }
+
+export default FinanceOperationalHistory;

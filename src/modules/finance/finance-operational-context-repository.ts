@@ -73,6 +73,20 @@ interface ObligationRow {
   notes: string | null;
   covered?: string | number;
   net_adjustments?: string | number;
+  gross_discounts?: string | number;
+  revoked_discounts?: string | number;
+}
+
+interface ActiveDiscountRow {
+  id: string;
+  obligation_id: string;
+  policy_id: string;
+  policy_code: string;
+  policy_name: string;
+  amount: string | number;
+  currency: string;
+  applied_at: string | Date;
+  reason: string;
 }
 
 interface PaymentRow {
@@ -118,6 +132,30 @@ interface AdjustmentHistoryRow {
   reason: string;
   compensates_adjustment_id: string | null;
   recorded_at: string | Date;
+}
+
+interface DiscountHistoryRow {
+  id: string;
+  obligation_id: string;
+  policy_id: string;
+  policy_code: string;
+  policy_name: string;
+  amount: string | number;
+  currency: string;
+  reason: string;
+  applied_at: string | Date;
+  actor_name: string | null;
+}
+
+interface RevocationHistoryRow {
+  id: string;
+  original_discount_id: string;
+  obligation_id: string;
+  amount: string | number;
+  currency: string;
+  reason: string;
+  revoked_at: string | Date;
+  actor_name: string | null;
 }
 
 export class PostgresFinanceOperationalContextRepository {
@@ -233,6 +271,8 @@ export class PostgresFinanceOperationalContextRepository {
           WHERE a.institution_id = o.institution_id AND a.obligation_id = o.id
         ), 0)::text AS covered,
         COALESCE((SELECT SUM(CASE WHEN oa.direction='increase' THEN oa.amount ELSE -oa.amount END) FROM finance_obligation_adjustments oa WHERE oa.institution_id=o.institution_id AND oa.obligation_id=o.id),0)::text AS net_adjustments,
+        COALESCE((SELECT SUM(d.amount) FROM finance_obligation_discounts d WHERE d.institution_id=o.institution_id AND d.obligation_id=o.id),0)::text AS gross_discounts,
+        COALESCE((SELECT SUM(dr.amount) FROM finance_obligation_discount_revocations dr WHERE dr.institution_id=o.institution_id AND dr.obligation_id=o.id),0)::text AS revoked_discounts,
         fci.code AS fee_item_code,
         fcv.name AS fee_item_name
       FROM finance_obligations o
@@ -244,12 +284,65 @@ export class PostgresFinanceOperationalContextRepository {
       ORDER BY o.due_at ASC NULLS LAST, o.created_at DESC
     `;
     const obligationsRes = await client.query<ObligationRow>(obligationsSql, [actor.institutionId, financialAccountId]);
+
+    // Active discount lookup for open obligations
+    const activeDiscountsRes = await client.query<ActiveDiscountRow>(
+      `SELECT
+         d.id,
+         d.obligation_id,
+         d.policy_id,
+         d.policy_code,
+         d.policy_name,
+         d.amount,
+         d.currency,
+         d.applied_at,
+         d.reason
+       FROM finance_obligation_discounts d
+       JOIN finance_obligations o ON o.id = d.obligation_id AND o.institution_id = d.institution_id
+       WHERE d.institution_id = $1
+         AND o.financial_account_id = $2
+         AND NOT EXISTS (
+           SELECT 1 FROM finance_obligation_discount_revocations r
+           WHERE r.institution_id = d.institution_id AND r.original_discount_id = d.id
+         )`,
+      [actor.institutionId, financialAccountId]
+    );
+
+    const activeDiscountByObligationId = new Map<string, FinanceOperationalObligation['activeDiscount']>();
+    for (const row of activeDiscountsRes.rows) {
+      activeDiscountByObligationId.set(String(row.obligation_id), {
+        id: String(row.id),
+        policyId: String(row.policy_id),
+        policyCode: String(row.policy_code),
+        policyName: String(row.policy_name),
+        amount: Money.parse(String(row.amount), String(row.currency)).serialize(),
+        appliedAt: row.applied_at instanceof Date ? row.applied_at.toISOString() : new Date(String(row.applied_at)).toISOString(),
+        reason: String(row.reason),
+      });
+    }
+
     const openObligations: FinanceOperationalObligation[] = obligationsRes.rows.map((row) => {
       const desc = row.fee_item_name ? `${row.fee_item_name} (${row.fee_item_code})` : row.fee_item_code;
       const original = Money.parse(String(row.amount), String(row.currency));
       const netAdjustment = Money.parse(String(row.net_adjustments ?? '0'), String(row.currency));
-      const position = deriveObligationFinancialPosition({ original, adjustments: netAdjustment.compare(Money.parse('0', String(row.currency))) === 0 ? [] : [{ direction: netAdjustment.compare(Money.parse('0', String(row.currency))) > 0 ? 'increase' : 'decrease', amount: Money.parse(netAdjustment.canonicalAmount().replace(/^-/, ''), String(row.currency)) }], allocations: [Money.parse(String(row.covered ?? '0'), String(row.currency))], allocationReversals: [] });
+      const grossDiscount = Money.parse(String(row.gross_discounts ?? '0'), String(row.currency));
+      const revokedDiscount = Money.parse(String(row.revoked_discounts ?? '0'), String(row.currency));
+      const covered = Money.parse(String(row.covered ?? '0'), String(row.currency));
+
+      const position = deriveObligationFinancialPosition({
+        original,
+        adjustments: netAdjustment.compare(Money.parse('0', String(row.currency))) === 0 ? [] : [{
+          direction: netAdjustment.compare(Money.parse('0', String(row.currency))) > 0 ? 'increase' : 'decrease',
+          amount: Money.parse(netAdjustment.canonicalAmount().replace(/^-/, ''), String(row.currency)),
+        }],
+        discounts: grossDiscount.compare(Money.parse('0', String(row.currency))) === 0 ? [] : [{ id: 'gross', amount: grossDiscount }],
+        discountRevocations: revokedDiscount.compare(Money.parse('0', String(row.currency))) === 0 ? [] : [{ originalDiscountId: 'gross', amount: revokedDiscount }],
+        allocations: [covered],
+        allocationReversals: [],
+      });
+
       const coverage = deriveObligationCoveragePosition(position.effectiveDue.canonicalAmount(), String(row.covered ?? '0'), String(row.currency));
+
       return {
         id: String(row.id),
         description: desc,
@@ -258,11 +351,13 @@ export class PostgresFinanceOperationalContextRepository {
         amount: original.serialize(),
         original: original.serialize(),
         netAdjustments: position.netAdjustments.serialize(),
+        netDiscounts: position.netDiscounts.serialize(),
         effectiveDue: position.effectiveDue.serialize(),
-        covered: Money.parse(String(row.covered ?? '0'), String(row.currency)).serialize(),
+        covered: position.netCovered.serialize(),
         uncovered: position.remainingCoverable.serialize(),
         remainingCoverable: position.remainingCoverable.serialize(),
         coveragePosition: coverage.state,
+        activeDiscount: activeDiscountByObligationId.get(String(row.id)) ?? null,
         effectiveAt:
           row.effective_at instanceof Date
             ? row.effective_at.toISOString()
@@ -533,6 +628,87 @@ export class PostgresFinanceOperationalContextRepository {
           amount: Money.parse(String(adjustment.amount), String(adjustment.currency)).serialize(),
           reason: String(adjustment.reason),
           compensatesAdjustmentId: adjustment.compensates_adjustment_id ?? undefined,
+        },
+      });
+    }
+
+    // Discounts applied
+    const discountsRes = await client.query<DiscountHistoryRow>(
+      `SELECT
+         d.id,
+         d.obligation_id,
+         d.policy_id,
+         d.policy_code,
+         d.policy_name,
+         d.amount,
+         d.currency,
+         d.reason,
+         d.applied_at,
+         pe.name AS actor_name
+       FROM finance_obligation_discounts d
+       JOIN finance_obligations o ON o.id = d.obligation_id AND o.institution_id = d.institution_id
+       LEFT JOIN people pe ON pe.id = d.actor_person_id
+       WHERE d.institution_id = $1 AND o.financial_account_id = $2
+       ORDER BY d.applied_at DESC, d.id DESC`,
+      [actor.institutionId, financialAccountId]
+    );
+    for (const discount of discountsRes.rows) {
+      const occurredAt = discount.applied_at instanceof Date
+        ? discount.applied_at.toISOString()
+        : new Date(String(discount.applied_at)).toISOString();
+      history.push({
+        kind: 'discount_applied',
+        id: String(discount.id),
+        occurredAt,
+        discount: {
+          discountId: String(discount.id),
+          obligationId: String(discount.obligation_id),
+          obligationDescription: obligationDescriptions.get(String(discount.obligation_id)),
+          policyCode: String(discount.policy_code),
+          policyName: String(discount.policy_name),
+          amount: Money.parse(String(discount.amount), String(discount.currency)).serialize(),
+          reason: String(discount.reason),
+          appliedAt: occurredAt,
+          actorName: discount.actor_name ? String(discount.actor_name) : undefined,
+        },
+      });
+    }
+
+    // Discount revocations
+    const discountRevocationsRes = await client.query<RevocationHistoryRow>(
+      `SELECT
+         dr.id,
+         dr.original_discount_id,
+         dr.obligation_id,
+         dr.amount,
+         dr.currency,
+         dr.reason,
+         dr.revoked_at,
+         pe.name AS actor_name
+       FROM finance_obligation_discount_revocations dr
+       JOIN finance_obligations o ON o.id = dr.obligation_id AND o.institution_id = dr.institution_id
+       LEFT JOIN people pe ON pe.id = dr.actor_person_id
+       WHERE dr.institution_id = $1 AND o.financial_account_id = $2
+       ORDER BY dr.revoked_at DESC, dr.id DESC`,
+      [actor.institutionId, financialAccountId]
+    );
+    for (const rev of discountRevocationsRes.rows) {
+      const occurredAt = rev.revoked_at instanceof Date
+        ? rev.revoked_at.toISOString()
+        : new Date(String(rev.revoked_at)).toISOString();
+      history.push({
+        kind: 'discount_revoked',
+        id: String(rev.id),
+        occurredAt,
+        revocation: {
+          revocationId: String(rev.id),
+          originalDiscountId: String(rev.original_discount_id),
+          obligationId: String(rev.obligation_id),
+          obligationDescription: obligationDescriptions.get(String(rev.obligation_id)),
+          amount: Money.parse(String(rev.amount), String(rev.currency)).serialize(),
+          reason: String(rev.reason),
+          revokedAt: occurredAt,
+          actorName: rev.actor_name ? String(rev.actor_name) : undefined,
         },
       });
     }
