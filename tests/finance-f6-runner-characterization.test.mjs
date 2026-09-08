@@ -8,5 +8,7 @@ test('Finance F6 aggregate runner awaits child completion and bounds a stalled s
   assert.match(source, /child\.once\('close'/);
   assert.match(source, /setTimeout\(\(\) =>/);
   assert.match(source, /child\.kill\(\)/);
+  assert.match(source, /--result-file/);
+  assert.match(source, /writeFileSync\(resultFile/);
   assert.doesNotMatch(source, /spawnSync/);
 });

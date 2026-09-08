@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import dotenv from 'dotenv';
 
@@ -22,6 +22,12 @@ const suites = [
 ];
 
 const suiteTimeoutMs = 60_000;
+const resultFileIndex = process.argv.indexOf('--result-file');
+const resultFile = resultFileIndex >= 0 ? process.argv[resultFileIndex + 1] : null;
+if (resultFileIndex >= 0 && !resultFile) throw new Error('--result-file requires a path');
+const publishResult = result => {
+  if (resultFile) writeFileSync(resultFile, `${JSON.stringify(result)}\n`, 'utf8');
+};
 
 const runSuite = suite => new Promise(resolveRun => {
   let settled = false;
@@ -49,6 +55,7 @@ for (const suite of suites) {
   console.log(`\n>>> Running test suite: ${suite}`);
   const result = await runSuite(suite);
   if (result.status !== 0) {
+    publishResult({ status: 'FAIL', suite, exitCode: result.status, reason: result.reason, suitesTotal: suites.length });
     console.error(`\n[FINANCE-F6-DISCOUNT-POLICY] Suite failed on ${suite} (${result.reason})`);
     process.exit(result.status ?? 1);
   }
@@ -57,3 +64,4 @@ for (const suite of suites) {
 console.log('\n========================================');
 console.log('FINANCE_F6_01_AGGREGATE=PASS');
 console.log('========================================');
+publishResult({ status: 'PASS', exitCode: 0, suitesTotal: suites.length, suitesPass: suites.length, suitesFail: 0 });
