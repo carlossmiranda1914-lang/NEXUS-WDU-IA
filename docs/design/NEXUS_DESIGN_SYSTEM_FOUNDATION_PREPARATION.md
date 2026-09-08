@@ -55,14 +55,14 @@ The system must support the approved Nexus experience model:
 
 | Priority | Deliverable | Status |
 |---|---|---|
-| DS-P0 | Visual baseline audit: logo, current tokens, existing themes, component inventory and visual debt | In progress |
+| DS-P0 | Visual baseline audit: official source and initial code drift captured; full component inventory remains for controlled adoption | In progress |
 | DS-P1 | Source alignment: Nexus Aurora, approved mark/palette/theme strategy captured from official source | Complete |
-| DS-P2 | Foundations: colour roles, typography, spacing, elevation, radii, grids and iconography | Pending |
-| DS-P3 | Component system: buttons, fields, selection, navigation, cards, tables, dialogs, alerts, status and empty/error/loading states | Pending |
-| DS-P4 | Interaction and accessibility: focus, keyboard, screen reader, contrast, motion and feedback | Pending |
-| DS-P5 | Responsive/layout system: desktop, tablet and mobile behaviours | Pending |
-| DS-P6 | Operational patterns: workspace, queue, detail, review/decision, timeline/audit and reporting | Pending |
-| DS-P7 | Governance/adoption: tokens, versioning, migration rules, visual QA and module handoff | Pending |
+| DS-P2 | Foundations: colour roles, typography, spacing, elevation, radii, grids and iconography | In progress — specification created; contrast/token mapping evidence pending |
+| DS-P3 | Component system: buttons, fields, selection, navigation, cards, tables, dialogs, alerts, status and empty/error/loading states | In progress — specification created; approved visual component board pending |
+| DS-P4 | Interaction and accessibility: focus, keyboard, screen reader, contrast, motion and feedback | In progress — rules created; contrast and interaction evidence pending |
+| DS-P5 | Responsive/layout system: desktop, tablet and mobile behaviours | In progress — rules created; responsive visual evidence pending |
+| DS-P6 | Operational patterns: workspace, queue, detail, review/decision, timeline/audit and reporting | In progress — specification created; design review pending |
+| DS-P7 | Governance/adoption: tokens, versioning, migration rules, visual QA and module handoff | In progress — governance created; approval/evidence process pending |
 | Gate A | DESIGN_SYSTEM_CLOSED | Not reached |
 | Gate B | ATTENDANCE_DESIGN_READY | Blocked by Gate A |
 
@@ -86,4 +86,4 @@ The system must support the approved Nexus experience model:
 
 ## 8. Next priority
 
-DS-P2 — align source-of-truth foundation tokens, typography, geometry and semantic states in a repository design specification, then record code drift as a future controlled adoption plan. No styling implementation is authorised.
+DS-P0–DS-P7 — complete the approved visual component board, three-mode contrast matrix, responsive evidence and Design System compatibility review. No styling implementation is authorised.
