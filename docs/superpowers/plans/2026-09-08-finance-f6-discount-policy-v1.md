@@ -23,6 +23,7 @@
 - **Tenant Isolation:** All tables and foreign keys enforce composite tenant safety `(institution_id, ...)`. Cross-tenant references fail closed at the database level.
 - **Single Command-Level Instant:** `applicationInstant: Date` is sampled exactly once server-side at command entry; zero browser clock authority (`BROWSER_TIME_AUTHORITY = NO`).
 - **Deterministic Version Applicability:** At most one policy version is applicable for a policy at any `applicationInstant`. Version effective intervals `[effectiveFrom, effectiveTo]` may not overlap.
+- **Policy Version Concurrency Law:** Version creation must lock the stable `finance_discount_policies` identity row `FOR UPDATE` before calculating next version sequence and verifying interval overlap.
 - **Covered Floor Invariant:** Discounts can never reduce `effectiveDue` below `netCovered` (`effectiveDue >= netCovered` and `remainingCoverable >= 0`).
 - **Strict Role Authorization:** Mutation permitted only for `institution_admin` and `financial`. Read-only for `director`. All others `403 Forbidden`.
 - **Scope Discipline:** Exclude automatic rule engines, discount stacking, partial revocations, late penalties (F7), customer credits (F8), and refunds (F9).
@@ -41,8 +42,8 @@
 | **MODIFY** | `src/modules/finance/journal-model.ts` | Extend typed Journal vocabulary with discount transaction and position types | Foundation Journal types | `DiscountJournalType`, `DiscountPositionType` |
 | **MODIFY** | `src/modules/finance/journal-repository.ts` | Support discount Journal booking validation and transaction types | `journal-model.ts` | Updated Journal validator |
 | **MODIFY** | `src/modules/finance/obligation-financial-position.ts` | Extend derived position formula with gross/revoked/net discounts and floor checks | `Money` | Extended `deriveObligationFinancialPosition` |
-| **MODIFY** | `src/modules/finance/obligation-adjustment-repository.ts` | Feed discount facts into position inputs during Adjustment validation | `obligation-financial-position.ts` | Updated Adjustment validation |
-| **MODIFY** | `src/modules/finance/allocation-repository.ts` | Feed discount facts into position inputs during Payment Allocation validation | `obligation-financial-position.ts` | Updated Allocation validation |
+| **MODIFY** | `src/modules/finance/obligation-adjustment-repository.ts` | Feed discount facts into position inputs during Adjustment validation / preserve lock order | `obligation-financial-position.ts` | Updated Adjustment validation |
+| **MODIFY** | `src/modules/finance/allocation-repository.ts` | Feed discount facts into position inputs during Payment Allocation validation / preserve lock order | `obligation-financial-position.ts` | Updated Allocation validation |
 | **CREATE** | `src/modules/finance/discount-policy-http.ts` | HTTP routes and controllers for discount policy management | Express, `InstitutionalContext`, Auth | Policy REST endpoints |
 | **CREATE** | `src/modules/finance/obligation-discount-http.ts` | HTTP routes and controllers for applying and revoking obligation discounts | Express, `InstitutionalContext`, Idempotency | Concession REST endpoints |
 | **CREATE** | `src/modules/finance/discount-policy-client.ts` | Typed client for policy CRUD and versioning API | Fetch / HTTP client | `DiscountPolicyClient` |
@@ -62,7 +63,7 @@
 
 ## Implementation Tasks
 
-### Task 1: Schema & Policy Version Authority
+### Task 1: Schema & Policy Version Authority with Concurrency Locking
 
 **Files:**
 - Create `src/db/migrations/0040_finance_discount_policy_and_obligation_discounts.sql`
@@ -84,20 +85,26 @@
   - Policy identity creation with version 1.
   - Immutable version append (`version = 2`).
   - Immutability of version 1 row after version 2 created.
-  - Overlapping effective interval rejection (`OVERLAPPING_VERSION_INTERVAL`).
+  - Overlapping effective interval rejection (`DISCOUNT_POLICY_OVERLAPPING_INTERVAL`).
   - Coexistence of future non-overlapping version (`future.effectiveFrom > current.effectiveTo`).
   - Archiving policy prevents new versions and new applications.
   - Composite tenant foreign key enforcement `(institution_id, policy_id)`.
   - Migration rollback and re-apply idempotency.
+  - **CONCURRENT_POLICY_VERSION_CREATE Race:** Two concurrent transactions create overlapping versions for the same policy identity $\to$ stable policy row lock (`SELECT ... FOR UPDATE`) serializes the transactions; exactly 1 commits, the other fails closed with `DISCOUNT_POLICY_OVERLAPPING_INTERVAL`; no duplicate version numbers; no overlapping intervals committed.
+  - Concurrent non-overlapping future versions serialize and both commit cleanly.
 - [ ] **RED Command:** `npx tsx tests/finance-discount-policy-schema-postgres.test.ts` (Expect failure: migration 0040 missing).
 - [ ] **Implementation:**
-  - Create migration `0040_finance_discount_policy_and_obligation_discounts.sql` with tables `finance_discount_policies` and `finance_discount_policy_versions` including unique constraints and check constraints.
+  - Create migration `0040_finance_discount_policy_and_obligation_discounts.sql` with tables `finance_discount_policies` and `finance_discount_policy_versions` including unique constraints `uq_discount_policy_versions_tenant_id (institution_id, id)` and `uq_discount_policy_version_seq (institution_id, policy_id, version)` plus check constraints.
   - Implement `src/modules/finance/discount-policy-model.ts` with input validation (percentage <= 100, fixed amount requires currency).
-  - Implement `src/modules/finance/discount-policy-repository.ts` with atomic version creation and non-overlapping interval validation query:
-    $$\text{SELECT COUNT(*) FROM finance\_discount\_policy\_versions WHERE institution\_id = \$1 AND policy\_id = \$2 AND (effective\_from IS NULL OR \$4 IS NULL OR effective\_from <= \$4) AND (effective\_to IS NULL OR \$3 IS NULL OR effective\_to >= \$3)}$$
+  - Implement `src/modules/finance/discount-policy-repository.ts`:
+    - In `createDiscountPolicyVersion`, open transaction, execute `SELECT id FROM finance_discount_policies WHERE institution_id = $1 AND id = $2 FOR UPDATE;` to lock the stable identity.
+    - Check interval overlap:
+      $$\text{SELECT COUNT(*) FROM finance\_discount\_policy\_versions WHERE institution\_id = \$1 AND policy\_id = \$2 AND (effective\_from IS NULL OR \$4 IS NULL OR effective\_from <= \$4) AND (effective\_to IS NULL OR \$3 IS NULL OR effective\_to >= \$3)}$$
+    - If count > 0, throw domain error `DISCOUNT_POLICY_OVERLAPPING_INTERVAL`.
+    - Compute `nextVersion = COALESCE(MAX(version), 0) + 1` and insert immutable version row.
   - Implement `resolveApplicablePolicyVersion` enforcing deterministic single version lookup.
 - [ ] **GREEN Command:** `npx tsx tests/finance-discount-policy-schema-postgres.test.ts && npx tsx tests/finance-discount-policy-postgres.test.ts` (Expect PASS).
-- [ ] **Commit Boundary:** `feat(finance): add discount policy and immutable version persistence authority`
+- [ ] **Commit Boundary:** `feat(finance): add discount policy and immutable version persistence authority with concurrency locking`
 
 ---
 
@@ -121,7 +128,8 @@
   - `finance_obligation_discounts` has no mutable status column.
   - `finance_obligation_discount_revocations` has unique constraint on `(institution_id, original_discount_id)` preventing duplicate revocations.
   - Composite tenant foreign keys enforce tenant isolation for account, obligation, policy, policy version, and Journal transaction.
-  - Negative proof: cross-tenant `journal_transaction_id` fails with foreign key violation.
+  - Negative proof: cross-tenant `journal_transaction_id` fails with foreign key violation:
+    `FOREIGN KEY (institution_id, journal_transaction_id) REFERENCES finance_journal_transactions(institution_id, id)`.
   - Journal transaction rejects unregistered position types.
 - [ ] **RED Command:** `npx tsx tests/finance-obligation-discount-schema-postgres.test.ts` (Expect failure).
 - [ ] **Implementation:**
@@ -133,7 +141,7 @@
 
 ---
 
-### Task 3: Unified Derived Position Authority Extension
+### Task 3: Unified Derived Position Authority Extension & Direct F4/F5 Regressions
 
 **Files:**
 - Modify `src/modules/finance/obligation-financial-position.ts`
@@ -181,8 +189,12 @@
     $$\text{remainingCoverable} = \text{effectiveDue} - \text{netCovered}$$
   - Enforce `effectiveDue >= netCovered` and `remainingCoverable >= 0`.
   - Update `obligation-adjustment-repository.ts` and `allocation-repository.ts` to supply `discounts` and `discountRevocations` when calling `deriveObligationFinancialPosition`.
-- [ ] **GREEN Command:** `npx tsx tests/finance-obligation-financial-position.test.ts` (Expect PASS).
-- [ ] **Commit Boundary:** `feat(finance): extend canonical obligation financial position with discount facts`
+- [ ] **Immediate Direct Regressions:**
+  - Run `npx tsx tests/finance-obligation-financial-position.test.ts`
+  - Run `npx tsx tests/finance-allocation-postgres.test.ts` (F4 Allocation regression)
+  - Run `npx tsx tests/finance-adjustment-postgres.test.ts` (F5 Adjustment regression)
+- [ ] **GREEN Command:** `npx tsx tests/finance-obligation-financial-position.test.ts && npx tsx tests/finance-allocation-postgres.test.ts && npx tsx tests/finance-adjustment-postgres.test.ts` (Expect PASS).
+- [ ] **Commit Boundary:** `feat(finance): extend canonical obligation financial position with discount facts and verify f4/f5 regressions`
 
 ---
 
@@ -231,29 +243,68 @@
 
 ---
 
-### Task 5: PostgreSQL Concurrency & Race Proofs
+### Task 5: PostgreSQL Concurrency, Race Characterization & Lock Order Remediation
 
 **Files:**
 - Create `tests/finance-discount-concurrency-postgres.test.ts`
+- Modify (authorized only for lock-order alignment):
+  - `src/modules/finance/obligation-discount-repository.ts`
+  - `src/modules/finance/allocation-repository.ts`
+  - `src/modules/finance/obligation-adjustment-repository.ts`
 
 **Interfaces:**
-- Proves 8 explicit race conditions under real PostgreSQL transactions.
+- Proves 8 explicit race conditions under real PostgreSQL transactions, fully characterizing both valid serializations.
 
 **Detailed Steps:**
 - [ ] **Failing Test (RED):** Write `tests/finance-discount-concurrency-postgres.test.ts` implementing:
-  1. **Apply × Apply Race:** Two concurrent `applyObligationDiscount` commands on same obligation $\to$ exactly 1 succeeds (`201`), exactly 1 fails (`409 DISCOUNT_ALREADY_ACTIVE`); exactly 1 discount fact created.
-  2. **Apply × Allocation Race:** Concurrent Apply (20 EUR) and Payment Allocation (50 EUR) on 100 EUR obligation $\to$ serialized cleanly; final effectiveDue = 80 EUR, netCovered = 50 EUR, remainingCoverable = 30 EUR; no floor breach.
-  3. **Apply × Adjustment Race:** Concurrent Apply (20 EUR) and Decrease Adjustment (30 EUR) on 100 EUR obligation $\to$ serialized; effectiveDue = 50 EUR, remainingCoverable = 50 EUR.
-  4. **Apply × Allocation Reversal Race:** Concurrent Apply (20 EUR) and Allocation Reversal (20 EUR) on 100 EUR obligation with 40 EUR covered $\to$ serialized; netCovered becomes 20 EUR, remainingCoverable becomes 60 EUR.
-  5. **Revoke × Allocation Race:** Concurrent Revoke (freeing 20 EUR) and Allocation (attempting 50 EUR) $\to$ serialized; allocation succeeds as capacity is restored.
-  6. **Revoke × Adjustment Race:** Concurrent Revoke and Adjustment $\to$ serialized; final balance consistent.
-  7. **Revoke × Discount Apply Race:** Concurrent Revoke of discount 1 and Apply of discount 2 $\to$ serialized; new discount succeeds only after revocation commits.
-  8. **Revoke × Revoke Race:** Two concurrent revocations of same discount $\to$ exactly 1 succeeds, exactly 1 fails (`409 DISCOUNT_ALREADY_REVOKED`); unique constraint `uq_discount_single_revocation` preserved.
-- [ ] **RED Command:** `npx tsx tests/finance-discount-concurrency-postgres.test.ts` (Expect test execution / verification).
-- [ ] **Implementation:**
-  - Verify that lock order in `obligation-discount-repository.ts`, `allocation-repository.ts`, and `obligation-adjustment-repository.ts` prevents deadlocks and enforces deterministic execution.
+  1. **Apply × Apply Race:**
+     - Initial: 100 EUR original, 0 covered, 100 EUR remaining (0 discounts).
+     - Op A: Apply BOLSA-20 (20 EUR); Op B: Apply BOLSA-20 (20 EUR).
+     - Serialization A $\to$ B: A succeeds (201); B fails (409 `DISCOUNT_ALREADY_ACTIVE`).
+     - Serialization B $\to$ A: B succeeds (201); A fails (409 `DISCOUNT_ALREADY_ACTIVE`).
+     - Final state: effectiveDue = 80 EUR, remaining = 80 EUR; 1 applied fact, 0 revocations; 1 Journal transaction.
+  2. **Apply × Allocation Race:**
+     - Initial: 100 EUR original, 40 EUR covered, 60 EUR remaining (0 discounts).
+     - Op A: Apply BOLSA-20 (20 EUR); Op B: Allocate Payment 50 EUR.
+     - Serialization A $\to$ B: A commits (effectiveDue 80 EUR, remaining 40 EUR) $\to$ B attempts 50 EUR allocation on 40 EUR remaining $\to$ B fails floor/capacity (422) or clamps to allowed balance.
+     - Serialization B $\to$ A: B commits (covered 90 EUR, remaining 10 EUR) $\to$ A attempts 20 EUR discount (floor violation, 100-20=80 < 90 covered) $\to$ A fails (422 `DISCOUNT_FLOOR_VIOLATION`).
+     - Invariant: effectiveDue $\ge$ netCovered under all race serializations; no negative remaining capacity.
+  3. **Apply × Adjustment Race:**
+     - Initial: 100 EUR original, 0 covered, 100 EUR remaining.
+     - Op A: Apply BOLSA-20 (20 EUR); Op B: Decrease Adjustment 30 EUR.
+     - Serialization A $\to$ B: A commits (effective 80 EUR) $\to$ B commits (effective 50 EUR).
+     - Serialization B $\to$ A: B commits (effective 70 EUR) $\to$ A commits (effective 50 EUR, 20% applied against base).
+     - Final state: effectiveDue = 50 EUR, remaining = 50 EUR; 1 discount fact, 1 adjustment fact; 2 Journal transactions.
+  4. **Apply × Allocation Reversal Race:**
+     - Initial: 100 EUR original, 40 EUR covered, 60 EUR remaining.
+     - Op A: Apply EXCEDENTE-70 (70 EUR); Op B: Reversal of 20 EUR allocation.
+     - Serialization A $\to$ B: A attempts 70 EUR discount when 40 EUR covered $\to$ A fails floor violation (422); B commits $\to$ covered becomes 20 EUR, remaining 80 EUR.
+     - Serialization B $\to$ A: B commits (covered becomes 20 EUR, remaining 80 EUR) $\to$ A attempts 70 EUR discount $\to$ A succeeds (effectiveDue 30 EUR $\ge$ 20 EUR covered).
+     - Both serializations valid and deterministic.
+  5. **Revoke × Allocation Race:**
+     - Initial: 100 EUR original, 40 EUR covered, 20 EUR active discount $\to$ effective 80 EUR, remaining 40 EUR.
+     - Op A: Revoke discount (restoring 20 EUR); Op B: Allocate 50 EUR.
+     - Serialization A $\to$ B: A commits (effective 100 EUR, remaining 60 EUR) $\to$ B allocates 50 EUR $\to$ B succeeds; covered becomes 90 EUR, remaining 10 EUR.
+     - Serialization B $\to$ A: B attempts 50 EUR allocation on 40 EUR remaining $\to$ B fails capacity; A revokes $\to$ effective becomes 100 EUR, remaining 60 EUR.
+  6. **Revoke × Adjustment Race:**
+     - Initial: 100 EUR original, 20 EUR active discount $\to$ effective 80 EUR.
+     - Op A: Revoke discount; Op B: Increase Adjustment 10 EUR.
+     - Both serializations commute: final effectiveDue = 110 EUR, remaining = 110 EUR; 1 applied, 1 revoked, 1 adjustment; 3 Journal transactions.
+  7. **Revoke × Discount Apply Race:**
+     - Initial: 100 EUR original, 40 EUR covered, 20 EUR active discount 1 $\to$ effective 80 EUR, remaining 40 EUR.
+     - Op A: Revoke discount 1; Op B: Apply discount 2 (IRMAOS-10, 10 EUR).
+     - Serialization 1 (Revoke first): Revoke commits $\to$ effective 100 EUR, remaining 60 EUR; Apply proceeds $\to$ applies 10 EUR $\to$ final effective 90 EUR, remaining 50 EUR; facts: 2 applied, 1 revoked; 3 Journal transactions.
+     - Serialization 2 (Apply first): Apply reaches authority while discount 1 is active $\to$ Apply fails (409 `DISCOUNT_ALREADY_ACTIVE`); Revoke proceeds $\to$ revokes discount 1 $\to$ final effective 100 EUR, remaining 60 EUR; facts: 1 applied, 1 revoked; 2 Journal transactions.
+  8. **Revoke × Revoke Race:**
+     - Initial: 100 EUR original, active discount 1.
+     - Op A: Revoke discount 1; Op B: Revoke discount 1.
+     - Serialization A $\to$ B: A succeeds (200); B fails (409 `DISCOUNT_ALREADY_REVOKED`).
+     - Final state: exactly 1 revocation fact created; unique constraint `uq_discount_single_revocation` preserved.
+- [ ] **RED Command:** `npx tsx tests/finance-discount-concurrency-postgres.test.ts` (Expect execution).
+- [ ] **Implementation & Lock-Order Remediation:**
+  - Verify and minimally adjust locking in `obligation-discount-repository.ts`, `allocation-repository.ts`, or `obligation-adjustment-repository.ts` if deadlock or ordering discrepancies arise, ensuring strict adherence to the global lock hierarchy without changing F4/F5 domain semantics.
 - [ ] **GREEN Command:** `npx tsx tests/finance-discount-concurrency-postgres.test.ts` (Expect PASS across all 8 races).
-- [ ] **Commit Boundary:** `test(finance): prove discount concurrency invariants across 8 real postgres races`
+- [ ] **Commit Boundary:** `test(finance): prove discount concurrency invariants and serializations across 8 real postgres races`
 
 ---
 
@@ -280,7 +331,7 @@
 **Detailed Steps:**
 - [ ] **Failing Test (RED):** Write `tests/finance-discount-policy-http.test.ts` and `tests/finance-obligation-discount-http.test.ts` testing:
   - Full request-response lifecycles through Express.
-  - Role authorization matrix: `institution_admin` and `financial` ALLOWED (`201/200`), `director` FORBIDDEN (`403`), unauthenticated UNAUTHORIZED (`401`).
+  - Role authorization matrix: `institution_admin` and `financial` ALLOWED (`201/200`), `director` FORBIDDEN on writes (`403`), unauthenticated UNAUTHORIZED (`401`).
   - Read endpoints allow `director`, `institution_admin`, `financial`.
   - Non-disclosure: cross-tenant IDs return generic `404 Not Found`.
   - Server calculation authority: client cannot pass custom calculated amount for percentage discounts.
@@ -314,8 +365,11 @@
   - "Nova Versão" action opens modal with prefilled code and policy identity.
   - "Arquivar" action with confirmation.
   - Loading, empty, and error states.
-  - Keyboard accessibility (Escape closes modal, Enter submits, focus trap).
-  - Light/Dark theme compatibility.
+  - **A11y, Visual & Responsive:**
+    - Light and dark themes (contrast $\ge 4.5:1$).
+    - Responsive layout for narrow viewports ($375\text{px}$ / $768\text{px}$).
+    - Keyboard accessibility: Escape closes modal, Enter submits, focus trap and focus restoration.
+    - Reduced motion support (`prefers-reduced-motion: reduce`).
 - [ ] **RED Command:** `npx tsx tests/finance-discount-policy-ui.test.ts` (Expect failure).
 - [ ] **Implementation:**
   - Build `FinanceDiscountPolicyView.tsx` using Nexus Aurora tokens, clean typography, responsive layout, and human-friendly Portuguese terminology.
@@ -346,19 +400,24 @@
   - Selecting percentage policy (e.g. 20%) displays real-time preview: `Original: 100.00 EUR | Desconto: -20.00 EUR | Novo devido: 80.00 EUR | Restante: 40.00 EUR`.
   - Selecting fixed policy exceeding floor displays preventive warning banner and disables submit button.
   - Mandatory reason validation before submit.
-  - Submit shows loading state, prevents duplicate clicks, and triggers context refetch on success.
+  - **Duplicate Submit Prevention:** Button enters loading state and disables double clicks on submit.
+  - **Error Recovery & Retry:** Simulated server error displays clean inline alert and **preserves operator-typed reason/input** for immediate retry without resetting form state.
   - Revocation flow displays restored balance preview.
-  - Accessibility: `role="dialog"`, `aria-modal="true"`, focus trap, Escape closes drawer.
+  - **A11y, Motion & Theming:**
+    - `role="dialog"`, `aria-modal="true"`, focus trap, focus restoration on close.
+    - Microinteractions $\le 150\text{ms}$; transitions disabled under `prefers-reduced-motion: reduce`.
+    - Light and dark themes with Nexus Aurora tokens.
+    - Mobile fluid width ($<640\text{px}$) with no horizontal overflow.
 - [ ] **RED Command:** `npx tsx tests/finance-obligation-discount-ui.test.ts` (Expect failure).
 - [ ] **Implementation:**
-  - Build `FinanceObligationDiscountView.tsx` matching the F5 UX V2 visual standard (Nexus Aurora surface, border-border-subtle, text-primary, microinteractions $\le 150\text{ms}$).
+  - Build `FinanceObligationDiscountView.tsx` matching the F5 UX V2 visual standard (Nexus Aurora surface, border-border-subtle, text-primary).
   - Integrate drawer trigger into `FinanceOperationalContextWorkspace.tsx` charge row menu.
 - [ ] **GREEN Command:** `npx tsx tests/finance-obligation-discount-ui.test.ts` (Expect PASS).
 - [ ] **Commit Boundary:** `feat(finance): add contextual obligation discount application and revocation drawer`
 
 ---
 
-### Task 9: Operational History, UAT Provisioner & Real Browser Gate
+### Task 9: Operational History, UAT Provisioner & Corrected Bounded Flow
 
 **Files:**
 - Modify `src/modules/finance/finance-operational-context-model.ts`
@@ -377,7 +436,14 @@
   - Policies: `BOLSA-20` (20%), `IRMAOS-10` (10 EUR), `EXCEDENTE-70` (70 EUR)
 
 **Detailed Steps:**
-- [ ] **Failing Test (RED):** Write `tests/finance-f6-real-flow-integration.test.ts` verifying the end-to-end flow from provisioned UAT data through repository, Journal, history, and position derivation.
+- [ ] **Failing Test (RED):** Write `tests/finance-f6-real-flow-integration.test.ts` verifying the full bounded lifecycle:
+  1. Provision clean 100 EUR / 40 EUR covered / 60 EUR remaining (0 discounts).
+  2. Apply `BOLSA-20 (20%)` $\to$ verify position 100 original, 80 effective, 40 covered, 40 remaining.
+  3. **Separate One-Active-Discount Rejection:** Attempt applying `IRMAOS-10` while `BOLSA-20` is active $\to$ rejected with `DISCOUNT_ALREADY_ACTIVE`.
+  4. Revoke `BOLSA-20` $\to$ verify restored to 100 effective, 60 remaining.
+  5. Apply `IRMAOS-10 (10.00 EUR)` $\to$ verify 90 effective, 50 remaining.
+  6. Revoke `IRMAOS-10` $\to$ verify restored to 100 effective, 60 remaining (0 active discounts).
+  7. **Floor Violation Test:** On clean 100/40/60 with 0 active discounts, attempt applying `EXCEDENTE-70 (70.00 EUR)` $\to$ preventive rejection; **0 discount facts and 0 Journal facts created**.
 - [ ] **RED Command:** `npx tsx tests/finance-f6-real-flow-integration.test.ts` (Expect failure).
 - [ ] **Implementation:**
   - Extend `finance-operational-context-repository.ts` to load discount and revocation facts and merge them into `FinanceOperationalHistory`.
@@ -388,7 +454,7 @@
 
 ---
 
-### Task 10: Final Codex Deterministic Verification & Antigravity Handoff
+### Task 10: Final Deterministic Quality Matrix & Antigravity Handoff
 
 **Files:**
 - Create `scripts/run-finance-f6-discount-policy.mjs`
@@ -408,15 +474,27 @@
   10. `finance-discount-policy-ui.test.ts`
   11. `finance-obligation-discount-ui.test.ts`
   12. `finance-f6-real-flow-integration.test.ts`
-  13. Regressions: F5 adjustments, F4 allocations, F3 payments, and operational consolidation runner.
-- [ ] **Run Full Regression Suite:**
+- [ ] **Run Complete Quality Matrix at Final HEAD:**
   ```powershell
+  # 1. F6 Dedicated Suite
   node scripts/run-finance-f6-discount-policy.mjs
+
+  # 2. Regression Suites
+  node scripts/run-finance-f5-obligation-adjustment.mjs
+  node scripts/run-finance-f4-allocation.mjs
+  node scripts/run-finance-f3-payment-core.mjs
+  node scripts/run-finance-operational-consolidation.mjs
+
+  # 3. Static Type & Build Checks
   npm run lint
   npm run build
-  node scripts/check-committed-diff.mjs
+
+  # 4. Security, Artifacts & Diff Checks
+  npm run test:diff
+  npm run test:secrets
+  npm run test:artifacts
   ```
-- [ ] **Handoff Document:** Create `docs/finance/FINANCE_F6_01_HANDOFF.md` recording all green evidence, migration hashes, clean worktree status, and the browser verification playbook for Antigravity.
+- [ ] **Handoff Document:** Create `docs/finance/FINANCE_F6_01_HANDOFF.md` recording all green evidence, migration hashes, clean worktree status, and the complete browser verification playbook for Antigravity.
 - [ ] **Commit Boundary:** `docs(finance): complete finance f6 discount policy v1 deterministic implementation and handoff`
 
 ---
@@ -438,21 +516,33 @@ Upon handoff to Antigravity, the persistent test runtime (`http://localhost:3000
    - Desconto: `-20.00 EUR`
    - Valor devido: `80.00 EUR`
    - Restante a liquidar: `40.00 EUR`
-10. **Application Submit:** Enter reason `"Bolsa de Mérito Semestre 1"` $\to$ click `Confirmar Desconto`.
+10. **Application Submit:** Enter reason `"Bolsa de Mérito Semestre 1"` $\to$ click `Confirmar Desconto` $\to$ verify button shows loading state and duplicate clicks are prevented (`DUPLICATE_SUBMIT_PREVENTION`).
 11. **Balance & History:** Verify charge due updates to `80.00 EUR`, remaining updates to `40.00 EUR`, and operational history displays applied discount entry.
 12. **Page Refresh:** Hard reload page (`Ctrl+F5`) $\to$ verify balance and history persist without corruption.
-13. **Revocation Flow:** Click `...` menu $\to$ select `Revogar desconto` $\to$ enter reason `"Perda de bolsa"` $\to$ click `Confirmar Revogação`.
-14. **Balance Restoration:** Verify charge due restores to `100.00 EUR` and remaining restores to `60.00 EUR`.
+13. **One-Active Rejection Check:** While `BOLSA-20` is active, attempt opening drawer or submitting another discount $\to$ verify system blocks application with `DISCOUNT_ALREADY_ACTIVE`.
+14. **Revocation Flow:** Click `...` menu $\to$ select `Revogar desconto` $\to$ enter reason `"Perda de bolsa"` $\to$ click `Confirmar Revogação` $\to$ verify charge due restores to `100.00 EUR` and remaining restores to `60.00 EUR`.
 15. **Re-Application (Fixed):** Click `...` $\to$ `Aplicar desconto institucional` $\to$ select `IRMAOS-10 (10.00 EUR)` $\to$ submit $\to$ verify due becomes `90.00 EUR` and remaining becomes `50.00 EUR`.
-16. **Floor Violation Validation:** Attempt applying `EXCEDENTE-70 (70.00 EUR)` $\to$ verify floor violation warning banner is displayed and submission is blocked.
-17. **A11y & Responsiveness:** Test Escape key drawer close, keyboard focus trapping, toggle Light/Dark themes, resize viewport to $375\text{px}$ (mobile fluid layout with no horizontal scroll).
-18. **Runtime SHA Parity:** Confirm browser build matches Git HEAD SHA.
+16. **Revoke Fixed & Floor Violation Test:**
+    - Revoke `IRMAOS-10` $\to$ restore balance to 100/40/60 (0 active discounts).
+    - Select `EXCEDENTE-70 (70.00 EUR)` $\to$ verify live preview displays floor boundary warning banner and disables submission button.
+    - Attempt submission $\to$ verified blocked; **NO Discount and NO Journal fact created**.
+17. **Error Recovery & Retry:** Inject a temporary simulated network/server failure on submit $\to$ verify error is displayed cleanly without raw runtime crashes (`NO_RAW_RUNTIME_ERROR`), operator reason/input is preserved (`RETRY_PRESERVES_OPERATOR_INPUT`), and subsequent retry succeeds.
+18. **A11y, Theme & Responsiveness:**
+    - Toggle Light and Dark themes (`LIGHT_THEME` / `DARK_THEME`) $\to$ verify contrast $\ge 4.5:1$.
+    - Resize viewport to $375\text{px}$ (`NARROW_RESPONSIVE`) $\to$ verify fluid drawer layout with no horizontal overflow.
+    - Test Escape key close, keyboard tab focus trapping (`FOCUS_CONTAINMENT`), and focus return to `...` trigger button on close (`FOCUS_RESTORATION`).
+    - Enable reduced motion (`REDUCED_MOTION`) $\to$ verify drawer microinteractions/animations are disabled.
+    - Verify runtime SHA parity with Git HEAD SHA.
 
 ---
 
 ## Plan Self-Review & Verification
 
-- **P0 / P1 Coverage:** All 4 original P1 items (Discount fact immutability, policy versioning, composite tenant FKs, complete proof matrix) and 3 residual P1 items (Journal composite FKs, single server application instant, deterministic version applicability intervals) are strictly integrated.
+- **P0 / P1 Coverage:**
+  - `P1-01`: Policy identity row `FOR UPDATE` locking on version creation specified in Task 1.
+  - `P1-02`: Task 5 authorized to minimally modify repository files for lock order alignment; all 8 races fully characterized for both serializations; Task 3 includes direct F4/F5 regressions.
+  - `P1-03`: Bounded UAT sequence corrected with separate one-active-discount verification and zero-active-discount floor violation test creating zero facts.
+  - `P1-04`: Complete quality matrix includes secrets, artifacts, build, lint, and full regression runners; browser gate includes duplicate-submit, error retry, a11y, responsive, themes, and reduced motion.
 - **Single Derived Authority:** `deriveObligationFinancialPosition` in `obligation-financial-position.ts` is the sole formula for both server-side validation and operational UI.
 - **No Scope Drift:** Excludes penalties, credit notes, refunds, rule engines, or stacking.
 - **Zero Placeholders:** Every task has explicit file paths, exact interfaces, failing test conditions, RED/GREEN commands, and clear commit boundaries.
