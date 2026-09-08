@@ -29,6 +29,20 @@ active_work:
     approve the first functional vertical and its mission/implementation contract before creating an F1
     implementation branch or writing production code.
 
+parallel_preparation:
+  documents:
+    mission: DOCUMENTS-FOUNDATION-I1
+    mission_branch: docs/documents-foundation-i1-preparation
+    activity: I1_PREPARATION
+    state: PREPARATION
+    owner: DOCUMENTS_ANALYST
+    write_owner: DOCUMENTS_ANALYST
+    executor: ANTIGRAVITY
+    baseline: main@02b7f0a454df922598b56660ce10216956539939
+    scope: governance and implementation preparation only; no production code
+    implementation_authorized: false
+    boundary: no Finance, Enrollment, uploaded_documents or legacy generic Documents changes
+
 execution:
   one_code_owner_per_unit: true
   reviewer_starts_read_only: true
@@ -41,6 +55,8 @@ scope:
     - inspect integrated Finance Foundation and canonical roadmap evidence needed to define F1
     - define the first functional vertical, invariants, proof requirements and implementation mission
     - governance and planning documentation required to authorize that mission
+    - bounded Documents Foundation I1 preparation on its isolated documentation branch
+    - Documents I1 Mission Pack and governance evidence only; no Documents production code
   forbidden:
     - F1 production implementation before explicit Product Owner approval of the F1 mission
     - reopen Finance Foundation Tasks 1 through 8 without concrete regression evidence
@@ -50,6 +66,7 @@ scope:
     - unrelated IAM Enrollment ALUNOS refactor
     - parallel writer on the same authority unit
     - CI or safety-gate weakening
+    - Documents production code, migrations, routes or shared-file changes before Documents I1 is READY and explicitly authorized
 
 protected_invariants:
   - Finance Foundation Tasks 1 through 8 remain integrated and accepted with P0 0 and P1 0
