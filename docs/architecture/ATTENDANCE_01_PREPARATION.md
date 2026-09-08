@@ -69,6 +69,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Report export requester | Coordination or institutionally authorised role only |
 | Report export scope | Learner, assigned class/activity and defined period; institutional summaries when policy permits |
 | Report delivery | E-mail attachment |
+| Export recipient | Any address indicated by the authorised requester, validated before each delivery |
+| Export formats | PDF and CSV |
+| E-mail attachment protection | No password; protection is pre-send address validation plus audited authorisation |
 
 ## 4. Authority boundary
 
@@ -223,5 +226,7 @@ A session is not a timetable. It records that an authorised attendance occasion 
 2. An authorised export may cover an individual learner, an assigned class/activity and a defined period. Institutional summaries are permitted only where institutional policy allows.
 3. The first-cut delivery channel is an e-mail attachment.
 4. Before creating or sending an export, Attendance must validate the requester, institutional scope, policy version and authorised recipient; the request, generated content scope, recipient, send result and policy reference are auditable.
-5. An e-mail attachment cannot be revoked after delivery. This decision therefore does not permit public links, forwarding to an unverified recipient, use of a personal address outside policy, or later claims of withdrawal. Encryption/password, file format and recipient verification remain open security decisions before implementation.
+5. An e-mail attachment cannot be revoked after delivery. Before every delivery, Attendance validates the address indicated by the authorised requester. The attachment is sent without a password; its protection relies on pre-send address validation and audited authorisation.
+6. The first-cut export formats are PDF and CSV. Format-specific data minimisation, generation controls and recipient-validation mechanics remain mandatory design work before implementation.
+7. This decision does not permit public links, unvalidated delivery, later claims of withdrawal, or disclosure beyond the approved export scope.
 
