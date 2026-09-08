@@ -21,7 +21,7 @@ Attendance must protect institution isolation, attendance integrity, actor accou
 | Historic record tampering | Immutable revisions and append-only integrity-verifiable audit |
 | Evidence bypass | Documents Foundation provisional association only; no local file store |
 | Unauthorised report export | Coordination/institution-authorised requester, policy scope and audit |
-| E-mail recipient mistake | One-time code sent to specified address before every delivery |
+| E-mail recipient mistake | One-time code sent to specified address before every delivery; expires after 5 minutes |
 | Irreversible e-mail delivery | No public link/no revocation claim; approved scope and recipient must be verified before send |
 | Mandatory notification failure | Automatic retry and escalation after policy deadline |
 | Retention conflict | Global jurisdictional profile; institution configures only within it |
