@@ -75,6 +75,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Readiness evidence | Automated, integration, security and manual validation tests |
 | Open defects at acceptance | No P0/P1; P2 only with recorded decision |
 | Readiness approver | Product Owner only |
+| Validation data | Synthetic or anonymised only |
+| Required manual-validation profiles | Teacher, coordination, guardian, learner and security/audit |
+| Institution isolation evidence | Mandatory negative attempts across at least two institutions |
 
 ## 4. Authority boundary
 
@@ -239,4 +242,7 @@ A session is not a timetable. It records that an authorised attendance occasion 
 2. No P0 or P1 issue may remain open for an accepted unit. A P2 issue requires an explicit recorded decision.
 3. Only the Product Owner approves readiness before an implementation-authorisation request.
 4. This readiness approval remains distinct from implementation authorisation. No code, migration, UI, storage setup or deployment is authorised by this preparation record.
+5. Testing and manual validation use synthetic or anonymised data only.
+6. Manual validation must include a teacher, coordination, guardian, learner and security/audit profile.
+7. Acceptance requires mandatory negative cross-institution attempts involving at least two institutions.
 
