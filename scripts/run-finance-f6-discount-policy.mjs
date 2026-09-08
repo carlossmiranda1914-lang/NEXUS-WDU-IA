@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import dotenv from 'dotenv';
@@ -21,15 +21,35 @@ const suites = [
   'tests/finance-f6-real-flow-integration.test.ts',
 ];
 
-for (const suite of suites) {
-  console.log(`\n>>> Running test suite: ${suite}`);
-  const result = spawnSync('npx', ['tsx', '--test', suite], {
+const suiteTimeoutMs = 60_000;
+
+const runSuite = suite => new Promise(resolveRun => {
+  let settled = false;
+  const finish = result => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    resolveRun(result);
+  };
+  const child = spawn(process.execPath, [path.resolve('node_modules', 'tsx', 'dist', 'cli.mjs'), '--test', suite], {
+    cwd: process.cwd(),
+    shell: false,
     stdio: 'inherit',
-    shell: process.platform === 'win32',
     env: process.env,
   });
+  const timer = setTimeout(() => {
+    child.kill();
+    finish({ status: 1, reason: 'timeout' });
+  }, suiteTimeoutMs);
+  child.once('error', error => finish({ status: 1, reason: error.message }));
+  child.once('close', (status, signal) => finish({ status: status ?? 1, reason: signal || `exit ${status}` }));
+});
+
+for (const suite of suites) {
+  console.log(`\n>>> Running test suite: ${suite}`);
+  const result = await runSuite(suite);
   if (result.status !== 0) {
-    console.error(`\n[FINANCE-F6-DISCOUNT-POLICY] Suite failed on ${suite}`);
+    console.error(`\n[FINANCE-F6-DISCOUNT-POLICY] Suite failed on ${suite} (${result.reason})`);
     process.exit(result.status ?? 1);
   }
 }
