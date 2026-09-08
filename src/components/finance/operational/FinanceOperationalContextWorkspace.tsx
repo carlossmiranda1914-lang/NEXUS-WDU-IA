@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { FinanceOperationalContext } from '../../../modules/finance/finance-operational-context-model.ts';
+import type { FinanceOperationalContext, FinanceOperationalObligation } from '../../../modules/finance/finance-operational-context-model.ts';
 import type { FinancialAccount } from '../../../modules/finance/financial-account-model.ts';
 import { FinanceOperationalContextClient } from '../../../modules/finance/finance-operational-context-client.ts';
 import { FinanceOperationalContextHeader } from './FinanceOperationalContextHeader.tsx';
@@ -10,7 +10,9 @@ import { FinanceAllocationCreateView } from './FinanceAllocationCreateView.tsx';
 import { FinanceAllocationReverseView } from './FinanceAllocationReverseView.tsx';
 import { allocationClient } from '../../../modules/finance/allocation-client.ts';
 import { obligationAdjustmentClient } from '../../../modules/finance/obligation-adjustment-client.ts';
+import { obligationDiscountClient } from '../../../modules/finance/obligation-discount-client.ts';
 import { FinanceObligationAdjustmentView } from './FinanceObligationAdjustmentView.tsx';
+import { FinanceObligationDiscountView } from './FinanceObligationDiscountView.tsx';
 
 export interface FinanceOperationalContextWorkspaceProps {
   theme?: string;
@@ -48,6 +50,10 @@ export function FinanceOperationalContextWorkspace({
   const [allocationPaymentId, setAllocationPaymentId] = useState<string | null>(null);
   const [reversalAllocation, setReversalAllocation] = useState<Extract<NonNullable<FinanceOperationalContext>['history'][number], { kind: 'allocation' }>['allocation'] | null>(null);
   const [adjustmentObligationId, setAdjustmentObligationId] = useState<string | null>(null);
+  const [discountObligation, setDiscountObligation] = useState<{
+    obligation: FinanceOperationalObligation;
+    mode: 'apply' | 'revoke';
+  } | null>(null);
   const [paymentSuccessNotice, setPaymentSuccessNotice] = useState<string | null>(null);
 
   // 1. Server-side bounded account search
@@ -133,6 +139,7 @@ export function FinanceOperationalContextWorkspace({
     setAllocationPaymentId(null);
     setReversalAllocation(null);
     setAdjustmentObligationId(null);
+    setDiscountObligation(null);
     setPaymentSuccessNotice(null);
     loadContext(id);
   };
@@ -147,6 +154,7 @@ export function FinanceOperationalContextWorkspace({
     setAllocationPaymentId(null);
     setReversalAllocation(null);
     setAdjustmentObligationId(null);
+    setDiscountObligation(null);
     setPaymentSuccessNotice(null);
     setHasSearched(false);
     setSearchResults([]);
@@ -430,6 +438,8 @@ export function FinanceOperationalContextWorkspace({
             confirmedUnallocatedPayments={context.confirmedUnallocatedPayments}
             onAllocatePayment={(paymentId) => setAllocationPaymentId(paymentId)}
             onRegisterAdjustment={(obligation) => setAdjustmentObligationId(obligation.id)}
+            onApplyDiscount={(obligation) => setDiscountObligation({ obligation, mode: 'apply' })}
+            onRevokeDiscount={(obligation) => setDiscountObligation({ obligation, mode: 'revoke' })}
           />
 
           <FinanceOperationalHistory
@@ -450,6 +460,36 @@ export function FinanceOperationalContextWorkspace({
           })}
         />
       )}
+      {discountObligation && (
+        <FinanceObligationDiscountView
+          theme={theme}
+          mode={discountObligation.mode}
+          obligation={discountObligation.obligation}
+          onCancel={() => setDiscountObligation(null)}
+          onApply={async (obligationId, policyId, reason) => {
+            const key = `discount-apply-${crypto.randomUUID()}`;
+            await obligationDiscountClient.apply(
+              obligationId,
+              { discountPolicyId: policyId, reason },
+              key
+            );
+            setDiscountObligation(null);
+            await loadContext(selectedAccountId);
+          }}
+          onRevoke={async (obligationId, discountId, reason) => {
+            const key = `discount-revoke-${crypto.randomUUID()}`;
+            await obligationDiscountClient.revoke(
+              obligationId,
+              { discountId, reason },
+              key
+            );
+            setDiscountObligation(null);
+            await loadContext(selectedAccountId);
+          }}
+        />
+      )}
     </div>
   );
 }
+
+export default FinanceOperationalContextWorkspace;

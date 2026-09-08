@@ -10,6 +10,8 @@ export interface FinanceOperationalTruthPanelsProps {
   confirmedUnallocatedPayments: FinanceOperationalPayment[];
   onAllocatePayment?: (paymentId: string) => void;
   onRegisterAdjustment?: (obligation: FinanceOperationalObligation) => void;
+  onApplyDiscount?: (obligation: FinanceOperationalObligation) => void;
+  onRevokeDiscount?: (obligation: FinanceOperationalObligation) => void;
 }
 
 function formatMoney(amount: string, currency: string): string {
@@ -51,6 +53,8 @@ export function FinanceOperationalTruthPanels({
   confirmedUnallocatedPayments,
   onAllocatePayment,
   onRegisterAdjustment,
+  onApplyDiscount,
+  onRevokeDiscount,
 }: FinanceOperationalTruthPanelsProps) {
   const isLight = theme === 'light';
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -127,8 +131,78 @@ export function FinanceOperationalTruthPanels({
                     <span className={`text-sm font-bold ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
                       Original: {formatMoney((ob.original || ob.amount).amount, (ob.original || ob.amount).currency)}
                     </span>
-                    {ob.covered && ob.uncovered && <span className="block text-xs text-zinc-500">Coberto: {formatMoney(ob.covered.amount, ob.covered.currency)} · Por cobrir: {formatMoney(ob.uncovered.amount, ob.uncovered.currency)}</span>}
-                    {onRegisterAdjustment && <div className="relative mt-2 inline-block"><button type="button" data-testid={`obligation-actions-${ob.id}`} aria-label={`Mais ações para ${ob.description}`} aria-expanded={openMenuId === ob.id} onClick={() => setOpenMenuId(openMenuId === ob.id ? null : ob.id)} onKeyDown={(event) => { if (event.key === 'Escape') setOpenMenuId(null); }} className={`rounded px-2 py-1 text-xs font-semibold ${isLight?'text-amber-800 hover:bg-amber-50':'text-amber-300 hover:bg-zinc-800'}`}>…</button>{openMenuId === ob.id && <div role="menu" className={`absolute right-0 z-20 mt-1 min-w-44 rounded-lg border p-1 shadow-lg ${isLight?'border-zinc-200 bg-white':'border-zinc-700 bg-zinc-900'}`}><button type="button" role="menuitem" onClick={() => { setOpenMenuId(null); onRegisterAdjustment(ob); }} className="w-full rounded px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800">Registar correção</button></div>}</div>}
+                    {ob.covered && ob.uncovered && (
+                      <span className="block text-xs text-zinc-500">
+                        Coberto: {formatMoney(ob.covered.amount, ob.covered.currency)} · Por cobrir: {formatMoney(ob.uncovered.amount, ob.uncovered.currency)}
+                      </span>
+                    )}
+                    {(onRegisterAdjustment || onApplyDiscount || onRevokeDiscount) && (
+                      <div className="relative mt-2 inline-block">
+                        <button
+                          type="button"
+                          data-testid={`obligation-actions-${ob.id}`}
+                          aria-label={`Mais ações para ${ob.description}`}
+                          aria-expanded={openMenuId === ob.id}
+                          onClick={() => setOpenMenuId(openMenuId === ob.id ? null : ob.id)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Escape') setOpenMenuId(null);
+                          }}
+                          className={`rounded px-2 py-1 text-xs font-semibold ${
+                            isLight ? 'text-amber-800 hover:bg-amber-50' : 'text-amber-300 hover:bg-zinc-800'
+                          }`}
+                        >
+                          …
+                        </button>
+                        {openMenuId === ob.id && (
+                          <div
+                            role="menu"
+                            className={`absolute right-0 z-20 mt-1 min-w-48 rounded-lg border p-1 shadow-lg ${
+                              isLight ? 'border-zinc-200 bg-white text-zinc-900' : 'border-zinc-700 bg-zinc-900 text-zinc-100'
+                            }`}
+                          >
+                            {onRegisterAdjustment && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  onRegisterAdjustment(ob);
+                                }}
+                                className="w-full rounded px-3 py-2 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                              >
+                                Registar correção
+                              </button>
+                            )}
+                            {ob.activeDiscount && onRevokeDiscount && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  onRevokeDiscount(ob);
+                                }}
+                                className="w-full rounded px-3 py-2 text-left text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                              >
+                                Revogar desconto
+                              </button>
+                            )}
+                            {!ob.activeDiscount && onApplyDiscount && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  onApplyDiscount(ob);
+                                }}
+                                className="w-full rounded px-3 py-2 text-left text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                              >
+                                Aplicar desconto institucional
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))
@@ -221,3 +295,5 @@ export function FinanceOperationalTruthPanels({
     </div>
   );
 }
+
+export default FinanceOperationalTruthPanels;
