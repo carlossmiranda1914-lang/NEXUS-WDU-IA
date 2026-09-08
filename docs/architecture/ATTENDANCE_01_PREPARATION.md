@@ -87,6 +87,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Threshold-alert states | Generated, notified, action pending, resolved and recalculated |
 | Mandatory notification failure | Failed; automatic retry and escalation after deadline |
 | Report-export states | Requested, authorised, generated, sent and failed |
+| Online assignment validation | Synchronous Academic Core query at initiation and confirmation |
+| Open-session placement changes | Signed Academic Core event; reconcile before confirmation |
+| Justification attachment linking | Documents Foundation provisional association; business validity only after decision |
 
 ## 4. Authority boundary
 
@@ -302,4 +305,11 @@ If a mandatory notification delivery fails, it becomes **FAILED**, is retried au
 ### 22.7 Report export
 
 A report export request has the required states **REQUESTED**, **AUTHORISED**, **GENERATED**, **SENT** and **FAILED**. Authorisation and recipient validation must complete before generation or sending. Every state change is auditable.
+
+## 23. Initial integration-contract decisions
+
+1. At online session initiation and confirmation, Attendance synchronously validates the teacher's active assignment with Academic Core. It must reject the action if the assignment is absent, inactive or institutionally incompatible.
+2. While a session is open, Academic Core delivers placement changes through signed events. Attendance reconciles the roster against authoritative Academic Core context before confirmation.
+3. Justification evidence may be linked immediately through a Documents Foundation provisional association. It is not business-valid evidence until Attendance records the authorised justification decision.
+4. These contracts must later define identity, institution, assignment/placement references, expiry, signature verification, idempotency, event replay and failure responses. No implementation is authorised.
 
