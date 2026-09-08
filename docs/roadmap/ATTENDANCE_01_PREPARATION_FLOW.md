@@ -25,11 +25,11 @@ This flow turns confirmed product decisions into a reviewable implementation spe
 | P0 | Domain audit and boundaries | No reuse of legacy Attendance; authority split with Academic Core, IAM and Documents Foundation | Complete |
 | P1 | Product decisions | Session, outcome, justification, threshold, offline, permissions, reporting and retention rules recorded | Complete |
 | P2 | Data authority | Entities, historical snapshot, revisions, policy traceability, retention and migration boundary | Complete |
-| P3 | State and policy specification | Exact state machine, policy parameter catalogue and policy transition rules | Pending |
-| P4 | Integration contracts | Academic Core/IAM/Documents Foundation proofs, events, idempotency and failure contracts | Pending |
-| P5 | Security, privacy and reporting review | Offline threat model, export/e-mail controls, jurisdictional retention validation | Pending |
-| P6 | UX and accessibility specification | Teacher, coordination, guardian and learner flows; offline/conflict/error states | Pending |
-| P7 | Acceptance pack and Mission Pack | Test matrix, manual validation scripts, evidence locations and implementation work packages | Pending |
+| P3 | State and policy specification | Lifecycle/policy-state draft created; transition payloads/idempotency/error taxonomy still required | In progress |
+| P4 | Integration contracts | Initial authority boundaries created; exact payloads/expiry/error contracts still required | In progress |
+| P5 | Security, privacy and reporting review | Security/privacy control record created; detailed threat-model and jurisdictional review still required | In progress |
+| P6 | UX and accessibility specification | Required role flows, accessibility and critical-state behaviour specified | Complete |
+| P7 | Acceptance pack and Mission Pack | Acceptance evidence specification and preparation Mission Pack created | Complete |
 | Gate A | Design closure review | All P0–P7 decisions/artefacts reviewed; open decisions explicitly resolved | Not reached |
 | Gate B | Implementation readiness review | Automated, integration, security and manual evidence planned and reviewable | Not reached |
 | Gate C | Implementation authorisation | Explicit Product Owner authorisation only | Not granted |
@@ -56,4 +56,4 @@ This flow turns confirmed product decisions into a reviewable implementation spe
 
 ## 6. Current next priority
 
-**P3 — State and policy specification.** Define exact lifecycle states and transitions for sessions, outcomes, justifications, correction proposals, offline conflicts, alerts and export requests. This is still documentation work only.
+**P3/P4/P5 — contract and assurance closure.** Complete exact transition payloads, error/idempotency semantics, dependency contracts, threat-model and jurisdictional review. This is still documentation work only.
