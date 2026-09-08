@@ -120,8 +120,25 @@ export interface DiscountPolicyVersion {
 ### Policy Versioning Invariants
 1. **Append-Only Immutability:** A policy version row is **never updated or deleted**.
 2. **Unique Version Sequence:** `UNIQUE (institution_id, policy_id, version)` ensures sequential, non-colliding versions.
-3. **Economic Mutation Creates New Version:** Modifying `name`, `calculationMode`, `value`, `currency`, `effectiveFrom`, or `effectiveTo` inserts a new version (`version = prior + 1`).
-4. **Exact Version Binding:** Applied discounts link directly to the specific `policy_version_id`, guaranteeing that historical concessions are never altered by future policy changes.
+3. **Non-Overlapping Effective Intervals (P1-03 Fix):** For one active policy identity and one `applicationInstant`, **at most one** policy version may be economically applicable. Version effective windows `[effectiveFrom, effectiveTo]` for a policy **may not overlap**. Creating a new version with an overlapping effective window is strictly rejected (`OVERLAPPING_VERSION_INTERVAL`).
+4. **Future Versions Supported:** A future version may coexist alongside the current version if their effective intervals do not overlap (`future.effectiveFrom > current.effectiveTo`). It does not become applicable until `applicationInstant >= future.effectiveFrom`.
+5. **Exact Version Binding:** Applied discounts link directly to the specific `policy_version_id`, guaranteeing that historical concessions are never altered by future policy changes.
+
+### 7.2 Deterministic Version Resolution: `CURRENT_APPLICABLE_VERSION`
+
+$$\text{CURRENT\_APPLICABLE\_VERSION}(\text{policyId}, \text{applicationInstant}) \to \text{DiscountPolicyVersion} \mid \text{null}$$
+
+Resolution rule:
+1. Find all versions $V$ belonging to `(institution_id, policy_id)` where:
+   $$(V.\text{effectiveFrom} \text{ IS NULL} \lor V.\text{effectiveFrom} \le \text{applicationInstant}) \land (V.\text{effectiveTo} \text{ IS NULL} \lor V.\text{effectiveTo} \ge \text{applicationInstant})$$
+2. If exactly $1$ version matches: return that version.
+3. If $0$ versions match: the policy is not currently applicable (application fails closed with `DISCOUNT_POLICY_NOT_CURRENTLY_APPLICABLE`).
+4. If $> 1$ versions match: structurally prevented by interval validation on creation; fails closed if detected.
+
+### 7.3 Read Semantics Distinction
+Read models explicitly distinguish:
+- `latestVersion`: The greatest version number created (for administrative inspection of draft/future versions).
+- `currentApplicableVersion`: The unique version currently active at query time (`applicationInstant`), or `null` if future-scheduled or expired. The greatest version number is **never** conflated with the currently active version.
 
 ---
 
@@ -373,8 +390,8 @@ CREATE TABLE finance_obligation_discounts (
     REFERENCES finance_financial_accounts(institution_id, id) ON DELETE RESTRICT,
   CONSTRAINT fk_obligation_discounts_obligation FOREIGN KEY (institution_id, obligation_id)
     REFERENCES finance_obligations(institution_id, id) ON DELETE RESTRICT,
-  CONSTRAINT fk_obligation_discounts_journal FOREIGN KEY (journal_transaction_id)
-    REFERENCES finance_journal_transactions(id) ON DELETE RESTRICT
+  CONSTRAINT fk_obligation_discounts_journal FOREIGN KEY (institution_id, journal_transaction_id)
+    REFERENCES finance_journal_transactions(institution_id, id) ON DELETE RESTRICT
 );
 
 -- 4. Obligation Discount Revocations (Append-Only Compensating Fact)
@@ -398,8 +415,8 @@ CREATE TABLE finance_obligation_discount_revocations (
     REFERENCES finance_financial_accounts(institution_id, id) ON DELETE RESTRICT,
   CONSTRAINT fk_discount_revocations_obligation FOREIGN KEY (institution_id, obligation_id)
     REFERENCES finance_obligations(institution_id, id) ON DELETE RESTRICT,
-  CONSTRAINT fk_discount_revocations_journal FOREIGN KEY (journal_transaction_id)
-    REFERENCES finance_journal_transactions(id) ON DELETE RESTRICT
+  CONSTRAINT fk_discount_revocations_journal FOREIGN KEY (institution_id, journal_transaction_id)
+    REFERENCES finance_journal_transactions(institution_id, id) ON DELETE RESTRICT
 );
 
 -- Indexes
@@ -457,7 +474,36 @@ $$\begin{aligned}
 ### 17.1 Policy Management Endpoints
 
 #### `GET /api/finance/discount-policies`
-Returns policies with their latest active version.
+Returns policy definitions with both `latestVersion` (administrative greatest sequence) and `currentApplicableVersion` (unique version effective at server query instant, or `null` if not currently effective).
+- **Response Shape:**
+```json
+[
+  {
+    "id": "e8b2f913-64a1-4328-8d01-e23f03a6bc41",
+    "institutionId": "inst-1",
+    "code": "BOLSA-20",
+    "status": "active",
+    "latestVersion": {
+      "id": "ver-2",
+      "version": 2,
+      "name": "Bolsa de Mérito 25%",
+      "calculationMode": "percentage",
+      "value": "25.00",
+      "effectiveFrom": "2027-09-01T00:00:00.000Z",
+      "effectiveTo": "2028-08-31T23:59:59.999Z"
+    },
+    "currentApplicableVersion": {
+      "id": "ver-1",
+      "version": 1,
+      "name": "Bolsa de Mérito 20%",
+      "calculationMode": "percentage",
+      "value": "20.00",
+      "effectiveFrom": "2026-09-01T00:00:00.000Z",
+      "effectiveTo": "2027-08-31T23:59:59.999Z"
+    }
+  }
+]
+```
 
 #### `POST /api/finance/discount-policies`
 Creates a new policy identity + version 1.
@@ -476,8 +522,8 @@ Creates a new policy identity + version 1.
 ```
 - **Response:** `201 Created`
 
-#### `POST /api/finance/discount-policies/:id/versions` (P1-02 Fix)
-Creates a new immutable economic version for an existing policy.
+#### `POST /api/finance/discount-policies/:id/versions` (P1-02 / P1-03 Fix)
+Creates a new immutable economic version for an existing policy. Fails with `422 DISCOUNT_POLICY_OVERLAPPING_INTERVAL` if `[effectiveFrom, effectiveTo]` overlaps with any existing version of the policy.
 - **Request Body:**
 ```json
 {
@@ -500,6 +546,7 @@ Sets `status = 'archived'`.
 ### 17.2 Obligation Concession Endpoints
 
 #### `POST /api/finance/obligations/:obligationId/discounts`
+Applies the policy version. If `discountPolicyId` is passed, the server automatically resolves `CURRENT_APPLICABLE_VERSION(policyId, applicationInstant)`; if explicit `discountPolicyVersionId` is passed, the server verifies it matches the applicable version at `applicationInstant`.
 - **Request Body:**
 ```json
 {
@@ -554,7 +601,9 @@ Sets `status = 'archived'`.
 | `DISCOUNT_ALREADY_ACTIVE` | 409 | Active discount already present | Esta cobrança já possui um desconto ativo. Revogue-o antes de aplicar um novo. |
 | `DISCOUNT_ALREADY_REVOKED` | 409 | Target discount is already revoked | Este desconto já se encontra revogado. |
 | `DISCOUNT_FLOOR_VIOLATION` | 422 | Discount exceeds available unallocated debt | O desconto não pode reduzir o valor devido abaixo do montante já liquidado. |
-| `DISCOUNT_INACTIVE_POLICY` | 422 | Policy archived or outside validity window | A política de desconto selecionada não se encontra ativa. |
+| `DISCOUNT_INACTIVE_POLICY` | 422 | Policy archived | A política de desconto selecionada encontra-se arquivada. |
+| `DISCOUNT_POLICY_NOT_CURRENTLY_APPLICABLE` | 422 | No version effective at applicationInstant | A política de desconto não possui nenhuma versão em vigor nesta data. |
+| `DISCOUNT_POLICY_OVERLAPPING_INTERVAL` | 422 | Proposed version interval overlaps existing version | O intervalo de vigência da versão sobrepõe-se a uma versão existente. |
 | `DISCOUNT_CURRENCY_MISMATCH`| 422 | Policy currency != Obligation currency | A moeda da política de desconto não coincide com a cobrança. |
 | `DISCOUNT_CONFLICT` | 409 | Idempotency fingerprint conflict | Conflito de submissão na operação de desconto. |
 
@@ -588,6 +637,10 @@ Extended in `scripts/provision-local-finance-uat.ts`:
 - **Fixed amount exactness:** Verifies exact `10.00 EUR` deduction.
 - **Canonical Money rounding reuse:** Reuses `exact-decimal.ts` / `money.ts` without custom rounding hacks.
 - **Policy version immutability:** Verifies creating version 2 preserves version 1 without row mutation.
+- **Overlapping version interval rejection:** Verifies creating a version whose `[effectiveFrom, effectiveTo]` overlaps with an existing version fails closed with `422 DISCOUNT_POLICY_OVERLAPPING_INTERVAL`.
+- **Future version does not become applicable early:** Verifies a version with future `effectiveFrom` cannot be applied before its effective window even if it is the highest version sequence number.
+- **Current version resolves correctly:** Verifies applying a policy resolves the unique immutable version effective at `applicationInstant`.
+- **No-version-applicable fails closed:** Verifies applying a policy with no version currently in effect at `applicationInstant` fails closed with `422 DISCOUNT_POLICY_NOT_CURRENTLY_APPLICABLE`.
 - **Archived policy rejection:** Fails application attempt when policy `status = 'archived'`.
 - **Out-of-effective-window rejection:** Fails when transaction time is outside `[effectiveFrom, effectiveTo]`.
 - **Currency semantics:** Rejects fixed discount policy in `USD` against an `EUR` obligation.
@@ -596,6 +649,7 @@ Extended in `scripts/provision-local-finance-uat.ts`:
 - **Foreign-tenant policy rejection:** Fails closed if policy belongs to another institution.
 - **Foreign-tenant policy version rejection:** Fails closed if policy version belongs to another institution.
 - **Foreign-tenant account & obligation rejection:** Cross-tenant IDs fail closed without data disclosure.
+- **Cross-tenant Journal reference negative proof (PostgreSQL):** Explicit test verifies that inserting a discount or discount revocation with a `journal_transaction_id` belonging to a foreign institution is rejected by the composite foreign key `(institution_id, journal_transaction_id) REFERENCES finance_journal_transactions(institution_id, id)` and causes transactional rollback.
 - **Director read-only:** `director` role receives `403 Forbidden` on create, version, apply, and revoke.
 - **Unauthorized mutation rejection:** Unauthenticated requests receive `401 Unauthorized`.
 
@@ -659,12 +713,21 @@ Extended in `scripts/provision-local-finance-uat.ts`:
 
 ## 25. Temporal Authority Clarification (`POLICY_TIME_AUTHORITY`)
 
-**Normative Rule:** All policy eligibility time evaluations and fact timestamps use **one explicit server-authoritative instant**:
-$$\text{AuthoritativeInstant} = \text{clock\_timestamp() (PostgreSQL) / new Date() (Server)}$$
+### 25.1 Single Server-Authoritative Instant
+A command-level `applicationInstant: Date` is sampled **exactly once server-side** at the entry of the command handler:
+$$\text{applicationInstant} = \text{new Date()}$$
 
-- The client/browser clock is **never** authority.
-- A policy is eligible if $\text{AuthoritativeInstant} \in [\text{effectiveFrom}, \text{effectiveTo}]$.
-- No user-supplied historical effective instant is accepted in v1.
+- **Zero Browser Clock Authority (`BROWSER_TIME_AUTHORITY = NO`):** The client/browser clock is never trusted or queried.
+- **Governing Scope:** The exact same sampled `applicationInstant` strictly governs:
+  1. Policy effective-window eligibility: evaluates whether $\text{applicationInstant} \in [V.\text{effectiveFrom}, V.\text{effectiveTo}]$;
+  2. Discount economic application semantics: determines base obligation position at that instant;
+  3. The immutable application fact timestamp: stored in `finance_obligation_discounts.applied_at` (or `revoked_at`);
+  4. Command idempotency and audit provenance.
+
+### 25.2 Distinction Between Economic Instant and Physical Database Instant
+- **Economic / Application Instant (`applied_at` / `revoked_at`):** The domain-level economic timestamp determined by `applicationInstant`.
+- **Database Recorded Instant (`created_at` / `recorded_at`):** The PostgreSQL physical commit/write timestamp (`clock_timestamp()`).
+- In accordance with Finance temporal law, the spec preserves both concepts distinctly without collapsing them.
 
 ---
 
