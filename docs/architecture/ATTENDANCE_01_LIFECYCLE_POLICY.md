@@ -21,7 +21,7 @@
 | CANCELLED | Pre-confirmation cancellation with reason/audit; no attendance effect. | Terminal |
 | EXPIRED | Terminal expiry where the policy does not create automatic absence or human-decision handling. | Terminal |
 
-A policy-selected automatic confirmed absence transitions the session to CONFIRMED and triggers immediate notification to teacher, coordination and guardian. A human route transitions it to PENDING_DECISION.
+When the teacher confirms an OPEN session, every eligible learner must have a primary outcome; any unset outcome is automatically set to absence as part of that confirmation. This is distinct from late-session automation. A policy-selected automatic confirmed absence after a missed deadline transitions the session to CONFIRMED and triggers immediate notification to teacher, coordination and guardian. A human route transitions it to PENDING_DECISION.
 
 ## 3. Justification lifecycle
 
