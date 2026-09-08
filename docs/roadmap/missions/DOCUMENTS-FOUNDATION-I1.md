@@ -1,10 +1,10 @@
-# DOCUMENTS-FOUNDATION-I1 — Core Authority Preparation
+# DOCUMENTS-FOUNDATION-I1 — Core Authority
 
-**Estado oficial:** PREPARATION  
+**Estado oficial:** READY  
 **Programa:** Documents Foundation  
-**Owner de preparação:** DOCUMENTS_ANALYST  
-**Executor futuro:** ANTIGRAVITY  
-**Implementação autorizada:** NÃO  
+**Mission owner:** ANTIGRAVITY  
+**Analyst/reviewer:** DOCUMENTS_ANALYST  
+**Implementação autorizada:** SIM — apenas dentro deste Mission Pack  
 **Baseline de partida:** `main @ 02b7f0a454df922598b56660ce10216956539939`
 
 ## Objetivo
@@ -19,16 +19,14 @@ Finance mantém integralmente a autoridade de pagamento, obrigação, alocação
 
 `enrollment_documents` mantém os metadados e a decisão de negócio de Matrícula. Não é convertido nesta missão em armazenamento físico nem é migrado.
 
-## I1 candidato — Document Core Authority
+## I1 — Document Core Authority
 
-Quando esta missão passar a `READY`, a implementação proposta limitar-se-á a:
+A implementação autorizada limita-se a:
 
 1. persistência PostgreSQL institution-scoped para documento, versão/proveniência e referência de armazenamento opaca;
 2. serviços/repositórios em `src/modules/documents/**`;
 3. autorização server-side por `InstitutionalContext`;
-4. endpoints mínimos de leitura/criação de metadados, somente se o caminho de composição for explicitamente aprovado;
-5. auditoria factual mínima e idempotência para comandos retryable;
-6. testes unitários, HTTP e PostgreSQL, incluindo negativos cross-tenant.
+4. auditoria factual mínima e idempotência para comandos retryable;\n5. testes unitários e PostgreSQL, incluindo negativos cross-tenant.\n\nNenhuma rota HTTP ou UI faz parte de I1.
 
 ## Exclusões absolutas
 
@@ -60,16 +58,16 @@ Quando esta missão passar a `READY`, a implementação proposta limitar-se-á a
 - nenhuma operação Documents altera verdade Finance ou estado de Matrícula;
 - estados/evidência técnicos não simulam upload, preview, anti-malware ou integração externa.
 
-## Evidência obrigatória antes de READY
+## Preflight obrigatório do executor antes do primeiro ficheiro de código
 
 - [ ] SHA remoto e worktree Documents confirmados limpos e isolados de Finance;
-- [ ] caminho de migração atual e composição de rotas confirmados no SHA de execução;
+- [ ] número seguinte de migração confirmado no SHA de execução; sem rota nesta missão;
 - [ ] matriz OWNED/SHARED/FORBIDDEN aprovada;
 - [ ] contrato de dados I1 com chaves, constraints e compatibilidade definido;
-- [ ] matriz RED/GREEN com PostgreSQL real, HTTP e negativos cross-tenant definida;
-- [ ] decisão explícita sobre capability/papéis mínimos sem criar IAM paralelo;
-- [ ] nenhum P0/P1 aberto;
-- [ ] aprovação explícita do Product Owner para `IMPLEMENTATION_AUTHORIZED=YES`.
+- [x] matriz RED/GREEN com PostgreSQL real e negativos cross-tenant definida;
+- [x] autorização mínima deriva do InstitutionalContext existente; nenhuma capability/IAM paralela;
+- [x] nenhum P0/P1 de planeamento aberto;
+- [x] Product Owner autorizou `IMPLEMENTATION_AUTHORIZED=YES` no escopo I1.
 
 ## Stop rules
 
@@ -79,9 +77,7 @@ Parar e pedir decisão formal se a implementação exigir alterar Finance, Enrol
 
 ```text
 MISSION=DOCUMENTS-FOUNDATION-I1
-STATE=READY
-BASELINE_RECONFIRMED=PASS
-DOCUMENTS_WORKTREE_ISOLATED=PASS
+STATE=READY\nBASELINE_RECONCILED=PASS\nDOCUMENTS_WORKTREE_ISOLATED=PRE-FLIGHT_REQUIRED
 OWNED_SHARED_FORBIDDEN=APPROVED
 DATA_CONTRACT=APPROVED
 AUTHORIZATION_CONTRACT=APPROVED
