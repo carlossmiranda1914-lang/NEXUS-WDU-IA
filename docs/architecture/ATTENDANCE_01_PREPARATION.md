@@ -66,6 +66,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | First-cut required experiences | Teacher register/confirm; coordination justification/conflict decisions and alert queue; guardian consultation/justification; learner own consultation |
 | First-cut reports | File export |
 | Learner attendance access | Own attendance information only |
+| Report export requester | Coordination or institutionally authorised role only |
+| Report export scope | Learner, assigned class/activity and defined period; institutional summaries when policy permits |
+| Report delivery | E-mail attachment |
 
 ## 4. Authority boundary
 
@@ -213,4 +216,12 @@ A session is not a timetable. It records that an authorised attendance occasion 
    - learner consultation limited strictly to their own attendance information.
 2. The first cut includes report export to file. The export authorisation, scope, content, format, expiry and audit remain to be specified before implementation; no uncontrolled export is implied by this decision.
 3. Learner access can never reveal another learner's attendance, a guardian's private submission, staff-only notes, internal decision rationale or unapproved evidence.
+
+## 20. Report-export decisions
+
+1. Only coordination and institutionally authorised roles may request an Attendance report export.
+2. An authorised export may cover an individual learner, an assigned class/activity and a defined period. Institutional summaries are permitted only where institutional policy allows.
+3. The first-cut delivery channel is an e-mail attachment.
+4. Before creating or sending an export, Attendance must validate the requester, institutional scope, policy version and authorised recipient; the request, generated content scope, recipient, send result and policy reference are auditable.
+5. An e-mail attachment cannot be revoked after delivery. This decision therefore does not permit public links, forwarding to an unverified recipient, use of a personal address outside policy, or later claims of withdrawal. Encryption/password, file format and recipient verification remain open security decisions before implementation.
 
