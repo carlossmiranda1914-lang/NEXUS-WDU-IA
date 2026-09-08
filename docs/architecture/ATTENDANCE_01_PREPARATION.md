@@ -57,6 +57,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Retention and erasure | Global jurisdictional profile; institution configures only within it |
 | Historical migration acceptance | Reconciled totals, validated sample and audited institutional approval |
 | Pending correction proposal | Institutional deadline, alert and escalation |
+| Confirmed-session learner history | Immutable reference plus learner name and class visible at confirmation |
+| Policy traceability | Immutable reference to the version applied to every decision |
+| Later placement correction | Preserve confirmed historical context; change only through audited Attendance revision |
 
 ## 4. Authority boundary
 
@@ -180,4 +183,11 @@ A session is not a timetable. It records that an authorised attendance occasion 
 1. Retention and eventual erasure of attendance records and audit evidence are governed by the applicable global jurisdictional profile. Institution-level configuration is permitted only within that profile.
 2. Historical migration is accepted only after reconciled totals, a validated sample and audited institutional approval. The migration must preserve source provenance, execution identity, time and reconciliation evidence.
 3. A correction proposal has an institutional-policy deadline. When pending beyond that deadline, Attendance alerts and escalates according to policy; it must never become effective merely by expiry.
+
+## 17. Attendance data-authority decisions
+
+1. At confirmation, Attendance preserves the historically visible learner context: immutable learner and placement references plus the learner name and class visible at that moment. This historical context is not silently refreshed from current Academic Core data.
+2. Attendance retains only the historical snapshot needed to interpret its own confirmed record; Academic Core remains authoritative for current learner, class and placement data.
+3. Every session, alert, justification and correction decision retains an immutable reference to the specific institutional-policy version applied.
+4. If Academic Core later corrects a placement, the confirmed Attendance context remains historically intact. Any attendance effect requires an auditable Attendance revision under the correction rules; automatic rewriting is prohibited.
 
