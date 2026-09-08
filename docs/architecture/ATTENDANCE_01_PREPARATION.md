@@ -78,6 +78,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Validation data | Synthetic or anonymised only |
 | Required manual-validation profiles | Teacher, coordination, guardian, learner and security/audit |
 | Institution isolation evidence | Mandatory negative attempts across at least two institutions |
+| Required session states | Open, pending decision, confirmed, cancelled and expired |
+| Human-decision late session | Pending decision and locked for editing |
+| Withdrawal of justification/correction proposal | Not allowed; proposal must be decided or rejected |
 
 ## 4. Authority boundary
 
@@ -245,4 +248,22 @@ A session is not a timetable. It records that an authorised attendance occasion 
 5. Testing and manual validation use synthetic or anonymised data only.
 6. Manual validation must include a teacher, coordination, guardian, learner and security/audit profile.
 7. Acceptance requires mandatory negative cross-institution attempts involving at least two institutions.
+
+## 22. Initial state-machine decisions
+
+### 22.1 Attendance session
+
+The required first-cut session states are:
+
+- **OPEN** — editable only by the authorised teacher while the session is within its permitted window;
+- **PENDING_DECISION** — deadline reached where policy requires human decision; locked for ordinary editing;
+- **CONFIRMED** — roster and primary outcomes historical; changes only by the correction workflow;
+- **CANCELLED** — pre-confirmation cancellation with preserved evidence and no attendance effect; and
+- **EXPIRED** — terminal expiry where policy does not create an automatic absence or a human-decision route.
+
+When a late session requires human decision, it transitions to **PENDING_DECISION**, not OPEN or EXPIRED, and is blocked for editing.
+
+### 22.2 Proposals
+
+A justification proposal and a correction proposal cannot be withdrawn by the proponent. Each must reach an explicit authorised decision or rejection; the full history remains auditable.
 
