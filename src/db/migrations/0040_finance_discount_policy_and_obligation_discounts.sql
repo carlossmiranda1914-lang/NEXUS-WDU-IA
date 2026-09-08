@@ -1,5 +1,33 @@
 -- FINANCE-F6-01: Institutional Discount Policy & Contextual Obligation Concession v1
 
+-- 0. Extend Journal Vocabulary Check Constraints
+ALTER TABLE finance_journal_transactions DROP CONSTRAINT finance_journal_transactions_journal_type_check;
+ALTER TABLE finance_journal_entries DROP CONSTRAINT finance_journal_entries_position_type_check;
+
+ALTER TABLE finance_journal_transactions ADD CONSTRAINT finance_journal_transactions_journal_type_check CHECK (
+  journal_type IN (
+    'foundation_value_received',
+    'foundation_reversal',
+    'payment_allocation',
+    'allocation_reversal',
+    'obligation_adjustment',
+    'obligation_discount'
+  )
+);
+
+ALTER TABLE finance_journal_entries ADD CONSTRAINT finance_journal_entries_position_type_check CHECK (
+  position_type IN (
+    'received_value',
+    'reversed_value',
+    'allocated_value',
+    'released_value',
+    'obligation_due_increased',
+    'obligation_due_decreased',
+    'obligation_discount_applied',
+    'obligation_discount_revoked'
+  )
+);
+
 -- 1. Stable Policy Identity
 CREATE TABLE finance_discount_policies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
