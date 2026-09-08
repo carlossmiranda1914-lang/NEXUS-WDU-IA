@@ -12,13 +12,13 @@ Attendance must protect institution isolation, attendance integrity, actor accou
 | Risk | Required control |
 |---|---|
 | Unauthorised online teacher action | Synchronous Academic Core validation at session initiation and confirmation |
-| Stale/offline authority | Previously verified, time-limited cached active assignment; revalidate server-side on synchronisation |
+| Stale/offline authority | Previously verified active assignment with server-signed expiry; revalidate server-side on synchronisation |
 | Excess local data | Cache only valid assignment, necessary session/roster and unsynchronised records |
 | Device protection loss | Block offline registration until OS protection requirements are restored |
 | Local disclosure | Encrypted OS-protected storage; remove local Attendance data at sign-out |
-| Conflicting offline changes | Human decision; no automatic client/server or timestamp winner |
+| Conflicting offline changes | Human decision; no automatic client/server or timestamp winner; suspicious device/server time drift becomes pending human decision |
 | Cross-institution access | Deny and test negative attempts across at least two institutions |
-| Historic record tampering | Immutable revisions and append-only integrity-verifiable audit |
+| Historic record tampering | Immutable revisions and append-only integrity-verifiable audit; same idempotency key with different content is rejected, audited and signalled |
 | Evidence bypass | Documents Foundation provisional association only; no local file store |
 | Unauthorised report export | Coordination/institution-authorised requester, policy scope and audit |
 | E-mail recipient mistake | One-time code sent to specified address before every delivery; expires after 5 minutes; repeated failures temporarily block validation and alert security |
