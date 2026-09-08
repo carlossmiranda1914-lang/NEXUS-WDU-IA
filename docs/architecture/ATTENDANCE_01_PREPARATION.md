@@ -96,6 +96,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Missing primary outcome at teacher confirmation | Automatically set to absence |
 | Offline-conflict UX | Separate status, affected record and authorised-decision-pending indication |
 | Attendance language | User interface language |
+| Learner visibility | Immediately after confirmation, limited to own record |
+| Accessibility minimum | Keyboard navigation, screen-reader support and adequate contrast |
+| Coordination alert queue fields | Learner/scope, alert reason, state, deadline and pending human action |
 
 ## 4. Authority boundary
 
@@ -331,4 +334,10 @@ A report export request has the required states **REQUESTED**, **AUTHORISED**, *
 1. When the teacher confirms a session, any eligible learner without an explicit primary outcome is automatically recorded as absent. This is a confirmation-completeness rule; it is distinct from the policy-selected automatic confirmation of an unconfirmed late session.
 2. An offline synchronisation conflict must show the teacher a separate clear status, the affected record and that an authorised decision is pending. It must not pretend the record was successfully synchronised.
 3. Attendance states, warnings and notifications appear in the user's interface language.
+
+## 26. Visibility, accessibility and coordination-queue decisions
+
+1. The learner sees their own confirmed presence/absence immediately after confirmation, under the same strict own-record boundary as guardian access.
+2. Attendance-01 requires keyboard navigation, screen-reader support and adequate contrast in its first cut.
+3. The coordination alert queue must display the learner or applicable scope, alert reason, current state, applicable deadline and required pending human action. It must not expose unauthorised evidence or internal-only details.
 
