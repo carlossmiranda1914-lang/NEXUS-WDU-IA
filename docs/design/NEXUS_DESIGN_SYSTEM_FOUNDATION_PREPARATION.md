@@ -6,7 +6,7 @@
 
 ## 1. Decision
 
-The official Nexus Design System must be defined and approved before detailed Attendance screen design begins. Attendance must consume this foundation; it must not create an independent visual language.
+The official Nexus Design System is defined by the approved business source **Nexus Edu IA — Padrão Visual e Paleta Oficial v1.0 (August 2026)**. Repository work must align to it before detailed Attendance screen design begins. Attendance must consume this foundation; it must not create an independent visual language.
 
 ## 2. Audit baseline
 
@@ -15,17 +15,18 @@ The current repository contains:
 - an experience-guidance model that is canonical for product behaviour;
 - reusable visual tokens/components and light/dark implementation patterns;
 - a current palette primarily based on blue/neutrals;
-- no complete official design-system specification covering identity, components, states, responsive rules and accessibility;
-- acknowledged visual debt: the current identity/palette may feel generic.
+- an official business-source design document covering identity, modes, tokens, components, states and accessibility;
+- no repository-aligned canonical design-system record yet; and
+- visual drift: current code uses predominantly blue tokens and two themes, while the approved visual standard is green-led and has three modes.
 
-Therefore existing code tokens are implementation evidence, not automatically official design authority.
+Therefore existing code tokens are implementation evidence, not official design authority where they diverge from the approved standard.
 
 ## 3. Design-system boundary
 
 The foundation must define:
 
-1. brand expression and use of logo/mark;
-2. theme model and background/surface hierarchy;
+1. brand expression Nexus Aurora and use of logo/mark;
+2. approved theme model: Claro, Escuro, Tonal Nexus and optional Seguir dispositivo;
 3. semantic colour roles and contrast requirements;
 4. typography, spacing, grid and density;
 5. components and their interactive states;
@@ -55,7 +56,7 @@ The system must support the approved Nexus experience model:
 | Priority | Deliverable | Status |
 |---|---|---|
 | DS-P0 | Visual baseline audit: logo, current tokens, existing themes, component inventory and visual debt | In progress |
-| DS-P1 | Brand direction: official visual character, mark usage, palette intent and theme strategy | Pending |
+| DS-P1 | Source alignment: Nexus Aurora, approved mark/palette/theme strategy captured from official source | Complete |
 | DS-P2 | Foundations: colour roles, typography, spacing, elevation, radii, grids and iconography | Pending |
 | DS-P3 | Component system: buttons, fields, selection, navigation, cards, tables, dialogs, alerts, status and empty/error/loading states | Pending |
 | DS-P4 | Interaction and accessibility: focus, keyboard, screen reader, contrast, motion and feedback | Pending |
@@ -73,6 +74,16 @@ The system must support the approved Nexus experience model:
 - Finance remains entirely outside scope.
 - Attendance functional decisions remain valid; only its visual/product presentation waits for this foundation.
 
-## 7. Next decision
+## 7. Approved DS-P1 direction
 
-DS-P1 starts with the official visual character and theme model, before selecting individual colours or screen layouts.
+- **Direction:** Nexus Aurora — institutional, serene, technically precise, futurist through contrast/transitions/functional detail, but human and comfortable for long work.
+- **Must not become:** cyberpunk, fluorescent/aggressive, cold/banking, infantilised or a decorative card dashboard.
+- **Brand base:** deep green, emerald, vivid green, lime accent and neutral surfaces.
+- **AI:** turquoise, visually distinct from the primary action.
+- **Appearance:** Claro, Escuro and Tonal Nexus throughout the whole product, plus Seguir dispositivo; initial mode Claro.
+- **Colour proportion:** 85% neutral surfaces, 10% deep/emerald green, up to 5% vivid/lime/turquoise accents.
+- **Visual process signature:** Nexus Path — Context → Action → Validation → Evidence → Result, only where the workflow has real stages/responsibility.
+
+## 8. Next priority
+
+DS-P2 — align source-of-truth foundation tokens, typography, geometry and semantic states in a repository design specification, then record code drift as a future controlled adoption plan. No styling implementation is authorised.
