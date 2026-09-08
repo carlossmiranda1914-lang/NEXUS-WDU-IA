@@ -86,7 +86,7 @@ Each integration contract must specify:
 - event/request identifier and idempotency strategy;
 - creation/expiry times;
 - ordering and replay behaviour;
-- retry, timeout and failure-queue rules;
+- retry, timeout and failure-queue rules: repeated delivery failure is recorded, retried and escalated to a failure queue;
 - audit fields; and
 - invalid-reference response.
 
