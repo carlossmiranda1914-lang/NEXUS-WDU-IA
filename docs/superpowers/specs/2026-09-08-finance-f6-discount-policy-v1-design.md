@@ -11,7 +11,7 @@
 
 ## 2. Product Outcome
 
-An authorized `financial` or `institution_admin` operator can define institutional Discount Policies (percentage rate or fixed amount) and apply an authorized policy concession to any open, eligible Financial Obligation within the authenticated institution.
+An authorized `financial` or `institution_admin` operator can define institutional Discount Policies (percentage rate or fixed amount) with immutable versioning and apply an authorized policy concession to any open, eligible Financial Obligation within the authenticated institution.
 
 Key user-facing outcomes:
 1. **Governed Institutional Concessions:** Schools eliminate ad-hoc, untracked price reductions by enforcing versioned, auditable institutional Discount Policies (e.g. *Bolsa de Mérito 20%*, *Desconto de Irmãos 10%*, *Pronto Pagamento 25 EUR*).
@@ -29,7 +29,7 @@ Key user-facing outcomes:
 | **Economic Meaning** | **Correction of error/defect:** An administrative fix for clerical errors, wrong price items, or contested invoice amounts. | **Policy-governed concession/entitlement:** An authorized reduction granted under defined institutional policies (scholarship, family, merit, prompt payment). |
 | **Origin & Nature** | Ad-hoc or reasoned correction targeting a specific mistake. | Standardized institutional policy entitlement. |
 | **Direction** | Bidirectional (`increase` or `decrease`). | Strictly **reduction** of payable obligation debt. |
-| **Reference Authority** | Justification reason + optional compensation link to prior Adjustment. | Versioned institutional Discount Policy (`finance_discount_policies`). |
+| **Reference Authority** | Justification reason + optional compensation link to prior Adjustment. | Exact immutable Discount Policy Version (`finance_discount_policy_versions`). |
 | **Journal Position** | `obligation_due_increased` / `obligation_due_decreased` | `obligation_discount_applied` / `obligation_discount_revoked` |
 
 **Normative Rule:** Discount is **never** an alias or UI re-skin of Adjustment. They represent separate economic authorities, separate Journal positions, and separate analytical streams in institutional reporting.
@@ -63,64 +63,73 @@ F6 consumes and builds upon the following frozen, verified capabilities without 
 
 ---
 
-## 6. Discount Policy Model
+## 6. Discount Policy Model (Stable Identity)
 
-Discount policies are institution-scoped catalog entities defining the terms under which a financial concession may be applied.
+Discount policies separate stable administrative identity from immutable economic versions.
 
-### Domain Model (`DiscountPolicy`)
+### 6.1 Stable Policy Identity (`finance_discount_policies`)
+
+Represents the durable institutional existence of a named policy:
 
 ```typescript
-export type DiscountCalculationMode = 'percentage' | 'fixed_amount';
 export type DiscountPolicyStatus = 'active' | 'archived';
 
 export interface DiscountPolicy {
   readonly id: string;
   readonly institutionId: string;
-  readonly code: string;
-  readonly name: string;
-  readonly description: string | null;
-  readonly calculationMode: DiscountCalculationMode;
-  readonly value: string; // e.g. "20.00" for 20%, or "25.00" for 25.00 EUR
-  readonly currency: string | null; // Required when calculationMode === 'fixed_amount', null for percentage
+  readonly code: string; // e.g. "BOLSA-20", "IRMAOS-10"
   readonly status: DiscountPolicyStatus;
-  readonly effectiveFrom: Date | null;
-  readonly effectiveTo: Date | null;
-  readonly version: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
 ```
 
-### Policy Invariants
-1. **Code Uniqueness:** `code` must be unique per institution among active policies (e.g. `BOLSA-20`, `IRMAOS-10`, `PRONTO-PAG`).
-2. **Calculation Mode Validation:**
-   - If `calculationMode === 'percentage'`: `value` must parse to an exact decimal in range `(0.00, 100.00]`. `currency` must be `NULL`.
-   - If `calculationMode === 'fixed_amount'`: `value` must parse to a strictly positive exact decimal (`> 0.00`). `currency` must be a valid ISO 4217 code.
-3. **Effective Interval:** If both `effectiveFrom` and `effectiveTo` are defined, `effectiveFrom <= effectiveTo`.
-4. **V1 Eligibility Boundary:** An obligation is eligible for a policy if:
-   - Policy `status === 'active'`;
-   - Current date is within `[effectiveFrom, effectiveTo]` (if dates are specified);
-   - If `fixed_amount`, policy `currency === obligation.currency`;
-   - Obligation `status === 'open'`;
-   - Obligation currently has **zero** active discounts.
+### Policy Identity Invariants
+1. **Code Uniqueness:** `UNIQUE (institution_id, code)` is strictly enforced per institution.
+2. **Stable Reference:** The `id` never changes over the lifetime of the policy.
+3. **Archival:** Archiving a policy (`status = 'archived'`) prevents any new version creation or application, but leaves all historical versions and applied discounts intact.
 
 ---
 
-## 7. Policy Versioning
+## 7. Policy Versioning (Immutable Economic Authority)
 
-To preserve historical auditability and deterministic reproduction of past financial positions:
-1. **Immutable Snapshot on Application:** When a discount is applied, the calculated Money amount, percentage rate / fixed value, policy code, and policy version are permanently captured in the `finance_obligation_discounts` fact row.
-2. **Policy Mutation Semantics:**
-   - Modifying a policy's economic terms (`calculationMode`, `value`, or `currency`) increments `version` and preserves prior version metadata.
-   - Archiving a policy (`status = 'archived'`) prevents *new* applications of that policy but **never** mutates, invalidates, or recalculates historically applied discounts.
+Economic terms of a discount policy are stored in immutable, append-only version rows.
+
+### 7.1 Immutable Policy Version (`finance_discount_policy_versions`)
+
+```typescript
+export type DiscountCalculationMode = 'percentage' | 'fixed_amount';
+
+export interface DiscountPolicyVersion {
+  readonly id: string;
+  readonly institutionId: string;
+  readonly policyId: string;
+  readonly version: number; // 1, 2, 3...
+  readonly name: string;
+  readonly description: string | null;
+  readonly calculationMode: DiscountCalculationMode;
+  readonly value: string; // Rate (e.g. "20.00" for 20%) or Fixed amount ("25.00")
+  readonly currency: string | null; // Required for fixed_amount, NULL for percentage
+  readonly effectiveFrom: Date | null;
+  readonly effectiveTo: Date | null;
+  readonly createdAt: Date;
+  readonly actorPersonId: string | null;
+}
+```
+
+### Policy Versioning Invariants
+1. **Append-Only Immutability:** A policy version row is **never updated or deleted**.
+2. **Unique Version Sequence:** `UNIQUE (institution_id, policy_id, version)` ensures sequential, non-colliding versions.
+3. **Economic Mutation Creates New Version:** Modifying `name`, `calculationMode`, `value`, `currency`, `effectiveFrom`, or `effectiveTo` inserts a new version (`version = prior + 1`).
+4. **Exact Version Binding:** Applied discounts link directly to the specific `policy_version_id`, guaranteeing that historical concessions are never altered by future policy changes.
 
 ---
 
-## 8. Applied Discount Fact
+## 8. Applied Discount Fact (Append-Only)
 
-An applied discount is an immutable economic fact recording an authorized reduction of an open obligation.
+An applied discount is an **immutable economic fact** recording an authorized concession granted on an open obligation.
 
-### Domain Model (`ObligationDiscount`)
+### 8.1 Domain Model (`ObligationDiscount`)
 
 ```typescript
 export interface ObligationDiscount {
@@ -128,34 +137,35 @@ export interface ObligationDiscount {
   readonly institutionId: string;
   readonly financialAccountId: string;
   readonly obligationId: string;
-  readonly discountPolicyId: string;
+  readonly policyId: string;
+  readonly policyVersionId: string;
   readonly policyCode: string;
   readonly policyName: string;
   readonly policyVersion: number;
   readonly calculationMode: DiscountCalculationMode;
-  readonly policyValue: string; // Rate (e.g. "20.00") or Fixed amount ("25.00")
-  readonly amount: Money; // Authoritative calculated discount Money amount
+  readonly policyValue: string;
+  readonly amount: Money; // Authoritative calculated Money amount (snapshot)
   readonly currency: string;
   readonly reason: string;
-  readonly status: 'applied' | 'revoked';
   readonly journalTransactionId: string;
   readonly appliedAt: Date;
   readonly actorPersonId: string | null;
 }
 ```
 
-### Application Invariants
-1. **At Most One Active Discount:** An obligation may have at most one discount in `status === 'applied'`.
-2. **Floor Constraint:** An applied discount cannot cause the obligation's `effectiveDue` to drop below its `netCovered` amount (`effectiveDue >= netCovered`).
-3. **Idempotency:** Every apply command carries a mandatory `Idempotency-Key` and canonical fingerprint. Replaying the exact command returns the existing record; sending a differing payload with the same key returns a `409 Conflict`.
+### 8.2 Pure Append-Only Economic Authority (P1-01 Fix)
+- The table `finance_obligation_discounts` has **NO mutable economic status column** (`status = 'applied' | 'revoked'` is removed from the canonical truth layer).
+- Once inserted, an `ObligationDiscount` fact is **strictly immutable**.
+- The concept of "active vs revoked" is a **derived projection**, computed deterministically as:
+  $$\text{IsActive}(D) \iff \text{No matching record exists in } \text{finance\_obligation\_discount\_revocations for } D.\text{id}$$
 
 ---
 
-## 9. Discount Revocation Fact
+## 9. Discount Revocation Fact (Separate Compensating Fact)
 
-Revocation is an explicit, full cancellation of an active discount fact.
+Revocation of a discount is represented solely by an independent, append-only **compensating fact**.
 
-### Domain Model (`ObligationDiscountRevocation`)
+### 9.1 Domain Model (`ObligationDiscountRevocation`)
 
 ```typescript
 export interface ObligationDiscountRevocation {
@@ -163,43 +173,43 @@ export interface ObligationDiscountRevocation {
   readonly institutionId: string;
   readonly financialAccountId: string;
   readonly obligationId: string;
-  readonly originalDiscountId: string;
-  readonly amount: Money; // Exactly matches originalDiscount.amount
+  readonly originalDiscountId: string; // Links to target discount fact
+  readonly amount: Money; // Exactly equals originalDiscount.amount
   readonly currency: string;
-  readonly reason: string; // Mandatory non-empty operator justification
+  readonly reason: string; // Mandatory non-empty justification
   readonly journalTransactionId: string;
   readonly revokedAt: Date;
   readonly actorPersonId: string | null;
 }
 ```
 
-### Revocation Invariants
-1. **Total Revocation Only:** Revocation always cancels `100%` of the target discount's amount. Partial revocation is forbidden.
-2. **Target Eligibility:** Target discount must exist in the same institution, match the specified obligation, and have `status === 'applied'`. A revoked discount cannot be revoked again.
-3. **State Transition:** Upon revocation, a new `finance_obligation_discount_revocations` row is created, the original discount record's derived status becomes `'revoked'`, a compensating Journal entry is posted, and the obligation's payable balance is restored.
-4. **Subsequent Concessions:** Once an active discount is revoked, the obligation has 0 active discounts and becomes eligible for a new discount application under an active policy if desired.
+### 9.2 Revocation Invariants
+1. **Separate Compensating Fact:** Revocation does not mutate, soft-delete, or overwrite the target discount row.
+2. **Single Revocation Constraint:** An applied discount may be revoked **at most once**:
+   $$\text{UNIQUE} (\text{institution\_id},\; \text{original\_discount\_id})$$
+3. **Exact Amount Reversal:** The revoked amount is identically equal to the target discount's calculated Money amount.
+4. **Total Revocation Only:** Partial revocation is strictly out of scope.
+5. **Restoration of Payable Capacity:** Revoking an active discount restores the obligation's payable balance, allowing subsequent allocation or a new discount application.
 
 ---
 
 ## 10. Money & Percentage Calculation
 
-All calculations are strictly server-authoritative and executed using canonical `Money` exact decimal arithmetic.
+All calculations are strictly server-authoritative using canonical `Money` exact decimal arithmetic.
 
 ### 10.1 Percentage Calculation Base
-
-**Normative Invariant:** The percentage calculation base is the **pre-discount effective obligation value** at the instant of application:
 
 $$\text{PreDiscountDue} = \text{OriginalObligationMoney} + \text{NetAdjustments}$$
 
 Where:
-- $\text{NetAdjustments} = \sum(\text{Adjustment increases}) - \sum(\text{Adjustment decreases})$
+$$\text{NetAdjustments} = \sum(\text{Adjustment increases}) - \sum(\text{Adjustment decreases})$$
 
 $$\text{CalculatedDiscountAmount} = \text{Quantize}\left(\text{PreDiscountDue} \times \frac{\text{PercentageRate}}{100},\; \text{CurrencyScale},\; \text{round\_half\_up}\right)$$
 
-### 10.2 Interaction with Subsequent Adjustments (Snapshot Immutability)
-- When a 20% discount is applied to an obligation with pre-discount due of $100.00\text{ EUR}$, an immutable discount fact of $20.00\text{ EUR}$ is recorded.
-- If an administrative adjustment is later posted (e.g. $+10.00\text{ EUR}$ due to extra lab fee), the historical discount fact **remains exactly $20.00\text{ EUR}$**.
-- It is **never** retroactively recalculated. If the operator wishes to adjust the concession, they must explicitly revoke the old discount and apply a new one.
+### 10.2 Snapshot Immutability
+- Applying a 20% discount on a pre-discount due of $100.00\text{ EUR}$ creates an immutable discount fact of $20.00\text{ EUR}$.
+- If an administrative adjustment is later posted (e.g. $+10.00\text{ EUR}$), the historical discount fact **remains exactly $20.00\text{ EUR}$**.
+- Historical discounts are **never** retroactively recalculated.
 
 ### 10.3 Fixed Amount Calculation
 - For fixed amount policies, $\text{CalculatedDiscountAmount} = \text{PolicyFixedMoney}$.
@@ -209,21 +219,24 @@ $$\text{CalculatedDiscountAmount} = \text{Quantize}\left(\text{PreDiscountDue} \
 
 ## 11. Derived Obligation Financial Position
 
-The server maintains **one unified, canonical derived position calculation** for an obligation across all financial operations (Adjustments, Discounts, Allocations, Reversals).
+The server maintains **one unified, canonical derived position calculation** for an obligation across all financial operations.
 
-### Canonical Formula
+### Canonical Formula Derived from Facts (P1-01 Fix)
 
 ```typescript
 export interface ObligationFinancialPositionInput {
   readonly original: Money;
   readonly adjustments: readonly { readonly direction: 'increase' | 'decrease'; readonly amount: Money }[];
-  readonly discounts: readonly { readonly status: 'applied' | 'revoked'; readonly amount: Money }[];
+  readonly discounts: readonly { readonly id: string; readonly amount: Money }[];
+  readonly discountRevocations: readonly { readonly originalDiscountId: string; readonly amount: Money }[];
   readonly allocations: readonly Money[];
   readonly allocationReversals: readonly Money[];
 }
 
 export interface ObligationFinancialPosition {
   readonly netAdjustments: Money;
+  readonly grossDiscounts: Money;
+  readonly revokedDiscounts: Money;
   readonly netDiscounts: Money;
   readonly effectiveDue: Money;
   readonly netCovered: Money;
@@ -233,7 +246,11 @@ export interface ObligationFinancialPosition {
 
 $$\text{netAdjustments} = \sum \text{adjustment increases} - \sum \text{adjustment decreases}$$
 
-$$\text{netDiscounts} = \sum_{\text{status}=\text{'applied'}} \text{discount.amount}$$
+$$\text{grossDiscounts} = \sum_{D \in \text{discounts}} D.\text{amount}$$
+
+$$\text{revokedDiscounts} = \sum_{R \in \text{discountRevocations}} R.\text{amount}$$
+
+$$\text{netDiscounts} = \text{grossDiscounts} - \text{revokedDiscounts}$$
 
 $$\text{effectiveDue} = \text{original} + \text{netAdjustments} - \text{netDiscounts}$$
 
@@ -244,15 +261,14 @@ $$\text{remainingCoverable} = \text{effectiveDue} - \text{netCovered}$$
 ### Mandatory Invariants Enforced by Position Engine
 1. $\text{effectiveDue} \ge \text{netCovered}$
 2. $\text{remainingCoverable} \ge 0.00$
-3. Currency match across all components.
+3. $\text{netDiscounts} \ge 0.00$
+4. Currency match across all components.
 
 ---
 
 ## 12. Journal Semantics
 
-The typed Financial Journal is extended to incorporate discount transactions as distinct economic subledger movements.
-
-### Typed Journal Extension
+The typed Financial Journal is extended with distinct economic subledger movements.
 
 ```typescript
 // Transaction Type Extension
@@ -276,56 +292,66 @@ export type JournalPositionType =
 ```
 
 ### Journal Booking Rules
-1. **Discount Application:**
-   - `journalType`: `'obligation_discount'`
-   - Entry: `{ positionType: 'obligation_discount_applied', money: discountAmount, sourceRef: obligationId }`
-   - `reason`: Operator-provided justification
-   - `actorPersonId`: Authenticated actor
-2. **Discount Revocation:**
-   - `journalType`: `'obligation_discount'`
-   - Entry: `{ positionType: 'obligation_discount_revoked', money: discountAmount, sourceRef: obligationId }`
-   - `reason`: Operator-provided revocation justification
-   - Links explicitly to the original discount ID in entry metadata.
+1. **Discount Application:** Entry `{ positionType: 'obligation_discount_applied', money: discountAmount, sourceRef: obligationId }`.
+2. **Discount Revocation:** Entry `{ positionType: 'obligation_discount_revoked', money: discountAmount, sourceRef: obligationId }`.
 
 ---
 
-## 13. Persistence & Tenant Isolation
+## 13. Persistence & Tenant Isolation (Tenant-Safe Composite FKs)
 
-All persistence enforces strict multi-tenant composite foreign keys and PostgreSQL check constraints.
+All relationships enforce multi-tenant composite foreign keys (`(institution_id, ...)`) to structurally prevent cross-institution references (P1-03 Fix).
 
 ### Schema Blueprint (`src/db/schema.ts`)
 
 ```sql
--- 1. Institutional Discount Policies
+-- 1. Stable Policy Identity
 CREATE TABLE finance_discount_policies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE RESTRICT,
   code VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT uq_finance_discount_policies_tenant_id UNIQUE (institution_id, id),
+  CONSTRAINT uq_finance_discount_policies_code UNIQUE (institution_id, code)
+);
+
+-- 2. Immutable Policy Versions
+CREATE TABLE finance_discount_policy_versions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  institution_id UUID NOT NULL,
+  policy_id UUID NOT NULL,
+  version INTEGER NOT NULL CHECK (version >= 1),
   name VARCHAR(255) NOT NULL,
   description TEXT,
   calculation_mode VARCHAR(32) NOT NULL CHECK (calculation_mode IN ('percentage', 'fixed_amount')),
   value NUMERIC(30, 12) NOT NULL CHECK (value > 0),
   currency VARCHAR(3) CHECK (currency IS NULL OR length(currency) = 3),
-  status VARCHAR(32) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived')),
   effective_from TIMESTAMPTZ,
   effective_to TIMESTAMPTZ,
-  version INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-  CONSTRAINT uq_finance_discount_policies_code UNIQUE (institution_id, code),
+  actor_person_id UUID,
+  CONSTRAINT uq_discount_policy_versions_tenant_id UNIQUE (institution_id, id),
+  CONSTRAINT uq_discount_policy_version_seq UNIQUE (institution_id, policy_id, version),
+  CONSTRAINT fk_policy_versions_policy FOREIGN KEY (institution_id, policy_id)
+    REFERENCES finance_discount_policies(institution_id, id) ON DELETE RESTRICT,
   CONSTRAINT chk_discount_policy_mode_currency CHECK (
     (calculation_mode = 'percentage' AND currency IS NULL AND value <= 100) OR
     (calculation_mode = 'fixed_amount' AND currency IS NOT NULL)
+  ),
+  CONSTRAINT chk_discount_policy_effective_window CHECK (
+    effective_from IS NULL OR effective_to IS NULL OR effective_from <= effective_to
   )
 );
 
--- 2. Obligation Applied Discounts
+-- 3. Obligation Applied Discounts (Append-Only Fact)
 CREATE TABLE finance_obligation_discounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE RESTRICT,
   financial_account_id UUID NOT NULL,
   obligation_id UUID NOT NULL,
-  discount_policy_id UUID NOT NULL REFERENCES finance_discount_policies(id) ON DELETE RESTRICT,
+  policy_id UUID NOT NULL,
+  policy_version_id UUID NOT NULL,
   policy_code VARCHAR(64) NOT NULL,
   policy_name VARCHAR(255) NOT NULL,
   policy_version INTEGER NOT NULL,
@@ -334,51 +360,61 @@ CREATE TABLE finance_obligation_discounts (
   amount NUMERIC(30, 12) NOT NULL CHECK (amount > 0),
   currency VARCHAR(3) NOT NULL,
   reason VARCHAR(500) NOT NULL,
-  status VARCHAR(32) NOT NULL DEFAULT 'applied' CHECK (status IN ('applied', 'revoked')),
-  journal_transaction_id UUID NOT NULL REFERENCES finance_journal_transactions(id) ON DELETE RESTRICT,
+  journal_transaction_id UUID NOT NULL,
   applied_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
   actor_kind VARCHAR(32) NOT NULL DEFAULT 'human',
   actor_person_id UUID,
+  CONSTRAINT uq_obligation_discounts_tenant_id UNIQUE (institution_id, id),
+  CONSTRAINT fk_obligation_discounts_policy FOREIGN KEY (institution_id, policy_id)
+    REFERENCES finance_discount_policies(institution_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_obligation_discounts_policy_version FOREIGN KEY (institution_id, policy_version_id)
+    REFERENCES finance_discount_policy_versions(institution_id, id) ON DELETE RESTRICT,
   CONSTRAINT fk_obligation_discounts_account FOREIGN KEY (institution_id, financial_account_id)
     REFERENCES finance_financial_accounts(institution_id, id) ON DELETE RESTRICT,
   CONSTRAINT fk_obligation_discounts_obligation FOREIGN KEY (institution_id, obligation_id)
-    REFERENCES finance_obligations(institution_id, id) ON DELETE RESTRICT
+    REFERENCES finance_obligations(institution_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_obligation_discounts_journal FOREIGN KEY (journal_transaction_id)
+    REFERENCES finance_journal_transactions(id) ON DELETE RESTRICT
 );
 
--- 3. Obligation Discount Revocations
+-- 4. Obligation Discount Revocations (Append-Only Compensating Fact)
 CREATE TABLE finance_obligation_discount_revocations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE RESTRICT,
   financial_account_id UUID NOT NULL,
   obligation_id UUID NOT NULL,
-  original_discount_id UUID NOT NULL REFERENCES finance_obligation_discounts(id) ON DELETE RESTRICT,
+  original_discount_id UUID NOT NULL,
   amount NUMERIC(30, 12) NOT NULL CHECK (amount > 0),
   currency VARCHAR(3) NOT NULL,
   reason VARCHAR(500) NOT NULL,
-  journal_transaction_id UUID NOT NULL REFERENCES finance_journal_transactions(id) ON DELETE RESTRICT,
+  journal_transaction_id UUID NOT NULL,
   revoked_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
   actor_kind VARCHAR(32) NOT NULL DEFAULT 'human',
   actor_person_id UUID,
   CONSTRAINT uq_discount_single_revocation UNIQUE (institution_id, original_discount_id),
+  CONSTRAINT fk_discount_revocations_discount FOREIGN KEY (institution_id, original_discount_id)
+    REFERENCES finance_obligation_discounts(institution_id, id) ON DELETE RESTRICT,
   CONSTRAINT fk_discount_revocations_account FOREIGN KEY (institution_id, financial_account_id)
     REFERENCES finance_financial_accounts(institution_id, id) ON DELETE RESTRICT,
   CONSTRAINT fk_discount_revocations_obligation FOREIGN KEY (institution_id, obligation_id)
-    REFERENCES finance_obligations(institution_id, id) ON DELETE RESTRICT
+    REFERENCES finance_obligations(institution_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_discount_revocations_journal FOREIGN KEY (journal_transaction_id)
+    REFERENCES finance_journal_transactions(id) ON DELETE RESTRICT
 );
 
--- Performance Indexes
+-- Indexes
 CREATE INDEX idx_discount_policies_tenant ON finance_discount_policies(institution_id, status);
-CREATE INDEX idx_obligation_discounts_lookup ON finance_obligation_discounts(institution_id, obligation_id, status);
+CREATE INDEX idx_discount_policy_versions_tenant ON finance_discount_policy_versions(institution_id, policy_id, version);
+CREATE INDEX idx_obligation_discounts_lookup ON finance_obligation_discounts(institution_id, obligation_id);
 CREATE INDEX idx_obligation_discounts_account ON finance_obligation_discounts(institution_id, financial_account_id);
+CREATE INDEX idx_discount_revocations_lookup ON finance_obligation_discount_revocations(institution_id, obligation_id);
 ```
 
 ---
 
 ## 14. Authorization
 
-Authorization follows existing Finance Core role laws:
-
-| Role | Policy Management (Create/Archive) | Apply Discount to Obligation | Revoke Discount | Read / View Context |
+| Role | Policy Create/Version/Archive | Apply Discount | Revoke Discount | Read / View Context |
 | :--- | :---: | :---: | :---: | :---: |
 | `institution_admin` | **ALLOWED** | **ALLOWED** | **ALLOWED** | **ALLOWED** |
 | `financial` | **ALLOWED** | **ALLOWED** | **ALLOWED** | **ALLOWED** |
@@ -390,20 +426,19 @@ Authorization follows existing Finance Core role laws:
 
 ## 15. Idempotency
 
-All mutation operations execute through the canonical `executeIdempotentFinanceCommand` wrapper:
-- **Operation Namespaces:**
-  - `finance.discount.policy.create`
-  - `finance.obligation.discount.apply`
-  - `finance.obligation.discount.revoke`
-- **Fingerprinting:** Canonical SHA-256 hash of `{ institutionId, operation, targetId, payload }`.
-- **Replay Behavior:** Identical key + identical fingerprint returns `200 OK` with original payload (`replayed: true`).
-- **Conflict Behavior:** Identical key + differing payload returns `409 Conflict` (`DISCOUNT_CONFLICT`).
+All write commands execute through `executeIdempotentFinanceCommand`:
+- `finance.discount.policy.create`
+- `finance.discount.policy.version`
+- `finance.obligation.discount.apply`
+- `finance.obligation.discount.revoke`
+
+Fingerprints compute canonical SHA-256 over institutional context and payload. Identical key + identical payload replays `200 OK`; differing payload returns `409 Conflict`.
 
 ---
 
 ## 16. Concurrency & Lock Order
 
-To prevent deadlocks and race conditions against allocations, adjustments, and reversals, all write commands adhere to the **Universal Finance Lock Hierarchy**:
+Global Finance Lock Hierarchy:
 
 $$\begin{aligned}
 \text{Step 1: } & \text{LOCK Financial Account (FOR UPDATE)} \\
@@ -415,15 +450,6 @@ $$\begin{aligned}
 \text{Step 7: } & \text{Insert Journal Entry \& Fact Record}
 \end{aligned}$$
 
-### Concurrency Matrix & Invariant Guarantees
-
-| Concurrent Contenders | Execution Behavior | Invariant Guarantee |
-| :--- | :--- | :--- |
-| **Apply Discount × Apply Discount** | Serialized at Obligation lock. Second transaction sees active discount and fails with `409 ALREADY_DISCOUNTED`. | Maximum 1 active discount per obligation. |
-| **Apply Discount × Allocate Payment** | Serialized at Account/Obligation lock. If Discount commits first, Allocation sees reduced `remainingCoverable`. If Allocation commits first, Discount verifies floor against new `netCovered`. | Covered floor never breached (`effectiveDue >= netCovered`). |
-| **Apply Discount × Decrease Adjustment** | Serialized at lock. Cumulative reduction cannot exceed unallocated head space. | `remainingCoverable >= 0` always holds. |
-| **Revoke Discount × Allocate Payment** | Serialized. Revocation increases `effectiveDue` and `remainingCoverable`, safely allowing subsequent allocations. | Deterministic capacity expansion without race corruption. |
-
 ---
 
 ## 17. HTTP Contracts
@@ -431,36 +457,16 @@ $$\begin{aligned}
 ### 17.1 Policy Management Endpoints
 
 #### `GET /api/finance/discount-policies`
-- **Query Params:** `status=active|archived|all`
-- **Response (200 OK):**
-```json
-{
-  "policies": [
-    {
-      "id": "7b0a8806-031e-42c2-8414-b6d85915d311",
-      "code": "BOLSA-20",
-      "name": "Bolsa de Mérito 20%",
-      "description": "Bolsa institucional de mérito académico",
-      "calculationMode": "percentage",
-      "value": "20.00",
-      "currency": null,
-      "status": "active",
-      "effectiveFrom": "2026-09-01T00:00:00.000Z",
-      "effectiveTo": "2027-08-31T23:59:59.999Z",
-      "version": 1
-    }
-  ]
-}
-```
+Returns policies with their latest active version.
 
 #### `POST /api/finance/discount-policies`
-- **Headers:** `Idempotency-Key: <UUID>`
+Creates a new policy identity + version 1.
 - **Request Body:**
 ```json
 {
   "code": "BOLSA-20",
   "name": "Bolsa de Mérito 20%",
-  "description": "Bolsa institucional de mérito académico",
+  "description": "Bolsa de mérito académico",
   "calculationMode": "percentage",
   "value": "20.00",
   "currency": null,
@@ -470,271 +476,220 @@ $$\begin{aligned}
 ```
 - **Response:** `201 Created`
 
+#### `POST /api/finance/discount-policies/:id/versions` (P1-02 Fix)
+Creates a new immutable economic version for an existing policy.
+- **Request Body:**
+```json
+{
+  "name": "Bolsa de Mérito 25%",
+  "description": "Atualização da bolsa para 25%",
+  "calculationMode": "percentage",
+  "value": "25.00",
+  "currency": null,
+  "effectiveFrom": "2027-09-01T00:00:00.000Z",
+  "effectiveTo": "2028-08-31T23:59:59.999Z"
+}
+```
+- **Response:** `201 Created` with `{ policyId, version: 2, ... }`
+
 #### `PATCH /api/finance/discount-policies/:id/archive`
-- **Response:** `200 OK` (sets `status = 'archived'`)
+Sets `status = 'archived'`.
 
 ---
 
 ### 17.2 Obligation Concession Endpoints
 
 #### `POST /api/finance/obligations/:obligationId/discounts`
-- **Headers:** `Idempotency-Key: <UUID>`
 - **Request Body:**
 ```json
 {
-  "discountPolicyId": "7b0a8806-031e-42c2-8414-b6d85915d311",
-  "reason": "Atribuição de Bolsa de Mérito conforme deliberação da Direção."
+  "discountPolicyVersionId": "7b0a8806-031e-42c2-8414-b6d85915d311",
+  "reason": "Atribuição de Bolsa de Mérito."
 }
 ```
-- **Response (201 Created / 200 Replayed):**
-```json
-{
-  "discount": {
-    "id": "e2c342f1-6119-482a-a70d-f203875a6c42",
-    "obligationId": "00f609e9-98b3-4b22-aaeb-3b3d4d1363f8",
-    "policyCode": "BOLSA-20",
-    "policyName": "Bolsa de Mérito 20%",
-    "calculationMode": "percentage",
-    "policyValue": "20.00",
-    "money": { "amount": "20.00", "currency": "EUR" },
-    "reason": "Atribuição de Bolsa de Mérito conforme deliberação da Direção.",
-    "status": "applied",
-    "appliedAt": "2026-09-08T12:00:00.000Z"
-  },
-  "position": {
-    "netAdjustments": { "amount": "0.00", "currency": "EUR" },
-    "netDiscounts": { "amount": "20.00", "currency": "EUR" },
-    "effectiveDue": { "amount": "80.00", "currency": "EUR" },
-    "netCovered": { "amount": "40.00", "currency": "EUR" },
-    "remainingCoverable": { "amount": "40.00", "currency": "EUR" }
-  },
-  "replayed": false
-}
-```
+- **Response:** `201 Created` with applied discount fact and updated position.
 
 #### `POST /api/finance/obligations/:obligationId/discounts/:discountId/revoke`
-- **Headers:** `Idempotency-Key: <UUID>`
 - **Request Body:**
 ```json
 {
-  "reason": "Perda de elegibilidade por transferência de ciclo."
+  "reason": "Perda de elegibilidade por transferência."
 }
 ```
-- **Response (200 OK / 200 Replayed):**
-```json
-{
-  "revocation": {
-    "id": "993a40b1-382a-43d8-a1bf-10499b9cf2a1",
-    "originalDiscountId": "e2c342f1-6119-482a-a70d-f203875a6c42",
-    "money": { "amount": "20.00", "currency": "EUR" },
-    "reason": "Perda de elegibilidade por transferência de ciclo.",
-    "revokedAt": "2026-09-08T12:30:00.000Z"
-  },
-  "position": {
-    "netAdjustments": { "amount": "0.00", "currency": "EUR" },
-    "netDiscounts": { "amount": "0.00", "currency": "EUR" },
-    "effectiveDue": { "amount": "100.00", "currency": "EUR" },
-    "netCovered": { "amount": "40.00", "currency": "EUR" },
-    "remainingCoverable": { "amount": "60.00", "currency": "EUR" }
-  },
-  "replayed": false
-}
-```
+- **Response:** `200 OK` with revocation fact and restored position.
 
 ---
 
 ## 18. Policy Management UX
 
-Institutional discount policies are configured within the existing Finance workspace configuration sub-navigation:
 - **Location:** `FinanceWorkspace` → Sub-tab `Catálogo de Emolumentos & Políticas` → Section `Políticas de Desconto`.
-- **Presentation:** Compact table displaying Code, Name, Mode (Badge: `20%` or `25,00 EUR`), Status (`Ativa` / `Arquivada`), Validity Window, and Actions (`Arquivar`).
-- **Creation Dialog / Modal:** Compact form with Code, Name, Description, Calculation Mode toggle (`Percentagem` vs `Valor Fixo`), Value input, Currency selector (active only if fixed), and optional Date Pickers.
+- **Interface:** Clean, compact table showing Policy Code, Name, Current Version, Mode/Value badge, Validity Window, and Actions (`Nova Versão`, `Arquivar`).
 
 ---
 
 ## 19. Contextual Application / Revocation UX
 
-Concession operations occur strictly within the contextual `FinanceOperationalContextWorkspace`.
-
-### Contextual Entry Points
-- **On Open Obligation with No Active Discount:**
-  - `...` contextual menu on charge row contains item: **`Aplicar desconto institucional`**.
-- **On Open Obligation with Active Discount:**
-  - Charge row displays a subtle tonal badge: `Desconto: Bolsa de Mérito 20% (-20,00 EUR)`.
-  - `...` contextual menu contains item: **`Revogar desconto`**.
-
-### Application Drawer (`FinanceObligationDiscountDrawer`)
-1. **Header:** `Aplicar desconto institucional` + Close button.
-2. **Context Summary:** Charge description, Original Value, Current Effective Due, and Covered Amount.
-3. **Policy Selection:** Clean dropdown / segmented selector listing eligible active policies with badges.
-4. **Concession Preview (Antes → Desconto → Depois):**
-   - *Valor atual devido:* `100,00 EUR`
-   - *Desconto calculado:* `-20,00 EUR` (`Bolsa de Mérito 20%`)
-   - *Novo valor a pagar:* `80,00 EUR`
-   - *Já liquidado:* `40,00 EUR`
-   - *Ficará por liquidar:* `40,00 EUR`
-5. **Justification Input:** Mandatory textarea with suggested quick chips (`Bolsa autorizada`, `Desconto de irmãos`, `Protocolo institucional`).
-6. **Floor Error Warning:** If fixed discount exceeds available debt, preview flags in rose tone: `O desconto não pode ser superior ao valor restante por liquidar (60,00 EUR)`. Confirmation button is disabled.
-7. **Footer CTA:** `Cancelar` and `Confirmar desconto` (with loading spinner `A aplicar desconto...`).
+- **Location:** `FinanceOperationalContextWorkspace` (Financial Account view retained in background).
+- **Entry Points:**
+  - Charge row `...` menu → `Aplicar desconto institucional` (if no active discount).
+  - Charge row `...` menu → `Revogar desconto` (if active discount present).
+- **Drawer Elements:** Charge context header, Policy selection dropdown, before → discount → after financial preview, reason input, floor validation banner, and submit CTA.
 
 ---
 
 ## 20. Adaptive Nexus Boundaries
 
-| Nexus May (Permitted Guidance) | Nexus May NOT (Forbidden Autonomous Action) |
-| :--- | :--- |
-| Filter and suggest eligible active policies matching obligation currency | Silently apply a discount without human operator submission |
-| Pre-calculate and render real-time financial preview | Autonomously approve financial policy waivers |
-| Highlight maximum discountable capacity before floor breach | Modify discount amounts independently of policy rules |
-| Suggest standard human-readable justification reasons | Override covered-floor constraints |
+- **Permitted Guidance:** Suggest eligible active policies, auto-derive live preview, flag floor boundary capacity.
+- **Forbidden Action:** Never silently apply discounts, never override covered floors, never auto-approve concessions without human operator confirmation.
 
 ---
 
 ## 21. Error Model
 
-| Error Code | HTTP Status | Trigger Condition | Operator Facing Message |
+| Error Code | Status | Condition | Operator Message |
 | :--- | :---: | :--- | :--- |
-| `DISCOUNT_UNAUTHORIZED` | 401 | Missing authentication token | Sessão expirada. Inicie sessão novamente. |
-| `DISCOUNT_FORBIDDEN` | 403 | Non-authorized role (e.g. `director`, `secretariat`) | Não tem permissões para gerir descontos financeiros. |
-| `DISCOUNT_NOT_FOUND` | 404 | Obligation or Policy ID does not exist in tenant | Obrigação ou política de desconto não encontrada. |
-| `DISCOUNT_ALREADY_ACTIVE` | 409 | Obligation already has an active discount | Esta cobrança já possui um desconto ativo. Revogue-o antes de aplicar um novo. |
-| `DISCOUNT_FLOOR_VIOLATION` | 422 | Discount amount would cause `effectiveDue < netCovered` | O desconto não pode reduzir o valor devido abaixo do montante já liquidado. |
-| `DISCOUNT_INACTIVE_POLICY` | 422 | Selected policy is archived or outside validity window | A política de desconto selecionada não se encontra ativa. |
-| `DISCOUNT_CURRENCY_MISMATCH` | 422 | Policy fixed currency != Obligation currency | A moeda da política de desconto não coincide com a cobrança. |
-| `DISCOUNT_CONFLICT` | 409 | Idempotency key reused with different payload | Conflito de submissão na operação de desconto. |
+| `DISCOUNT_UNAUTHORIZED` | 401 | Missing authentication | Sessão expirada. Inicie sessão novamente. |
+| `DISCOUNT_FORBIDDEN` | 403 | Unauthorized role | Não tem permissões para gerir descontos financeiros. |
+| `DISCOUNT_NOT_FOUND` | 404 | Obligation or Policy Version ID missing | Obrigação ou versão de política de desconto não encontrada. |
+| `DISCOUNT_ALREADY_ACTIVE` | 409 | Active discount already present | Esta cobrança já possui um desconto ativo. Revogue-o antes de aplicar um novo. |
+| `DISCOUNT_ALREADY_REVOKED` | 409 | Target discount is already revoked | Este desconto já se encontra revogado. |
+| `DISCOUNT_FLOOR_VIOLATION` | 422 | Discount exceeds available unallocated debt | O desconto não pode reduzir o valor devido abaixo do montante já liquidado. |
+| `DISCOUNT_INACTIVE_POLICY` | 422 | Policy archived or outside validity window | A política de desconto selecionada não se encontra ativa. |
+| `DISCOUNT_CURRENCY_MISMATCH`| 422 | Policy currency != Obligation currency | A moeda da política de desconto não coincide com a cobrança. |
+| `DISCOUNT_CONFLICT` | 409 | Idempotency fingerprint conflict | Conflito de submissão na operação de desconto. |
 
 ---
 
 ## 22. Accessibility, Theme, Responsive & Motion
 
-- **Accessibility (WCAG 2.1 AA):** Complete ARIA modal dialog markup (`role="dialog"`, `aria-modal="true"`, `aria-label`), keyboard focus trap, `Escape` key close, and focus restoration to the originating `...` trigger button.
-- **Theme Support:** Dedicated Nexus Aurora tonal tokens for Light and Dark themes. Contrast ratio $\ge 4.5:1$ for all text elements.
-- **Responsive Layout:** Full desktop side drawer geometry transitioning to full-width mobile view on narrow viewports ($<640\text{px}$) with zero horizontal scroll overflow.
-- **Motion:** Subdued CSS microinteractions ($\le 150\text{ms}$) with `prefers-reduced-motion: reduce` fully disabling transitions.
+- **Accessibility:** WCAG 2.1 AA dialog role, focus trap, Escape key close, focus restoration.
+- **Themes:** Dedicated Nexus Aurora light and dark tokens, contrast $\ge 4.5:1$.
+- **Responsive:** Fluid transition to full width on mobile viewports ($<640\text{px}$) with no horizontal overflow.
+- **Motion:** Microinteractions $\le 150\text{ms}$, disabled under `prefers-reduced-motion: reduce`.
 
 ---
 
 ## 23. UAT Fixture
 
-Extended canonical fixture in `scripts/provision-local-finance-uat.ts`:
-
-### Starting Baseline State
+Extended in `scripts/provision-local-finance-uat.ts`:
 - **Account:** `UAT — Finance Discount 100-40-60`
-- **Obligation:** `UAT-F6-DISCOUNT-100-40-60` (Tuition fee)
-  - `Original`: `100.00 EUR`
-  - `Covered`: `40.00 EUR` (Cash Payment `PAG-UAT-F6`)
-  - `Effective Due`: `100.00 EUR`
-  - `Remaining Coverable`: `60.00 EUR`
-  - `Initial Discounts`: `0`
-- **Pre-provisioned Policies:**
-  1. `BOLSA-20`: `Bolsa de Mérito 20%` (`percentage`, `20.00%`)
-  2. `IRMAOS-10`: `Desconto Irmãos 10 EUR` (`fixed_amount`, `10.00 EUR`)
-  3. `GRANDE-70`: `Desconto Excedente 70 EUR` (`fixed_amount`, `70.00 EUR` — for floor rejection test)
+- **Obligation:** `UAT-F6-DISCOUNT-100-40-60` (Original: `100.00 EUR`, Covered: `40.00 EUR`, Remaining: `60.00 EUR`, 0 Discounts).
+- **Policies:**
+  1. `BOLSA-20` (v1: `20.00%` percentage)
+  2. `IRMAOS-10` (v1: `10.00 EUR` fixed)
+  3. `EXCEDENTE-70` (v1: `70.00 EUR` fixed — for floor violation testing)
 
 ---
 
-## 24. Behavioral, PostgreSQL & Browser Proof Matrix
+## 24. Comprehensive Behavioral, PostgreSQL & Browser Proof Matrix (P1-04 Fix)
 
-```mermaid
-flowchart TD
-  subgraph Deterministic_Tests [Codex Ownership]
-    T1[Money Model & Percentage Rounding Tests]
-    T2[PostgreSQL Schema & Isolation Tests]
-    T3[PostgreSQL Concurrency & Floor Race Tests]
-    T4[HTTP API Contract & Idempotency Tests]
-    T5[React Component & UI Contract Tests]
-  end
+### 24.1 MONEY / POLICY PROOFS
+- **Percentage calculation exactness:** Verifies `Quantize(100.00 * 20% = 20.00)` and non-trivial fractions with `round_half_up`.
+- **Fixed amount exactness:** Verifies exact `10.00 EUR` deduction.
+- **Canonical Money rounding reuse:** Reuses `exact-decimal.ts` / `money.ts` without custom rounding hacks.
+- **Policy version immutability:** Verifies creating version 2 preserves version 1 without row mutation.
+- **Archived policy rejection:** Fails application attempt when policy `status = 'archived'`.
+- **Out-of-effective-window rejection:** Fails when transaction time is outside `[effectiveFrom, effectiveTo]`.
+- **Currency semantics:** Rejects fixed discount policy in `USD` against an `EUR` obligation.
 
-  subgraph Runtime_Browser_Proof [Antigravity Ownership]
-    B1[Persistent Runtime Preflight]
-    B2[UAT Fixture Provisioning]
-    B3[Contextual Drawer & Live Preview Browser Verification]
-    B4[Submission, Refresh & History Verification]
-    B5[Revocation & Re-application Verification]
-    B6[Light/Dark & Mobile Responsive Verification]
-  end
+### 24.2 AUTHORITY / TENANCY PROOFS
+- **Foreign-tenant policy rejection:** Fails closed if policy belongs to another institution.
+- **Foreign-tenant policy version rejection:** Fails closed if policy version belongs to another institution.
+- **Foreign-tenant account & obligation rejection:** Cross-tenant IDs fail closed without data disclosure.
+- **Director read-only:** `director` role receives `403 Forbidden` on create, version, apply, and revoke.
+- **Unauthorized mutation rejection:** Unauthenticated requests receive `401 Unauthorized`.
 
-  Deterministic_Tests -->|GREEN Commit| Runtime_Browser_Proof
-```
+### 24.3 DISCOUNT ECONOMICS PROOFS
+- **One active discount invariant:** Rejects second apply while active discount exists (`409`).
+- **Covered floor invariant:** Rejects discount reducing effective due below `netCovered` (`422/409`).
+- **Original Obligation immutable:** Verifies `finance_obligations.amount` is untouched after apply and revoke.
+- **Original Discount immutable:** Verifies `finance_obligation_discounts` fact is untouched after revocation.
+- **Revocation once-only:** Second revocation attempt on same discount fails (`409`).
+- **Total revocation exact amount:** Restores exact calculated Money amount to payable balance.
+- **New discount allowed after revocation:** Once revoked, a new discount under any active policy succeeds.
+- **Stacking rejected:** Attempting multiple concurrent discounts on single charge fails.
 
-### 1. PostgreSQL & Concurrency Matrix (`tests/finance-discount-postgres.test.ts`)
-- Tenant composite foreign key enforcement across foreign institutions.
-- Multi-currency rejection.
-- Concurrent Apply × Apply race condition (verifying exactly 1 winner, 1 `409`).
-- Concurrent Apply × Allocate race condition (verifying floor constraint preserved under load).
-- Replay idempotency (`200`) and conflict rejection (`409`).
-- Atomic Journal rollback upon simulated constraint failure.
+### 24.4 IDEMPOTENCY PROOFS
+- **Apply replay:** Replaying identical `Idempotency-Key` + fingerprint returns `200 OK` (`replayed: true`).
+- **Apply conflict:** Differing payload with same key returns `409 Conflict`.
+- **Revoke replay & conflict:** Verifies replay and conflict behavior on revocation.
+- **Policy create & version replay:** Verifies idempotency across policy definition commands.
 
-### 2. HTTP & Component Tests (`tests/finance-discount-http.test.ts`, `tests/finance-discount-ui.test.ts`)
-- Policy creation and archival routes.
-- Role-based authorization (`institution_admin` / `financial` write, `director` read-only).
-- UI state transitions: policy selection, live calculated preview, reason entry, floor error handling.
+### 24.5 CONCURRENCY PROOFS
+- **Apply × Apply Race:** Two concurrent apply commands on same obligation: exactly 1 commits (`201`), 1 fails (`409 ALREADY_ACTIVE`).
+- **Apply × Allocation Race:** Concurrent Apply and Payment Allocation: serialized by account/obligation locks; covered floor is strictly preserved under race conditions.
+- **Apply × Adjustment Race:** Concurrent Apply and Decrease Adjustment: serialized; cumulative reduction never exceeds unallocated balance.
+- **Apply × Allocation Reversal Race:** Reversal frees covered amount; serialized without deadlock.
+- **Revoke × Allocation Race:** Revocation increases available capacity; allocation succeeds cleanly.
+- **Revoke × Adjustment Race:** Serialized; no balance corruption.
+- **Revoke × Discount Apply Race:** Serialized; new discount succeeds only after revocation commits.
+- **Competing Revoke × Revoke Race:** Exactly 1 revocation commits; 1 fails (`409 ALREADY_REVOKED`).
 
-### 3. Real Browser E2E Gate
-- Execution against persistent test server on `http://localhost:3000`.
-- Visual validation of drawer opening, account retention, percentage calculation display, submission, and instant operational history update.
+### 24.6 POSITION & JOURNAL PROOFS
+- **Single position authority:** Unit tests verify identical position output across all consumers.
+- **Position rebuild consistency:** Rebuilding position from raw Journal facts equals derived aggregate.
+- **Journal application linkage:** Verifies Journal entry references `obligationId` and matches discount amount.
+- **Journal revocation linkage:** Verifies compensating Journal entry is created.
+- **Rollback atomicity:** Injected failure rolls back both Journal and Discount facts atomically.
+
+### 24.7 HTTP & CLIENT PROOFS
+- **Policy management endpoints:** Validates `GET`, `POST`, `POST /versions`, and `PATCH /archive`.
+- **Concession endpoints:** Validates apply and revoke contracts.
+- **Server authority:** Browser cannot dictate calculated discount amount for percentage policies.
+- **Tenant non-disclosure:** Unknown/foreign IDs return generic `404` or `403`.
+
+### 24.8 UI & COMPONENT PROOFS
+- **Policy management view:** Renders policies table, version badges, creation modal.
+- **Contextual menu entry:** Renders `Aplicar desconto` when eligible, `Revogar desconto` when active.
+- **Drawer presentation:** Renders over retained account context, live preview calculation, reason input.
+- **Floor preventive validation:** Flags invalid fixed discount before submit.
+- **Operational history:** Displays applied and revoked discount facts with reason and policy name.
+
+### 24.9 REAL BROWSER E2E PROOFS
+- Persistent runtime execution on `http://localhost:3000`.
+- Policy creation and versioning.
+- Contextual drawer opening and percentage discount application.
+- Balance verification (`100 EUR - 20 EUR = 80 EUR effective, 40 EUR remaining`).
+- Floor violation warning display.
+- Revocation flow and balance restoration (`100 EUR effective, 60 EUR remaining`).
+- Light/Dark theme switching, responsive viewport ($375\text{px}$ / $768\text{px}$), keyboard focus/tab/escape, and reduced motion.
+- Runtime SHA parity validation.
 
 ---
 
-## 25. Codex → Antigravity Handoff Contract
+## 25. Temporal Authority Clarification (`POLICY_TIME_AUTHORITY`)
 
-### Codex Implementation Scope (Writer 1)
-- Write schema migration (`0040_finance_discount_policy_and_concessions.sql`).
-- Implement domain models, policy repository, discount repository, and Journal extensions.
-- Extend `deriveObligationFinancialPosition` in `obligation-financial-position.ts`.
-- Implement HTTP routes, API client, and React UI components (`FinanceObligationDiscountDrawer`, `FinanceDiscountPoliciesView`).
-- Deliver all deterministic test suites (unit, PostgreSQL, HTTP, UI contracts) in **GREEN** state.
-- Commit to branch `codex/finance-f6-discount-policy-v1`.
+**Normative Rule:** All policy eligibility time evaluations and fact timestamps use **one explicit server-authoritative instant**:
+$$\text{AuthoritativeInstant} = \text{clock\_timestamp() (PostgreSQL) / new Date() (Server)}$$
 
-### Antigravity Verification Scope (Writer 2)
-- Inspect commit HEAD and run `npm run nexus:preflight`.
-- Launch persistent test server and execute UAT fixture provisioning.
-- Execute real browser test suite and capture WebP session recordings.
-- Validate Light/Dark themes, responsive widths, keyboard focus, and reduced-motion states.
-- Run complete quality matrix: `lint`, `build`, `git diff --check`, `test:secrets`, `test:artifacts`.
-- Prepare final release evidence for Product Owner Human UAT.
+- The client/browser clock is **never** authority.
+- A policy is eligible if $\text{AuthoritativeInstant} \in [\text{effectiveFrom}, \text{effectiveTo}]$.
+- No user-supplied historical effective instant is accepted in v1.
 
 ---
 
-## 26. Explicit File/Authority Boundaries
+## 26. Codex → Antigravity Delivery Contract
 
-### Files Allowed for Creation / Modification in F6
-- `src/db/schema.ts` (Add `finance_discount_policies`, `finance_obligation_discounts`, `finance_obligation_discount_revocations`)
-- `src/db/migrations/0040_finance_discount_policy_and_concessions.sql`
-- `src/modules/finance/discount-policy-model.ts` [NEW]
-- `src/modules/finance/discount-policy-repository.ts` [NEW]
-- `src/modules/finance/discount-policy-http.ts` [NEW]
-- `src/modules/finance/obligation-discount-model.ts` [NEW]
-- `src/modules/finance/obligation-discount-repository.ts` [NEW]
-- `src/modules/finance/obligation-discount-http.ts` [NEW]
-- `src/modules/finance/obligation-discount-client.ts` [NEW]
-- `src/modules/finance/obligation-financial-position.ts` (Extend with discount position inputs)
-- `src/modules/finance/journal-model.ts` (Add `obligation_discount` types)
-- `src/modules/finance/finance-operational-context-repository.ts` (Include discount data in operational context query)
-- `src/components/finance/operational/FinanceObligationDiscountDrawer.tsx` [NEW]
-- `src/components/finance/operational/FinanceOperationalTruthPanels.tsx` (Add `...` action and discount badge)
-- `src/components/finance/operational/FinanceOperationalHistory.tsx` (Render discount applied/revoked items)
-- `src/components/finance/fee-catalogue/FinanceDiscountPoliciesWorkspace.tsx` [NEW]
-- `scripts/provision-local-finance-uat.ts` (Extend with discount fixture)
-- `tests/finance-discount-*.test.ts` [NEW]
+- **Codex (Writer 1):** Implements complete deterministic stack (migrations, domain, repositories, Journal, position engine, HTTP, client, React components, and automated test matrix). Delivers **GREEN** commit on `codex/finance-f6-discount-policy-v1`.
+- **Antigravity (Writer 2):** Takes over after deterministic implementation passes. Executes runtime preflight, local UAT provisioning, real browser verification, visual/theme/accessibility checks, and prepares final UAT gate for Product Owner.
 
 ---
 
 ## 27. Product Owner Decisions (D01 / D02 / D03)
 
 - **D01 — Calculation Modes:** Approved. Supports `percentage` (exact half-up rounding against pre-discount due) and `fixed_amount` (exact Money in obligation currency).
-- **D02 — Active Discount Multiplicity:** Approved. Maximum **one active discount** per obligation in v1. No stacking or compounding.
+- **D02 — Active Discount Multiplicity:** Approved. Maximum **one active discount** per obligation in v1.
 - **D03 — Revocation Semantics:** Approved. Total explicit revocation only, creating an immutable compensating fact, restoring payable balance, and enabling subsequent new concessions.
 
 ---
 
 ## 28. Acceptance Criteria
 
-1. **Policy Management:** Financial admins can create, list, and archive percentage and fixed-amount discount policies.
+1. **Policy Management:** Financial admins can create, list, version, and archive percentage and fixed-amount discount policies.
 2. **Contextual Concession:** Operators can apply an active discount policy to an open obligation from the Financial Account workspace with instant before/after preview.
 3. **Floor Invariant:** System strictly blocks any discount that would reduce `effectiveDue` below `netCovered`.
 4. **Total Revocation:** Active discounts can be revoked with a mandatory reason, immediately restoring the payable balance.
-5. **Immutable Journal:** Every application and revocation generates an append-only Journal entry with source linkage.
+5. **Immutable Journal & Facts:** Every application and revocation generates an append-only Journal entry and immutable fact row with composite tenant FKs.
 6. **No Regressions:** All existing F1–F5 test suites pass with 0 errors.
 
 ---
