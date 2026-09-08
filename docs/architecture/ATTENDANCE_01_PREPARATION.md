@@ -72,6 +72,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Export recipient | Any address indicated by the authorised requester, validated before each delivery |
 | Export formats | PDF and CSV |
 | E-mail attachment protection | No password; protection is pre-send address validation plus audited authorisation |
+| Readiness evidence | Automated, integration, security and manual validation tests |
+| Open defects at acceptance | No P0/P1; P2 only with recorded decision |
+| Readiness approver | Product Owner only |
 
 ## 4. Authority boundary
 
@@ -229,4 +232,11 @@ A session is not a timetable. It records that an authorised attendance occasion 
 5. An e-mail attachment cannot be revoked after delivery. Before every delivery, Attendance validates the address indicated by the authorised requester. The attachment is sent without a password; its protection relies on pre-send address validation and audited authorisation.
 6. The first-cut export formats are PDF and CSV. Format-specific data minimisation, generation controls and recipient-validation mechanics remain mandatory design work before implementation.
 7. This decision does not permit public links, unvalidated delivery, later claims of withdrawal, or disclosure beyond the approved export scope.
+
+## 21. Acceptance and implementation-readiness decisions
+
+1. Attendance-01 is not ready to request implementation authorisation without evidence from automated tests, integration tests, security tests and manual validation.
+2. No P0 or P1 issue may remain open for an accepted unit. A P2 issue requires an explicit recorded decision.
+3. Only the Product Owner approves readiness before an implementation-authorisation request.
+4. This readiness approval remains distinct from implementation authorisation. No code, migration, UI, storage setup or deployment is authorised by this preparation record.
 
