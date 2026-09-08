@@ -84,6 +84,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Required justification states | Submitted, teacher-proposed, pending decision, approved and rejected |
 | Approved correction | Effective immediately; earlier revision retained |
 | Offline-conflict states | Detected, pending decision, resolved and rejected |
+| Threshold-alert states | Generated, notified, action pending, resolved and recalculated |
+| Mandatory notification failure | Failed; automatic retry and escalation after deadline |
+| Report-export states | Requested, authorised, generated, sent and failed |
 
 ## 4. Authority boundary
 
@@ -289,4 +292,14 @@ Once a correction is approved by the policy-authorised actor, its new immutable 
 ### 22.5 Offline synchronisation conflict
 
 The required conflict states are **DETECTED**, **PENDING_DECISION**, **RESOLVED** and **REJECTED**. No automatic-resolution state or implicit client/server winner is allowed.
+
+### 22.6 Threshold alert and notification
+
+A threshold alert has the required states **GENERATED**, **NOTIFIED**, **ACTION_PENDING**, **RESOLVED** and **RECALCULATED**. A recalculation preserves previous alert history; it does not erase an alert.
+
+If a mandatory notification delivery fails, it becomes **FAILED**, is retried automatically and escalates after the policy-defined deadline. In-system notification remains the mandatory trace even where additional channels are enabled.
+
+### 22.7 Report export
+
+A report export request has the required states **REQUESTED**, **AUTHORISED**, **GENERATED**, **SENT** and **FAILED**. Authorisation and recipient validation must complete before generation or sending. Every state change is auditable.
 
