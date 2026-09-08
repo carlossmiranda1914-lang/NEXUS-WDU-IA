@@ -93,6 +93,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Offline device data | Cached valid assignment, required session/roster and unsynchronised records only |
 | Export-recipient validation | One-time code sent to the specified address before every delivery |
 | Device protection failure | Offline register blocked until operating-system protection requirements are restored |
+| Missing primary outcome at teacher confirmation | Automatically set to absence |
+| Offline-conflict UX | Separate status, affected record and authorised-decision-pending indication |
+| Attendance language | User interface language |
 
 ## 4. Authority boundary
 
@@ -141,7 +144,7 @@ A session is not a timetable. It records that an authorised attendance occasion 
 
 1. An authorised teacher initiates an attendance session from an active TeacherAssignment.
 2. While open, the eligible roster follows valid placement changes.
-3. Before confirmation, every eligible learner needs a primary outcome: presence or absence.
+3. At confirmation, every eligible learner must have a primary outcome: presence or absence. Any still unset outcome is automatically set to absence as part of the teacher's confirmation action.
 4. Confirmation freezes the eligible roster and creates historical session context.
 5. Tardiness and missing material are separate occurrences attached to the primary outcome.
 6. If the deadline passes without confirmation, the institutional policy selects either:
@@ -322,4 +325,10 @@ A report export request has the required states **REQUESTED**, **AUTHORISED**, *
 2. Before each report e-mail delivery, the address indicated by the authorised requester is validated with a one-time code sent to that same address.
 3. If the device no longer satisfies operating-system protection requirements, offline attendance is blocked until those requirements are restored. A warning-only continuation is not permitted.
 4. These controls supplement encrypted operating-system-protected storage, cache-expiry policy and sign-out removal; they do not replace server-side authorisation and audit on synchronisation.
+
+## 25. UX and communication decisions
+
+1. When the teacher confirms a session, any eligible learner without an explicit primary outcome is automatically recorded as absent. This is a confirmation-completeness rule; it is distinct from the policy-selected automatic confirmation of an unconfirmed late session.
+2. An offline synchronisation conflict must show the teacher a separate clear status, the affected record and that an authorised decision is pending. It must not pretend the record was successfully synchronised.
+3. Attendance states, warnings and notifications appear in the user's interface language.
 
