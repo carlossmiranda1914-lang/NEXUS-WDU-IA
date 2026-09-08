@@ -60,6 +60,9 @@ Attendance is the authoritative domain for attendance sessions, presence/absence
 | Confirmed-session learner history | Immutable reference plus learner name and class visible at confirmation |
 | Policy traceability | Immutable reference to the version applied to every decision |
 | Later placement correction | Preserve confirmed historical context; change only through audited Attendance revision |
+| Policy for session confirmation | Version effective at session initiation |
+| More restrictive global/jurisdictional rule | May re-evaluate pending work when required; preserve history |
+| Attendance policy publication | Institution-authorised role with audited approval |
 
 ## 4. Authority boundary
 
@@ -190,4 +193,10 @@ A session is not a timetable. It records that an authorised attendance occasion 
 2. Attendance retains only the historical snapshot needed to interpret its own confirmed record; Academic Core remains authoritative for current learner, class and placement data.
 3. Every session, alert, justification and correction decision retains an immutable reference to the specific institutional-policy version applied.
 4. If Academic Core later corrects a placement, the confirmed Attendance context remains historically intact. Any attendance effect requires an auditable Attendance revision under the correction rules; automatic rewriting is prohibited.
+
+## 18. Institutional-policy lifecycle decisions
+
+1. A session is governed at confirmation by the institutional-policy version effective when the session was initiated. Its reference is immutable on the session record.
+2. A new global or jurisdictional rule that is more restrictive may re-evaluate already-pending sessions, justifications or corrections when legally or globally required. The original policy reference and all resulting actions remain historical evidence.
+3. Attendance policy may be published or changed only by an institutionally authorised role through an auditable approval process, and only within global/jurisdictional limits.
 
