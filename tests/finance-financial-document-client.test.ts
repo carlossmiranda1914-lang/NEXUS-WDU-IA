@@ -54,3 +54,16 @@ test('F7-06 diagnostics characterize request construction and sanitize transport
   assert.equal(failure?.errorName, 'TypeError');
   assert.doesNotMatch(String(failure?.errorMessage), /secret-token|Bearer/i);
 });
+
+test('F7-06 invokes its stored fetch function as a client method', async () => {
+  const events: Array<Record<string, unknown>> = [];
+  const receiverSensitiveFetch = async function (this: unknown) {
+    if (this !== globalThis) throw new TypeError('Illegal invocation');
+    return response({ items: [] });
+  } as typeof fetch;
+  const client = new FinancialDocumentClient(receiverSensitiveFetch, async () => null, (event) => events.push(event));
+  await assert.rejects(() => client.list(), /Illegal invocation/);
+  const failure = events.find(event => event.event === 'FINANCE_DOCUMENT_FETCH_NETWORK_FAILURE');
+  assert.equal(failure?.errorName, 'TypeError');
+  assert.equal(failure?.errorMessage, 'Illegal invocation');
+});
