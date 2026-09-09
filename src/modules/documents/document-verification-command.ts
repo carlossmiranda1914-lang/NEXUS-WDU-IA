@@ -352,6 +352,14 @@ export async function finalizeTechnicalVerificationCommand(params: {
 
       const evaluation = evaluateVerificationOutcome(assessments);
 
+      // Quarantine is terminal: if version or verification is already quarantined, never promote to available
+      if (version.status === 'quarantined' || verification.status === 'quarantined') {
+        evaluation.overallStatus = 'quarantined';
+        evaluation.isReadyForAvailability = false;
+        evaluation.allMandatoryPassed = false;
+        evaluation.quarantineReason = evaluation.quarantineReason || verification.quarantineReason || 'Version is permanently quarantined';
+      }
+
       let updatedVerification = verification;
 
       if (evaluation.allMandatoryPassed && evaluation.overallStatus === 'available') {
@@ -553,7 +561,7 @@ export async function executeTechnicalVerificationPipelineCommand(params: {
     let totalBytes = 0;
     const prefixChunks: Buffer[] = [];
     let prefixBytesCollected = 0;
-    const maxPrefix = 64 * 1024; // 64KB bounded prefix for detector
+    const maxPrefix = input.contentTypeDetector.maxPrefixInspectionBytes;
 
     await new Promise<void>((resolve, reject) => {
       stream.on('data', (chunk: Buffer) => {

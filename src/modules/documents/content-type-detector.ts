@@ -32,6 +32,14 @@ export interface MimeCompatibilityResult {
 export class ContentTypeDetector {
   constructor(private readonly config: ContentTypeDetectorConfig) {}
 
+  public get maxPrefixInspectionBytes(): number {
+    return this.config.maxPrefixInspectionBytes;
+  }
+
+  public getConfig(): Readonly<ContentTypeDetectorConfig> {
+    return this.config;
+  }
+
   public detect(buffer: Buffer): DetectedContentType {
     if (!buffer || buffer.length === 0) {
       return {
@@ -211,12 +219,12 @@ export class ContentTypeDetector {
       };
     }
 
-    // Also scan buffer within limits for central directory strings if local header parsing was partial
-    const bufferSliceString = buffer.subarray(0, maxBytes).toString('utf8');
-    const hasContentTypes = entryNames.some((n) => n === '[Content_Types].xml') || bufferSliceString.includes('[Content_Types].xml');
-    const hasWord = entryNames.some((n) => n.startsWith('word/')) || bufferSliceString.includes('word/');
-    const hasXl = entryNames.some((n) => n.startsWith('xl/')) || bufferSliceString.includes('xl/');
-    const hasPpt = entryNames.some((n) => n.startsWith('ppt/')) || bufferSliceString.includes('ppt/');
+    // Strict structural evaluation: requires parsed ZIP local header / directory entry names.
+    // Raw substring scanning in unparsed buffer bytes is forbidden.
+    const hasContentTypes = entryNames.some((n) => n.toLowerCase() === '[content_types].xml');
+    const hasWord = entryNames.some((n) => n.toLowerCase().startsWith('word/'));
+    const hasXl = entryNames.some((n) => n.toLowerCase().startsWith('xl/'));
+    const hasPpt = entryNames.some((n) => n.toLowerCase().startsWith('ppt/'));
 
     if (hasContentTypes && hasWord) {
       return {

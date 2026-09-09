@@ -83,28 +83,27 @@ export interface VerificationEvaluationResult {
 export function evaluateVerificationOutcome(
   assessments: DocumentTechnicalAssessment[],
 ): VerificationEvaluationResult {
+  // 1. FAIL/MALICIOUS dominates across all attempts: if ANY assessment ever failed, quarantined is terminal
+  const failedAssessment = assessments.find((a) => a.status === 'fail');
+  if (failedAssessment) {
+    const reason =
+      failedAssessment.errorMessage ||
+      (failedAssessment.facts.reason as string) ||
+      `Technical assessment ${failedAssessment.assessmentType} failed`;
+    return {
+      overallStatus: 'quarantined',
+      isReadyForAvailability: false,
+      allMandatoryPassed: false,
+      quarantineReason: `Assessment ${failedAssessment.assessmentType} failed: ${reason}`,
+    };
+  }
+
   // Find latest assessment per type
   const latestByType = new Map<TechnicalAssessmentType, DocumentTechnicalAssessment>();
   for (const a of assessments) {
     const existing = latestByType.get(a.assessmentType);
     if (!existing || a.attemptNumber > existing.attemptNumber) {
       latestByType.set(a.assessmentType, a);
-    }
-  }
-
-  // 1. Check for ANY 'fail' (fail-closed domination)
-  for (const [type, assessment] of latestByType.entries()) {
-    if (assessment.status === 'fail') {
-      const reason =
-        assessment.errorMessage ||
-        (assessment.facts.reason as string) ||
-        `Technical assessment ${type} failed`;
-      return {
-        overallStatus: 'quarantined',
-        isReadyForAvailability: false,
-        allMandatoryPassed: false,
-        quarantineReason: `Assessment ${type} failed: ${reason}`,
-      };
     }
   }
 

@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS document_technical_verifications (
 
   CONSTRAINT uq_doc_tech_verifications_inst_ver UNIQUE (institution_id, version_id),
   CONSTRAINT uq_doc_tech_verifications_inst_id UNIQUE (institution_id, id),
+  CONSTRAINT uq_doc_tech_verifications_inst_doc_ver_id UNIQUE (institution_id, document_id, version_id, id),
   CONSTRAINT fk_doc_tech_verifications_inst FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE RESTRICT,
   CONSTRAINT fk_doc_tech_verifications_inst_doc FOREIGN KEY (institution_id, document_id) REFERENCES documents (institution_id, id) ON DELETE RESTRICT,
   CONSTRAINT fk_doc_tech_verifications_inst_doc_ver FOREIGN KEY (institution_id, document_id, version_id) REFERENCES document_versions (institution_id, document_id, id) ON DELETE RESTRICT
@@ -46,7 +47,7 @@ CREATE TABLE IF NOT EXISTS document_technical_assessments (
   CONSTRAINT fk_doc_tech_assessments_inst FOREIGN KEY (institution_id) REFERENCES institutions (id) ON DELETE RESTRICT,
   CONSTRAINT fk_doc_tech_assessments_inst_doc FOREIGN KEY (institution_id, document_id) REFERENCES documents (institution_id, id) ON DELETE RESTRICT,
   CONSTRAINT fk_doc_tech_assessments_inst_doc_ver FOREIGN KEY (institution_id, document_id, version_id) REFERENCES document_versions (institution_id, document_id, id) ON DELETE RESTRICT,
-  CONSTRAINT fk_doc_tech_assessments_verification FOREIGN KEY (institution_id, verification_id) REFERENCES document_technical_verifications (institution_id, id) ON DELETE CASCADE
+  CONSTRAINT fk_doc_tech_assessments_verification FOREIGN KEY (institution_id, document_id, version_id, verification_id) REFERENCES document_technical_verifications (institution_id, document_id, version_id, id) ON DELETE RESTRICT
 );
 
 CREATE INDEX IF NOT EXISTS idx_doc_tech_verifications_inst_status ON document_technical_verifications (institution_id, status);

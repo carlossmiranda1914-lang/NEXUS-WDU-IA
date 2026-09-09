@@ -208,6 +208,25 @@ try {
     'PostgreSQL composite FK must prevent cross-tenant assessment records',
   );
 
+  // 4. Mismatched document_id against parent verification FK rejection
+  const docA2 = await docRepo.createDocument(client, {
+    institutionId: instA,
+    category: 'identification',
+    createdByPersonId: actorA,
+  });
+  await assert.rejects(
+    async () => {
+      await client.query(
+        `INSERT INTO document_technical_assessments (
+          institution_id, document_id, version_id, verification_id, assessment_type, status, provider, attempt_number
+        ) VALUES ($1, $2, $3, $4, 'malware', 'pass', 'test', 1)`,
+        [instA, docA2.id, verA.id, verificationA.id], // Mismatched document_id vs verificationA
+      );
+    },
+    /fk_doc_tech_assessments_verification|foreign key constraint/,
+    'Assessment cannot reference verification with mismatched document_id',
+  );
+
   console.log('[DOCUMENTS-VERIFICATION-MULTI-TENANT] PASS: Cross-tenant command boundaries and composite PostgreSQL FK integrity verified.');
 } finally {
   try {

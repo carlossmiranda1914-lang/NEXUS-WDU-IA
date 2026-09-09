@@ -153,6 +153,89 @@ export class PostgresDocumentVerificationRepository {
     client: pg.PoolClient,
     params: RecordAssessmentParams,
   ): Promise<DocumentTechnicalAssessment> {
+    // 1. Check for existing assessment for (institution_id, verification_id, assessment_type, attempt_number)
+    const existingRes = await client.query<{
+      id: string;
+      institution_id: string;
+      document_id: string;
+      version_id: string;
+      verification_id: string;
+      assessment_type: TechnicalAssessmentType;
+      status: TechnicalAssessmentStatus;
+      provider: string;
+      attempt_number: number;
+      started_at: Date;
+      completed_at: Date | null;
+      facts: Record<string, unknown>;
+      error_code: string | null;
+      error_message: string | null;
+      created_at: Date;
+    }>(
+      `SELECT * FROM document_technical_assessments
+       WHERE institution_id = $1 AND verification_id = $2 AND assessment_type = $3 AND attempt_number = $4
+       FOR UPDATE`,
+      [params.institutionId, params.verificationId, params.assessmentType, params.attemptNumber],
+    );
+
+    if (existingRes.rows.length > 0) {
+      const existing = existingRes.rows[0];
+
+      // Idempotent replay: exact same status -> return immutable existing record
+      if (existing.status === params.status) {
+        return this.mapAssessmentRow(existing);
+      }
+
+      // Conflicting result on same attempt: FAIL/MALICIOUS dominates!
+      // If existing is already fail/error, a late/conflicting pass cannot erase it.
+      if (existing.status === 'fail' || existing.status === 'error') {
+        return this.mapAssessmentRow(existing);
+      }
+
+      // If existing was pass and incoming is fail/error, fail dominates (fail-closed transition)
+      if (params.status === 'fail' || params.status === 'error') {
+        const updateRes = await client.query<{
+          id: string;
+          institution_id: string;
+          document_id: string;
+          version_id: string;
+          verification_id: string;
+          assessment_type: TechnicalAssessmentType;
+          status: TechnicalAssessmentStatus;
+          provider: string;
+          attempt_number: number;
+          started_at: Date;
+          completed_at: Date | null;
+          facts: Record<string, unknown>;
+          error_code: string | null;
+          error_message: string | null;
+          created_at: Date;
+        }>(
+          `UPDATE document_technical_assessments
+           SET status = $1,
+               facts = $2,
+               error_code = $3,
+               error_message = $4,
+               completed_at = $5
+           WHERE institution_id = $6 AND id = $7
+           RETURNING *`,
+          [
+            params.status,
+            JSON.stringify({ ...existing.facts, ...params.facts, conflictDominated: true }),
+            params.errorCode || null,
+            params.errorMessage || null,
+            params.completedAt || new Date(),
+            params.institutionId,
+            existing.id,
+          ],
+        );
+        return this.mapAssessmentRow(updateRes.rows[0]);
+      }
+
+      // Inconclusive / other conflict -> fail closed without overwriting fail
+      return this.mapAssessmentRow(existing);
+    }
+
+    // 2. New assessment insert (append-only)
     const res = await client.query<{
       id: string;
       institution_id: string;
@@ -185,13 +268,6 @@ export class PostgresDocumentVerificationRepository {
         error_code,
         error_message
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      ON CONFLICT (institution_id, verification_id, assessment_type, attempt_number)
-      DO UPDATE SET
-        status = EXCLUDED.status,
-        completed_at = EXCLUDED.completed_at,
-        facts = EXCLUDED.facts,
-        error_code = EXCLUDED.error_code,
-        error_message = EXCLUDED.error_message
       RETURNING *`,
       [
         params.institutionId,
@@ -252,6 +328,19 @@ export class PostgresDocumentVerificationRepository {
     quarantineReason?: string | null,
     nextRetryAt?: Date | null,
   ): Promise<DocumentTechnicalVerification> {
+    const current = await client.query<{ status: string }>(
+      `SELECT status FROM document_technical_verifications WHERE institution_id = $1 AND id = $2`,
+      [institutionId, verificationId],
+    );
+
+    if (current.rows.length === 0) {
+      throw new Error(`Verification ${verificationId} not found for status transition in institution ${institutionId}`);
+    }
+
+    if (current.rows[0].status === 'quarantined' && newStatus !== 'quarantined') {
+      throw new Error(`QUARANTINE_IS_TERMINAL: Verification ${verificationId} is quarantined and cannot transition to ${newStatus}`);
+    }
+
     const isCompleted = newStatus === 'available' || newStatus === 'quarantined' || newStatus === 'failed';
     const completedAtClause = isCompleted ? 'completed_at = COALESCE(completed_at, now()),' : '';
 
@@ -281,10 +370,6 @@ export class PostgresDocumentVerificationRepository {
        RETURNING *`,
       [newStatus, quarantineReason || null, nextRetryAt || null, institutionId, verificationId],
     );
-
-    if (res.rows.length === 0) {
-      throw new Error(`Verification ${verificationId} not found for status transition in institution ${institutionId}`);
-    }
 
     return this.mapVerificationRow(res.rows[0]);
   }
@@ -331,6 +416,7 @@ export class PostgresDocumentVerificationRepository {
   /**
    * Atomic CAS status transition of DocumentVersion.
    * Promotes: content_received -> available | quarantined.
+   * Quarantine is terminal.
    */
   public async transitionVersionStatus(
     client: pg.PoolClient,
@@ -340,6 +426,10 @@ export class PostgresDocumentVerificationRepository {
     expectedStatus: DocumentVersionStatus,
     newStatus: DocumentVersionStatus,
   ): Promise<void> {
+    if (expectedStatus === 'quarantined' && newStatus !== 'quarantined') {
+      throw new Error(`QUARANTINE_IS_TERMINAL: Version ${versionId} is quarantined and cannot transition to ${newStatus}`);
+    }
+
     const res = await client.query(
       `UPDATE document_versions
        SET status = $1

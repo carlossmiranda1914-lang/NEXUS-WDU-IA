@@ -222,6 +222,18 @@ const conflictSet = [
 const conflictEval = evaluateVerificationOutcome(conflictSet);
 assert.strictEqual(conflictEval.overallStatus, 'quarantined');
 
+// Late Clean does NOT release quarantine: Attempt 1 Fail + Attempt 2 Clean -> Quarantined
+const lateCleanSet = [
+  baseAssessment('integrity', 'pass'),
+  baseAssessment('size', 'pass'),
+  baseAssessment('real_type', 'pass'),
+  { ...baseAssessment('malware', 'fail'), attemptNumber: 1, errorMessage: 'Malware on attempt 1' },
+  { ...baseAssessment('malware', 'pass'), attemptNumber: 2 },
+];
+const lateCleanEval = evaluateVerificationOutcome(lateCleanSet);
+assert.strictEqual(lateCleanEval.overallStatus, 'quarantined');
+assert.strictEqual(lateCleanEval.isReadyForAvailability, false);
+
 // 6. RETRY CALCULATION WITH 24H DUE_AT CEILING
 const startedAt = new Date();
 const dueAt = new Date(startedAt.getTime() + 24 * 3600 * 1000);
@@ -241,5 +253,14 @@ assert.strictEqual(retryMaxExceeded, null, 'Retry must not be scheduled when max
 const expiredDueAt = new Date(Date.now() - 1000);
 const retryAfterExpiry = calculateNextRetry(1, retryPolicy, startedAt, expiredDueAt);
 assert.strictEqual(retryAfterExpiry, null, 'Retry must not exceed 24h due_at window');
+
+// Structural OPC test: Raw substring in buffer without valid ZIP entry headers must not be DOCX
+const fakeDocxRawString = Buffer.from('PK\x03\x04SomeRandomGarbage[Content_Types].xmlSomeMoreGarbageword/document.xml');
+const fakeDocxRawDetected = detector.detect(fakeDocxRawString);
+assert.notStrictEqual(
+  fakeDocxRawDetected.mimeType,
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'Unparsed raw substrings without valid ZIP headers must NOT be detected as DOCX',
+);
 
 console.log('[DOCUMENTS-VERIFICATION-MODEL] PASS: ContentTypeDetector, OpenXML/plain-ZIP inspection, evaluation rules, and retry policies verified.');

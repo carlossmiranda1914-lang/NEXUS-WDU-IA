@@ -15,6 +15,7 @@ import {
 } from '../src/modules/documents/document-upload-command.ts';
 import {
   startTechnicalVerificationCommand,
+  finalizeTechnicalVerificationCommand,
   executeTechnicalVerificationPipelineCommand,
 } from '../src/modules/documents/document-verification-command.ts';
 import { MemoryObjectStorageProvider } from './support/memory-object-storage-provider.ts';
@@ -226,6 +227,63 @@ try {
 
   const ver2After = await docRepo.getVersionById(client, institutionId, ver2.id);
   assert.strictEqual(ver2After?.status, 'quarantined');
+
+  // 3a. QUARANTINE IS TERMINAL: Attempting to transition quarantined version/verification to available MUST FAIL
+  await assert.rejects(
+    async () => {
+      await verificationRepo.transitionVersionStatus(
+        client,
+        institutionId,
+        doc2.id,
+        ver2.id,
+        'quarantined',
+        'available',
+      );
+    },
+    /QUARANTINE_IS_TERMINAL/,
+    'Quarantined version cannot be transitioned to available',
+  );
+
+  await assert.rejects(
+    async () => {
+      await verificationRepo.transitionVerificationStatus(
+        client,
+        institutionId,
+        pipelineRes2.result.verification.id,
+        'available',
+      );
+    },
+    /QUARANTINE_IS_TERMINAL/,
+    'Quarantined verification cannot be transitioned to available',
+  );
+
+  // Late clean scan or finalize on quarantined version still evaluates to quarantined
+  const lateFinalize = await finalizeTechnicalVerificationCommand({
+    pool,
+    context,
+    idempotencyKey: 'idemp-late-finalize-quarantine',
+    input: {
+      documentId: doc2.id,
+      versionId: ver2.id,
+      verificationId: pipelineRes2.result.verification.id,
+      retryPolicy,
+    },
+  });
+  assert.strictEqual(lateFinalize.result.evaluation.overallStatus, 'quarantined');
+  assert.strictEqual(lateFinalize.result.evaluation.isReadyForAvailability, false);
+
+  // 3b. ASSESSMENT IMMUTABILITY & FAIL DOMINATION: Recording PASS on failed assessment preserves FAIL
+  const failAssessmentRes = await verificationRepo.recordAssessmentResult(client, {
+    institutionId,
+    documentId: doc2.id,
+    versionId: ver2.id,
+    verificationId: pipelineRes2.result.verification.id,
+    assessmentType: 'malware',
+    status: 'pass', // Conflicting late clean on same attempt
+    provider: 'late_clean_scanner',
+    attemptNumber: 1,
+  });
+  assert.strictEqual(failAssessmentRes.status, 'fail', 'Conflicting PASS must NOT overwrite existing FAIL assessment');
 
   // 4. INTEGRITY_HASH_FAIL -> QUARANTINED
   const { doc: doc3, version: ver3, session: sess3 } = await createAndUploadDocument(
