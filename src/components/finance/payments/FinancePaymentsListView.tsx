@@ -9,6 +9,7 @@ export interface FinancePaymentsListViewProps {
   onRefresh: () => void;
   onOpenCreate: () => void;
   onOpenProviders: () => void;
+  onIssueReceipt?: (payment: Payment) => void;
 }
 
 export function FinancePaymentsListView({
@@ -19,6 +20,7 @@ export function FinancePaymentsListView({
   onRefresh,
   onOpenCreate,
   onOpenProviders,
+  onIssueReceipt,
 }: FinancePaymentsListViewProps) {
   const isLight = theme === 'light';
 
@@ -109,7 +111,7 @@ export function FinancePaymentsListView({
                   <th className="px-6 py-3">Montante</th>
                   <th className="px-6 py-3">Data Efetiva</th>
                   <th className="px-6 py-3">Estado</th>
-                  <th className="px-6 py-3">Aplicação</th>
+                  <th className="px-6 py-3">Aplicação</th><th className="px-6 py-3">Documento</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -148,6 +150,7 @@ export function FinancePaymentsListView({
                         Não aplicado
                       </span>
                     </td>
+                    <td className="px-6 py-4">{p.status === 'confirmed' && onIssueReceipt ? <button type="button" data-testid={`issue-receipt-${p.id}`} onClick={() => onIssueReceipt(p)} className="rounded-md border px-2 py-1 text-xs font-semibold">Emitir recibo oficial</button> : <span className="text-xs text-zinc-500">Indisponível</span>}</td>
                   </tr>
                 ))}
               </tbody>

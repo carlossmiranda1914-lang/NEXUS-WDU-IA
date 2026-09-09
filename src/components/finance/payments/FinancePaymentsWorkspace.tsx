@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { Payment } from '../../../modules/finance/payment-model.ts';
 import { paymentClient } from '../../../modules/finance/payment-client.ts';
 import { FinancePaymentsListView } from './FinancePaymentsListView.tsx';
 import { FinancePaymentCreateView } from './FinancePaymentCreateView.tsx';
 import { FinancePaymentProvidersView } from './FinancePaymentProvidersView.tsx';
+import { financialDocumentClient } from '../../../modules/finance/financial-document-client.ts';
 
 export type PaymentSubView = 'list' | 'create' | 'providers';
 
@@ -16,6 +17,8 @@ export function FinancePaymentsWorkspace({ theme = 'light' }: FinancePaymentsWor
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [issuanceNotice, setIssuanceNotice] = useState<string | null>(null);
+  const receiptKeys = useRef(new Map<string, string>());
 
   const loadPayments = useCallback(async () => {
     setLoading(true);
@@ -38,6 +41,17 @@ export function FinancePaymentsWorkspace({ theme = 'light' }: FinancePaymentsWor
     setPayments((prev) => [newPayment, ...prev]);
     setView('list');
   };
+  const issueReceipt = async (payment: Payment) => {
+    setError(null); setIssuanceNotice(null);
+    try {
+      const series = await financialDocumentClient.listActiveReceiptSeries();
+      const selected = series[0]; if (!selected) throw new Error('Não existe uma série de recibos efetiva configurada.');
+      const key = receiptKeys.current.get(payment.id) ?? `document-receipt-${crypto.randomUUID()}`;
+      receiptKeys.current.set(payment.id, key);
+      const result = await financialDocumentClient.issueReceipt({ sourceId: payment.id, seriesId: selected.id, idempotencyKey: key });
+      setIssuanceNotice(`Recibo oficial ${result.replayed ? 'recuperado' : 'emitido'}: n.º ${result.sequenceNumber}.`);
+    } catch (err: any) { setError(err?.message || 'Não foi possível emitir o recibo oficial. Tente novamente para recuperar a operação.'); }
+  };
 
   return (
     <div className="w-full">
@@ -50,8 +64,11 @@ export function FinancePaymentsWorkspace({ theme = 'light' }: FinancePaymentsWor
           onRefresh={loadPayments}
           onOpenCreate={() => setView('create')}
           onOpenProviders={() => setView('providers')}
+          onIssueReceipt={issueReceipt}
         />
       )}
+
+      {issuanceNotice && <p data-testid="financial-document-issuance-notice" className="mt-3 text-sm text-emerald-700">{issuanceNotice}</p>}
 
       {view === 'create' && (
         <FinancePaymentCreateView

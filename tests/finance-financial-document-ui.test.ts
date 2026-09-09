@@ -19,6 +19,9 @@ assert.match(clientSource, /async detail\(/, 'the client must obtain source prov
 assert.match(clientSource, /listArtifacts\(/, 'the client must obtain private artifact metadata from the authorized route');
 assert.match(clientSource, /issueReceipt\(/, 'issuance must be delegated to the authoritative endpoint');
 assert.match(clientSource, /Idempotency-Key/, 'issuance must carry an idempotency key for double-click and timeout recovery');
+assert.match(clientSource, /listActiveReceiptSeries\(/, 'the client must derive effective receipt series from the authoritative API');
+const paymentsListSource = fs.readFileSync(path.join(root, 'src/components/finance/payments/FinancePaymentsListView.tsx'), 'utf8');
+assert.match(paymentsListSource, /Emitir recibo oficial/, 'a confirmed payment must expose the bounded source-context action');
 assert.match(workspaceSource, /Visualizar|View/, 'the workspace must offer a read-only document preview');
 assert.match(workspaceSource, /PDF/, 'the workspace must offer the private official artifact action');
 assert.match(workspaceSource, /Proveniência/, 'the preview must expose persisted source provenance');
