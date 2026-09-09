@@ -143,8 +143,15 @@ test('F7-01 correction creates an idempotent immutable fact without changing eco
     assert.deepEqual(after.rows[0]?.source_snapshot, before.rows[0]?.source_snapshot, 'original provenance remains queryable unchanged');
     assert.equal(after.rows[0]?.payments, before.rows[0]?.payments, 'correction must not mutate payments'); assert.equal(after.rows[0]?.journals, before.rows[0]?.journals, 'correction creates no economic journal');
     assert.equal(after.rows[0]?.audit, 1); assert.equal(after.rows[0]?.outbox, 1);
-    await assert.rejects(() => repo.issueCorrection({ ...command, idempotencyKey: 'rollback', seriesId: randomUUID() }), /SERIES_NOT_FOUND/);
+    await assert.rejects(() => repo.issueCorrection({ ...command, idempotencyKey: 'rollback', seriesId: randomUUID() }), /SERIES_NOT_EFFECTIVE/);
     const corrections = await pool.query('SELECT count(*)::int count FROM finance_financial_documents WHERE institution_id=$1 AND corrects_document_id=$2', [institutionId, original.id]);
     assert.equal(corrections.rows[0].count, 1, 'failed correction rolls back without a partial fact');
   } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(() => undefined); await pool.end(); }
+});
+
+test('F7-02 inactive series cannot be used for authoritative issuance', async () => {
+  await verifyApprovedTestConnection(); const schema=`finance_document_inactive_${randomUUID().replaceAll('-','')}`; const quote=(value:string)=>`"${value.replaceAll('"','""')}"`; const pool=new pg.Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${quote(schema)},public`}); const institutionId=randomUUID(),seriesId=randomUUID(); let paymentId: string;
+  try { const client=await pool.connect(); try { await client.query(`CREATE SCHEMA ${quote(schema)}`); await runMigrations(client,await discoverMigrations(path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../src/db/migrations'))); await client.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'Inactive series','inactive-series','active')",[institutionId]); await client.query("INSERT INTO finance_financial_document_series(id,institution_id,code,status) VALUES($1,$2,'OFF','inactive')",[seriesId,institutionId]); paymentId=await seedConfirmedPayment(client,institutionId); } finally { client.release(); }
+    const repo=new PostgresFinancialDocumentRepository(pool); await assert.rejects(()=>repo.issue({institutionId,sourceInstitutionId:institutionId,sourceType:'payment',sourceId:paymentId!,seriesId,idempotencyKey:'inactive-series',documentType:'receipt'}),/SERIES_NOT_EFFECTIVE/);
+  } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(()=>undefined); await pool.end(); }
 });

@@ -54,10 +54,10 @@ export class PostgresFinancialDocumentRepository {
         financialProfileVersion: sourceRow.financial_profile_version,
       };
       const series = await client.query<{ next_sequence_number: string }>(
-        'SELECT next_sequence_number FROM finance_financial_document_series WHERE institution_id=$1 AND id=$2 FOR UPDATE',
+        "SELECT next_sequence_number FROM finance_financial_document_series WHERE institution_id=$1 AND id=$2 AND status='active' AND effective_from<=now() AND (effective_to IS NULL OR effective_to>now()) FOR UPDATE",
         [command.institutionId, command.seriesId],
       );
-      if (!series.rows[0]) throw new Error('FINANCIAL_DOCUMENT_SERIES_NOT_FOUND');
+      if (!series.rows[0]) throw new Error('FINANCIAL_DOCUMENT_SERIES_NOT_EFFECTIVE');
       const sequenceNumber = Number(series.rows[0].next_sequence_number);
       const id = randomUUID();
       await client.query('UPDATE finance_financial_document_series SET next_sequence_number=$3 WHERE institution_id=$1 AND id=$2', [command.institutionId, command.seriesId, sequenceNumber + 1]);
@@ -88,10 +88,10 @@ export class PostgresFinancialDocumentRepository {
         );
         if (originalSources.rows.length === 0) throw new Error('FINANCIAL_DOCUMENT_ORIGINAL_PROVENANCE_MISSING');
         const series = await client.query<{ next_sequence_number: string }>(
-          'SELECT next_sequence_number FROM finance_financial_document_series WHERE institution_id=$1 AND id=$2 FOR UPDATE',
+          "SELECT next_sequence_number FROM finance_financial_document_series WHERE institution_id=$1 AND id=$2 AND status='active' AND effective_from<=now() AND (effective_to IS NULL OR effective_to>now()) FOR UPDATE",
           [command.institutionId, command.seriesId],
         );
-        if (!series.rows[0]) throw new Error('FINANCIAL_DOCUMENT_SERIES_NOT_FOUND');
+        if (!series.rows[0]) throw new Error('FINANCIAL_DOCUMENT_SERIES_NOT_EFFECTIVE');
         const sequenceNumber = Number(series.rows[0].next_sequence_number);
         const id = randomUUID();
         await client.query('UPDATE finance_financial_document_series SET next_sequence_number=$3 WHERE institution_id=$1 AND id=$2', [command.institutionId, command.seriesId, sequenceNumber + 1]);
