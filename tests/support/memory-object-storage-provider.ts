@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
 import type {
   ObjectStorageProvider,
   CreateUploadAuthParams,
@@ -9,6 +10,8 @@ import type {
   HeadObjectParams,
   HeadObjectResult,
   DeleteObjectParams,
+  OpenReadStreamParams,
+  ReadRangeParams,
 } from '../../src/modules/documents/object-storage-provider.ts';
 
 export interface SimulateDirectUploadParams {
@@ -169,5 +172,32 @@ export class MemoryObjectStorageProvider implements ObjectStorageProvider {
     const had = this.objects.has(`${params.storageBucket}/${params.storageKey}`);
     this.objects.delete(`${params.storageBucket}/${params.storageKey}`);
     return had;
+  }
+
+  async openReadStream(params: OpenReadStreamParams): Promise<NodeJS.ReadableStream> {
+    if (this.failureInjections.has('readStream')) {
+      throw new Error('Injected openReadStream failure in MemoryObjectStorageProvider');
+    }
+    const obj = this.objects.get(`${params.storageBucket}/${params.storageKey}`);
+    if (!obj) {
+      throw new Error(`Object not found in storage for read stream: ${params.storageBucket}/${params.storageKey}`);
+    }
+    return Readable.from(obj.buffer);
+  }
+
+  async readRange(params: ReadRangeParams): Promise<Buffer> {
+    if (this.failureInjections.has('readRange')) {
+      throw new Error('Injected readRange failure in MemoryObjectStorageProvider');
+    }
+    const obj = this.objects.get(`${params.storageBucket}/${params.storageKey}`);
+    if (!obj) {
+      throw new Error(`Object not found in storage for read range: ${params.storageBucket}/${params.storageKey}`);
+    }
+    const start = Math.max(0, params.startByte);
+    const end = Math.min(obj.buffer.length - 1, params.endByte);
+    if (start > end) {
+      return Buffer.alloc(0);
+    }
+    return obj.buffer.subarray(start, end + 1);
   }
 }
