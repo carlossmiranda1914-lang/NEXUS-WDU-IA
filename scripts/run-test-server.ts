@@ -20,7 +20,6 @@ if (productionUrl && productionUrl === testUrl) {
 process.env.DATABASE_URL = testUrl;
 process.env.NODE_ENV = 'development';
 process.env.NEXUS_UAT_RUNTIME_IDENTITY ??= 'true';
-process.env.NEXUS_UAT_FORENSIC_TRACE ??= 'true';
 
 console.log('[TEST SERVER] Connected only to the dedicated test database.');
 await import('../server.ts');

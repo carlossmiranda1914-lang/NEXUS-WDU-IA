@@ -31,43 +31,6 @@ test('F7-06 preserves an authentication-required list failure for safe UAT diagn
   await assert.rejects(() => client.list(), /FINANCIAL_DOCUMENT_AUTH_REQUIRED/);
 });
 
-test('F7-06 emits only safe correlated UAT fetch events', async () => {
-  const events: Array<Record<string, unknown>> = [];
-  const client = new FinancialDocumentClient(async () => authenticationRequired(), async () => 'secret-token', (event) => events.push(event), () => true);
-  await assert.rejects(() => client.list(), /FINANCIAL_DOCUMENT_AUTH_REQUIRED/);
-  assert.equal(events[0]?.event, 'FINANCE_DOCUMENT_FETCH_INTENT');
-  assert.equal(events[0]?.authorizationPlanned, true);
-  const responseEvent = events.find(event => event.event === 'FINANCE_DOCUMENT_FETCH_RESPONSE');
-  assert.equal(responseEvent?.status, 401);
-  assert.equal(events[0]?.traceId, responseEvent?.traceId);
-  assert.doesNotMatch(JSON.stringify(events), /secret-token|Bearer|authorization:/i);
-});
-
-test('F7-06 diagnostics characterize request construction and sanitize transport errors', async () => {
-  const events: Array<Record<string, unknown>> = [];
-  const client = new FinancialDocumentClient(async () => { throw new TypeError('Failed to fetch Bearer secret-token'); }, async () => 'secret-token', (event) => events.push(event), () => true);
-  await assert.rejects(() => client.list(), TypeError);
-  const construction = events.find(event => event.event === 'FINANCE_DOCUMENT_REQUEST_CONSTRUCTION');
-  const failure = events.find(event => event.event === 'FINANCE_DOCUMENT_FETCH_NETWORK_FAILURE');
-  assert.equal(construction?.requestConstruction, 'PASS');
-  assert.equal(construction?.requestHeaderNames, 'authorization,x-nexus-uat-trace');
-  assert.equal(failure?.errorName, 'TypeError');
-  assert.doesNotMatch(String(failure?.errorMessage), /secret-token|Bearer/i);
-});
-
-test('F7-06 invokes its stored fetch function as a client method', async () => {
-  const events: Array<Record<string, unknown>> = [];
-  const receiverSensitiveFetch = async function (this: unknown) {
-    if (this !== globalThis) throw new TypeError('Illegal invocation');
-    return response({ items: [] });
-  } as typeof fetch;
-  const client = new FinancialDocumentClient(receiverSensitiveFetch, async () => null, (event) => events.push(event));
-  await assert.rejects(() => client.list(), /Illegal invocation/);
-  const failure = events.find(event => event.event === 'FINANCE_DOCUMENT_FETCH_NETWORK_FAILURE');
-  assert.equal(failure?.errorName, 'TypeError');
-  assert.equal(failure?.errorMessage, 'Illegal invocation');
-});
-
 test('F7-06 default browser fetch preserves the global receiver', async () => {
   const originalFetch = globalThis.fetch;
   const receiverSensitiveFetch = async function (this: unknown) {
@@ -76,7 +39,7 @@ test('F7-06 default browser fetch preserves the global receiver', async () => {
   } as typeof fetch;
   globalThis.fetch = receiverSensitiveFetch;
   try {
-    const client = new FinancialDocumentClient(undefined, async () => null, () => undefined);
+    const client = new FinancialDocumentClient(undefined, async () => null);
     assert.deepEqual(await client.list(), []);
   } finally {
     globalThis.fetch = originalFetch;

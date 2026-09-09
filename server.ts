@@ -170,7 +170,6 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
   const uatFinanceTraceEnabled = process.env.NODE_ENV !== 'production' && process.env.NEXUS_UAT_AUTH_TRACE === 'true';
-  const uatForensicTraceEnabled = process.env.NODE_ENV !== 'production' && process.env.NEXUS_UAT_FORENSIC_TRACE === 'true';
   const uatRuntimeIdentityEnabled = process.env.NODE_ENV !== 'production' && process.env.NEXUS_UAT_RUNTIME_IDENTITY === 'true';
   const startupTimestamp = new Date().toISOString();
   const readGit = (args: string[]) => {
@@ -185,12 +184,6 @@ async function startServer() {
     canonicalOrigin: 'http://localhost:3000',
   });
   let financeDocumentsUatTrace: { method: string; path: string; statusCode: number } | null = null;
-  const forensicTrace: Array<Record<string, string | number | boolean>> = [];
-  const recordForensicTrace = (event: Record<string, string | number | boolean>) => {
-    if (!uatForensicTraceEnabled) return;
-    forensicTrace.push({ timestamp: new Date().toISOString(), ...event });
-    if (forensicTrace.length > 50) forensicTrace.splice(0, forensicTrace.length - 50);
-  };
 
   // Vite injects a small inline module to enable React Refresh in local
   // development. The production CSP remains enabled; only the development
@@ -298,23 +291,6 @@ async function startServer() {
 
   // JSON body parser (configure for base64 file uploads)
   app.use(express.json({ limit: '10mb' }));
-  if (uatForensicTraceEnabled) {
-    app.post('/__uat/trace', (req, res) => {
-      const body = req.body || {};
-      const safe = ['event', 'traceId', 'timestamp', 'origin', 'method', 'path', 'firebaseUserPresent', 'idTokenAvailable', 'authorizationPlanned', 'status', 'responseClassification', 'errorName', 'errorMessage', 'errorCause', 'networkFailure', 'windowOrigin', 'fetchInputType', 'fetchInputSafeValue', 'resolvedRequestUrl', 'requestMethod', 'requestMode', 'requestCredentialsMode', 'requestRedirectMode', 'requestCacheMode', 'authorizationHeaderPresent', 'authorizationHeaderValue', 'requestHeaderNames', 'headerNameValid', 'headerValueType', 'headerValueContainsForbiddenControlCharacters', 'headerObjectConstruction', 'requestConstruction', 'requestConstructionErrorName', 'requestConstructionSafeMessage', 'control', 'reachedResponse'];
-      const event = Object.fromEntries(safe.flatMap((key) => ['string', 'number', 'boolean'].includes(typeof body[key]) ? [[key, body[key]]] : []));
-      recordForensicTrace({ source: 'CLIENT', ...event });
-      res.status(204).end();
-    });
-    app.use((req, res, next) => {
-      if (req.path !== '/api/finance/documents') return next();
-      const traceId = req.header('X-Nexus-Uat-Trace');
-      recordForensicTrace({ source: 'SERVER', event: 'SERVER_REQUEST_ENTRY', traceId: traceId || 'ABSENT', method: req.method, path: req.path, authHeaderPresent: Boolean(req.header('Authorization')), runtimePid: runtimeIdentity.pid, runtimeHead: runtimeIdentity.head, worktree: runtimeIdentity.worktree });
-      res.on('finish', () => recordForensicTrace({ source: 'SERVER', event: 'RESPONSE_STATUS', traceId: traceId || 'ABSENT', status: res.statusCode }));
-      next();
-    });
-    app.get('/__uat/trace', (_req, res) => res.json({ events: forensicTrace }));
-  }
 
   // Global Real-time Platform Status Tracking Object
   const platformStats = {

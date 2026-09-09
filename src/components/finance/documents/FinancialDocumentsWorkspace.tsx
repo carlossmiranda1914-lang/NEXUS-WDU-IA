@@ -4,6 +4,7 @@ import { financialDocumentClient, type FinancialDocumentCapabilities, type Finan
 export function FinancialDocumentsWorkspace({ theme = 'light' }: { theme?: string }) {
   const [items, setItems] = useState<FinancialDocumentProjection[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState<FinancialDocumentProjection | null>(null);
   const [detail, setDetail] = useState<FinancialDocumentDetail | null>(null);
   const [artifacts, setArtifacts] = useState<FinancialDocumentArtifactProjection[]>([]);
@@ -18,7 +19,7 @@ export function FinancialDocumentsWorkspace({ theme = 'light' }: { theme?: strin
         : code === 'FINANCIAL_DOCUMENT_FORBIDDEN'
           ? 'A sua associação institucional não possui autorização para consultar documentos financeiros.'
           : 'Não foi possível carregar documentos financeiros autorizados.');
-  }); }, []);
+  }).finally(() => setLoaded(true)); }, []);
   const light = theme === 'light';
   const generateArtifact = async () => { if (!selected) return; try { await financialDocumentClient.generateArtifact(selected.id); setArtifacts(await financialDocumentClient.listArtifacts(selected.id)); } catch { setError('Não foi possível gerar o PDF oficial. O documento emitido permanece inalterado.'); } };
   const openArtifact = async (artifact: FinancialDocumentArtifactProjection, print = false) => { try { const bytes = await financialDocumentClient.artifactContent(artifact.id); const url = URL.createObjectURL(bytes); const page = window.open(url, '_blank', 'noopener'); if (print && page) page.addEventListener('load', () => page.print(), { once: true }); } catch { setError('Não foi possível recuperar o PDF oficial autorizado.'); } };
@@ -27,6 +28,7 @@ export function FinancialDocumentsWorkspace({ theme = 'light' }: { theme?: strin
     <h2 className="text-xl font-bold">Documentos Financeiros</h2>
     <p className="mt-1 text-sm text-zinc-500">Histórico oficial somente leitura. Os valores e números emitidos não são editáveis.</p>
     {error && <p role="alert" className="mt-4 text-sm text-rose-600">{error}</p>}
+    {loaded && !error && items.length === 0 && <p className="mt-5 text-sm text-zinc-500" data-testid="financial-documents-empty-state">Não existem documentos financeiros emitidos para esta instituição.</p>}
     <div className="mt-5 space-y-2">{items.map(document => <article key={document.id} className="flex items-center justify-between rounded-lg border p-3" data-testid={`financial-document-${document.id}`}>
       <div><strong>{document.seriesCode}/{document.sequenceNumber}</strong><span className="ml-2 text-sm text-zinc-500">{document.type} · {document.status}</span><p className="text-xs text-zinc-500">Data de emissão: {new Date(document.issuedAt).toLocaleString('pt-PT')} · Moeda: {String(document.sourceSnapshot.currency ?? 'não registada')}</p></div>
       <button type="button" onClick={() => { setSelected(document); setDetail(null); setArtifacts([]); Promise.all([financialDocumentClient.detail(document.id), financialDocumentClient.listArtifacts(document.id)]).then(([nextDetail, nextArtifacts]) => { setDetail(nextDetail); setArtifacts(nextArtifacts); }).catch(() => setError('Não foi possível carregar a proveniência autorizada do documento.')); }} className="rounded-md border px-3 py-1 text-sm">Visualizar</button>
