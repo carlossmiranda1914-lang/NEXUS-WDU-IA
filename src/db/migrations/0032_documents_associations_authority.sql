@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS document_associations (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT document_associations_institution_id_unique
     UNIQUE (institution_id, id),
-  CONSTRAINT document_associations_institution_doc_id_unique
-    UNIQUE (institution_id, document_id, id),
+  CONSTRAINT document_associations_institution_id_doc_unique
+    UNIQUE (institution_id, id, document_id),
   CONSTRAINT document_associations_document_tenant_fk
     FOREIGN KEY (institution_id, document_id)
     REFERENCES documents(institution_id, id)
@@ -51,9 +51,9 @@ CREATE TABLE IF NOT EXISTS document_business_decision_references (
   decided_by_person_id UUID REFERENCES people(id) ON DELETE RESTRICT,
   observed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   correlation_id TEXT CHECK (correlation_id IS NULL OR length(trim(correlation_id)) BETWEEN 4 AND 128),
-  CONSTRAINT document_business_decision_references_association_tenant_fk
-    FOREIGN KEY (institution_id, association_id)
-    REFERENCES document_associations(institution_id, id)
+  CONSTRAINT document_business_decision_references_association_doc_tenant_fk
+    FOREIGN KEY (institution_id, association_id, document_id)
+    REFERENCES document_associations(institution_id, id, document_id)
     ON DELETE RESTRICT,
   CONSTRAINT document_business_decision_references_version_doc_tenant_fk
     FOREIGN KEY (institution_id, document_id, version_id)

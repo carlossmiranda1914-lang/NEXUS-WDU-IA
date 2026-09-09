@@ -11,7 +11,46 @@ export const RECOGNIZED_TARGET_DOMAINS = [
   'attendance',
 ] as const;
 
-export type RecognizedTargetDomain = (typeof RECOGNIZED_TARGET_DOMAINS)[number] | (string & {});
+export type RecognizedTargetDomain = (typeof RECOGNIZED_TARGET_DOMAINS)[number];
+
+export const GOVERNED_TARGET_CONTRACTS: Record<RecognizedTargetDomain, readonly string[]> = {
+  enrollment: [
+    'enrollment_application',
+    'student_enrollment',
+    'candidacy',
+    'registration',
+  ],
+  finance: [
+    'student_account',
+    'payment_plan',
+    'invoice',
+    'scholarship',
+    'bursary',
+  ],
+  academic: [
+    'student_record',
+    'grade_appeal',
+    'academic_standing',
+    'curriculum_waiver',
+  ],
+  student_lifecycle: [
+    'person_identity',
+    'legal_guardian',
+    'civil_id',
+    'lifecycle_event',
+  ],
+  secretariat: [
+    'certificate_request',
+    'diploma_request',
+    'transfer_process',
+    'general_request',
+  ],
+  attendance: [
+    'absence_record',
+    'medical_justification',
+    'attendance_log',
+  ],
+} as const;
 
 export interface DocumentAssociationRecord {
   id: string;
@@ -44,17 +83,32 @@ export interface BusinessDecisionReferenceRecord {
   correlationId: string | null;
 }
 
-export function validateTargetDomain(targetDomain: string): void {
+export function validateTargetDomain(targetDomain: string): asserts targetDomain is RecognizedTargetDomain {
   const trimmed = targetDomain?.trim();
   if (!trimmed || trimmed.length < 2 || trimmed.length > 64) {
     throw new Error(`Invalid targetDomain: "${targetDomain}". Must be between 2 and 64 characters.`);
   }
+  if (!RECOGNIZED_TARGET_DOMAINS.includes(trimmed as RecognizedTargetDomain)) {
+    throw new Error(
+      `Unrecognized targetDomain: "${targetDomain}". Allowed domains: ${RECOGNIZED_TARGET_DOMAINS.join(', ')}.`,
+    );
+  }
 }
 
-export function validateTargetResourceType(targetResourceType: string): void {
-  const trimmed = targetResourceType?.trim();
-  if (!trimmed || trimmed.length < 2 || trimmed.length > 64) {
-    throw new Error(`Invalid targetResourceType: "${targetResourceType}". Must be between 2 and 64 characters.`);
+export function validateTargetResourceType(targetDomain: string, targetResourceType: string): void {
+  validateTargetDomain(targetDomain);
+  const trimmedType = targetResourceType?.trim();
+  if (!trimmedType || trimmedType.length < 2 || trimmedType.length > 64) {
+    throw new Error(
+      `Invalid targetResourceType: "${targetResourceType}". Must be between 2 and 64 characters.`,
+    );
+  }
+  const domainKey = targetDomain as RecognizedTargetDomain;
+  const allowedTypes = GOVERNED_TARGET_CONTRACTS[domainKey];
+  if (!allowedTypes || !allowedTypes.includes(trimmedType)) {
+    throw new Error(
+      `Unrecognized targetResourceType "${targetResourceType}" for domain "${targetDomain}". Allowed resource types: ${allowedTypes ? allowedTypes.join(', ') : 'none'}.`,
+    );
   }
 }
 
@@ -70,6 +124,18 @@ export function validatePurpose(purpose: string): void {
   if (!trimmed || trimmed.length < 2 || trimmed.length > 128) {
     throw new Error(`Invalid purpose: "${purpose}". Must be between 2 and 128 characters.`);
   }
+}
+
+export function validateTargetResourceContract(
+  targetDomain: string,
+  targetResourceType: string,
+  targetResourceId: string,
+  purpose: string,
+): void {
+  validateTargetDomain(targetDomain);
+  validateTargetResourceType(targetDomain, targetResourceType);
+  validateTargetResourceId(targetResourceId);
+  validatePurpose(purpose);
 }
 
 export function validateAuthorityDomain(authorityDomain: string): void {
@@ -97,15 +163,14 @@ export function validateAssociationTransition(
   currentStatus: AssociationStatus,
   targetStatus: AssociationStatus,
 ): void {
-  if (currentStatus === targetStatus) {
-    return;
-  }
   if (currentStatus !== 'active') {
     throw new Error(
-      `Invalid association transition: Cannot transition from terminal state "${currentStatus}" to "${targetStatus}".`,
+      `Invalid association transition: Cannot transition from terminal state "${currentStatus}" to "${targetStatus}". Associations in terminal states are immutable.`,
     );
   }
   if (targetStatus !== 'withdrawn' && targetStatus !== 'closed' && targetStatus !== 'superseded') {
-    throw new Error(`Invalid target association status: "${targetStatus}".`);
+    throw new Error(
+      `Invalid target association status: "${targetStatus}". Active associations can only transition to 'withdrawn', 'closed', or 'superseded'.`,
+    );
   }
 }

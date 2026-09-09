@@ -82,7 +82,7 @@ try {
   const payload1 = {
     documentId: doc.id,
     targetDomain: 'enrollment',
-    targetResourceType: 'application',
+    targetResourceType: 'enrollment_application',
     targetResourceId: 'app-100',
     purpose: 'identity_proof',
   };
@@ -128,7 +128,7 @@ try {
   const racePayload = {
     documentId: doc.id,
     targetDomain: 'academic',
-    targetResourceType: 'transcript_request',
+    targetResourceType: 'student_record',
     targetResourceId: 'req-500',
     purpose: 'credit_transfer',
   };
@@ -198,6 +198,70 @@ try {
   assert.match(
     (transRejected[0] as PromiseRejectedResult).reason.message,
     /Cannot transition from terminal state/,
+  );
+
+  // 5.1 Terminal Status Immutability Evidence:
+  // Query state after terminal transition
+  const checkAssocQuery = await client.query<{ status: string; updated_at: Date }>(
+    `SELECT status, updated_at FROM document_associations WHERE institution_id = $1 AND id = $2`,
+    [institutionId, assocToRace],
+  );
+  const terminalStatus = checkAssocQuery.rows[0].status;
+  const originalUpdatedAt = checkAssocQuery.rows[0].updated_at;
+
+  const countAuditsBefore = await client.query<{ count: string }>(
+    `SELECT COUNT(*) as count FROM document_audit_events WHERE institution_id = $1`,
+    [institutionId],
+  );
+
+  // Retry same terminal state as a NEW command -> REJECTED
+  await assert.rejects(
+    async () => {
+      await transitionAssociationStatusCommand({
+        pool,
+        context,
+        idempotencyKey: 'key-trans-retry-same-terminal-new-command',
+        input: { associationId: assocToRace, targetStatus: terminalStatus as any },
+      });
+    },
+    /Cannot transition from terminal state/,
+    'Attempting same terminal transition with new command must be rejected',
+  );
+
+  // Transition to another terminal state as a NEW command -> REJECTED
+  await assert.rejects(
+    async () => {
+      await transitionAssociationStatusCommand({
+        pool,
+        context,
+        idempotencyKey: 'key-trans-to-other-terminal',
+        input: { associationId: assocToRace, targetStatus: 'superseded' },
+      });
+    },
+    /Cannot transition from terminal state/,
+    'Attempting different terminal transition with new command must be rejected',
+  );
+
+  // Verify NO MUTATION on failed attempts
+  const checkAssocAfter = await client.query<{ status: string; updated_at: Date }>(
+    `SELECT status, updated_at FROM document_associations WHERE institution_id = $1 AND id = $2`,
+    [institutionId, assocToRace],
+  );
+  assert.strictEqual(
+    checkAssocAfter.rows[0].updated_at.getTime(),
+    originalUpdatedAt.getTime(),
+    'updated_at must remain unchanged after rejected terminal transitions',
+  );
+
+  // Verify NO SUCCESS AUDIT generated on rejected attempts
+  const countAuditsAfter = await client.query<{ count: string }>(
+    `SELECT COUNT(*) as count FROM document_audit_events WHERE institution_id = $1`,
+    [institutionId],
+  );
+  assert.strictEqual(
+    countAuditsAfter.rows[0].count,
+    countAuditsBefore.rows[0].count,
+    'No success audit event may be recorded for failed transitions',
   );
 
   // 6. Concurrent Business Decision Reference Recording Idempotency

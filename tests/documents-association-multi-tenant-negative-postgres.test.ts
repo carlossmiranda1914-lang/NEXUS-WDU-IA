@@ -108,7 +108,7 @@ try {
     institutionId: institutionA,
     documentId: docA1.id,
     targetDomain: 'enrollment',
-    targetResourceType: 'application',
+    targetResourceType: 'enrollment_application',
     targetResourceId: 'app-alpha-1',
     purpose: 'identity_verification',
     createdByPersonId: actorA,
@@ -120,7 +120,7 @@ try {
       await client.query(
         `INSERT INTO document_associations (
           institution_id, document_id, target_domain, target_resource_type, target_resource_id, purpose, created_by_person_id
-        ) VALUES ($1, $2, 'enrollment', 'application', 'app-beta-1', 'hack', $3)`,
+        ) VALUES ($1, $2, 'enrollment', 'enrollment_application', 'app-beta-1', 'hack', $3)`,
         [institutionB, docA1.id, actorB],
       );
     },
@@ -156,7 +156,7 @@ try {
     'PostgreSQL composite FK must reject pinning a version from a different document in the same institution',
   );
 
-  // 4. NEGATIVE TEST: DecisionReference in Inst A referencing Inst B Association -> REJECTED
+  // 4. NEGATIVE TEST: DecisionReference in Inst B referencing Inst A Association -> REJECTED
   await assert.rejects(
     async () => {
       await client.query(
@@ -166,11 +166,25 @@ try {
         [institutionB, assocA1.id, docB1.id, verB1.id],
       );
     },
-    /violates foreign key constraint "document_business_decision_references_association_tenant_fk"/,
+    /violates foreign key constraint "document_business_decision_references_association_doc_tenant_fk"/,
     'PostgreSQL composite FK must reject decision reference in Institution B targeting Institution A association',
   );
 
-  // 5. NEGATIVE TEST: DecisionReference for Association D_A1 attempts to reference Version V_A2 (belonging to D_A2) -> REJECTED
+  // 5. NEGATIVE TEST: DecisionReference specifying Association D_A1 with mismatched Document D_A2 (even in SAME institution) -> REJECTED
+  await assert.rejects(
+    async () => {
+      await client.query(
+        `INSERT INTO document_business_decision_references (
+          institution_id, association_id, document_id, version_id, authority_domain, decision_type, decision_outcome, external_reference
+        ) VALUES ($1, $2, $3, $4, 'enrollment', 'intake', 'accepted', 'ref-01')`,
+        [institutionA, assocA1.id, docA2.id, verA2.id],
+      );
+    },
+    /violates foreign key constraint "document_business_decision_references_association_doc_tenant_fk"/,
+    'PostgreSQL composite FK (institution_id, association_id, document_id) must reject decision reference pairing Association of Document A with Document B',
+  );
+
+  // 6. NEGATIVE TEST: DecisionReference for Association D_A1 attempts to reference Version V_A2 (belonging to D_A2) -> REJECTED
   await assert.rejects(
     async () => {
       await client.query(
@@ -184,14 +198,14 @@ try {
     'PostgreSQL composite FK must reject decision reference specifying a version that does not belong to the document',
   );
 
-  // 6. NEGATIVE TEST: Inst B cannot read Inst A associations via repository
+  // 7. NEGATIVE TEST: Inst B cannot read Inst A associations via repository
   const docAssocsFromB = await assocRepo.listAssociationsForDocument(client, institutionB, docA1.id);
   assert.strictEqual(docAssocsFromB.length, 0);
 
-  const targetAssocsFromB = await assocRepo.listAssociationsForTarget(client, institutionB, 'enrollment', 'application', 'app-alpha-1');
+  const targetAssocsFromB = await assocRepo.listAssociationsForTarget(client, institutionB, 'enrollment', 'enrollment_application', 'app-alpha-1');
   assert.strictEqual(targetAssocsFromB.length, 0);
 
-  // 7. NEGATIVE TEST: Command context spoofing rejected
+  // 8. NEGATIVE TEST: Command context spoofing rejected
   await assert.rejects(
     async () => {
       await createDocumentAssociationCommand({
@@ -201,7 +215,7 @@ try {
         input: {
           documentId: docA1.id, // Target in A
           targetDomain: 'enrollment',
-          targetResourceType: 'application',
+          targetResourceType: 'enrollment_application',
           targetResourceId: 'app-spoofed',
           purpose: 'spoofing_test',
         },
@@ -210,7 +224,7 @@ try {
     /violates foreign key constraint "document_associations_document_tenant_fk"/,
   );
 
-  console.log('[DOCUMENTS-ASSOCIATION-MULTI-TENANT-NEGATIVE] PASS: All cross-tenant and cross-document relational negative tests verified.');
+  console.log('[DOCUMENTS-ASSOCIATION-MULTI-TENANT-NEGATIVE] PASS: All cross-tenant, cross-document, and decision-association relational negative tests verified.');
 } finally {
   try {
     await client.query('RESET search_path');

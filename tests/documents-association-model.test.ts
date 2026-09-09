@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import {
+  RECOGNIZED_TARGET_DOMAINS,
+  GOVERNED_TARGET_CONTRACTS,
   validateTargetDomain,
   validateTargetResourceType,
   validateTargetResourceId,
   validatePurpose,
+  validateTargetResourceContract,
   validateAuthorityDomain,
   validateDecisionType,
   validateExternalReference,
@@ -16,15 +19,65 @@ import {
   createRecordDecisionReferenceFingerprint,
 } from '../src/modules/documents/document-association-command.ts';
 
-// 1. Invariants validation
+// 1. Target Domain Governance & Invariants
 assert.throws(() => validateTargetDomain(''), /Invalid targetDomain/);
 assert.throws(() => validateTargetDomain('a'), /Invalid targetDomain/);
-assert.doesNotThrow(() => validateTargetDomain('enrollment'));
-assert.doesNotThrow(() => validateTargetDomain('finance'));
+assert.throws(() => validateTargetDomain('unknown_domain'), /Unrecognized targetDomain/);
+assert.throws(() => validateTargetDomain('random_module'), /Unrecognized targetDomain/);
 
-assert.throws(() => validateTargetResourceType(''), /Invalid targetResourceType/);
-assert.doesNotThrow(() => validateTargetResourceType('enrollment_application'));
+for (const domain of RECOGNIZED_TARGET_DOMAINS) {
+  assert.doesNotThrow(() => validateTargetDomain(domain));
+}
 
+// 2. Governed Target Resource Types per Domain
+assert.throws(() => validateTargetResourceType('enrollment', ''), /Invalid targetResourceType/);
+assert.throws(() => validateTargetResourceType('enrollment', 'a'), /Invalid targetResourceType/);
+assert.throws(() => validateTargetResourceType('unknown_domain', 'student_enrollment'), /Unrecognized targetDomain/);
+
+// Recognized domain + recognized resource type -> PASS
+assert.doesNotThrow(() => validateTargetResourceType('enrollment', 'enrollment_application'));
+assert.doesNotThrow(() => validateTargetResourceType('enrollment', 'student_enrollment'));
+assert.doesNotThrow(() => validateTargetResourceType('finance', 'student_account'));
+assert.doesNotThrow(() => validateTargetResourceType('finance', 'invoice'));
+assert.doesNotThrow(() => validateTargetResourceType('academic', 'student_record'));
+assert.doesNotThrow(() => validateTargetResourceType('student_lifecycle', 'person_identity'));
+assert.doesNotThrow(() => validateTargetResourceType('secretariat', 'certificate_request'));
+assert.doesNotThrow(() => validateTargetResourceType('attendance', 'medical_justification'));
+
+// Recognized domain + unknown resource type -> REJECTED
+assert.throws(
+  () => validateTargetResourceType('enrollment', 'crypto_wallet'),
+  /Unrecognized targetResourceType "crypto_wallet" for domain "enrollment"/,
+);
+assert.throws(
+  () => validateTargetResourceType('finance', 'arbitrary_payload'),
+  /Unrecognized targetResourceType "arbitrary_payload" for domain "finance"/,
+);
+
+// Resource type valid for Domain A used with Domain B -> REJECTED
+assert.throws(
+  () => validateTargetResourceType('finance', 'medical_justification'),
+  /Unrecognized targetResourceType "medical_justification" for domain "finance"/,
+);
+assert.throws(
+  () => validateTargetResourceType('attendance', 'student_account'),
+  /Unrecognized targetResourceType "student_account" for domain "attendance"/,
+);
+assert.throws(
+  () => validateTargetResourceType('secretariat', 'student_account'),
+  /Unrecognized targetResourceType "student_account" for domain "secretariat"/,
+);
+
+// Full target resource contract validation
+assert.doesNotThrow(() =>
+  validateTargetResourceContract('enrollment', 'enrollment_application', 'app-101', 'enrollment_proof'),
+);
+assert.throws(
+  () => validateTargetResourceContract('enrollment', 'unsupported_type', 'app-101', 'enrollment_proof'),
+  /Unrecognized targetResourceType/,
+);
+
+// 3. String Invariants
 assert.throws(() => validateTargetResourceId(''), /Invalid targetResourceId/);
 assert.doesNotThrow(() => validateTargetResourceId('app-12345'));
 
@@ -40,24 +93,40 @@ assert.doesNotThrow(() => validateDecisionType('curriculum_approval'));
 assert.throws(() => validateExternalReference(''), /Invalid externalReference/);
 assert.doesNotThrow(() => validateExternalReference('proc-ref-999'));
 
-// 2. Association state machine transitions
+// 4. Association state machine transitions and terminal immutability
+// ACTIVE -> Valid terminal transitions
 assert.doesNotThrow(() => validateAssociationTransition('active', 'withdrawn'));
 assert.doesNotThrow(() => validateAssociationTransition('active', 'closed'));
 assert.doesNotThrow(() => validateAssociationTransition('active', 'superseded'));
-assert.doesNotThrow(() => validateAssociationTransition('active', 'active'));
 
-assert.throws(() => validateAssociationTransition('withdrawn', 'active'), /terminal state/);
-assert.throws(() => validateAssociationTransition('closed', 'active'), /terminal state/);
-assert.throws(() => validateAssociationTransition('superseded', 'active'), /terminal state/);
-assert.throws(() => validateAssociationTransition('withdrawn', 'closed'), /terminal state/);
+// ACTIVE -> ACTIVE must be rejected
+assert.throws(() => validateAssociationTransition('active', 'active'), /Invalid target association status/);
 
-// 3. Deterministic Fingerprint Generation
+// Terminal states -> Same terminal state must be REJECTED (no self-transition / no mutation)
+assert.throws(() => validateAssociationTransition('withdrawn', 'withdrawn'), /terminal state "withdrawn"/);
+assert.throws(() => validateAssociationTransition('closed', 'closed'), /terminal state "closed"/);
+assert.throws(() => validateAssociationTransition('superseded', 'superseded'), /terminal state "superseded"/);
+
+// Terminal states -> Other terminal states must be REJECTED
+assert.throws(() => validateAssociationTransition('withdrawn', 'closed'), /terminal state "withdrawn"/);
+assert.throws(() => validateAssociationTransition('withdrawn', 'superseded'), /terminal state "withdrawn"/);
+assert.throws(() => validateAssociationTransition('closed', 'withdrawn'), /terminal state "closed"/);
+assert.throws(() => validateAssociationTransition('closed', 'superseded'), /terminal state "closed"/);
+assert.throws(() => validateAssociationTransition('superseded', 'withdrawn'), /terminal state "superseded"/);
+assert.throws(() => validateAssociationTransition('superseded', 'closed'), /terminal state "superseded"/);
+
+// Terminal states -> ACTIVE must be REJECTED
+assert.throws(() => validateAssociationTransition('withdrawn', 'active'), /terminal state "withdrawn"/);
+assert.throws(() => validateAssociationTransition('closed', 'active'), /terminal state "closed"/);
+assert.throws(() => validateAssociationTransition('superseded', 'active'), /terminal state "superseded"/);
+
+// 5. Deterministic Fingerprint Generation
 const fp1 = createAssociationCreationFingerprint(
   '00000000-0000-0000-0000-000000000001',
   {
     documentId: '00000000-0000-0000-0000-000000000002',
     targetDomain: 'enrollment',
-    targetResourceType: 'application',
+    targetResourceType: 'enrollment_application',
     targetResourceId: 'app-1',
     purpose: 'identity_proof',
   },
@@ -69,7 +138,7 @@ const fp2 = createAssociationCreationFingerprint(
   {
     purpose: 'identity_proof',
     targetResourceId: 'app-1',
-    targetResourceType: 'application',
+    targetResourceType: 'enrollment_application',
     targetDomain: 'enrollment',
     documentId: '00000000-0000-0000-0000-000000000002',
   },
@@ -78,4 +147,4 @@ const fp2 = createAssociationCreationFingerprint(
 
 assert.strictEqual(fp1, fp2, 'Fingerprints must match regardless of property order');
 
-console.log('[DOCUMENTS-ASSOCIATION-MODEL] PASS: Association models, invariants, and transitions verified.');
+console.log('[DOCUMENTS-ASSOCIATION-MODEL] PASS: Association models, governed target contracts, and terminal immutability verified.');

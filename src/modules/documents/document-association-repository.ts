@@ -47,7 +47,7 @@ export class PostgresDocumentAssociationRepository {
     input: CreateAssociationInput,
   ): Promise<DocumentAssociationRecord> {
     validateTargetDomain(input.targetDomain);
-    validateTargetResourceType(input.targetResourceType);
+    validateTargetResourceType(input.targetDomain, input.targetResourceType);
     validateTargetResourceId(input.targetResourceId);
     validatePurpose(input.purpose);
 
