@@ -15,6 +15,33 @@ const toDate = (value: Date | string) => value instanceof Date ? value : new Dat
 const mapAllocation = (row: AllocationRow): Allocation => ({ id:row.id, institutionId:row.institution_id, financialAccountId:row.financial_account_id, paymentId:row.payment_id, obligationId:row.obligation_id, money:Money.parse(row.amount,row.currency), effectiveAt:toDate(row.effective_at), recordedAt:toDate(row.recorded_at), actorKind:row.actor_kind, actorPersonId:row.actor_person_id ?? undefined, journalTransactionId:row.journal_transaction_id, commandId:row.command_id ?? row.journal_transaction_id, status:'confirmed' });
 const mapReversal = (row: ReversalRow): AllocationReversal => ({ id:row.id, institutionId:row.institution_id, originalAllocationId:row.original_allocation_id, money:Money.parse(row.amount,row.currency), reason:row.reason, effectiveAt:toDate(row.effective_at), recordedAt:toDate(row.recorded_at), actorKind:row.actor_kind, actorPersonId:row.actor_person_id ?? undefined, journalTransactionId:row.journal_transaction_id, commandId:row.journal_transaction_id, status:'confirmed' });
 
+/**
+ * Canonical current settlement relationship. Consumers must use this instead
+ * of treating an historical allocation row as proof that settlement remains.
+ */
+export async function findCurrentAllocationRelation(
+  pool: Pick<Pool | PoolClient, 'query'>,
+  institutionId: string,
+  paymentId: string,
+  obligationId: string,
+) {
+  const result = await pool.query<{ id: string; payment_id: string; obligation_id: string }>(
+    `SELECT a.id,a.payment_id,a.obligation_id
+     FROM finance_allocations a
+     INNER JOIN finance_payments p ON p.institution_id=a.institution_id AND p.id=a.payment_id AND p.status='confirmed'
+     INNER JOIN finance_obligations o ON o.institution_id=a.institution_id AND o.id=a.obligation_id AND o.status='open'
+     WHERE a.institution_id=$1 AND a.payment_id=$2 AND a.obligation_id=$3
+       AND a.amount > COALESCE((
+         SELECT SUM(r.amount)
+         FROM finance_allocation_reversals r
+         WHERE r.institution_id=a.institution_id AND r.original_allocation_id=a.id
+       ),0)
+     FOR UPDATE OF a,p,o`,
+    [institutionId, paymentId, obligationId],
+  );
+  return result.rows[0];
+}
+
 export class PostgresAllocationRepository {
   constructor(private readonly pool: Pool, private readonly failurePoint?: AllocationFailurePoint) {}
 

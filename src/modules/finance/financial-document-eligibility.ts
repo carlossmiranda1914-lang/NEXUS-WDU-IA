@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { findCurrentAllocationRelation } from './allocation-repository.ts';
 
 export type EligibleReceiptSource = Readonly<{
   paymentId: string;
@@ -50,16 +51,7 @@ export class FinancialDocumentEligibilityService {
   }
 
   async requireInvoiceReceipt(institutionId: string, paymentId: string, obligationId: string): Promise<EligibleInvoiceReceiptSource> {
-    const result = await this.pool.query<{ id: string; payment_id: string; obligation_id: string }>(
-      `SELECT a.id,a.payment_id,a.obligation_id
-       FROM finance_allocations a
-       INNER JOIN finance_payments p ON p.institution_id=a.institution_id AND p.id=a.payment_id AND p.status='confirmed'
-       INNER JOIN finance_obligations o ON o.institution_id=a.institution_id AND o.id=a.obligation_id AND o.status='open'
-       WHERE a.institution_id=$1 AND a.payment_id=$2 AND a.obligation_id=$3
-       FOR UPDATE OF a,p,o`,
-      [institutionId, paymentId, obligationId],
-    );
-    const allocation = result.rows[0];
+    const allocation = await findCurrentAllocationRelation(this.pool, institutionId, paymentId, obligationId);
     if (!allocation) throw new Error('FINANCIAL_DOCUMENT_INVOICE_RECEIPT_INELIGIBLE');
     return Object.freeze({ allocationId: allocation.id, paymentId: allocation.payment_id, obligationId: allocation.obligation_id });
   }

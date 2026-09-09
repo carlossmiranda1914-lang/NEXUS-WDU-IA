@@ -21,7 +21,7 @@ async function seedConfirmedPayment(client: pg.PoolClient, institutionId: string
 
 test('F7-01 issuance is idempotent, tenant-safe, and allocates series numbers atomically', async () => {
   const harness: any = {};
-  await assert.rejects(() => issueFinancialDocumentCommand(harness, { institutionId: 'a', sourceInstitutionId: 'b', seriesId: 's', idempotencyKey: 'key-a' }));
+  await assert.rejects(() => issueFinancialDocumentCommand(harness, { institutionId: 'a', sourceInstitutionId: 'b', sourceType: 'payment', sourceId: 'payment-a', seriesId: 's', idempotencyKey: 'key-a' }));
 });
 
 test('F7-01 repository exposes an atomic issuance authority', () => {
