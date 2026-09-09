@@ -40,3 +40,12 @@ test('F7-05 persists a hash-verified PDF artifact from an issued immutable docum
   const artifact = await service.generate({ institutionId: 'tenant-1', documentId: 'document-1', renderVersion: 'renderer-1', templateVersion: 'template-1' });
   assert.equal(artifact.id, artifactId); assert.equal(artifact.mediaType, 'application/pdf'); assert.ok(artifact.contentHash.length === 64); assert.equal((await service.retrieve({ institutionId: 'tenant-1', artifactId })).subarray(0, 5).toString(), '%PDF-');
 });
+
+test('F7-05 fails closed for missing or integrity-mismatched stored bytes', async () => {
+  const row = { id: 'artifact-1', document_id: 'document-1', render_version: 'renderer-1', template_version: 'template-1', generated_at: new Date(), content_hash: '0'.repeat(64), media_type: 'application/pdf', byte_size: 5, storage_reference: 'private/reference' };
+  const pool: any = { query: async () => ({ rows: [row] }) };
+  const missing = new FinancialDocumentArtifactService(pool, { put: async () => undefined, get: async () => undefined });
+  await assert.rejects(() => missing.retrieve({ institutionId: 'tenant-1', artifactId: row.id }), /ARTIFACT_MISSING/);
+  const tampered = new FinancialDocumentArtifactService(pool, { put: async () => undefined, get: async () => Buffer.from('wrong') });
+  await assert.rejects(() => tampered.retrieve({ institutionId: 'tenant-1', artifactId: row.id }), /INTEGRITY_MISMATCH/);
+});
