@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { FinancialDocumentArtifactService, InMemoryFinancialDocumentArtifactStorage } from '../src/modules/finance/financial-document-artifact-service.ts';
+import { FinancialDocumentArtifactService, InMemoryFinancialDocumentArtifactStorage, PostgresFinancialDocumentArtifactStorage } from '../src/modules/finance/financial-document-artifact-service.ts';
 import { renderFinancialDocumentPdf } from '../src/modules/finance/financial-document-artifact-renderer.ts';
 
 test('F7-05 defines a versioned, non-destructive Financial Document artifact authority', () => {
@@ -21,6 +21,10 @@ test('F7-05 keeps artifact bytes behind a provider-neutral storage boundary', as
   await storage.put('private/reference', Buffer.from('immutable-bytes'));
   assert.equal((await storage.get('private/reference'))?.toString(), 'immutable-bytes');
   assert.equal(await storage.get('missing'), undefined);
+});
+
+test('F7-05 exposes a durable PostgreSQL storage adapter without provider-specific Finance authority', () => {
+  assert.equal(typeof PostgresFinancialDocumentArtifactStorage, 'function');
 });
 
 test('F7-05 persists a hash-verified PDF artifact from an issued immutable document', async () => {

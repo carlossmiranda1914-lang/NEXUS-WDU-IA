@@ -14,6 +14,18 @@ export class InMemoryFinancialDocumentArtifactStorage implements FinancialDocume
   async get(storageReference: string): Promise<Buffer | undefined> { const bytes = this.objects.get(storageReference); return bytes && Buffer.from(bytes); }
 }
 
+/** Durable local implementation of the neutral storage contract for the current Finance slice. */
+export class PostgresFinancialDocumentArtifactStorage implements FinancialDocumentArtifactStorage {
+  constructor(private readonly pool: Pool) {}
+  async put(storageReference: string, bytes: Buffer): Promise<void> {
+    await this.pool.query('INSERT INTO finance_financial_document_artifact_blobs(storage_reference,content) VALUES($1,$2)', [storageReference, bytes]);
+  }
+  async get(storageReference: string): Promise<Buffer | undefined> {
+    const result = await this.pool.query<{ content: Buffer }>('SELECT content FROM finance_financial_document_artifact_blobs WHERE storage_reference=$1', [storageReference]);
+    return result.rows[0]?.content && Buffer.from(result.rows[0].content);
+  }
+}
+
 export type FinancialDocumentArtifact = {
   id: string;
   documentId: string;
@@ -28,7 +40,7 @@ export type FinancialDocumentArtifact = {
 
 /** F7-05 boundary: representation evidence is versioned and never replaces the Financial Document fact. */
 export class FinancialDocumentArtifactService {
-  constructor(private readonly pool: Pool, private readonly storage: FinancialDocumentArtifactStorage = new InMemoryFinancialDocumentArtifactStorage()) { void this.pool; void this.storage; }
+  constructor(private readonly pool: Pool, private readonly storage: FinancialDocumentArtifactStorage = new PostgresFinancialDocumentArtifactStorage(pool)) { void this.pool; void this.storage; }
 
   async generate(input: { institutionId: string; documentId: string; renderVersion: string; templateVersion: string }): Promise<FinancialDocumentArtifact> {
     const document = await this.pool.query<any>('SELECT d.id,d.document_type,d.sequence_number,d.issued_at,d.source_snapshot,d.corrects_document_id,s.code series_code FROM finance_financial_documents d JOIN finance_financial_document_series s ON s.institution_id=d.institution_id AND s.id=d.series_id WHERE d.institution_id=$1 AND d.id=$2 AND d.status=\'issued\'', [input.institutionId, input.documentId]);
