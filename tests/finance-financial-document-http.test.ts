@@ -15,16 +15,20 @@ test('F7-04 Financial Document reads are capability-gated and tenant-scoped', as
   try {
     const base = `http://127.0.0.1:${(server.address() as any).port}`;
     assert.equal((await fetch(`${base}/api/finance/documents`)).status, 401);
+    assert.equal((await fetch(`${base}/api/finance/documents/issue`, { method: 'POST', headers: { 'Idempotency-Key': 'missing-auth' } })).status, 401);
     const list = await fetch(`${base}/api/finance/documents?limit=10`, { headers: { Authorization: 'Bearer financial' } });
     assert.equal(list.status, 200); const listPayload = await list.json(); assert.equal(listPayload.items[0].id, 'doc-a'); assert.deepEqual(listPayload.page, { nextCursor: null }, 'Financial Document reads follow the canonical page envelope');
     const detail = await fetch(`${base}/api/finance/documents/foreign`, { headers: { Authorization: 'Bearer financial' } });
     assert.equal(detail.status, 404);
     const ownedDetail = await fetch(`${base}/api/finance/documents/doc-a`, { headers: { Authorization: 'Bearer financial' } }); const ownedPayload = await ownedDetail.json(); assert.equal(ownedDetail.status, 200); assert.deepEqual(ownedPayload.sources, [{ type: 'payment', id: 'payment-a', snapshot: { paymentReference: 'PAY-A' } }]); assert.equal(ownedPayload.corrections[0].id, 'correction-a');
     const deniedIssue = await fetch(`${base}/api/finance/documents/issue`, { method: 'POST', headers: { Authorization: 'Bearer director', 'Idempotency-Key': 'denied' } });
+    const deniedCorrection = await fetch(`${base}/api/finance/documents/doc-a/corrections`, { method: 'POST', headers: { Authorization: 'Bearer director', 'Idempotency-Key': 'denied' } });
     assert.equal(deniedIssue.status, 403);
     const deniedConfig = await fetch(`${base}/api/finance/fiscal-configurations`, { method: 'POST', headers: { Authorization: 'Bearer financial', 'Idempotency-Key': 'denied' } });
     const deniedSeries = await fetch(`${base}/api/finance/document-series`, { method: 'POST', headers: { Authorization: 'Bearer financial', 'Idempotency-Key': 'denied' } });
-    assert.equal(deniedConfig.status, 403); assert.equal(deniedSeries.status, 403);
+    assert.equal(deniedIssue.status, 403); assert.equal(deniedCorrection.status, 403); assert.equal(deniedConfig.status, 403); assert.equal(deniedSeries.status, 403);
+    assert.equal((await fetch(`${base}/api/finance/fiscal-configurations`, { headers: { Authorization: 'Bearer financial' } })).status, 200);
+    assert.equal((await fetch(`${base}/api/finance/document-series`, { headers: { Authorization: 'Bearer financial' } })).status, 200);
     assert.ok(calls.every(call => call.values.includes('tenant-a')), 'every lookup must bind the server-derived institution');
   } finally { server.close(); }
 });
