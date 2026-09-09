@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { requireAuth, type AuthRequest } from '../../middleware/auth.ts';
 import { canAccessFinancialDocuments } from './financial-document-policy.ts';
 import { PostgresFinancialDocumentRepository } from './financial-document-service.ts';
+import { FinancialDocumentArtifactService } from './financial-document-artifact-service.ts';
 import { createCanonicalFinanceFingerprint, executeIdempotentFinanceCommand } from './finance-command.ts';
 
 type DocumentRow = { id: string; document_type: string; status: string; sequence_number: string; issued_at: Date; source_snapshot: Record<string, unknown>; corrects_document_id: string | null; fiscal_adapter_key: string | null; series_code: string };
@@ -60,6 +61,19 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
   app.post('/api/finance/documents/:id/corrections', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'correct'); const idempotencyKey = key(req, res); if (!context || !idempotencyKey) return;
     try { const result = await new PostgresFinancialDocumentRepository(pool as Pool).issueCorrection({ institutionId: context.institutionId, originalDocumentId: req.params.id, seriesId: req.body?.seriesId, documentType: req.body?.documentType, idempotencyKey }); res.status(result.replayed ? 200 : 201).json(result); } catch (error) { handleCommand(res, error); }
+  });
+  app.get('/api/finance/documents/:id/artifacts', auth, async (req: AuthRequest, res) => {
+    const context = actor(req, res, 'read'); if (!context) return;
+    const artifacts = await pool.query('SELECT id,document_id,render_version,template_version,generated_at,content_hash,media_type,byte_size FROM finance_financial_document_artifacts WHERE institution_id=$1 AND document_id=$2 ORDER BY generated_at DESC', [context.institutionId, req.params.id]);
+    res.json({ items: artifacts.rows });
+  });
+  app.post('/api/finance/documents/:id/artifacts', auth, async (req: AuthRequest, res) => {
+    const context = actor(req, res, 'issue'); if (!context) return;
+    try { const artifact = await new FinancialDocumentArtifactService(pool).generate({ institutionId: context.institutionId, documentId: req.params.id, renderVersion: req.body?.renderVersion ?? 'renderer-1', templateVersion: req.body?.templateVersion ?? 'template-1' }); res.status(201).json(artifact); } catch (error) { const message = error instanceof Error ? error.message : ''; res.status(message.includes('NOT_FOUND') ? 404 : 422).json({ code: 'FINANCIAL_DOCUMENT_ARTIFACT_VALIDATION', error: 'Não foi possível gerar o artefacto oficial.' }); }
+  });
+  app.get('/api/finance/document-artifacts/:artifactId/content', auth, async (req: AuthRequest, res) => {
+    const context = actor(req, res, 'read'); if (!context) return;
+    try { const bytes = await new FinancialDocumentArtifactService(pool).retrieve({ institutionId: context.institutionId, artifactId: req.params.artifactId }); res.type('application/pdf').send(bytes); } catch (error) { const message = error instanceof Error ? error.message : ''; res.status(message.includes('NOT_FOUND') ? 404 : 422).json({ code: 'FINANCIAL_DOCUMENT_ARTIFACT_UNAVAILABLE', error: 'Artefacto oficial indisponível.' }); }
   });
   app.get('/api/finance/fiscal-configurations', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'fiscal_config_read'); if (!context) return;
