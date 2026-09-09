@@ -3,11 +3,12 @@ import type { Pool } from 'pg';
 import { requireAuth, type AuthRequest } from '../../middleware/auth.ts';
 import { canAccessFinancialDocuments } from './financial-document-policy.ts';
 import { PostgresFinancialDocumentRepository } from './financial-document-service.ts';
-import { FinancialDocumentArtifactService } from './financial-document-artifact-service.ts';
+import { FinancialDocumentArtifactService, type FinancialDocumentArtifact } from './financial-document-artifact-service.ts';
 import { createCanonicalFinanceFingerprint, executeIdempotentFinanceCommand } from './finance-command.ts';
 
 type DocumentRow = { id: string; document_type: string; status: string; sequence_number: string; issued_at: Date; source_snapshot: Record<string, unknown>; corrects_document_id: string | null; fiscal_adapter_key: string | null; series_code: string };
 const view = (row: DocumentRow) => ({ id: row.id, type: row.document_type, status: row.status, seriesCode: row.series_code, sequenceNumber: Number(row.sequence_number), issuedAt: row.issued_at.toISOString(), sourceSnapshot: row.source_snapshot, correctsDocumentId: row.corrects_document_id, fiscalAdapterKey: row.fiscal_adapter_key });
+const artifactView = (artifact: FinancialDocumentArtifact) => ({ id: artifact.id, documentId: artifact.documentId, renderVersion: artifact.renderVersion, templateVersion: artifact.templateVersion, generatedAt: artifact.generatedAt.toISOString(), contentHash: artifact.contentHash, mediaType: artifact.mediaType, byteSize: artifact.byteSize });
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const decodeCursor = (value: unknown) => {
   if (value === undefined) return null;
@@ -69,7 +70,7 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
   });
   app.post('/api/finance/documents/:id/artifacts', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'issue'); if (!context) return;
-    try { const artifact = await new FinancialDocumentArtifactService(pool).generate({ institutionId: context.institutionId, documentId: req.params.id, renderVersion: req.body?.renderVersion ?? 'renderer-1', templateVersion: req.body?.templateVersion ?? 'template-1' }); res.status(201).json(artifact); } catch (error) { const message = error instanceof Error ? error.message : ''; res.status(message.includes('NOT_FOUND') ? 404 : 422).json({ code: 'FINANCIAL_DOCUMENT_ARTIFACT_VALIDATION', error: 'Não foi possível gerar o artefacto oficial.' }); }
+    try { const artifact = await new FinancialDocumentArtifactService(pool).generate({ institutionId: context.institutionId, documentId: req.params.id, renderVersion: req.body?.renderVersion ?? 'renderer-1', templateVersion: req.body?.templateVersion ?? 'template-1' }); res.status(201).json(artifactView(artifact)); } catch (error) { const message = error instanceof Error ? error.message : ''; res.status(message.includes('NOT_FOUND') ? 404 : 422).json({ code: 'FINANCIAL_DOCUMENT_ARTIFACT_VALIDATION', error: 'Não foi possível gerar o artefacto oficial.' }); }
   });
   app.get('/api/finance/document-artifacts/:artifactId/content', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'read'); if (!context) return;
