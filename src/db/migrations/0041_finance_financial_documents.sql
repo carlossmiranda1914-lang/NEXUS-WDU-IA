@@ -8,6 +8,11 @@ CREATE TABLE finance_financial_documents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(), institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE RESTRICT,
   document_type TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('draft','issued')), series_id UUID, sequence_number BIGINT,
   source_snapshot JSONB NOT NULL CHECK (jsonb_typeof(source_snapshot)='object'), corrects_document_id UUID, issued_at TIMESTAMPTZ,
+  CONSTRAINT finance_financial_documents_issued_shape CHECK (
+    (status = 'draft' AND series_id IS NULL AND sequence_number IS NULL AND issued_at IS NULL)
+    OR
+    (status = 'issued' AND series_id IS NOT NULL AND sequence_number IS NOT NULL AND sequence_number > 0 AND issued_at IS NOT NULL)
+  ),
   CONSTRAINT finance_financial_documents_series_fk FOREIGN KEY (institution_id,series_id) REFERENCES finance_financial_document_series(institution_id,id) ON DELETE RESTRICT,
   CONSTRAINT finance_financial_documents_correction_fk FOREIGN KEY (institution_id,corrects_document_id) REFERENCES finance_financial_documents(institution_id,id) ON DELETE RESTRICT,
   CONSTRAINT finance_financial_documents_number_unique UNIQUE (institution_id, series_id, sequence_number),
