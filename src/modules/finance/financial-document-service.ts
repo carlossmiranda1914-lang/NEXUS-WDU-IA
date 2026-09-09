@@ -43,10 +43,10 @@ export class PostgresFinancialDocumentRepository {
       // Lock the authoritative Finance source first, then the institution series.
       // The document snapshot is built from this server-side row, never caller input.
       const source = await client.query<{ id: string; amount: string; currency: string; payment_reference: string; effective_at: Date; journal_transaction_id: string; financial_profile_version: number }>(
-        'SELECT id,amount::text,currency,payment_reference,effective_at,journal_transaction_id,financial_profile_version FROM finance_payments WHERE institution_id=$1 AND id=$2 FOR UPDATE',
+        "SELECT id,amount::text,currency,payment_reference,effective_at,journal_transaction_id,financial_profile_version FROM finance_payments WHERE institution_id=$1 AND id=$2 AND status='confirmed' FOR UPDATE",
         [command.institutionId, command.sourceId],
       );
-      if (!source.rows[0]) throw new Error('FINANCIAL_DOCUMENT_SOURCE_NOT_FOUND');
+      if (!source.rows[0]) throw new Error('FINANCIAL_DOCUMENT_SOURCE_NOT_ELIGIBLE');
       const sourceRow = source.rows[0];
       const fiscalConfiguration = await client.query<{ id: string; adapter_key: string }>(
         "SELECT id,adapter_key FROM finance_fiscal_configuration_versions WHERE institution_id=$1 AND effective_from<=now() AND (effective_to IS NULL OR effective_to>now()) ORDER BY version DESC LIMIT 1 FOR SHARE",

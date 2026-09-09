@@ -81,7 +81,7 @@ test('F7-01 PostgreSQL issuance replays idempotently and allocates a series numb
       await foreignClient.query("INSERT INTO finance_journal_transactions(id,institution_id,status,currency,amount,command_id,journal_type,actor_person_id,financial_profile_version,confirmed_at) VALUES($1,$2,'confirmed','EUR',10,$3,'foundation_value_received',$4,1,now())", [journalId, foreignInstitutionId, `foreign-source-${foreignPaymentId}`, personId]);
       await foreignClient.query("INSERT INTO finance_payments(id,institution_id,payment_reference,journal_transaction_id,source_type,method,amount,currency,status,allocation_status,payer_person_id,effective_at,financial_profile_version,actor_person_id) VALUES($1,$2,$3,$4,'manual_offline','cash',10,'EUR','confirmed','unapplied',$5,now(),1,$5)", [foreignPaymentId, foreignInstitutionId, `PAY-${foreignPaymentId.slice(0, 8)}`, journalId, personId]);
     } finally { foreignClient.release(); }
-    await assert.rejects(() => repo.issue({ ...command, sourceId: foreignPaymentId, idempotencyKey: 'cross-tenant-source' }), /SOURCE_NOT_FOUND/);
+    await assert.rejects(() => repo.issue({ ...command, sourceId: foreignPaymentId, idempotencyKey: 'cross-tenant-source' }), /SOURCE_NOT_ELIGIBLE/);
     await assert.rejects(() => eligibility.requireReceipt(institutionId, foreignPaymentId), /RECEIPT_INELIGIBLE/);
   } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(() => undefined); await pool.end(); }
 });
