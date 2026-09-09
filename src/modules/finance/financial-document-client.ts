@@ -12,7 +12,13 @@ export class FinancialDocumentClient {
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     const token = await this.getToken().catch(() => null);
     const response = await this.fetcher(path, { ...init, headers: { ...(init?.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
-    if (!response.ok) throw new Error(response.status === 403 ? 'FINANCIAL_DOCUMENT_FORBIDDEN' : response.status === 422 ? 'Não foi possível concluir a ação. Verifique a configuração fiscal e a série efetiva.' : 'FINANCIAL_DOCUMENT_UNAVAILABLE');
+    if (!response.ok) throw new Error(
+      response.status === 401 ? 'FINANCIAL_DOCUMENT_AUTH_REQUIRED'
+        : response.status === 403 ? 'FINANCIAL_DOCUMENT_FORBIDDEN'
+          : response.status === 409 ? 'FINANCIAL_DOCUMENT_INSTITUTION_SELECTION_REQUIRED'
+            : response.status === 422 ? 'Não foi possível concluir a ação. Verifique a configuração fiscal e a série efetiva.'
+              : 'FINANCIAL_DOCUMENT_UNAVAILABLE',
+    );
     return response.json() as Promise<T>;
   }
 

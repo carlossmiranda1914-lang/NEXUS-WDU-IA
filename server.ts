@@ -168,6 +168,8 @@ async function generateContentWithRetry(
 async function startServer() {
   const app = express();
   const PORT = 3000;
+  const uatFinanceTraceEnabled = process.env.NODE_ENV !== 'production' && process.env.NEXUS_UAT_AUTH_TRACE === 'true';
+  let financeDocumentsUatTrace: { method: string; path: string; statusCode: number } | null = null;
 
   // Vite injects a small inline module to enable React Refresh in local
   // development. The production CSP remains enabled; only the development
@@ -185,6 +187,19 @@ async function startServer() {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Institution-Id'],
     credentials: true,
   }));
+  if (uatFinanceTraceEnabled) {
+    app.use((req, res, next) => {
+      if (req.path === '/api/finance/documents') {
+        res.on('finish', () => {
+          financeDocumentsUatTrace = { method: req.method, path: req.path, statusCode: res.statusCode };
+        });
+      }
+      next();
+    });
+    app.get('/api/diagnostics/uat/finance-documents-last-request', (_req, res) => {
+      res.json({ trace: financeDocumentsUatTrace });
+    });
+  }
 
   const server = http.createServer(app);
   const verificationCodes = new Map<string, { code: string; expiresAt: number }>();

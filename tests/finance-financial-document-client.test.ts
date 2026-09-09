@@ -4,6 +4,7 @@ import { FinancialDocumentClient } from '../src/modules/finance/financial-docume
 
 const response = (body: unknown) => ({ ok: true, json: async () => body }) as Response;
 const unavailable = () => ({ ok: false, status: 422, json: async () => ({ code: 'FINANCIAL_DOCUMENT_VALIDATION' }) }) as Response;
+const authenticationRequired = () => ({ ok: false, status: 401, json: async () => ({ error: 'Unauthorized: Missing token' }) }) as Response;
 
 test('F7-06 delegates receipt issuance and correction through idempotent authoritative HTTP commands', async () => {
   const calls: Array<{ path: string; init?: RequestInit }> = [];
@@ -23,4 +24,9 @@ test('F7-06 only presents active receipt and credit-note series returned by the 
 test('F7-06 turns unavailable issuance into an actionable configuration result', async () => {
   const client = new FinancialDocumentClient(async () => unavailable(), async () => null);
   await assert.rejects(() => client.issueReceipt({ sourceId: 'pay-1', seriesId: 'series-1', idempotencyKey: 'receipt-stable-key' }), /configuração fiscal e a série efetiva/);
+});
+
+test('F7-06 preserves an authentication-required list failure for safe UAT diagnosis', async () => {
+  const client = new FinancialDocumentClient(async () => authenticationRequired(), async () => null);
+  await assert.rejects(() => client.list(), /FINANCIAL_DOCUMENT_AUTH_REQUIRED/);
 });

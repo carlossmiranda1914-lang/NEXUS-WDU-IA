@@ -9,7 +9,16 @@ export function FinancialDocumentsWorkspace({ theme = 'light' }: { theme?: strin
   const [artifacts, setArtifacts] = useState<FinancialDocumentArtifactProjection[]>([]);
   const [capabilities, setCapabilities] = useState<FinancialDocumentCapabilities>({ issue: false, correct: false });
   const correctionKeys = useRef(new Map<string, string>());
-  useEffect(() => { Promise.all([financialDocumentClient.list(), financialDocumentClient.capabilities()]).then(([documents, permissions]) => { setItems(documents); setCapabilities(permissions); }).catch(() => setError('Não foi possível carregar documentos financeiros autorizados.')); }, []);
+  useEffect(() => { Promise.all([financialDocumentClient.list(), financialDocumentClient.capabilities()]).then(([documents, permissions]) => { setItems(documents); setCapabilities(permissions); }).catch((loadError: unknown) => {
+    const code = loadError instanceof Error ? loadError.message : '';
+    setError(code === 'FINANCIAL_DOCUMENT_AUTH_REQUIRED'
+      ? 'A sessão autenticada não foi reconhecida pelo servidor. Termine sessão e entre novamente na conta UAT autorizada.'
+      : code === 'FINANCIAL_DOCUMENT_INSTITUTION_SELECTION_REQUIRED'
+        ? 'É necessário selecionar a instituição antes de consultar documentos financeiros.'
+        : code === 'FINANCIAL_DOCUMENT_FORBIDDEN'
+          ? 'A sua associação institucional não possui autorização para consultar documentos financeiros.'
+          : 'Não foi possível carregar documentos financeiros autorizados.');
+  }); }, []);
   const light = theme === 'light';
   const generateArtifact = async () => { if (!selected) return; try { await financialDocumentClient.generateArtifact(selected.id); setArtifacts(await financialDocumentClient.listArtifacts(selected.id)); } catch { setError('Não foi possível gerar o PDF oficial. O documento emitido permanece inalterado.'); } };
   const openArtifact = async (artifact: FinancialDocumentArtifactProjection, print = false) => { try { const bytes = await financialDocumentClient.artifactContent(artifact.id); const url = URL.createObjectURL(bytes); const page = window.open(url, '_blank', 'noopener'); if (print && page) page.addEventListener('load', () => page.print(), { once: true }); } catch { setError('Não foi possível recuperar o PDF oficial autorizado.'); } };
