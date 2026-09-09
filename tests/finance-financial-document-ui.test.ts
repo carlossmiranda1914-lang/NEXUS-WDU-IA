@@ -30,6 +30,8 @@ assert.match(workspaceSource, /PDF/, 'the workspace must offer the private offic
 assert.match(workspaceSource, /Imprimir/, 'the workspace must offer print only for private artifact bytes');
 assert.match(workspaceSource, /Proveniência/, 'the preview must expose persisted source provenance');
 assert.match(workspaceSource, /Correç/, 'the preview must expose an authoritative correction relationship');
+assert.match(workspaceSource, /Data de emissão/, 'the workspace must show the issued date from the persisted document projection');
+assert.match(workspaceSource, /Moeda:/, 'the workspace must show the persisted document currency without deriving financial truth in the browser');
 assert.doesNotMatch(workspaceSource, /Word|Excel|PowerPoint/, 'the Finance UX must not expose office editing');
 assert.match(financeWorkspaceSource, /finance-tab-documents/, 'the Finance workspace must expose the authorized document history entrypoint');
 console.log('FINANCIAL_DOCUMENT_UI_AUTHORIZED_BOUNDARY=PASS');
