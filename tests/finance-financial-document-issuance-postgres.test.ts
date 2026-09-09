@@ -56,6 +56,8 @@ test('F7-01 PostgreSQL issuance replays idempotently and allocates a series numb
     assert.equal((await eligibility.requireReceipt(institutionId, paymentId!)).paymentId, paymentId!);
     const first = await repo.issue(command); const replay = await repo.issue(command);
     assert.equal(first.id, replay.id); assert.equal(first.sequenceNumber, 1);
+    assert.equal(first.replayed, false, 'the first command result must distinguish creation from replay');
+    assert.equal(replay.replayed, true, 'the HTTP boundary needs canonical replay information');
     const documents = await pool.query('SELECT count(*)::int count FROM finance_financial_documents WHERE institution_id=$1', [institutionId]);
     assert.equal(documents.rows[0].count, 1);
     const fiscalProvenance = await pool.query<{ fiscal_configuration_id: string | null; fiscal_adapter_key: string | null }>('SELECT fiscal_configuration_id,fiscal_adapter_key FROM finance_financial_documents WHERE id=$1', [first.id]);
@@ -152,6 +154,7 @@ test('F7-01 correction creates an idempotent immutable fact without changing eco
     const command = { institutionId, originalDocumentId: original.id, seriesId, documentType: 'credit_note', idempotencyKey: 'correction-001' };
     const [correction, replay] = await Promise.all([repo.issueCorrection(command), repo.issueCorrection(command)]);
     assert.equal(correction.id, replay.id); assert.equal(correction.sequenceNumber, 2);
+    assert.equal(correction.replayed || replay.replayed, true, 'one concurrent correction invocation must be recognized as a replay');
     const after = await pool.query<{ status: string; corrects_document_id: string; source_snapshot: Record<string, unknown>; payments: number; journals: number; audit: number; outbox: number }>("SELECT (SELECT status FROM finance_financial_documents WHERE id=$1) status,(SELECT corrects_document_id FROM finance_financial_documents WHERE id=$2) corrects_document_id,(SELECT source_snapshot FROM finance_financial_documents WHERE id=$1) source_snapshot,(SELECT count(*)::int FROM finance_payments WHERE institution_id=$3) payments,(SELECT count(*)::int FROM finance_journal_transactions WHERE institution_id=$3) journals,(SELECT count(*)::int FROM finance_audit_records WHERE institution_id=$3 AND event_type='financial_document_corrected') audit,(SELECT count(*)::int FROM finance_outbox WHERE institution_id=$3 AND topic='financial_document_corrected') outbox", [original.id, correction.id, institutionId]);
     assert.equal(after.rows[0]?.status, 'issued'); assert.equal(after.rows[0]?.corrects_document_id, original.id);
     assert.deepEqual(after.rows[0]?.source_snapshot, before.rows[0]?.source_snapshot, 'original provenance remains queryable unchanged');

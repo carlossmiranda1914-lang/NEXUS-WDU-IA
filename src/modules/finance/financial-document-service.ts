@@ -36,7 +36,7 @@ export class PostgresFinancialDocumentRepository {
 
   async issue(command: FinancialDocumentIssuanceCommand & { documentType: string }) {
     validateDocumentSourceInstitution(command.institutionId, command.sourceInstitutionId);
-    return (await executeIdempotentFinanceCommand({
+    const commandResult = await executeIdempotentFinanceCommand({
       pool: this.pool,
       identity: { institutionId: command.institutionId, operationNamespace: 'financial_document_issuance', idempotencyKey: command.idempotencyKey, canonicalFingerprint: createCanonicalFinanceFingerprint(command) },
       execute: async client => {
@@ -87,11 +87,12 @@ export class PostgresFinancialDocumentRepository {
       return { resultRef: id, result: { id, sequenceNumber } };
       },
       loadResult: async (client, id) => { const row = await client.query<{ sequence_number: string }>('SELECT sequence_number FROM finance_financial_documents WHERE institution_id=$1 AND id=$2', [command.institutionId, id]); if (!row.rows[0]) throw new Error('FINANCIAL_DOCUMENT_RESULT_MISSING'); return { id, sequenceNumber: Number(row.rows[0].sequence_number) }; },
-    })).result;
+    });
+    return { ...commandResult.result, replayed: commandResult.replayed };
   }
 
   async issueCorrection(command: FinancialDocumentCorrectionCommand) {
-    return (await executeIdempotentFinanceCommand({
+    const commandResult = await executeIdempotentFinanceCommand({
       pool: this.pool,
       identity: { institutionId: command.institutionId, operationNamespace: 'financial_document_correction', idempotencyKey: command.idempotencyKey, canonicalFingerprint: createCanonicalFinanceFingerprint(command) },
       execute: async client => {
@@ -127,6 +128,7 @@ export class PostgresFinancialDocumentRepository {
         if (!row.rows[0]) throw new Error('FINANCIAL_DOCUMENT_CORRECTION_RESULT_MISSING');
         return { id, sequenceNumber: Number(row.rows[0].sequence_number), originalDocumentId: row.rows[0].corrects_document_id };
       },
-    })).result;
+    });
+    return { ...commandResult.result, replayed: commandResult.replayed };
   }
 }
