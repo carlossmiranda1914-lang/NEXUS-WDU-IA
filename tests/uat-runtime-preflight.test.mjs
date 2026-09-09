@@ -12,6 +12,7 @@ assert.match(source, /EXTERNAL_CONFIGURATION_REQUIRED/, 'the preflight must clea
 assert.match(source, /verifyApprovedTestConnection/, 'the preflight must verify the safe disposable PostgreSQL target');
 assert.match(source, /discoverMigrations/, 'the preflight must verify the migration ledger');
 assert.match(source, /READY_FOR_HUMAN_UAT/, 'the preflight must make the human-UAT decision explicit');
+assert.match(source, /UNVERIFIABLE_PROCESS_COMMAND/, 'the preflight must not claim an exact runtime SHA from a process command alone');
 assert.match(source, /NEXUS_UAT_FIREBASE_UID/, 'the preflight must require the canonical identity fixture without exposing it');
 assert.match(guide, /http:\/\/localhost:3000/, 'the documented guardrail must name the single canonical origin');
 assert.match(guide, /EXTERNAL_CONFIGURATION_REQUIRED/, 'the documented guardrail must forbid a false readiness result');

@@ -55,7 +55,7 @@ async function migrationsCurrent(connectionString) {
 }
 
 async function main() {
-  const expectedHead = git('rev-parse', 'HEAD');
+  git('rev-parse', 'HEAD');
   const serverProcess = expectedServerProcess();
   const backend = await backendReachable();
   let database = false;
@@ -78,12 +78,11 @@ async function main() {
   }
 
   const identityFixture = Boolean(process.env.NEXUS_UAT_FIREBASE_UID?.trim());
-  const expectedCode = serverProcess.commandMatches && backend;
   const prerequisites = database && migrations && identityFixture;
   const status = {
     UAT_PREFLIGHT: 'FAIL',
     EXPECTED_WORKTREE: serverProcess.commandMatches ? 'PASS' : 'FAIL',
-    EXPECTED_HEAD: expectedCode ? 'PASS' : 'FAIL',
+    EXPECTED_HEAD: 'UNVERIFIABLE_PROCESS_COMMAND',
     CANONICAL_UAT_ORIGIN,
     BACKEND: backend ? 'PASS' : 'FAIL',
     DATABASE: database ? 'PASS' : 'FAIL',
