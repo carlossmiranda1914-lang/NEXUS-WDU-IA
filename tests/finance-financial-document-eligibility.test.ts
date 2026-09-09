@@ -6,3 +6,8 @@ test('F7-02 receipt eligibility fails closed when authoritative payment is absen
   const service = new FinancialDocumentEligibilityService({ query: async () => ({ rows: [] }) } as never);
   await assert.rejects(() => service.requireReceipt('institution-a', 'payment-a'), /FINANCIAL_DOCUMENT_RECEIPT_INELIGIBLE/);
 });
+
+test('F7-02 invoice eligibility fails closed when authoritative obligation is absent', async () => {
+  const service = new FinancialDocumentEligibilityService({ query: async () => ({ rows: [] }) } as never);
+  await assert.rejects(() => service.requireInvoice('institution-a', 'obligation-a'), /FINANCIAL_DOCUMENT_INVOICE_INELIGIBLE/);
+});
