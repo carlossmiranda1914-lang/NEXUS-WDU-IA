@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { FinancialDocumentArtifactService } from '../src/modules/finance/financial-document-artifact-service.ts';
+import { FinancialDocumentArtifactService, InMemoryFinancialDocumentArtifactStorage } from '../src/modules/finance/financial-document-artifact-service.ts';
 import { renderFinancialDocumentPdf } from '../src/modules/finance/financial-document-artifact-renderer.ts';
 
 test('F7-05 defines a versioned, non-destructive Financial Document artifact authority', () => {
@@ -14,4 +14,11 @@ test('F7-05 renders a real PDF only from immutable documentary input', () => {
   assert.ok(bytes.byteLength > 200);
   assert.equal(bytes.subarray(0, 5).toString('ascii'), '%PDF-');
   assert.match(bytes.toString('latin1'), /PAY-IMMUTABLE/);
+});
+
+test('F7-05 keeps artifact bytes behind a provider-neutral storage boundary', async () => {
+  const storage = new InMemoryFinancialDocumentArtifactStorage();
+  await storage.put('private/reference', Buffer.from('immutable-bytes'));
+  assert.equal((await storage.get('private/reference'))?.toString(), 'immutable-bytes');
+  assert.equal(await storage.get('missing'), undefined);
 });
