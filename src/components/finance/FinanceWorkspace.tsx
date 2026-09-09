@@ -3,8 +3,9 @@ import { FinanceOperationalContextWorkspace } from './operational/FinanceOperati
 import { FinanceFeeCatalogueWorkspace } from './fee-catalogue/FinanceFeeCatalogueWorkspace.tsx';
 import { FinancialObligationsWorkspace } from './obligations/FinancialObligationsWorkspace.tsx';
 import { FinancePaymentsWorkspace } from './payments/FinancePaymentsWorkspace.tsx';
+import { FinancialDocumentsWorkspace } from './documents/FinancialDocumentsWorkspace.tsx';
 
-export type FinanceTab = 'operations' | 'catalogue' | 'obligations' | 'recebimentos';
+export type FinanceTab = 'operations' | 'catalogue' | 'obligations' | 'recebimentos' | 'documents';
 
 export interface FinanceWorkspaceProps {
   theme?: string;
@@ -90,6 +91,12 @@ export function FinanceWorkspace({
           </svg>
           Recebimentos
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('documents')}
+          data-testid="finance-tab-documents"
+          className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'documents' ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400' : 'border-transparent text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'}`}
+        >Documentos Financeiros</button>
       </div>
 
       {/* Active Finance Surface */}
@@ -104,6 +111,7 @@ export function FinanceWorkspace({
         {activeTab === 'catalogue' && <FinanceFeeCatalogueWorkspace theme={theme} />}
         {activeTab === 'obligations' && <FinancialObligationsWorkspace theme={theme} />}
         {activeTab === 'recebimentos' && <FinancePaymentsWorkspace theme={theme} />}
+        {activeTab === 'documents' && <FinancialDocumentsWorkspace theme={theme} />}
       </div>
     </div>
   );
