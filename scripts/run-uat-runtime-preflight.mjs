@@ -45,11 +45,10 @@ function requestedHumanUatOrigin() {
 function expectedServerProcess() {
   if (process.platform !== 'win32') return { running: false, commandMatches: false };
   try {
-    const output = execFileSync('powershell.exe', ['-NoProfile', '-Command', "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"], { encoding: 'utf8', windowsHide: true });
-    const processes = JSON.parse(output || '[]');
-    const items = Array.isArray(processes) ? processes : [processes];
-    const match = items.find((item) => typeof item.CommandLine === 'string' && item.CommandLine.includes(root) && item.CommandLine.includes('scripts/run-test-server.ts'));
-    return { running: Boolean(match), commandMatches: Boolean(match), pid: match?.ProcessId };
+    const output = execFileSync('powershell.exe', ['-NoProfile', '-Command', "$listener=Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction Stop | Select-Object -First 1; Get-CimInstance Win32_Process -Filter \"ProcessId=$($listener.OwningProcess)\" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"], { encoding: 'utf8', windowsHide: true });
+    const listener = JSON.parse(output || '{}');
+    const commandMatches = typeof listener.CommandLine === 'string' && listener.CommandLine.includes(root) && listener.CommandLine.includes('scripts/run-test-server.ts');
+    return { running: Boolean(listener.ProcessId), commandMatches, pid: listener.ProcessId };
   } catch {
     return { running: false, commandMatches: false };
   }
