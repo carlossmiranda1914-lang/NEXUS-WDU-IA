@@ -13,6 +13,7 @@ async function seedConfirmedPayment(client: pg.PoolClient, institutionId: string
   const personId = randomUUID(); const journalId = randomUUID(); const paymentId = randomUUID();
   await client.query("INSERT INTO people(id,name) VALUES($1,'Document payer')", [personId]);
   await client.query("INSERT INTO finance_profile_versions(institution_id,version,effective_from,primary_jurisdiction,functional_currency,financial_timezone,monetary_policy_version,enabled_currencies) VALUES($1,1,now(),'PT','EUR','Europe/Lisbon','v1','[\"EUR\"]')", [institutionId]);
+  await client.query("INSERT INTO finance_fiscal_configuration_versions(institution_id,version,adapter_key,effective_from) VALUES($1,1,'core',now())", [institutionId]);
   await client.query("INSERT INTO finance_journal_transactions(id,institution_id,status,currency,amount,command_id,journal_type,actor_person_id,financial_profile_version,confirmed_at) VALUES($1,$2,'confirmed','EUR',10,$3,'foundation_value_received',$4,1,now())", [journalId, institutionId, `document-source-${paymentId}`, personId]);
   await client.query("INSERT INTO finance_payments(id,institution_id,payment_reference,journal_transaction_id,source_type,method,amount,currency,status,allocation_status,payer_person_id,effective_at,financial_profile_version,actor_person_id) VALUES($1,$2,$3,$4,'manual_offline','cash',10,'EUR','confirmed','unapplied',$5,now(),1,$5)", [paymentId, institutionId, `PAY-${paymentId.slice(0, 8)}`, journalId, personId]);
   return paymentId;
@@ -57,6 +58,9 @@ test('F7-01 PostgreSQL issuance replays idempotently and allocates a series numb
     assert.equal(first.id, replay.id); assert.equal(first.sequenceNumber, 1);
     const documents = await pool.query('SELECT count(*)::int count FROM finance_financial_documents WHERE institution_id=$1', [institutionId]);
     assert.equal(documents.rows[0].count, 1);
+    const fiscalProvenance = await pool.query<{ fiscal_configuration_id: string | null; fiscal_adapter_key: string | null }>('SELECT fiscal_configuration_id,fiscal_adapter_key FROM finance_financial_documents WHERE id=$1', [first.id]);
+    assert.notEqual(fiscalProvenance.rows[0]?.fiscal_configuration_id, null, 'issuance must persist the server-resolved fiscal configuration');
+    assert.equal(fiscalProvenance.rows[0]?.fiscal_adapter_key, 'core');
     const provenance = await pool.query<{ source_snapshot: { sourceId: string; sourceType: string }; source_id: string; source_type: string }>('SELECT d.source_snapshot,s.source_id,s.source_type FROM finance_financial_documents d JOIN finance_financial_document_sources s ON s.document_id=d.id AND s.institution_id=d.institution_id WHERE d.institution_id=$1', [institutionId]);
     assert.equal(provenance.rows[0]?.source_snapshot.sourceType, 'payment');
     assert.equal(provenance.rows[0]?.source_snapshot.sourceId, paymentId!, 'issuance provenance must reference the server-locked payment');
