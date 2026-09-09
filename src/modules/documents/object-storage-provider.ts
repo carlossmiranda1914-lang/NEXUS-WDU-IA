@@ -77,9 +77,31 @@ export interface ReadRangeParams {
   endByte: number;
 }
 
+export interface CreateReadAuthParams {
+  institutionId?: string;
+  documentId?: string;
+  versionId?: string;
+  storageBucket: string;
+  storageKey: string;
+  action: 'open' | 'download';
+  displayFilename?: string;
+  mimeType: string;
+  expiresInSeconds: number;
+}
+
+export interface ReadAuthResult {
+  storageProvider: string;
+  storageBucket: string;
+  storageKey: string;
+  readUrl?: string;
+  headers?: Record<string, string>;
+  authorizedUntil: Date;
+  contentDisposition?: string;
+}
+
 /**
  * Provider-neutral object storage abstraction interface.
- * Production concrete provider is NONE in I3/I4.
+ * Production concrete provider is NONE in I3/I4/I5.
  */
 export interface ObjectStorageProvider {
   readonly providerName: string;
@@ -97,4 +119,6 @@ export interface ObjectStorageProvider {
   openReadStream(params: OpenReadStreamParams): Promise<NodeJS.ReadableStream>;
 
   readRange(params: ReadRangeParams): Promise<Buffer>;
+
+  createReadAuthorization?(params: CreateReadAuthParams): Promise<ReadAuthResult>;
 }

@@ -4,6 +4,8 @@ import type {
   ObjectStorageProvider,
   CreateUploadAuthParams,
   UploadAuthResult,
+  CreateReadAuthParams,
+  ReadAuthResult,
   CompleteUploadParams,
   StorageObjectMetadata,
   AbortUploadParams,
@@ -199,5 +201,22 @@ export class MemoryObjectStorageProvider implements ObjectStorageProvider {
       return Buffer.alloc(0);
     }
     return obj.buffer.subarray(start, end + 1);
+  }
+
+  async createReadAuthorization(params: CreateReadAuthParams): Promise<ReadAuthResult> {
+    const authorizedUntil = new Date(Date.now() + params.expiresInSeconds * 1000);
+    const dispositionType = params.action === 'download' ? 'attachment' : 'inline';
+    const contentDisposition = params.displayFilename
+      ? `${dispositionType}; filename="${params.displayFilename}"`
+      : dispositionType;
+
+    return {
+      storageProvider: this.providerName,
+      storageBucket: params.storageBucket,
+      storageKey: params.storageKey,
+      readUrl: `https://test-storage.local/${params.storageBucket}/${params.storageKey}?auth_token=${randomUUID()}`,
+      authorizedUntil,
+      contentDisposition,
+    };
   }
 }
