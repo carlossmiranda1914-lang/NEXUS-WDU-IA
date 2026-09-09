@@ -301,7 +301,7 @@ async function startServer() {
   if (uatForensicTraceEnabled) {
     app.post('/__uat/trace', (req, res) => {
       const body = req.body || {};
-      const safe = ['event', 'traceId', 'timestamp', 'origin', 'method', 'path', 'firebaseUserPresent', 'idTokenAvailable', 'authorizationPlanned', 'status', 'responseClassification', 'errorName', 'networkFailure'];
+      const safe = ['event', 'traceId', 'timestamp', 'origin', 'method', 'path', 'firebaseUserPresent', 'idTokenAvailable', 'authorizationPlanned', 'status', 'responseClassification', 'errorName', 'errorMessage', 'errorCause', 'networkFailure', 'windowOrigin', 'fetchInputType', 'fetchInputSafeValue', 'resolvedRequestUrl', 'requestMethod', 'requestMode', 'requestCredentialsMode', 'requestRedirectMode', 'requestCacheMode', 'authorizationHeaderPresent', 'authorizationHeaderValue', 'requestHeaderNames', 'headerNameValid', 'headerValueType', 'headerValueContainsForbiddenControlCharacters', 'headerObjectConstruction', 'requestConstruction', 'requestConstructionErrorName', 'requestConstructionSafeMessage', 'control', 'reachedResponse'];
       const event = Object.fromEntries(safe.flatMap((key) => ['string', 'number', 'boolean'].includes(typeof body[key]) ? [[key, body[key]]] : []));
       recordForensicTrace({ source: 'CLIENT', ...event });
       res.status(204).end();

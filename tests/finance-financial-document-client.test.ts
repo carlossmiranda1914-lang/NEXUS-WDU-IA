@@ -37,8 +37,20 @@ test('F7-06 emits only safe correlated UAT fetch events', async () => {
   await assert.rejects(() => client.list(), /FINANCIAL_DOCUMENT_AUTH_REQUIRED/);
   assert.equal(events[0]?.event, 'FINANCE_DOCUMENT_FETCH_INTENT');
   assert.equal(events[0]?.authorizationPlanned, true);
-  assert.equal(events[1]?.event, 'FINANCE_DOCUMENT_FETCH_RESPONSE');
-  assert.equal(events[1]?.status, 401);
-  assert.equal(events[0]?.traceId, events[1]?.traceId);
+  const responseEvent = events.find(event => event.event === 'FINANCE_DOCUMENT_FETCH_RESPONSE');
+  assert.equal(responseEvent?.status, 401);
+  assert.equal(events[0]?.traceId, responseEvent?.traceId);
   assert.doesNotMatch(JSON.stringify(events), /secret-token|Bearer|authorization:/i);
+});
+
+test('F7-06 diagnostics characterize request construction and sanitize transport errors', async () => {
+  const events: Array<Record<string, unknown>> = [];
+  const client = new FinancialDocumentClient(async () => { throw new TypeError('Failed to fetch Bearer secret-token'); }, async () => 'secret-token', (event) => events.push(event), () => true);
+  await assert.rejects(() => client.list(), TypeError);
+  const construction = events.find(event => event.event === 'FINANCE_DOCUMENT_REQUEST_CONSTRUCTION');
+  const failure = events.find(event => event.event === 'FINANCE_DOCUMENT_FETCH_NETWORK_FAILURE');
+  assert.equal(construction?.requestConstruction, 'PASS');
+  assert.equal(construction?.requestHeaderNames, 'authorization,x-nexus-uat-trace');
+  assert.equal(failure?.errorName, 'TypeError');
+  assert.doesNotMatch(String(failure?.errorMessage), /secret-token|Bearer/i);
 });
