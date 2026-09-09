@@ -3,11 +3,12 @@ import type { Pool } from 'pg';
 import { requireAuth, type AuthRequest } from '../../middleware/auth.ts';
 import { canAccessFinancialDocuments } from './financial-document-policy.ts';
 import { PostgresFinancialDocumentRepository } from './financial-document-service.ts';
+import { createCanonicalFinanceFingerprint, executeIdempotentFinanceCommand } from './finance-command.ts';
 
 type DocumentRow = { id: string; document_type: string; status: string; sequence_number: string; issued_at: Date; source_snapshot: Record<string, unknown>; corrects_document_id: string | null; fiscal_adapter_key: string | null; series_code: string };
 const view = (row: DocumentRow) => ({ id: row.id, type: row.document_type, status: row.status, seriesCode: row.series_code, sequenceNumber: Number(row.sequence_number), issuedAt: row.issued_at.toISOString(), sourceSnapshot: row.source_snapshot, correctsDocumentId: row.corrects_document_id, fiscalAdapterKey: row.fiscal_adapter_key });
 
-export function registerFinancialDocumentRoutes(app: Express, pool: Pick<Pool, 'query'>, auth = requireAuth): void {
+export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth = requireAuth): void {
   const actor = (req: AuthRequest, res: Response, action: 'read' | 'issue' | 'correct' | 'fiscal_config_read' | 'fiscal_config_manage' | 'series_read' | 'series_manage' = 'read') => {
     const context = req.institutionalContext;
     if (!context) { res.status(401).json({ code: 'UNAUTHORIZED', error: 'Contexto institucional não encontrado.' }); return undefined; }
@@ -49,7 +50,8 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pick<Pool, '
   app.post('/api/finance/fiscal-configurations', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'fiscal_config_manage'); if (!context) return;
     const idempotencyKey = key(req, res); if (!idempotencyKey) return;
-    try { const result = await pool.query(`INSERT INTO finance_fiscal_configuration_versions(institution_id,version,adapter_key,operational_configuration,effective_from,effective_to) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,version,adapter_key,effective_from,effective_to`, [context.institutionId, req.body?.version, req.body?.adapterKey, req.body?.operationalConfiguration ?? {}, req.body?.effectiveFrom, req.body?.effectiveTo ?? null]); res.status(201).json(result.rows[0]); } catch { res.status(422).json({ code: 'FISCAL_CONFIGURATION_VALIDATION', error: 'Configuração fiscal inválida.' }); }
+    const command = { version: req.body?.version, adapterKey: req.body?.adapterKey, operationalConfiguration: req.body?.operationalConfiguration ?? {}, effectiveFrom: req.body?.effectiveFrom, effectiveTo: req.body?.effectiveTo ?? null };
+    try { const result = await executeIdempotentFinanceCommand({ pool, identity: { institutionId: context.institutionId, operationNamespace: 'financial_document_fiscal_configuration', idempotencyKey, canonicalFingerprint: createCanonicalFinanceFingerprint(command) }, execute: async client => { const inserted = await client.query<{ id: string; version: number; adapter_key: string; effective_from: Date; effective_to: Date | null }>(`INSERT INTO finance_fiscal_configuration_versions(institution_id,version,adapter_key,operational_configuration,effective_from,effective_to) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,version,adapter_key,effective_from,effective_to`, [context.institutionId, command.version, command.adapterKey, command.operationalConfiguration, command.effectiveFrom, command.effectiveTo]); return { resultRef: inserted.rows[0]!.id, result: inserted.rows[0]! }; }, loadResult: async (client, id) => { const loaded = await client.query<{ id: string; version: number; adapter_key: string; effective_from: Date; effective_to: Date | null }>('SELECT id,version,adapter_key,effective_from,effective_to FROM finance_fiscal_configuration_versions WHERE institution_id=$1 AND id=$2', [context.institutionId, id]); if (!loaded.rows[0]) throw new Error('FISCAL_CONFIGURATION_RESULT_MISSING'); return loaded.rows[0]; } }); res.status(result.replayed ? 200 : 201).json(result.result); } catch { res.status(422).json({ code: 'FISCAL_CONFIGURATION_VALIDATION', error: 'Configuração fiscal inválida.' }); }
   });
   app.get('/api/finance/document-series', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'series_read'); if (!context) return;
