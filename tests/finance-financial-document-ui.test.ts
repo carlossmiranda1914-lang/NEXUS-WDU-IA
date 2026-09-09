@@ -15,8 +15,12 @@ const workspaceSource = fs.readFileSync(workspace, 'utf8');
 const financeWorkspaceSource = fs.readFileSync(financeWorkspace, 'utf8');
 
 assert.match(clientSource, /\/api\/finance\/documents/, 'document reads must use the authoritative HTTP boundary');
+assert.match(clientSource, /async detail\(/, 'the client must obtain source provenance and corrections from the authorized detail route');
+assert.match(clientSource, /listArtifacts\(/, 'the client must obtain private artifact metadata from the authorized route');
 assert.match(workspaceSource, /Visualizar|View/, 'the workspace must offer a read-only document preview');
 assert.match(workspaceSource, /PDF/, 'the workspace must offer the private official artifact action');
+assert.match(workspaceSource, /Proveniência/, 'the preview must expose persisted source provenance');
+assert.match(workspaceSource, /Correç/, 'the preview must expose an authoritative correction relationship');
 assert.doesNotMatch(workspaceSource, /Word|Excel|PowerPoint/, 'the Finance UX must not expose office editing');
 assert.match(financeWorkspaceSource, /finance-tab-documents/, 'the Finance workspace must expose the authorized document history entrypoint');
 console.log('FINANCIAL_DOCUMENT_UI_AUTHORIZED_BOUNDARY=PASS');
