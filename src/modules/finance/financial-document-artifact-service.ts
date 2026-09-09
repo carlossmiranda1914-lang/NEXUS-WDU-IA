@@ -51,7 +51,14 @@ export class FinancialDocumentArtifactService {
     const bytes = renderFinancialDocumentPdf({ documentId: row.id, documentType: row.document_type, seriesCode: row.series_code, sequenceNumber: Number(row.sequence_number), issuedAt: row.issued_at, sourceSnapshot: row.source_snapshot, sources: sources.rows.map((source: any) => ({ type: source.source_type, id: source.source_id, snapshot: source.snapshot })), correctsDocumentId: row.corrects_document_id, renderVersion: input.renderVersion, templateVersion: input.templateVersion });
     const contentHash = createHash('sha256').update(bytes).digest('hex');
     const storageReference = `financial-document-artifacts/${input.institutionId}/${input.documentId}/${input.renderVersion}/${input.templateVersion}/${contentHash}.pdf`;
-    await this.storage.put(storageReference, bytes);
+    try { await this.storage.put(storageReference, bytes); } catch (error) {
+      const failure = error instanceof Error ? error.message : 'ARTIFACT_STORAGE_FAILURE';
+      await Promise.all([
+        this.pool.query("INSERT INTO finance_audit_records(institution_id,event_type,metadata) VALUES($1,'financial_document_artifact_generation_failed',$2)", [input.institutionId, { documentId: input.documentId, renderVersion: input.renderVersion, templateVersion: input.templateVersion, failure }]),
+        this.pool.query("INSERT INTO finance_outbox(institution_id,topic,aggregate_id,payload) VALUES($1,'financial_document_artifact_generation_failed',$2,$3)", [input.institutionId, input.documentId, { documentId: input.documentId, renderVersion: input.renderVersion, templateVersion: input.templateVersion, failure }]),
+      ]);
+      throw error;
+    }
     const inserted = await this.pool.query<any>('INSERT INTO finance_financial_document_artifacts(institution_id,document_id,render_version,template_version,content_hash,media_type,byte_size,storage_reference) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,document_id,render_version,template_version,generated_at,content_hash,media_type,byte_size,storage_reference', [input.institutionId, input.documentId, input.renderVersion, input.templateVersion, contentHash, 'application/pdf', bytes.byteLength, storageReference]);
     const artifact = this.map(inserted.rows[0]!);
     await Promise.all([
