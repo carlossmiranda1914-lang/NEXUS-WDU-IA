@@ -61,6 +61,26 @@ test('F7-01 migration rejects a cross-tenant correction relationship', async () 
   try { const client=await pool.connect(); try { await client.query(`CREATE SCHEMA ${quote(schema)}`); await runMigrations(client,await discoverMigrations(path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../src/db/migrations'))); await client.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'A','tenant-a','active'),($2,'B','tenant-b','active')",[a,b]); await client.query("INSERT INTO finance_financial_documents(id,institution_id,document_type,status,source_snapshot) VALUES($1,$2,'receipt','issued','{}')",[document,a]); await assert.rejects(()=>client.query("INSERT INTO finance_financial_documents(institution_id,document_type,status,source_snapshot,corrects_document_id) VALUES($1,'credit_note','draft','{}',$2)",[b,document])); } finally { client.release(); } } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(()=>undefined); await pool.end(); }
 });
 
+test('F7-01 migration makes issued documents append-only', async () => {
+  await verifyApprovedTestConnection();
+  const schema = `finance_document_immutable_${randomUUID().replaceAll('-', '')}`;
+  const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
+  const pool = new pg.Pool({ connectionString: process.env.TEST_DATABASE_URL, options: `-c search_path=${quote(schema)},public` });
+  const institutionId = randomUUID();
+  const documentId = randomUUID();
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query(`CREATE SCHEMA ${quote(schema)}`);
+      await runMigrations(client, await discoverMigrations(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations')));
+      await client.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'Immutable document','immutable-document','active')", [institutionId]);
+      await client.query("INSERT INTO finance_financial_documents(id,institution_id,document_type,status,source_snapshot) VALUES($1,$2,'receipt','issued','{}')", [documentId, institutionId]);
+      await assert.rejects(() => client.query("UPDATE finance_financial_documents SET document_type='credit_note' WHERE id=$1", [documentId]), /immutable/i);
+      await assert.rejects(() => client.query('DELETE FROM finance_financial_documents WHERE id=$1', [documentId]), /immutable/i);
+    } finally { client.release(); }
+  } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(() => undefined); await pool.end(); }
+});
+
 test('F7-01 failed issuance leaves no documentary fact', async () => {
   await verifyApprovedTestConnection(); const schema=`finance_document_rollback_${randomUUID().replaceAll('-', '')}`; const quote=(value:string)=>`"${value.replaceAll('"','""')}"`; const pool=new pg.Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${quote(schema)},public`}); const institutionId=randomUUID();
   try { const client=await pool.connect(); try { await client.query(`CREATE SCHEMA ${quote(schema)}`); await runMigrations(client,await discoverMigrations(path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../src/db/migrations'))); await client.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'Rollback','rollback','active')",[institutionId]); } finally { client.release(); } const repo=new PostgresFinancialDocumentRepository(pool); await assert.rejects(()=>repo.issue({institutionId,sourceInstitutionId:institutionId,seriesId:randomUUID(),idempotencyKey:'rollback-command',documentType:'receipt',sourceSnapshot:{amount:'1.00'}})); const count=await pool.query('SELECT count(*)::int count FROM finance_financial_documents WHERE institution_id=$1',[institutionId]); assert.equal(count.rows[0].count,0); } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(()=>undefined); await pool.end(); }
