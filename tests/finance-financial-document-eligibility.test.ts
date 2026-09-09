@@ -11,3 +11,8 @@ test('F7-02 invoice eligibility fails closed when authoritative obligation is ab
   const service = new FinancialDocumentEligibilityService({ query: async () => ({ rows: [] }) } as never);
   await assert.rejects(() => service.requireInvoice('institution-a', 'obligation-a'), /FINANCIAL_DOCUMENT_INVOICE_INELIGIBLE/);
 });
+
+test('F7-02 invoice-receipt eligibility requires an authoritative settlement relationship', async () => {
+  const service = new FinancialDocumentEligibilityService({ query: async () => ({ rows: [] }) } as never);
+  await assert.rejects(() => service.requireInvoiceReceipt('institution-a', 'payment-a', 'obligation-a'), /FINANCIAL_DOCUMENT_INVOICE_RECEIPT_INELIGIBLE/);
+});
