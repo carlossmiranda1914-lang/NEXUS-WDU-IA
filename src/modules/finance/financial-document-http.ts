@@ -36,7 +36,7 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
     const result = await pool.query<DocumentRow>(`WITH cursor_row AS (SELECT issued_at,id FROM finance_financial_documents WHERE institution_id=$1 AND id=$2) ${select} WHERE d.institution_id=$1 AND ($2::uuid IS NULL OR EXISTS (SELECT 1 FROM cursor_row) AND (d.issued_at,d.id)<(SELECT issued_at,id FROM cursor_row)) ORDER BY d.issued_at DESC,d.id DESC LIMIT $3`, [context.institutionId, cursorId, parsedLimit + 1]);
     const hasMore = result.rows.length > parsedLimit; const rows = hasMore ? result.rows.slice(0, parsedLimit) : result.rows;
     if (cursorId && result.rows.length === 0) { const exists = await pool.query<{ id: string }>('SELECT id FROM finance_financial_documents WHERE institution_id=$1 AND id=$2', [context.institutionId, cursorId]); if (!exists.rows[0]) return res.status(422).json({ code: 'FINANCIAL_DOCUMENT_INVALID_CURSOR', error: 'O cursor é inválido.' }); }
-    res.json({ items: rows.map(view), page: { nextCursor: hasMore && rows.length ? encodeCursor(rows[rows.length - 1]!.id) : null } });
+    res.json({ items: rows.map(view), page: { nextCursor: hasMore && rows.length ? encodeCursor(rows[rows.length - 1]!.id) : null }, capabilities: { issue: canAccessFinancialDocuments(context.role, 'issue'), correct: canAccessFinancialDocuments(context.role, 'correct') } });
   });
   app.get('/api/finance/documents/:id', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res); if (!context) return;

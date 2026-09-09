@@ -18,6 +18,7 @@ export function FinancePaymentsWorkspace({ theme = 'light' }: FinancePaymentsWor
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [issuanceNotice, setIssuanceNotice] = useState<string | null>(null);
+  const [canIssueDocument, setCanIssueDocument] = useState(false);
   const receiptKeys = useRef(new Map<string, string>());
 
   const loadPayments = useCallback(async () => {
@@ -36,6 +37,7 @@ export function FinancePaymentsWorkspace({ theme = 'light' }: FinancePaymentsWor
   useEffect(() => {
     loadPayments();
   }, [loadPayments]);
+  useEffect(() => { financialDocumentClient.capabilities().then(capabilities => setCanIssueDocument(capabilities.issue)).catch(() => setCanIssueDocument(false)); }, []);
 
   const handleCreated = (newPayment: Payment) => {
     setPayments((prev) => [newPayment, ...prev]);
@@ -64,7 +66,7 @@ export function FinancePaymentsWorkspace({ theme = 'light' }: FinancePaymentsWor
           onRefresh={loadPayments}
           onOpenCreate={() => setView('create')}
           onOpenProviders={() => setView('providers')}
-          onIssueReceipt={issueReceipt}
+          onIssueReceipt={canIssueDocument ? issueReceipt : undefined}
         />
       )}
 

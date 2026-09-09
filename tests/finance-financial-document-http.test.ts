@@ -17,7 +17,8 @@ test('F7-04 Financial Document reads are capability-gated and tenant-scoped', as
     assert.equal((await fetch(`${base}/api/finance/documents`)).status, 401);
     assert.equal((await fetch(`${base}/api/finance/documents/issue`, { method: 'POST', headers: { 'Idempotency-Key': 'missing-auth' } })).status, 401);
     const list = await fetch(`${base}/api/finance/documents?limit=10`, { headers: { Authorization: 'Bearer financial' } });
-    assert.equal(list.status, 200); const listPayload = await list.json(); assert.equal(listPayload.items[0].id, 'doc-a'); assert.deepEqual(listPayload.page, { nextCursor: null }, 'Financial Document reads follow the canonical page envelope');
+    assert.equal(list.status, 200); const listPayload = await list.json(); assert.equal(listPayload.items[0].id, 'doc-a'); assert.deepEqual(listPayload.page, { nextCursor: null }, 'Financial Document reads follow the canonical page envelope'); assert.deepEqual(listPayload.capabilities, { issue: true, correct: true }, 'action presentation must be derived from the server role');
+    const directorList = await fetch(`${base}/api/finance/documents?limit=10`, { headers: { Authorization: 'Bearer director' } }); assert.deepEqual((await directorList.json()).capabilities, { issue: false, correct: false });
     const detail = await fetch(`${base}/api/finance/documents/foreign`, { headers: { Authorization: 'Bearer financial' } });
     assert.equal(detail.status, 404);
     const ownedDetail = await fetch(`${base}/api/finance/documents/doc-a`, { headers: { Authorization: 'Bearer financial' } }); const ownedPayload = await ownedDetail.json(); assert.equal(ownedDetail.status, 200); assert.deepEqual(ownedPayload.sources, [{ type: 'payment', id: 'payment-a', snapshot: { paymentReference: 'PAY-A' } }]); assert.equal(ownedPayload.corrections[0].id, 'correction-a');
