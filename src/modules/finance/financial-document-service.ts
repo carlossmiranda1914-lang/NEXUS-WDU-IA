@@ -2,6 +2,11 @@ import { validateDocumentSourceInstitution } from './financial-document-model.ts
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createCanonicalFinanceFingerprint, executeIdempotentFinanceCommand } from './finance-command.ts';
+import { FiscalAdapterRegistry, type FiscalAdapter } from './fiscal-adapter-registry.ts';
+
+// F7-02 intentionally provides only a synthetic adapter. Production
+// jurisdictions must be explicitly registered before they can issue.
+const builtInFiscalAdapters: readonly FiscalAdapter[] = [{ key: 'core', supportedJurisdictions: ['NEXUS_TEST'] }];
 
 export type FinancialDocumentIssuanceCommand = {
   institutionId: string;
@@ -27,7 +32,7 @@ export async function issueFinancialDocumentCommand(_dependencies: unknown, comm
 }
 
 export class PostgresFinancialDocumentRepository {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly fiscalAdapters = new FiscalAdapterRegistry(builtInFiscalAdapters)) {}
 
   async issue(command: FinancialDocumentIssuanceCommand & { documentType: string }) {
     validateDocumentSourceInstitution(command.institutionId, command.sourceInstitutionId);
@@ -48,6 +53,15 @@ export class PostgresFinancialDocumentRepository {
         [command.institutionId],
       );
       if (!fiscalConfiguration.rows[0]) throw new Error('FISCAL_CONFIGURATION_NOT_EFFECTIVE');
+      const financialProfile = await client.query<{ primary_jurisdiction: string }>(
+        'SELECT primary_jurisdiction FROM finance_profile_versions WHERE institution_id=$1 AND version=$2',
+        [command.institutionId, sourceRow.financial_profile_version],
+      );
+      if (!financialProfile.rows[0]) throw new Error('FINANCIAL_PROFILE_NOT_FOUND');
+      this.fiscalAdapters.select(
+        { primaryJurisdiction: financialProfile.rows[0].primary_jurisdiction },
+        { adapterKey: fiscalConfiguration.rows[0].adapter_key },
+      );
       const sourceSnapshot = {
         sourceType: command.sourceType,
         sourceId: sourceRow.id,
