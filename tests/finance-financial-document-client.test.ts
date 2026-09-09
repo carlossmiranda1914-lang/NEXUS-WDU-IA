@@ -30,3 +30,15 @@ test('F7-06 preserves an authentication-required list failure for safe UAT diagn
   const client = new FinancialDocumentClient(async () => authenticationRequired(), async () => null);
   await assert.rejects(() => client.list(), /FINANCIAL_DOCUMENT_AUTH_REQUIRED/);
 });
+
+test('F7-06 emits only safe correlated UAT fetch events', async () => {
+  const events: Array<Record<string, unknown>> = [];
+  const client = new FinancialDocumentClient(async () => authenticationRequired(), async () => 'secret-token', (event) => events.push(event), () => true);
+  await assert.rejects(() => client.list(), /FINANCIAL_DOCUMENT_AUTH_REQUIRED/);
+  assert.equal(events[0]?.event, 'FINANCE_DOCUMENT_FETCH_INTENT');
+  assert.equal(events[0]?.authorizationPlanned, true);
+  assert.equal(events[1]?.event, 'FINANCE_DOCUMENT_FETCH_RESPONSE');
+  assert.equal(events[1]?.status, 401);
+  assert.equal(events[0]?.traceId, events[1]?.traceId);
+  assert.doesNotMatch(JSON.stringify(events), /secret-token|Bearer|authorization:/i);
+});

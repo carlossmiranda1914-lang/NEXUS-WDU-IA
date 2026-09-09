@@ -5,13 +5,36 @@ export type FinancialDocumentCapabilities = { issue: boolean; correct: boolean }
 export type FinancialDocumentDetail = FinancialDocumentProjection & { sources: Array<{ type: string; id: string; snapshot: Record<string, unknown> }>; corrections: FinancialDocumentProjection[] };
 export type FinancialDocumentArtifactProjection = { id: string; document_id: string; render_version: string; template_version: string; generated_at: string; content_hash: string; media_type: string; byte_size: number };
 type FinancialDocumentSeriesProjection = { id: string; document_type: string; status: string };
+type UatTraceEvent = Record<string, string | number | boolean>;
+type UatTraceReporter = (event: UatTraceEvent) => void;
+
+const defaultUatTraceReporter: UatTraceReporter = (event) => {
+  const environment = (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env;
+  if (!environment?.DEV) return;
+  void fetch('/__uat/trace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(event) }).catch(() => undefined);
+};
 
 export class FinancialDocumentClient {
-  constructor(private readonly fetcher: typeof fetch = globalThis.fetch, private readonly getToken = async () => auth.currentUser?.getIdToken()) {}
+  constructor(
+    private readonly fetcher: typeof fetch = globalThis.fetch,
+    private readonly getToken = async () => auth.currentUser?.getIdToken(),
+    private readonly trace: UatTraceReporter = defaultUatTraceReporter,
+    private readonly userPresent = () => Boolean(auth.currentUser),
+  ) {}
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     const token = await this.getToken().catch(() => null);
-    const response = await this.fetcher(path, { ...init, headers: { ...(init?.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+    const traceId = crypto.randomUUID();
+    const method = init?.method || 'GET';
+    this.trace({ event: 'FINANCE_DOCUMENT_FETCH_INTENT', traceId, timestamp: new Date().toISOString(), origin: globalThis.location?.origin || 'UNAVAILABLE', method, path, firebaseUserPresent: this.userPresent(), idTokenAvailable: Boolean(token), authorizationPlanned: Boolean(token) });
+    let response: Response;
+    try {
+      response = await this.fetcher(path, { ...init, headers: { ...(init?.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), 'X-Nexus-Uat-Trace': traceId } });
+    } catch (error) {
+      this.trace({ event: 'FINANCE_DOCUMENT_FETCH_NETWORK_FAILURE', traceId, timestamp: new Date().toISOString(), errorName: error instanceof Error ? error.name : 'UnknownError', networkFailure: true });
+      throw error;
+    }
+    this.trace({ event: 'FINANCE_DOCUMENT_FETCH_RESPONSE', traceId, timestamp: new Date().toISOString(), status: response.status, responseClassification: response.ok ? 'SUCCESS' : 'HTTP_ERROR' });
     if (!response.ok) throw new Error(
       response.status === 401 ? 'FINANCIAL_DOCUMENT_AUTH_REQUIRED'
         : response.status === 403 ? 'FINANCIAL_DOCUMENT_FORBIDDEN'

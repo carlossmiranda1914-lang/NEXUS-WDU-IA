@@ -15,6 +15,9 @@ assert.doesNotMatch(source, /financeDocumentsUatTrace[\s\S]{0,500}(authorization
 assert.match(source, /\/__uat\/runtime/, 'UAT diagnostics must expose a development-only runtime identity endpoint');
 assert.match(source, /X-Nexus-Uat-Pid/, 'UAT responses must carry a safe runtime identity marker');
 assert.match(source, /NEXUS_UAT_RUNTIME_IDENTITY === 'true'/, 'runtime identity diagnostics must require an explicit UAT flag');
+assert.match(source, /NEXUS_UAT_FORENSIC_TRACE === 'true'/, 'forensic tracing must require an explicit UAT flag');
+assert.match(source, /\/__uat\/trace/, 'forensic tracing must expose only a dedicated development UAT endpoint');
+assert.doesNotMatch(source, /forensicTrace[\s\S]{0,1000}(tokenValue|cookieValue|passwordValue|authorizationValue)/i, 'forensic trace storage must not retain credential values');
 assert.doesNotMatch(source, /runtimeIdentity[\s\S]{0,500}(authorization|token|cookie|password|database_url)/i, 'runtime identity must not retain secrets or credentials');
 
 console.log('F7_06_UAT_RUNTIME_DIAGNOSTICS=PASS');
