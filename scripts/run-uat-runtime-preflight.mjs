@@ -14,13 +14,21 @@ function git(...args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
 }
 
-async function backendReachable() {
+async function backendReachable(origin = CANONICAL_UAT_ORIGIN) {
   try {
-    const response = await fetch(CANONICAL_UAT_ORIGIN, { signal: AbortSignal.timeout(3_000) });
+    const response = await fetch(origin, { signal: AbortSignal.timeout(3_000) });
     return response.ok;
   } catch {
     return false;
   }
+}
+
+function requestedHumanUatOrigin() {
+  const index = process.argv.indexOf('--origin');
+  if (index === -1) return CANONICAL_UAT_ORIGIN;
+  const origin = process.argv[index + 1];
+  if (!origin) throw new Error('--origin requires an explicit origin value');
+  return new URL(origin).origin;
 }
 
 function expectedServerProcess() {
@@ -56,8 +64,30 @@ async function migrationsCurrent(connectionString) {
 
 async function main() {
   git('rev-parse', 'HEAD');
+  const intendedOrigin = requestedHumanUatOrigin();
+  const canonicalOriginValid = intendedOrigin === CANONICAL_UAT_ORIGIN;
   const serverProcess = expectedServerProcess();
   const backend = await backendReachable();
+  const server127Reachable = await backendReachable('http://127.0.0.1:3000');
+  if (!canonicalOriginValid) {
+    const rejected = {
+      UAT_PREFLIGHT: 'FAIL',
+      CANONICAL_UAT_ORIGIN,
+      INTENDED_HUMAN_UAT_ORIGIN: intendedOrigin,
+      AUTHENTICATED_HUMAN_UAT_ORIGIN_VALID: 'NO',
+      NON_CANONICAL_AUTH_UAT_ORIGIN_REJECTED: 'YES',
+      CODEX_PREVIEW_AUTH_UAT_SUPPORTED: 'NO',
+      MANUAL_CANONICAL_BROWSER_ORIGIN_REQUIRED: 'YES',
+      BACKEND: backend ? 'PASS' : 'FAIL',
+      SERVER_127_REACHABLE: server127Reachable ? 'YES' : 'NO',
+      AUTH_UAT_127_ALLOWED: 'NO',
+      READY_FOR_HUMAN_UAT: 'NO',
+    };
+    for (const [key, value] of Object.entries(rejected)) console.log(`${key}=${value}`);
+    console.error('UAT_PREFLIGHT_BLOCKER=The intended authenticated Human-UAT origin is not canonical. Use http://localhost:3000 manually, never the Codex preview origin.');
+    process.exitCode = 1;
+    return;
+  }
   let database = false;
   let migrations = false;
   let target;
@@ -84,7 +114,14 @@ async function main() {
     EXPECTED_WORKTREE: serverProcess.commandMatches ? 'PASS' : 'FAIL',
     EXPECTED_HEAD: 'UNVERIFIABLE_PROCESS_COMMAND',
     CANONICAL_UAT_ORIGIN,
+    INTENDED_HUMAN_UAT_ORIGIN: intendedOrigin,
+    AUTHENTICATED_HUMAN_UAT_ORIGIN_VALID: 'YES',
+    NON_CANONICAL_AUTH_UAT_ORIGIN_REJECTED: 'YES',
+    CODEX_PREVIEW_AUTH_UAT_SUPPORTED: 'NO',
+    MANUAL_CANONICAL_BROWSER_ORIGIN_REQUIRED: 'YES',
     BACKEND: backend ? 'PASS' : 'FAIL',
+    SERVER_127_REACHABLE: server127Reachable ? 'YES' : 'NO',
+    AUTH_UAT_127_ALLOWED: 'NO',
     DATABASE: database ? 'PASS' : 'FAIL',
     DATABASE_TARGET: target ? `${target.host}:${target.port}/${target.database}` : 'UNAVAILABLE',
     MIGRATIONS: migrations ? 'PASS' : 'FAIL',
