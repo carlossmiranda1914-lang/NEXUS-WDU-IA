@@ -1,4 +1,6 @@
 import type { Pool } from 'pg';
+import { createHash } from 'node:crypto';
+import { renderFinancialDocumentPdf } from './financial-document-artifact-renderer.ts';
 
 export interface FinancialDocumentArtifactStorage {
   put(storageReference: string, bytes: Buffer): Promise<void>;
@@ -28,6 +30,27 @@ export type FinancialDocumentArtifact = {
 export class FinancialDocumentArtifactService {
   constructor(private readonly pool: Pool, private readonly storage: FinancialDocumentArtifactStorage = new InMemoryFinancialDocumentArtifactStorage()) { void this.pool; void this.storage; }
 
-  async generate(): Promise<FinancialDocumentArtifact> { throw new Error('FINANCIAL_DOCUMENT_ARTIFACT_GENERATION_NOT_IMPLEMENTED'); }
-  async retrieve(): Promise<Buffer> { throw new Error('FINANCIAL_DOCUMENT_ARTIFACT_RETRIEVAL_NOT_IMPLEMENTED'); }
+  async generate(input: { institutionId: string; documentId: string; renderVersion: string; templateVersion: string }): Promise<FinancialDocumentArtifact> {
+    const document = await this.pool.query<any>('SELECT d.id,d.document_type,d.sequence_number,d.issued_at,d.source_snapshot,d.corrects_document_id,s.code series_code FROM finance_financial_documents d JOIN finance_financial_document_series s ON s.institution_id=d.institution_id AND s.id=d.series_id WHERE d.institution_id=$1 AND d.id=$2 AND d.status=\'issued\'', [input.institutionId, input.documentId]);
+    const row = document.rows[0]; if (!row) throw new Error('FINANCIAL_DOCUMENT_ARTIFACT_DOCUMENT_NOT_FOUND');
+    const existing = await this.pool.query<any>('SELECT id,document_id,render_version,template_version,generated_at,content_hash,media_type,byte_size,storage_reference FROM finance_financial_document_artifacts WHERE institution_id=$1 AND document_id=$2 AND render_version=$3 AND template_version=$4', [input.institutionId, input.documentId, input.renderVersion, input.templateVersion]);
+    if (existing.rows[0]) return this.map(existing.rows[0]);
+    const sources = await this.pool.query<any>('SELECT source_type,source_id,snapshot FROM finance_financial_document_sources WHERE institution_id=$1 AND document_id=$2 ORDER BY source_type,source_id', [input.institutionId, input.documentId]);
+    const bytes = renderFinancialDocumentPdf({ documentId: row.id, documentType: row.document_type, seriesCode: row.series_code, sequenceNumber: Number(row.sequence_number), issuedAt: row.issued_at, sourceSnapshot: row.source_snapshot, sources: sources.rows.map((source: any) => ({ type: source.source_type, id: source.source_id, snapshot: source.snapshot })), correctsDocumentId: row.corrects_document_id, renderVersion: input.renderVersion, templateVersion: input.templateVersion });
+    const contentHash = createHash('sha256').update(bytes).digest('hex');
+    const storageReference = `financial-document-artifacts/${input.institutionId}/${input.documentId}/${input.renderVersion}/${input.templateVersion}/${contentHash}.pdf`;
+    await this.storage.put(storageReference, bytes);
+    const inserted = await this.pool.query<any>('INSERT INTO finance_financial_document_artifacts(institution_id,document_id,render_version,template_version,content_hash,media_type,byte_size,storage_reference) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,document_id,render_version,template_version,generated_at,content_hash,media_type,byte_size,storage_reference', [input.institutionId, input.documentId, input.renderVersion, input.templateVersion, contentHash, 'application/pdf', bytes.byteLength, storageReference]);
+    return this.map(inserted.rows[0]!);
+  }
+
+  async retrieve(input: { institutionId: string; artifactId: string }): Promise<Buffer> {
+    const artifact = await this.pool.query<any>('SELECT id,document_id,render_version,template_version,generated_at,content_hash,media_type,byte_size,storage_reference FROM finance_financial_document_artifacts WHERE institution_id=$1 AND id=$2', [input.institutionId, input.artifactId]);
+    const row = artifact.rows[0]; if (!row) throw new Error('FINANCIAL_DOCUMENT_ARTIFACT_NOT_FOUND');
+    const bytes = await this.storage.get(row.storage_reference); if (!bytes) throw new Error('FINANCIAL_DOCUMENT_ARTIFACT_MISSING');
+    if (bytes.byteLength !== Number(row.byte_size) || createHash('sha256').update(bytes).digest('hex') !== row.content_hash) throw new Error('FINANCIAL_DOCUMENT_ARTIFACT_INTEGRITY_MISMATCH');
+    return bytes;
+  }
+
+  private map(row: any): FinancialDocumentArtifact { return { id: row.id, documentId: row.document_id, renderVersion: row.render_version, templateVersion: row.template_version, generatedAt: row.generated_at, contentHash: row.content_hash, mediaType: row.media_type, byteSize: Number(row.byte_size), storageReference: row.storage_reference }; }
 }

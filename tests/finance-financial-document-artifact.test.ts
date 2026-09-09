@@ -22,3 +22,17 @@ test('F7-05 keeps artifact bytes behind a provider-neutral storage boundary', as
   assert.equal((await storage.get('private/reference'))?.toString(), 'immutable-bytes');
   assert.equal(await storage.get('missing'), undefined);
 });
+
+test('F7-05 persists a hash-verified PDF artifact from an issued immutable document', async () => {
+  const storage = new InMemoryFinancialDocumentArtifactStorage(); const artifactId = 'artifact-1'; let inserted: any;
+  const pool: any = { query: async (sql: string, values: unknown[]) => {
+    if (sql.includes('FROM finance_financial_documents d')) return { rows: [{ id: 'document-1', document_type: 'receipt', sequence_number: '7', issued_at: new Date('2026-09-09T10:00:00.000Z'), source_snapshot: { paymentReference: 'PAY-IMMUTABLE', amount: '10.00', currency: 'EUR' }, corrects_document_id: null, series_code: 'REC' }] };
+    if (sql.includes('FROM finance_financial_document_sources')) return { rows: [{ source_type: 'payment', source_id: 'payment-1', snapshot: { paymentReference: 'PAY-IMMUTABLE' } }] };
+    if (sql.includes('FROM finance_financial_document_artifacts')) return { rows: inserted ? [inserted] : [] };
+    if (sql.includes('INSERT INTO finance_financial_document_artifacts')) { inserted = { id: artifactId, document_id: 'document-1', render_version: values[2], template_version: values[3], generated_at: new Date(), content_hash: values[4], media_type: values[5], byte_size: values[6], storage_reference: values[7] }; return { rows: [inserted] }; }
+    throw new Error(`Unexpected SQL: ${sql}`);
+  } };
+  const service = new FinancialDocumentArtifactService(pool, storage);
+  const artifact = await service.generate({ institutionId: 'tenant-1', documentId: 'document-1', renderVersion: 'renderer-1', templateVersion: 'template-1' });
+  assert.equal(artifact.id, artifactId); assert.equal(artifact.mediaType, 'application/pdf'); assert.ok(artifact.contentHash.length === 64); assert.equal((await service.retrieve({ institutionId: 'tenant-1', artifactId })).subarray(0, 5).toString(), '%PDF-');
+});
