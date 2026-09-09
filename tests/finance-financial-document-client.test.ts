@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { FinancialDocumentClient } from '../src/modules/finance/financial-document-client.ts';
 
 const response = (body: unknown) => ({ ok: true, json: async () => body }) as Response;
+const unavailable = () => ({ ok: false, status: 422, json: async () => ({ code: 'FINANCIAL_DOCUMENT_VALIDATION' }) }) as Response;
 
 test('F7-06 delegates receipt issuance and correction through idempotent authoritative HTTP commands', async () => {
   const calls: Array<{ path: string; init?: RequestInit }> = [];
@@ -17,4 +18,9 @@ test('F7-06 only presents active receipt and credit-note series returned by the 
   const client = new FinancialDocumentClient(async () => response({ items: [{ id: 'receipt', document_type: 'receipt', status: 'active' }, { id: 'inactive', document_type: 'receipt', status: 'inactive' }, { id: 'credit', document_type: 'credit_note', status: 'active' }] }), async () => null);
   assert.deepEqual((await client.listActiveReceiptSeries()).map(item => item.id), ['receipt']);
   assert.deepEqual((await client.listActiveCorrectionSeries()).map(item => item.id), ['credit']);
+});
+
+test('F7-06 turns unavailable issuance into an actionable configuration result', async () => {
+  const client = new FinancialDocumentClient(async () => unavailable(), async () => null);
+  await assert.rejects(() => client.issueReceipt({ sourceId: 'pay-1', seriesId: 'series-1', idempotencyKey: 'receipt-stable-key' }), /configuração fiscal e a série efetiva/);
 });
