@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { issueFinancialDocumentCommand, PostgresFinancialDocumentRepository } from '../src/modules/finance/financial-document-service.ts';
+import { FinancialDocumentEligibilityService } from '../src/modules/finance/financial-document-eligibility.ts';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,7 +50,9 @@ test('F7-01 PostgreSQL issuance replays idempotently and allocates a series numb
       paymentId = await seedConfirmedPayment(client, institutionId);
     } finally { client.release(); }
     const repo = new PostgresFinancialDocumentRepository(pool);
+    const eligibility = new FinancialDocumentEligibilityService(pool);
     const command = { institutionId, sourceInstitutionId: institutionId, sourceType: 'payment' as const, sourceId: paymentId!, seriesId, idempotencyKey: 'financial-document-command-001', documentType: 'receipt' };
+    assert.equal((await eligibility.requireReceipt(institutionId, paymentId!)).paymentId, paymentId!);
     const first = await repo.issue(command); const replay = await repo.issue(command);
     assert.equal(first.id, replay.id); assert.equal(first.sequenceNumber, 1);
     const documents = await pool.query('SELECT count(*)::int count FROM finance_financial_documents WHERE institution_id=$1', [institutionId]);
@@ -75,6 +78,7 @@ test('F7-01 PostgreSQL issuance replays idempotently and allocates a series numb
       await foreignClient.query("INSERT INTO finance_payments(id,institution_id,payment_reference,journal_transaction_id,source_type,method,amount,currency,status,allocation_status,payer_person_id,effective_at,financial_profile_version,actor_person_id) VALUES($1,$2,$3,$4,'manual_offline','cash',10,'EUR','confirmed','unapplied',$5,now(),1,$5)", [foreignPaymentId, foreignInstitutionId, `PAY-${foreignPaymentId.slice(0, 8)}`, journalId, personId]);
     } finally { foreignClient.release(); }
     await assert.rejects(() => repo.issue({ ...command, sourceId: foreignPaymentId, idempotencyKey: 'cross-tenant-source' }), /SOURCE_NOT_FOUND/);
+    await assert.rejects(() => eligibility.requireReceipt(institutionId, foreignPaymentId), /RECEIPT_INELIGIBLE/);
   } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(() => undefined); await pool.end(); }
 });
 
