@@ -128,7 +128,7 @@ try {
   const racePayload = {
     documentId: doc.id,
     targetDomain: 'academic',
-    targetResourceType: 'student_record',
+    targetResourceType: 'academic_year',
     targetResourceId: 'req-500',
     purpose: 'credit_transfer',
   };

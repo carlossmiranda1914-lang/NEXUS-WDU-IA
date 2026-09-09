@@ -6,49 +6,47 @@ export const RECOGNIZED_TARGET_DOMAINS = [
   'enrollment',
   'finance',
   'academic',
-  'student_lifecycle',
   'secretariat',
-  'attendance',
 ] as const;
 
 export type RecognizedTargetDomain = (typeof RECOGNIZED_TARGET_DOMAINS)[number];
 
+/**
+ * CANONICAL TARGET CONTRACTS EVIDENCE MATRIX (baseline main@c210e50d82e808f49e3613272303952fc5f6a632):
+ *
+ * | DOMAIN      | RESOURCE_TYPE          | CANONICAL_EVIDENCE                                      | STATUS    |
+ * |-------------|------------------------|---------------------------------------------------------|-----------|
+ * | enrollment  | enrollment_application | src/db/schema.ts: enrollment_applications              | EVIDENCED |
+ * | enrollment  | enrollment_process     | 0016_s03_enrollment_process_persistence.sql             | EVIDENCED |
+ * | finance     | invoice                | src/db/schema.ts: invoices                              | EVIDENCED |
+ * | academic    | academic_year          | src/db/schema.ts: academic_years                        | EVIDENCED |
+ * | academic    | academic_term          | 0022_academic_temporal_authority.sql: academic_terms    | EVIDENCED |
+ * | secretariat | school_task            | src/db/schema.ts: school_tasks                          | EVIDENCED |
+ * | secretariat | approval               | src/db/schema.ts: approvals                            | EVIDENCED |
+ *
+ * REMOVED UNVERIFIED TYPES (NOT_EVIDENCED in current baseline):
+ * - enrollment: student_enrollment, candidacy, registration
+ * - finance: student_account, payment_plan, scholarship, bursary
+ * - academic: student_record, grade_appeal, academic_standing, curriculum_waiver
+ * - student_lifecycle: person_identity, legal_guardian, civil_id, lifecycle_event (Domain removed: unevidenced)
+ * - secretariat: certificate_request, diploma_request, transfer_process, general_request
+ * - attendance: absence_record, medical_justification, attendance_log (Domain removed: no canonical tables in baseline)
+ */
 export const GOVERNED_TARGET_CONTRACTS: Record<RecognizedTargetDomain, readonly string[]> = {
   enrollment: [
     'enrollment_application',
-    'student_enrollment',
-    'candidacy',
-    'registration',
+    'enrollment_process',
   ],
   finance: [
-    'student_account',
-    'payment_plan',
     'invoice',
-    'scholarship',
-    'bursary',
   ],
   academic: [
-    'student_record',
-    'grade_appeal',
-    'academic_standing',
-    'curriculum_waiver',
-  ],
-  student_lifecycle: [
-    'person_identity',
-    'legal_guardian',
-    'civil_id',
-    'lifecycle_event',
+    'academic_year',
+    'academic_term',
   ],
   secretariat: [
-    'certificate_request',
-    'diploma_request',
-    'transfer_process',
-    'general_request',
-  ],
-  attendance: [
-    'absence_record',
-    'medical_justification',
-    'attendance_log',
+    'school_task',
+    'approval',
   ],
 } as const;
 

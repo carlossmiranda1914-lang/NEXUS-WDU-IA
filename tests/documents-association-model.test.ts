@@ -24,48 +24,74 @@ assert.throws(() => validateTargetDomain(''), /Invalid targetDomain/);
 assert.throws(() => validateTargetDomain('a'), /Invalid targetDomain/);
 assert.throws(() => validateTargetDomain('unknown_domain'), /Unrecognized targetDomain/);
 assert.throws(() => validateTargetDomain('random_module'), /Unrecognized targetDomain/);
+assert.throws(() => validateTargetDomain('attendance'), /Unrecognized targetDomain/);
+assert.throws(() => validateTargetDomain('student_lifecycle'), /Unrecognized targetDomain/);
 
 for (const domain of RECOGNIZED_TARGET_DOMAINS) {
   assert.doesNotThrow(() => validateTargetDomain(domain));
 }
 
-// 2. Governed Target Resource Types per Domain
+// 2. Governed Target Resource Types per Domain (EVIDENCED ONLY)
 assert.throws(() => validateTargetResourceType('enrollment', ''), /Invalid targetResourceType/);
 assert.throws(() => validateTargetResourceType('enrollment', 'a'), /Invalid targetResourceType/);
-assert.throws(() => validateTargetResourceType('unknown_domain', 'student_enrollment'), /Unrecognized targetDomain/);
+assert.throws(() => validateTargetResourceType('unknown_domain', 'enrollment_application'), /Unrecognized targetDomain/);
 
-// Recognized domain + recognized resource type -> PASS
+// Recognized domain + evidenced resource type -> PASS
 assert.doesNotThrow(() => validateTargetResourceType('enrollment', 'enrollment_application'));
-assert.doesNotThrow(() => validateTargetResourceType('enrollment', 'student_enrollment'));
-assert.doesNotThrow(() => validateTargetResourceType('finance', 'student_account'));
+assert.doesNotThrow(() => validateTargetResourceType('enrollment', 'enrollment_process'));
 assert.doesNotThrow(() => validateTargetResourceType('finance', 'invoice'));
-assert.doesNotThrow(() => validateTargetResourceType('academic', 'student_record'));
-assert.doesNotThrow(() => validateTargetResourceType('student_lifecycle', 'person_identity'));
-assert.doesNotThrow(() => validateTargetResourceType('secretariat', 'certificate_request'));
-assert.doesNotThrow(() => validateTargetResourceType('attendance', 'medical_justification'));
+assert.doesNotThrow(() => validateTargetResourceType('academic', 'academic_year'));
+assert.doesNotThrow(() => validateTargetResourceType('academic', 'academic_term'));
+assert.doesNotThrow(() => validateTargetResourceType('secretariat', 'school_task'));
+assert.doesNotThrow(() => validateTargetResourceType('secretariat', 'approval'));
 
-// Recognized domain + unknown resource type -> REJECTED
-assert.throws(
-  () => validateTargetResourceType('enrollment', 'crypto_wallet'),
-  /Unrecognized targetResourceType "crypto_wallet" for domain "enrollment"/,
-);
-assert.throws(
-  () => validateTargetResourceType('finance', 'arbitrary_payload'),
-  /Unrecognized targetResourceType "arbitrary_payload" for domain "finance"/,
-);
+// Removed/Unevidenced resource types -> MUST BE REJECTED (Explicit Audit Regression)
+const unevidencedTypesToReject: Array<{ domain: string; type: string }> = [
+  // Removed from enrollment
+  { domain: 'enrollment', type: 'student_enrollment' },
+  { domain: 'enrollment', type: 'candidacy' },
+  { domain: 'enrollment', type: 'registration' },
+  // Removed from finance
+  { domain: 'finance', type: 'student_account' },
+  { domain: 'finance', type: 'payment_plan' },
+  { domain: 'finance', type: 'scholarship' },
+  { domain: 'finance', type: 'bursary' },
+  // Removed from academic
+  { domain: 'academic', type: 'student_record' },
+  { domain: 'academic', type: 'grade_appeal' },
+  { domain: 'academic', type: 'academic_standing' },
+  { domain: 'academic', type: 'curriculum_waiver' },
+  // Removed from secretariat
+  { domain: 'secretariat', type: 'certificate_request' },
+  { domain: 'secretariat', type: 'diploma_request' },
+  { domain: 'secretariat', type: 'transfer_process' },
+  { domain: 'secretariat', type: 'general_request' },
+];
+
+for (const { domain, type } of unevidencedTypesToReject) {
+  assert.throws(
+    () => validateTargetResourceType(domain, type),
+    new RegExp(`Unrecognized targetResourceType "${type}" for domain "${domain}"`),
+    `Removed unevidenced resource type "${type}" on domain "${domain}" must be rejected`,
+  );
+}
 
 // Resource type valid for Domain A used with Domain B -> REJECTED
 assert.throws(
-  () => validateTargetResourceType('finance', 'medical_justification'),
-  /Unrecognized targetResourceType "medical_justification" for domain "finance"/,
+  () => validateTargetResourceType('finance', 'school_task'),
+  /Unrecognized targetResourceType "school_task" for domain "finance"/,
 );
 assert.throws(
-  () => validateTargetResourceType('attendance', 'student_account'),
-  /Unrecognized targetResourceType "student_account" for domain "attendance"/,
+  () => validateTargetResourceType('enrollment', 'invoice'),
+  /Unrecognized targetResourceType "invoice" for domain "enrollment"/,
 );
 assert.throws(
-  () => validateTargetResourceType('secretariat', 'student_account'),
-  /Unrecognized targetResourceType "student_account" for domain "secretariat"/,
+  () => validateTargetResourceType('academic', 'approval'),
+  /Unrecognized targetResourceType "approval" for domain "academic"/,
+);
+assert.throws(
+  () => validateTargetResourceType('secretariat', 'enrollment_application'),
+  /Unrecognized targetResourceType "enrollment_application" for domain "secretariat"/,
 );
 
 // Full target resource contract validation
