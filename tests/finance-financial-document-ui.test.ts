@@ -8,8 +8,8 @@ const client = path.join(root, 'src/modules/finance/financial-document-client.ts
 const workspace = path.join(root, 'src/components/finance/documents/FinancialDocumentsWorkspace.tsx');
 const financeWorkspace = path.join(root, 'src/components/finance/FinanceWorkspace.tsx');
 
-assert.ok(fs.existsSync(client), 'F7-07 requires an authorized Financial Document client');
-assert.ok(fs.existsSync(workspace), 'F7-07 requires a minimal Financial Document workspace');
+assert.ok(fs.existsSync(client), 'F7-06 requires an authorized Financial Document client');
+assert.ok(fs.existsSync(workspace), 'F7-06 requires a minimal Financial Document workspace');
 const clientSource = fs.readFileSync(client, 'utf8');
 const workspaceSource = fs.readFileSync(workspace, 'utf8');
 const financeWorkspaceSource = fs.readFileSync(financeWorkspace, 'utf8');
