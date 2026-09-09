@@ -34,6 +34,7 @@ test('F7-05 persists a hash-verified PDF artifact from an issued immutable docum
     if (sql.includes('FROM finance_financial_document_sources')) return { rows: [{ source_type: 'payment', source_id: 'payment-1', snapshot: { paymentReference: 'PAY-IMMUTABLE' } }] };
     if (sql.includes('FROM finance_financial_document_artifacts')) return { rows: inserted ? [inserted] : [] };
     if (sql.includes('INSERT INTO finance_financial_document_artifacts')) { inserted = { id: artifactId, document_id: 'document-1', render_version: values[2], template_version: values[3], generated_at: new Date(), content_hash: values[4], media_type: values[5], byte_size: values[6], storage_reference: values[7] }; return { rows: [inserted] }; }
+    if (sql.includes('finance_audit_records') || sql.includes('finance_outbox')) return { rows: [] };
     throw new Error(`Unexpected SQL: ${sql}`);
   } };
   const service = new FinancialDocumentArtifactService(pool, storage);

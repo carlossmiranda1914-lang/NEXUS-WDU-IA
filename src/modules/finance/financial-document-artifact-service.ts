@@ -53,7 +53,12 @@ export class FinancialDocumentArtifactService {
     const storageReference = `financial-document-artifacts/${input.institutionId}/${input.documentId}/${input.renderVersion}/${input.templateVersion}/${contentHash}.pdf`;
     await this.storage.put(storageReference, bytes);
     const inserted = await this.pool.query<any>('INSERT INTO finance_financial_document_artifacts(institution_id,document_id,render_version,template_version,content_hash,media_type,byte_size,storage_reference) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,document_id,render_version,template_version,generated_at,content_hash,media_type,byte_size,storage_reference', [input.institutionId, input.documentId, input.renderVersion, input.templateVersion, contentHash, 'application/pdf', bytes.byteLength, storageReference]);
-    return this.map(inserted.rows[0]!);
+    const artifact = this.map(inserted.rows[0]!);
+    await Promise.all([
+      this.pool.query("INSERT INTO finance_audit_records(institution_id,event_type,metadata) VALUES($1,'financial_document_artifact_generated',$2)", [input.institutionId, { artifactId: artifact.id, documentId: input.documentId, renderVersion: input.renderVersion, templateVersion: input.templateVersion }]),
+      this.pool.query("INSERT INTO finance_outbox(institution_id,topic,aggregate_id,payload) VALUES($1,'financial_document_artifact_generated',$2,$3)", [input.institutionId, artifact.id, { artifactId: artifact.id, documentId: input.documentId, renderVersion: input.renderVersion, templateVersion: input.templateVersion }]),
+    ]);
+    return artifact;
   }
 
   async retrieve(input: { institutionId: string; artifactId: string }): Promise<Buffer> {
