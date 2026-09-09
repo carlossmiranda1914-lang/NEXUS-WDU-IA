@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
 import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
+import { PostgresFiscalConfigurationStore } from '../src/modules/finance/fiscal-configuration.ts';
+import { FiscalAdapterRegistry } from '../src/modules/finance/fiscal-adapter-registry.ts';
 
 test('F7-02 starts with a Finance-owned versioned fiscal configuration migration', async () => {
   await assert.doesNotReject(() => readFile(new URL('../src/db/migrations/0042_finance_fiscal_configuration.sql', import.meta.url), 'utf8'));
@@ -28,4 +30,15 @@ test('F7-02 fiscal configurations reject overlapping effective versions per inst
       await assert.rejects(() => client.query("INSERT INTO finance_fiscal_configuration_versions(institution_id,version,adapter_key,effective_from,effective_to) VALUES($1,2,'core',TIMESTAMPTZ '2026-06-01',TIMESTAMPTZ '2027-01-01')", [institutionId]), /overlap|exclude/i);
     } finally { client.release(); }
   } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(() => undefined); await pool.end(); }
+});
+
+test('F7-02 resolves only the effective fiscal configuration for its institution', async () => {
+  const store = new PostgresFiscalConfigurationStore({ query: async () => ({ rows: [] }) } as never);
+  await assert.rejects(() => store.requireEffective('institution-a', new Date('2026-01-01T00:00:00.000Z')), /FISCAL_CONFIGURATION_NOT_EFFECTIVE/);
+});
+
+test('F7-02 adapter selection is derived from the financial profile and fails closed', () => {
+  const registry = new FiscalAdapterRegistry([{ key: 'core', supportedJurisdictions: ['NEXUS_TEST'] }]);
+  assert.equal(registry.select({ primaryJurisdiction: 'NEXUS_TEST' }, { adapterKey: 'core' }).key, 'core');
+  assert.throws(() => registry.select({ primaryJurisdiction: 'UNSUPPORTED' }, { adapterKey: 'core' }), /FISCAL_ADAPTER_UNSUPPORTED_JURISDICTION/);
 });
