@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -89,6 +89,16 @@ for (const file of docFiles) {
       );
     }
 
+    // Verify test provider is NOT in production module
+    const testProviderTerms = ['MemoryObjectStorageProvider', 'memory_test_provider', 'simulateDirectUpload'];
+    for (const term of testProviderTerms) {
+      assert.strictEqual(
+        content.includes(term),
+        false,
+        `Production module file ${file} must NOT contain test provider reference "${term}"`,
+      );
+    }
+
     // Verify I4 capabilities are not implemented in I3
     const forbiddenI4Terms = ['malware_scan', 'quarantine_reason', 'scan_engine', 'magic_number_verified'];
     for (const term of forbiddenI4Terms) {
@@ -101,7 +111,18 @@ for (const file of docFiles) {
   }
 }
 
-// 5. Verify schema.ts is untouched
+// 5. Verify MemoryObjectStorageProvider is in test support directory
+const testSupportPath = path.join(rootDir, 'tests/support/memory-object-storage-provider.ts');
+const testSupportStat = await stat(testSupportPath);
+assert.ok(testSupportStat.isFile(), 'tests/support/memory-object-storage-provider.ts must exist');
+
+const testSupportContent = await readFile(testSupportPath, 'utf8');
+assert.ok(
+  testSupportContent.includes('MemoryObjectStorageProvider'),
+  'MemoryObjectStorageProvider must be declared in test support file',
+);
+
+// 6. Verify schema.ts is untouched
 const schemaSource = await readFile(path.join(rootDir, 'src/db/schema.ts'), 'utf8');
 assert.strictEqual(
   schemaSource.includes('document_upload_sessions'),
@@ -109,4 +130,4 @@ assert.strictEqual(
   'src/db/schema.ts must remain untouched (migration runner is authoritative)',
 );
 
-console.log('[DOCUMENTS-UPLOAD-BOUNDARY-FENCE] PASS: Documents Upload boundary fence verified statically.');
+console.log('[DOCUMENTS-UPLOAD-BOUNDARY-FENCE] PASS: Documents Upload boundary fence and test-support isolation verified statically.');

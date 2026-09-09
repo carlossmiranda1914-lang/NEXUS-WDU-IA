@@ -14,7 +14,7 @@ import {
   cancelUploadSessionCommand,
   completeUploadSessionCommand,
 } from '../src/modules/documents/document-upload-command.ts';
-import { MemoryObjectStorageProvider } from '../src/modules/documents/object-storage-provider.ts';
+import { MemoryObjectStorageProvider } from './support/memory-object-storage-provider.ts';
 import { verifyUploadToken } from '../src/modules/documents/document-upload-model.ts';
 
 await verifyApprovedTestConnection();

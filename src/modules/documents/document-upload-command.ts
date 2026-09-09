@@ -162,10 +162,6 @@ export async function createUploadSessionCommand(input: {
 }): Promise<{ replayed: boolean; result: CreateUploadSessionResult }> {
   const { pool, context, idempotencyKey, input: cmdInput } = input;
 
-  if (context.institutionId !== context.institutionId) {
-    throw new Error('InstitutionalContext mismatch: caller is not authorized for target institution.');
-  }
-
   // 1. Evaluate file size policy - FAIL CLOSED if global limit missing
   const effectiveLimit = calculateEffectiveSizeLimit(cmdInput.policyConfig);
   if (cmdInput.declaredByteSize <= 0) {

@@ -9,10 +9,13 @@ import { PostgresDocumentRepository } from '../src/modules/documents/document-re
 import { PostgresDocumentUploadRepository } from '../src/modules/documents/document-upload-repository.ts';
 import {
   createUploadSessionCommand,
+  resumeUploadSessionCommand,
   cancelUploadSessionCommand,
   completeUploadSessionCommand,
 } from '../src/modules/documents/document-upload-command.ts';
-import { MemoryObjectStorageProvider } from '../src/modules/documents/object-storage-provider.ts';
+import { MemoryObjectStorageProvider } from './support/memory-object-storage-provider.ts';
+import type { InstitutionalContext } from '../src/auth/institutional-context.ts';
+import { verifyUploadToken } from '../src/modules/documents/document-upload-model.ts';
 
 await verifyApprovedTestConnection();
 
@@ -23,8 +26,6 @@ const pool = new pg.Pool({
   options: `-c search_path=${quote(schema)},public`,
 });
 const migrationsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations');
-
-import type { InstitutionalContext } from '../src/auth/institutional-context.ts';
 
 const institutionId = '00000000-0000-0000-0000-000000000001';
 const personId = '00000000-0000-0000-0000-000000000002';
@@ -126,7 +127,7 @@ try {
   assert.strictEqual(versionsInDb.length, 1, 'Exactly 1 canonical version must exist in database');
   assert.strictEqual(versionsInDb[0].versionNumber, 1);
 
-  // 2. COMPLETE VS CANCEL RACE
+  // 2. COMPLETE VS CANCEL REAL CONCURRENCY RACE -> EXACTLY ONE TERMINAL OUTCOME
   const raceDoc = await docRepo.createDocument(client, {
     institutionId,
     category: 'identification',
@@ -183,6 +184,12 @@ try {
       },
     }),
   ]);
+
+  // Verify exactly one won and other was rejected with conflict/terminal-rejection
+  const fulfilledCount = results.filter((r) => r.status === 'fulfilled').length;
+  const rejectedCount = results.filter((r) => r.status === 'rejected').length;
+  assert.strictEqual(fulfilledCount, 1, 'Exactly one terminal operation must succeed in complete vs cancel race');
+  assert.strictEqual(rejectedCount, 1, 'The losing operation must receive a deterministic rejection');
 
   const finalSession = await uploadRepo.getSessionById(client, institutionId, raceSessRes.result.session.id);
   assert.ok(finalSession);
@@ -288,7 +295,112 @@ try {
   const versionNumbers = seqVersions.map((v) => v.versionNumber).sort((a, b) => a - b);
   assert.deepStrictEqual(versionNumbers, [1, 2], 'Versions must sequence sequentially without duplicates');
 
-  // 4. IDEMPOTENCY CONFLICT CHECK
+  // 4. CONCURRENT RESUME TOKEN ROTATION TEST
+  const rotDoc = await docRepo.createDocument(client, {
+    institutionId,
+    category: 'identification',
+    createdByPersonId: personId,
+  });
+
+  const rotSessRes = await createUploadSessionCommand({
+    pool,
+    context,
+    idempotencyKey: 'idemp-rot-create',
+    input: {
+      documentId: rotDoc.id,
+      declaredFilename: 'rot.pdf',
+      declaredMimeType: 'application/pdf',
+      declaredByteSize: 1024,
+      policyConfig: { globalMaxByteSize: 10 * 1024 * 1024 },
+      storageProvider: 'test-memory',
+      storageBucket: 'vault',
+    },
+  });
+
+  const originalRawToken = rotSessRes.result.rawToken;
+  const rotSessionId = rotSessRes.result.session.id;
+
+  // Two workers concurrently try to resume using the same initial raw token
+  const rotResults = await Promise.allSettled([
+    resumeUploadSessionCommand({
+      pool,
+      context,
+      idempotencyKey: 'idemp-resume-worker-1',
+      input: {
+        sessionId: rotSessionId,
+        rawToken: originalRawToken,
+      },
+    }),
+    resumeUploadSessionCommand({
+      pool,
+      context,
+      idempotencyKey: 'idemp-resume-worker-2',
+      input: {
+        sessionId: rotSessionId,
+        rawToken: originalRawToken,
+      },
+    }),
+  ]);
+
+  // One worker rotates token; the second worker with the old raw token gets rejected with INVALID_UPLOAD_TOKEN
+  const rotFulfilled = rotResults.filter((r) => r.status === 'fulfilled');
+  const rotRejected = rotResults.filter((r) => r.status === 'rejected');
+  assert.strictEqual(rotFulfilled.length, 1, 'Exactly one concurrent resume must succeed with the original token');
+  assert.strictEqual(rotRejected.length, 1, 'Second concurrent resume using invalidated token must be rejected');
+
+  const activeRotSession = await uploadRepo.getSessionById(client, institutionId, rotSessionId);
+  assert.ok(activeRotSession);
+  // Old token is strictly invalid
+  assert.strictEqual(
+    verifyUploadToken(originalRawToken, activeRotSession.uploadTokenHash),
+    false,
+    'Old raw token must be invalid in database after rotation',
+  );
+
+  // 5. STALE STATUS UPDATE REJECTED (NO_SILENT_LAST_WRITE_WINS)
+  const staleDoc = await docRepo.createDocument(client, {
+    institutionId,
+    category: 'identification',
+    createdByPersonId: personId,
+  });
+
+  const staleSessRes = await createUploadSessionCommand({
+    pool,
+    context,
+    idempotencyKey: 'idemp-stale-create',
+    input: {
+      documentId: staleDoc.id,
+      declaredFilename: 'stale.pdf',
+      declaredMimeType: 'application/pdf',
+      declaredByteSize: 1024,
+      policyConfig: { globalMaxByteSize: 10 * 1024 * 1024 },
+      storageProvider: 'test-memory',
+      storageBucket: 'vault',
+    },
+  });
+
+  // Transition to cancelled
+  await uploadRepo.transitionSessionStatus(client, institutionId, staleSessRes.result.session.id, 'cancelled');
+
+  // Stale client/thread attempting to transition from 'authorized' to 'uploading'
+  await assert.rejects(
+    async () => {
+      await uploadRepo.transitionSessionStatus(
+        client,
+        institutionId,
+        staleSessRes.result.session.id,
+        'uploading',
+        ['authorized'], // Stale expected state
+      );
+    },
+    /UPLOAD_SESSION_CONCURRENT_STATE_CONFLICT/,
+    'Attempting CAS update with stale expected state must be rejected and prevent silent overwrite',
+  );
+
+  const finalStaleSession = await uploadRepo.getSessionById(client, institutionId, staleSessRes.result.session.id);
+  assert.strictEqual(finalStaleSession?.status, 'cancelled', 'Terminal cancelled status must not be overwritten');
+
+  // 6. IDEMPOTENCY CONFLICT CHECK
   await assert.rejects(
     async () => {
       await createUploadSessionCommand({
@@ -310,7 +422,7 @@ try {
     'Reusing idempotency key with different payload must throw IDEMPOTENCY_CONFLICT',
   );
 
-  console.log('[DOCUMENTS-UPLOAD-CONCURRENCY] PASS: Double completion, cancel/complete race, sequence concurrency and idempotency conflicts verified.');
+  console.log('[DOCUMENTS-UPLOAD-CONCURRENCY] PASS: Double completion, cancel/complete race, token rotation concurrency, CAS stale rejection, and idempotency verified.');
 } finally {
   try {
     await client.query('RESET search_path');

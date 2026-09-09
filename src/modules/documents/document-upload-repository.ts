@@ -7,7 +7,6 @@ import {
   sanitizeDeclaredFilename,
   validateDeclaredMimeType,
   validateDeclaredByteSize,
-  validateUploadSessionTransition,
 } from './document-upload-model.ts';
 
 export interface CreateUploadSessionInput {
@@ -159,6 +158,10 @@ export class PostgresDocumentUploadRepository {
     };
   }
 
+  /**
+   * Atomic CAS Token Rotation: guarantees session belongs to institution, is in active status,
+   * and is strictly not past expires_at before rotating the token hash and window.
+   */
   async rotateSessionToken(
     client: QueryClient,
     institutionId: string,
@@ -191,7 +194,10 @@ export class PostgresDocumentUploadRepository {
               authorized_until = $4,
               status = 'authorized',
               updated_at = now()
-        WHERE institution_id = $1 AND id = $2
+        WHERE institution_id = $1
+          AND id = $2
+          AND status IN ('authorized', 'uploading')
+          AND expires_at > now()
         RETURNING id, institution_id, document_id, target_version_number, declared_filename, declared_mime_type, declared_byte_size,
                   storage_provider, storage_bucket, storage_key, status, upload_token_hash, authorized_until, expires_at,
                   completed_version_id, created_by_person_id, created_at, updated_at`,
@@ -199,7 +205,9 @@ export class PostgresDocumentUploadRepository {
     );
 
     if (result.rows.length === 0) {
-      throw new Error(`Upload session ${sessionId} not found for token rotation.`);
+      throw new Error(
+        `UPLOAD_SESSION_CONCURRENT_STATE_CONFLICT: Upload session ${sessionId} cannot be rotated (not found, in terminal status, or past expires_at).`,
+      );
     }
 
     const row = result.rows[0];
@@ -225,18 +233,27 @@ export class PostgresDocumentUploadRepository {
     };
   }
 
+  /**
+   * Atomic CAS Status Transition: updates status only if the current row status matches allowed prior states.
+   */
   async transitionSessionStatus(
     client: QueryClient,
     institutionId: string,
     sessionId: string,
     targetStatus: UploadSessionStatus,
+    expectedCurrentStatuses?: UploadSessionStatus[],
   ): Promise<DocumentUploadSessionRecord> {
-    const current = await this.getSessionById(client, institutionId, sessionId);
-    if (!current) {
-      throw new Error(`Upload session ${sessionId} not found in institution ${institutionId}`);
-    }
+    const validPriorStatuses: Record<UploadSessionStatus, UploadSessionStatus[]> = {
+      created: [],
+      authorized: ['created'],
+      uploading: ['authorized', 'failed'],
+      completed: ['authorized', 'uploading'],
+      cancelled: ['created', 'authorized', 'uploading', 'failed'],
+      expired: ['created', 'authorized', 'uploading', 'failed'],
+      failed: ['created', 'authorized', 'uploading'],
+    };
 
-    validateUploadSessionTransition(current.status, targetStatus);
+    const allowedPriors = expectedCurrentStatuses ?? validPriorStatuses[targetStatus];
 
     const result = await client.query<{
       id: string;
@@ -261,12 +278,20 @@ export class PostgresDocumentUploadRepository {
       `UPDATE document_upload_sessions
           SET status = $3,
               updated_at = now()
-        WHERE institution_id = $1 AND id = $2
+        WHERE institution_id = $1
+          AND id = $2
+          AND status = ANY($4::text[])
         RETURNING id, institution_id, document_id, target_version_number, declared_filename, declared_mime_type, declared_byte_size,
                   storage_provider, storage_bucket, storage_key, status, upload_token_hash, authorized_until, expires_at,
                   completed_version_id, created_by_person_id, created_at, updated_at`,
-      [institutionId, sessionId, targetStatus],
+      [institutionId, sessionId, targetStatus, allowedPriors],
     );
+
+    if (result.rows.length === 0) {
+      throw new Error(
+        `UPLOAD_SESSION_CONCURRENT_STATE_CONFLICT: Upload session ${sessionId} could not transition to "${targetStatus}" (concurrent modification or invalid status).`,
+      );
+    }
 
     const row = result.rows[0];
     return {
@@ -291,6 +316,9 @@ export class PostgresDocumentUploadRepository {
     };
   }
 
+  /**
+   * Atomic CAS Session Completion: updates status to 'completed' only if currently active and not expired.
+   */
   async completeSessionWithVersion(
     client: QueryClient,
     institutionId: string,
@@ -321,7 +349,10 @@ export class PostgresDocumentUploadRepository {
           SET status = 'completed',
               completed_version_id = $3,
               updated_at = now()
-        WHERE institution_id = $1 AND id = $2 AND status IN ('authorized', 'uploading')
+        WHERE institution_id = $1
+          AND id = $2
+          AND status IN ('authorized', 'uploading')
+          AND expires_at > now()
         RETURNING id, institution_id, document_id, target_version_number, declared_filename, declared_mime_type, declared_byte_size,
                   storage_provider, storage_bucket, storage_key, status, upload_token_hash, authorized_until, expires_at,
                   completed_version_id, created_by_person_id, created_at, updated_at`,
@@ -329,7 +360,9 @@ export class PostgresDocumentUploadRepository {
     );
 
     if (result.rows.length === 0) {
-      throw new Error(`Upload session ${sessionId} cannot be completed (invalid status or not found).`);
+      throw new Error(
+        `UPLOAD_SESSION_CONCURRENT_STATE_CONFLICT: Upload session ${sessionId} cannot be completed (invalid status, already terminal, or not found).`,
+      );
     }
 
     const row = result.rows[0];
