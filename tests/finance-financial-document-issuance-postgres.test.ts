@@ -61,6 +61,19 @@ test('F7-01 PostgreSQL issuance replays idempotently and allocates a series numb
     const audit = await pool.query('SELECT count(*)::int count FROM finance_audit_records WHERE institution_id=$1 AND event_type=$2', [institutionId, 'financial_document_issued']);
     const outbox = await pool.query('SELECT count(*)::int count FROM finance_outbox WHERE institution_id=$1 AND topic=$2', [institutionId, 'financial_document_issued']);
     assert.equal(audit.rows[0].count, 1); assert.equal(outbox.rows[0].count, 1);
+    const foreignInstitutionId = randomUUID();
+    const foreignPaymentId = randomUUID();
+    const foreignClient = await pool.connect();
+    try {
+      await foreignClient.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'Foreign document institution','foreign-document-institution','active')", [foreignInstitutionId]);
+      // A known UUID from another institution must be indistinguishable from an absent source.
+      const personId = randomUUID(); const journalId = randomUUID();
+      await foreignClient.query("INSERT INTO people(id,name) VALUES($1,'Foreign payer')", [personId]);
+      await foreignClient.query("INSERT INTO finance_profile_versions(institution_id,version,effective_from,primary_jurisdiction,functional_currency,financial_timezone,monetary_policy_version,enabled_currencies) VALUES($1,1,now(),'PT','EUR','Europe/Lisbon','v1','[\"EUR\"]')", [foreignInstitutionId]);
+      await foreignClient.query("INSERT INTO finance_journal_transactions(id,institution_id,status,currency,amount,command_id,journal_type,actor_person_id,financial_profile_version,confirmed_at) VALUES($1,$2,'confirmed','EUR',10,$3,'foundation_value_received',$4,1,now())", [journalId, foreignInstitutionId, `foreign-source-${foreignPaymentId}`, personId]);
+      await foreignClient.query("INSERT INTO finance_payments(id,institution_id,payment_reference,journal_transaction_id,source_type,method,amount,currency,status,allocation_status,payer_person_id,effective_at,financial_profile_version,actor_person_id) VALUES($1,$2,$3,$4,'manual_offline','cash',10,'EUR','confirmed','unapplied',$5,now(),1,$5)", [foreignPaymentId, foreignInstitutionId, `PAY-${foreignPaymentId.slice(0, 8)}`, journalId, personId]);
+    } finally { foreignClient.release(); }
+    await assert.rejects(() => repo.issue({ ...command, sourceId: foreignPaymentId, idempotencyKey: 'cross-tenant-source' }), /SOURCE_NOT_FOUND/);
   } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(() => undefined); await pool.end(); }
 });
 
