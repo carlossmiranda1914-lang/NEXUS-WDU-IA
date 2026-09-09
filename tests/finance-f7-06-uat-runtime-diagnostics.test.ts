@@ -12,5 +12,9 @@ assert.match(source, /method: req\.method/, 'the diagnostic must capture only re
 assert.match(source, /path: req\.path/, 'the diagnostic must capture only request path');
 assert.match(source, /statusCode: res\.statusCode/, 'the diagnostic must capture the final HTTP status');
 assert.doesNotMatch(source, /financeDocumentsUatTrace[\s\S]{0,500}(authorization|token|cookie|uid)/i, 'UAT diagnostics must never retain credentials or identity data');
+assert.match(source, /\/__uat\/runtime/, 'UAT diagnostics must expose a development-only runtime identity endpoint');
+assert.match(source, /X-Nexus-Uat-Pid/, 'UAT responses must carry a safe runtime identity marker');
+assert.match(source, /NEXUS_UAT_RUNTIME_IDENTITY === 'true'/, 'runtime identity diagnostics must require an explicit UAT flag');
+assert.doesNotMatch(source, /runtimeIdentity[\s\S]{0,500}(authorization|token|cookie|password|database_url)/i, 'runtime identity must not retain secrets or credentials');
 
 console.log('F7_06_UAT_RUNTIME_DIAGNOSTICS=PASS');

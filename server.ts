@@ -16,6 +16,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import nodemailer from 'nodemailer';
 import os from 'os';
+import { execFileSync } from 'child_process';
 
 
 // Import Drizzle, initialize, schemas, etc.
@@ -169,6 +170,19 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
   const uatFinanceTraceEnabled = process.env.NODE_ENV !== 'production' && process.env.NEXUS_UAT_AUTH_TRACE === 'true';
+  const uatRuntimeIdentityEnabled = process.env.NODE_ENV !== 'production' && process.env.NEXUS_UAT_RUNTIME_IDENTITY === 'true';
+  const startupTimestamp = new Date().toISOString();
+  const readGit = (args: string[]) => {
+    try { return execFileSync('git', args, { cwd: process.cwd(), encoding: 'utf8', windowsHide: true }).trim(); } catch { return 'UNAVAILABLE'; }
+  };
+  const runtimeIdentity = Object.freeze({
+    pid: process.pid,
+    head: readGit(['rev-parse', 'HEAD']),
+    branch: readGit(['branch', '--show-current']),
+    worktree: path.basename(process.cwd()),
+    startedAt: startupTimestamp,
+    canonicalOrigin: 'http://localhost:3000',
+  });
   let financeDocumentsUatTrace: { method: string; path: string; statusCode: number } | null = null;
 
   // Vite injects a small inline module to enable React Refresh in local
@@ -187,6 +201,15 @@ async function startServer() {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Institution-Id'],
     credentials: true,
   }));
+  if (uatRuntimeIdentityEnabled) {
+    app.use((_req, res, next) => {
+      res.setHeader('X-Nexus-Uat-Pid', String(runtimeIdentity.pid));
+      res.setHeader('X-Nexus-Uat-Head', runtimeIdentity.head);
+      res.setHeader('X-Nexus-Uat-Worktree', runtimeIdentity.worktree);
+      next();
+    });
+    app.get('/__uat/runtime', (_req, res) => res.json(runtimeIdentity));
+  }
   if (uatFinanceTraceEnabled) {
     app.use((req, res, next) => {
       if (req.path === '/api/finance/documents') {

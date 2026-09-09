@@ -12,11 +12,13 @@ assert.match(source, /EXTERNAL_CONFIGURATION_REQUIRED/, 'the preflight must clea
 assert.match(source, /verifyApprovedTestConnection/, 'the preflight must verify the safe disposable PostgreSQL target');
 assert.match(source, /discoverMigrations/, 'the preflight must verify the migration ledger');
 assert.match(source, /READY_FOR_HUMAN_UAT/, 'the preflight must make the human-UAT decision explicit');
-assert.match(source, /UNVERIFIABLE_PROCESS_COMMAND/, 'the preflight must not claim an exact runtime SHA from a process command alone');
+assert.match(source, /runtimeIdentityMatches/, 'the preflight must verify the runtime SHA using the runtime identity endpoint, not a process command alone');
 assert.match(source, /NEXUS_UAT_FIREBASE_UID/, 'the preflight must require the canonical identity fixture without exposing it');
 assert.match(source, /--origin/, 'the preflight must accept the intended human-UAT origin explicitly');
 assert.match(source, /NON_CANONICAL_AUTH_UAT_ORIGIN_REJECTED/, 'the preflight must reject a non-canonical authenticated UAT origin');
 assert.match(source, /CODEX_PREVIEW_AUTH_UAT_SUPPORTED/, 'the preflight must state that the Codex preview is not an authenticated-UAT authority');
+assert.match(source, /__uat\/runtime/, 'the preflight must require the runtime identity endpoint');
+assert.match(source, /RUNTIME_IDENTITY_REQUIRED/, 'the preflight must reject HTTP 200 without runtime identity');
 assert.match(guide, /http:\/\/localhost:3000/, 'the documented guardrail must name the single canonical origin');
 assert.match(guide, /EXTERNAL_CONFIGURATION_REQUIRED/, 'the documented guardrail must forbid a false readiness result');
 assert.match(guide, /Codex preview.*not supported/i, 'the documented guardrail must reject Codex preview as a human-UAT browser');

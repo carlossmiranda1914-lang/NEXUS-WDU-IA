@@ -23,6 +23,17 @@ async function backendReachable(origin = CANONICAL_UAT_ORIGIN) {
   }
 }
 
+async function runtimeIdentity(origin) {
+  try {
+    const response = await fetch(`${origin}/__uat/runtime`, { signal: AbortSignal.timeout(3_000) });
+    if (!response.ok) return null;
+    const value = await response.json();
+    return typeof value?.pid === 'number' && typeof value?.head === 'string' && typeof value?.worktree === 'string' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 function requestedHumanUatOrigin() {
   const index = process.argv.indexOf('--origin');
   if (index === -1) return CANONICAL_UAT_ORIGIN;
@@ -63,11 +74,14 @@ async function migrationsCurrent(connectionString) {
 }
 
 async function main() {
-  git('rev-parse', 'HEAD');
+  const expectedHead = git('rev-parse', 'HEAD');
   const intendedOrigin = requestedHumanUatOrigin();
   const canonicalOriginValid = intendedOrigin === CANONICAL_UAT_ORIGIN;
   const serverProcess = expectedServerProcess();
   const backend = await backendReachable();
+  const identity = await runtimeIdentity(CANONICAL_UAT_ORIGIN);
+  const expectedWorktree = path.basename(root);
+  const runtimeIdentityMatches = Boolean(identity && identity.head === expectedHead && identity.worktree === expectedWorktree && identity.pid === serverProcess.pid);
   const server127Reachable = await backendReachable('http://127.0.0.1:3000');
   if (!canonicalOriginValid) {
     const rejected = {
@@ -79,6 +93,8 @@ async function main() {
       CODEX_PREVIEW_AUTH_UAT_SUPPORTED: 'NO',
       MANUAL_CANONICAL_BROWSER_ORIGIN_REQUIRED: 'YES',
       BACKEND: backend ? 'PASS' : 'FAIL',
+      RUNTIME_IDENTITY_REQUIRED: 'YES',
+      RUNTIME_IDENTITY: runtimeIdentityMatches ? 'PASS' : 'FAIL',
       SERVER_127_REACHABLE: server127Reachable ? 'YES' : 'NO',
       AUTH_UAT_127_ALLOWED: 'NO',
       READY_FOR_HUMAN_UAT: 'NO',
@@ -112,7 +128,9 @@ async function main() {
   const status = {
     UAT_PREFLIGHT: 'FAIL',
     EXPECTED_WORKTREE: serverProcess.commandMatches ? 'PASS' : 'FAIL',
-    EXPECTED_HEAD: 'UNVERIFIABLE_PROCESS_COMMAND',
+    EXPECTED_HEAD: runtimeIdentityMatches ? 'PASS' : 'FAIL',
+    RUNTIME_IDENTITY_REQUIRED: 'YES',
+    RUNTIME_IDENTITY: runtimeIdentityMatches ? 'PASS' : 'FAIL',
     CANONICAL_UAT_ORIGIN,
     INTENDED_HUMAN_UAT_ORIGIN: intendedOrigin,
     AUTHENTICATED_HUMAN_UAT_ORIGIN_VALID: 'YES',
