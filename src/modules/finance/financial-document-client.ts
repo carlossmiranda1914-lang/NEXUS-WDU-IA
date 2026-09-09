@@ -7,9 +7,9 @@ export type FinancialDocumentArtifactProjection = { id: string; document_id: str
 export class FinancialDocumentClient {
   constructor(private readonly fetcher: typeof fetch = globalThis.fetch, private readonly getToken = async () => auth.currentUser?.getIdToken()) {}
 
-  private async request<T>(path: string): Promise<T> {
+  private async request<T>(path: string, init?: RequestInit): Promise<T> {
     const token = await this.getToken().catch(() => null);
-    const response = await this.fetcher(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    const response = await this.fetcher(path, { ...init, headers: { ...(init?.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
     if (!response.ok) throw new Error(response.status === 403 ? 'FINANCIAL_DOCUMENT_FORBIDDEN' : 'FINANCIAL_DOCUMENT_UNAVAILABLE');
     return response.json() as Promise<T>;
   }
@@ -17,6 +17,9 @@ export class FinancialDocumentClient {
   async list(): Promise<FinancialDocumentProjection[]> { return (await this.request<{ items: FinancialDocumentProjection[] }>('/api/finance/documents')).items; }
   async detail(id: string): Promise<FinancialDocumentDetail> { return this.request<FinancialDocumentDetail>(`/api/finance/documents/${encodeURIComponent(id)}`); }
   async listArtifacts(id: string): Promise<FinancialDocumentArtifactProjection[]> { return (await this.request<{ items: FinancialDocumentArtifactProjection[] }>(`/api/finance/documents/${encodeURIComponent(id)}/artifacts`)).items; }
+  async issueReceipt(input: { sourceId: string; seriesId: string; idempotencyKey: string }): Promise<{ id: string; sequenceNumber: number; replayed: boolean }> {
+    return this.request('/api/finance/documents/issue', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': input.idempotencyKey }, body: JSON.stringify({ sourceId: input.sourceId, seriesId: input.seriesId, documentType: 'receipt' }) });
+  }
   async artifactContent(artifactId: string): Promise<Blob> {
     const token = await this.getToken().catch(() => null);
     const response = await this.fetcher(`/api/finance/document-artifacts/${encodeURIComponent(artifactId)}/content`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });

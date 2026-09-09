@@ -17,6 +17,8 @@ const financeWorkspaceSource = fs.readFileSync(financeWorkspace, 'utf8');
 assert.match(clientSource, /\/api\/finance\/documents/, 'document reads must use the authoritative HTTP boundary');
 assert.match(clientSource, /async detail\(/, 'the client must obtain source provenance and corrections from the authorized detail route');
 assert.match(clientSource, /listArtifacts\(/, 'the client must obtain private artifact metadata from the authorized route');
+assert.match(clientSource, /issueReceipt\(/, 'issuance must be delegated to the authoritative endpoint');
+assert.match(clientSource, /Idempotency-Key/, 'issuance must carry an idempotency key for double-click and timeout recovery');
 assert.match(workspaceSource, /Visualizar|View/, 'the workspace must offer a read-only document preview');
 assert.match(workspaceSource, /PDF/, 'the workspace must offer the private official artifact action');
 assert.match(workspaceSource, /Proveniência/, 'the preview must expose persisted source provenance');
