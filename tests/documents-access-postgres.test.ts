@@ -105,6 +105,9 @@ const syntheticRules: DocumentAccessPolicyRule[] = [
 
 const policyEngine = new ConfigurableDocumentAccessPolicyEngine(syntheticRules);
 
+// Explicit test secret — minimum 32 chars, no production fallback, injected as trusted dependency
+const TEST_ACCESS_GRANT_TOKEN_KEY = 'EXPLICIT_TEST_SECRET_minimum_32_bytes_for_hmac_derivation';
+
 const storageProvider = new MemoryObjectStorageProvider();
 const malwareScanner = new DeterministicTestMalwareScanner();
 const docRepo = new PostgresDocumentRepository();
@@ -242,6 +245,7 @@ try {
       context: teacherContext,
       idempotencyKey: 'idemp-auth-1',
       policyEngine,
+      accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
       input: {
         documentId: doc1.id,
         versionId: ver1.id,
@@ -311,6 +315,7 @@ try {
           context: adminContext,
           idempotencyKey: 'idemp-auth-received',
           policyEngine,
+          accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
           input: {
             documentId: docReceived.id,
             versionId: verReceived.id,
@@ -341,6 +346,7 @@ try {
           context: adminContext,
           idempotencyKey: 'idemp-auth-quar',
           policyEngine,
+          accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
           input: {
             documentId: docQuar.id,
             versionId: verQuar.id,
@@ -366,6 +372,7 @@ try {
       context: teacherContext,
       idempotencyKey: 'idemp-auth-revoke-test',
       policyEngine,
+      accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
       input: {
         documentId: docRevoke.id,
         versionId: verRevoke.id,
@@ -408,6 +415,7 @@ try {
       context: teacherContext,
       idempotencyKey: 'idemp-auth-expire-test',
       policyEngine,
+      accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
       input: {
         documentId: docRevoke.id,
         versionId: verRevoke.id,
@@ -445,6 +453,7 @@ try {
       context: teacherContext,
       idempotencyKey: 'idemp-auth-member-test',
       policyEngine,
+      accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
       input: {
         documentId: docRevoke.id,
         versionId: verRevoke.id,
@@ -486,6 +495,7 @@ try {
       context: teacherContext,
       idempotencyKey: 'idemp-auth-role-test',
       policyEngine,
+      accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
       input: {
         documentId: doc1.id,
         versionId: ver1.id,
@@ -529,6 +539,7 @@ try {
           context: teacherContext,
           idempotencyKey: 'idemp-auth-download-denied',
           policyEngine,
+          accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
           input: {
             documentId: doc1.id,
             versionId: ver1.id,
@@ -548,6 +559,7 @@ try {
       context: teacherContext, // Person A
       idempotencyKey: 'idemp-auth-stolen-token-test',
       policyEngine,
+      accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
       input: {
         documentId: doc1.id,
         versionId: ver1.id,
@@ -575,7 +587,125 @@ try {
       'Person B using Person A token in same institution must be DENIED with GRANT_GRANTEE_MISMATCH',
     );
 
-    // 8. NO_RAW_TOKEN_AT_REST: Verify PostgreSQL table contains only SHA256 hashes
+    // 10. RESPONSE_LOSS_SIMULATION
+    // First response commits and is treated as lost. Retry same key must recover same grant + same usable token.
+    const authLoss1 = await authorizeContentAccessCommand({
+      pool,
+      context: teacherContext,
+      idempotencyKey: 'idemp-auth-response-loss-test',
+      policyEngine,
+      accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
+      input: {
+        documentId: doc1.id,
+        versionId: ver1.id,
+        action: 'open',
+      },
+    });
+    assert.strictEqual(authLoss1.replayed, false);
+    assert.ok(authLoss1.result.rawAccessToken, 'Initial response must contain raw token');
+    const lossGrantId = authLoss1.result.grant.id;
+    const lossOriginalToken = authLoss1.result.rawAccessToken!;
+
+    // Simulate response loss: retry identical request
+    const authLoss2 = await authorizeContentAccessCommand({
+      pool,
+      context: teacherContext,
+      idempotencyKey: 'idemp-auth-response-loss-test', // same key
+      policyEngine,
+      accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
+      input: {
+        documentId: doc1.id,
+        versionId: ver1.id,
+        action: 'open',
+      },
+    });
+
+    assert.strictEqual(authLoss2.replayed, true, 'REPLAYED=YES');
+    assert.strictEqual(authLoss2.result.grant.id, lossGrantId, 'SAME_GRANT_ID=YES');
+    assert.ok(authLoss2.result.rawAccessToken, 'RAW_TOKEN_RETURNED=YES');
+    assert.strictEqual(authLoss2.result.rawAccessToken, lossOriginalToken, 'RAW_TOKEN_USABLE=YES (same deterministic token)');
+
+    // TOKEN_HASH_MATCHES_GRANT=YES
+    const { createHash } = await import('node:crypto');
+    const lossGrantDbRow = await accessRepo.getGrantById(client, institutionId, lossGrantId);
+    assert.ok(lossGrantDbRow);
+    const recomputedHash = createHash('sha256').update(lossOriginalToken, 'utf8').digest('hex');
+    assert.strictEqual(lossGrantDbRow.tokenHash, recomputedHash, 'TOKEN_HASH_MATCH=YES');
+
+    // GRANT_COUNT=1
+    const grantCountRes = await client.query<{ count: string }>(
+      `SELECT COUNT(*) as count FROM document_content_access_grants WHERE id = $1`,
+      [lossGrantId],
+    );
+    assert.strictEqual(grantCountRes.rows[0].count, '1', 'GRANT_COUNT=1: no duplicate grant on replay');
+
+    // DUPLICATE_SUCCESS_AUDIT=NO
+    const allAuditForDoc = await auditRepo.getAuditEventsForDocument(client, institutionId, doc1.id);
+    const grantedAuditForLoss = allAuditForDoc.filter(
+      (e) =>
+        e.action === 'document.content_access_granted.open' &&
+        (e.details as Record<string, unknown>)?.grantId === lossGrantId,
+    );
+    assert.strictEqual(grantedAuditForLoss.length, 1, 'DUPLICATE_SUCCESS_AUDIT=NO: one grant audit event per grant');
+
+    // RAW_TOKEN_USABLE=YES: exchange recovered token
+    const lossStreamRes = await exchangeGrantForContentStreamCommand({
+      pool,
+      context: teacherContext,
+      policyEngine,
+      storageProvider,
+      input: { rawAccessToken: lossOriginalToken },
+    });
+    assert.strictEqual(lossStreamRes.grantId, lossGrantId, 'Recovered token exchanges to correct grant');
+
+    // 11. MISSING_TOKEN_KEY: fail closed
+    await assert.rejects(
+      async () => {
+        await authorizeContentAccessCommand({
+          pool,
+          context: adminContext,
+          idempotencyKey: 'idemp-auth-missing-key-short',
+          policyEngine,
+          accessGrantTokenKey: 'too-short',
+          input: { documentId: doc1.id, versionId: ver1.id, action: 'open' },
+        });
+      },
+      /ACCESS_GRANT_TOKEN_KEY_MISSING/,
+      'SHORT_KEY must fail closed with ACCESS_GRANT_TOKEN_KEY_MISSING',
+    );
+
+    await assert.rejects(
+      async () => {
+        await authorizeContentAccessCommand({
+          pool,
+          context: adminContext,
+          idempotencyKey: 'idemp-auth-missing-key-empty',
+          policyEngine,
+          accessGrantTokenKey: '',
+          input: { documentId: doc1.id, versionId: ver1.id, action: 'open' },
+        });
+      },
+      /ACCESS_GRANT_TOKEN_KEY_MISSING/,
+      'EMPTY_KEY must fail closed with ACCESS_GRANT_TOKEN_KEY_MISSING',
+    );
+
+    // 12. DIFFERENT_TOKEN_KEY: wrong key produces unrecognized token hash
+    const wrongRawToken = createHash('sha256').update('wrong-derivation-different-key').digest('hex');
+    await assert.rejects(
+      async () => {
+        await exchangeGrantForContentStreamCommand({
+          pool,
+          context: teacherContext,
+          policyEngine,
+          storageProvider,
+          input: { rawAccessToken: wrongRawToken },
+        });
+      },
+      /GRANT_NOT_FOUND/,
+      'DIFFERENT_TOKEN_KEY: unrecognized hash must yield GRANT_NOT_FOUND',
+    );
+
+    // 8. NO_RAW_TOKEN_AT_REST + RAW_KEY_AT_REST=NO
     const allGrants = await client.query<{ token_hash: string }>(
       `SELECT token_hash FROM document_content_access_grants WHERE institution_id = $1`,
       [institutionId],
@@ -583,9 +713,10 @@ try {
     for (const row of allGrants.rows) {
       assert.strictEqual(row.token_hash.length, 64, 'Token hash must be exactly 64-char SHA256 hex');
       assert.match(row.token_hash, /^[0-9a-f]{64}$/, 'Token hash must be lowercase hex');
+      assert.notStrictEqual(row.token_hash, TEST_ACCESS_GRANT_TOKEN_KEY, 'RAW_KEY_AT_REST=NO');
     }
 
-    console.log('[DOCUMENTS-ACCESS-POSTGRES] PASS: Full PostgreSQL access grant lifecycle, immediate revocation, membership revalidation, stolen-token same-institution denial, and security verified.');
+    console.log('[DOCUMENTS-ACCESS-POSTGRES] PASS: Lifecycle, revocation, membership, stolen-token denial, response-loss recovery, missing-key fail-closed, different-key boundary verified.');
   } finally {
     client.release();
   }

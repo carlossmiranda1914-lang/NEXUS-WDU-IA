@@ -84,6 +84,9 @@ const policyEngine = new ConfigurableDocumentAccessPolicyEngine([
   },
 ]);
 
+// Explicit test secret — no production fallback
+const TEST_ACCESS_GRANT_TOKEN_KEY = 'EXPLICIT_TEST_SECRET_minimum_32_bytes_for_hmac_derivation';
+
 const storageProvider = new MemoryObjectStorageProvider();
 const malwareScanner = new DeterministicTestMalwareScanner();
 const docRepo = new PostgresDocumentRepository();
@@ -189,6 +192,7 @@ try {
           context: contextB,
           idempotencyKey: 'idemp-cross-tenant-auth',
           policyEngine,
+          accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
           input: {
             documentId: docAId,
             versionId: verAId,
@@ -206,6 +210,7 @@ try {
       context: contextA,
       idempotencyKey: 'idemp-grant-a',
       policyEngine,
+      accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
       input: {
         documentId: docAId,
         versionId: verAId,

@@ -87,6 +87,9 @@ const policyEngine = new ConfigurableDocumentAccessPolicyEngine([
   },
 ]);
 
+// Explicit test secret — no production fallback
+const TEST_ACCESS_GRANT_TOKEN_KEY = 'EXPLICIT_TEST_SECRET_minimum_32_bytes_for_hmac_derivation';
+
 const storageProvider = new MemoryObjectStorageProvider();
 const malwareScanner = new DeterministicTestMalwareScanner();
 const docRepo = new PostgresDocumentRepository();
@@ -187,6 +190,7 @@ try {
       context: teacherContext,
       idempotencyKey: 'idemp-grant-exact-1',
       policyEngine,
+      accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
       input: {
         documentId: docId,
         versionId: verId,
@@ -201,6 +205,7 @@ try {
       context: teacherContext,
       idempotencyKey: 'idemp-grant-exact-1',
       policyEngine,
+      accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
       input: {
         documentId: docId,
         versionId: verId,
@@ -209,9 +214,9 @@ try {
     });
     assert.strictEqual(auth1Replay.replayed, true);
     assert.strictEqual(auth1Replay.result.grant.id, auth1.result.grant.id);
-    // CSPRNG: rawAccessToken is not re-issued on replay by design (one-time secret).
-    // The grant remains active and the caller retains the original token.
-    assert.strictEqual(auth1Replay.result.rawAccessToken, undefined, 'Replay must not re-issue rawAccessToken (CSPRNG strategy)');
+    // KEYED_DETERMINISTIC_HMAC_SHA256: same canonical identity + same key -> same token on replay
+    assert.ok(auth1Replay.result.rawAccessToken, 'Replay must return usable rawAccessToken (deterministic recovery)');
+    assert.strictEqual(auth1Replay.result.rawAccessToken, auth1.result.rawAccessToken, 'Replay token must equal original');
 
     // 2. IDEMPOTENCY_CONFLICT
     await assert.rejects(
@@ -221,6 +226,7 @@ try {
           context: teacherContext,
           idempotencyKey: 'idemp-grant-exact-1',
           policyEngine,
+          accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
           input: {
             documentId: docId,
             versionId: verId,
@@ -239,6 +245,7 @@ try {
         context: teacherContext,
         idempotencyKey: `idemp-concurrent-${i}`,
         policyEngine,
+        accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
         input: {
           documentId: docId,
           versionId: verId,

@@ -3,14 +3,17 @@
  * Mission: DOCUMENTS-FOUNDATION-I5
  *
  * Security invariants:
- *   TOKEN_STRATEGY=CSPRNG >=32 bytes (crypto.randomBytes(32))
+ *   TOKEN_STRATEGY=KEYED_DETERMINISTIC_HMAC_SHA256
+ *   TOKEN_ENTROPY_SOURCE=TRUSTED_SECRET_KEY (accessGrantTokenKey trusted dependency)
  *   NO_RAW_TOKEN_AT_REST — only SHA-256 hash persisted
- *   IDEMPOTENT_RETRY_RETURNS_USABLE_AUTHORIZATION — replayed command returns active grant
+ *   IDEMPOTENT_TOKEN_RECOVERY=PASS — replay re-derives same token from same canonical identity
  *   CURRENT_ACTOR_MUST_EQUAL_GRANTEE — enforced during token exchange
  *   HARDCODED_SECRET_FALLBACK=REMOVED — no production defaults in source
  *   CALLER_CONTROLLED_POLICY_ENGINE=REMOVED — policyEngine is a trusted dependency
+ *   ACCESS_GRANT_TOKEN_KEY_MISSING — fail closed when key absent or invalid
  */
 
+import crypto from 'crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
 import {
@@ -20,7 +23,6 @@ import {
   ContentStreamResult,
   CONTENT_ACCESS_GRANT_TTL_SECONDS,
   hashAccessToken,
-  generateSecureAccessToken,
   sanitizeDisplayFilename,
 } from './document-access-model.ts';
 import {
@@ -33,6 +35,32 @@ import { PostgresDocumentAuditRepository } from './document-audit.ts';
 import { ObjectStorageProvider } from './object-storage-provider.ts';
 import { createCanonicalDocumentsFingerprint } from './document-model.ts';
 import { executeIdempotentDocumentsCommand } from './document-command.ts';
+
+// Minimum key length for HMAC secret (256 bits = 64 hex chars, or 32 raw bytes)
+const MIN_TOKEN_KEY_LENGTH = 32;
+
+/**
+ * Derive a deterministic, keyed access token from canonical command identity.
+ *
+ * TOKEN_STRATEGY=KEYED_DETERMINISTIC_HMAC_SHA256
+ * - Same canonical identity + same key → same token (idempotent recovery)
+ * - Different key → cannot reproduce token (mismatched exchange fails)
+ * - Raw token never persisted; only SHA-256 hash stored in DB
+ */
+function deriveAccessToken(params: {
+  tokenKey: string;
+  institutionId: string;
+  commandScope: string;
+  idempotencyKey: string;
+  canonicalFingerprint: string;
+}): string {
+  return crypto
+    .createHmac('sha256', params.tokenKey)
+    .update(
+      `${params.institutionId}:${params.commandScope}:${params.idempotencyKey}:${params.canonicalFingerprint}`,
+    )
+    .digest('hex');
+}
 
 export interface AuthorizeContentAccessCommandInput {
   documentId: string;
@@ -86,26 +114,41 @@ export function createRevokeGrantFingerprint(
   });
 }
 
+const AUTHORIZE_COMMAND_SCOPE = 'documents.secure_content_access.authorize';
+
 /**
  * Authorize content access and issue a time-bounded server-mediated access grant.
  *
  * policyEngine: trusted application dependency — must not come from request payload.
- * Token is generated via CSPRNG (>=32 bytes). Only the SHA-256 hash is persisted.
- * On idempotent replay the grant remains active; rawAccessToken is not re-issued
- * (caller must retain the token from the original response).
+ * accessGrantTokenKey: trusted application secret — minimum 32 characters.
+ *   TOKEN_STRATEGY=KEYED_DETERMINISTIC_HMAC_SHA256
+ *   Same canonical identity + same key → same token on replay (idempotent token recovery).
+ *   Only SHA-256 hash persisted; raw token never at rest.
  */
 export async function authorizeContentAccessCommand(params: {
   pool: Pool;
   context: InstitutionalContext;
   idempotencyKey: string;
   policyEngine: DocumentAccessPolicyEngine;
+  accessGrantTokenKey: string;
   input: AuthorizeContentAccessCommandInput;
 }): Promise<{ replayed: boolean; result: ContentAccessAuthorizationPayload }> {
-  const { pool, context, idempotencyKey, policyEngine, input } = params;
+  const { pool, context, idempotencyKey, policyEngine, accessGrantTokenKey, input } = params;
 
   // FAIL_CLOSED: policyEngine must be a trusted dependency
   if (!policyEngine || typeof policyEngine.evaluateAccess !== 'function') {
     throw new Error('POLICY_ENGINE_MISSING: A trusted policy engine is required to authorize content access');
+  }
+
+  // FAIL_CLOSED: accessGrantTokenKey must be a valid trusted secret
+  if (
+    !accessGrantTokenKey ||
+    typeof accessGrantTokenKey !== 'string' ||
+    accessGrantTokenKey.length < MIN_TOKEN_KEY_LENGTH
+  ) {
+    throw new Error(
+      `ACCESS_GRANT_TOKEN_KEY_MISSING: A valid token key (minimum ${MIN_TOKEN_KEY_LENGTH} characters) is required to derive access tokens`,
+    );
   }
 
   const fingerprint = createAuthorizeContentAccessFingerprint(
@@ -114,8 +157,15 @@ export async function authorizeContentAccessCommand(params: {
     context.personId,
   );
 
-  // CSPRNG token — generated once, never re-derivable from any secret
-  const rawToken = generateSecureAccessToken();
+  // Derive deterministic token from canonical identity + trusted key
+  // Same inputs → same token → idempotent token recovery on response loss
+  const rawToken = deriveAccessToken({
+    tokenKey: accessGrantTokenKey,
+    institutionId: context.institutionId,
+    commandScope: AUTHORIZE_COMMAND_SCOPE,
+    idempotencyKey,
+    canonicalFingerprint: fingerprint,
+  });
   const tokenHash = hashAccessToken(rawToken);
 
   return executeIdempotentDocumentsCommand<ContentAccessAuthorizationPayload>({
@@ -225,15 +275,22 @@ export async function authorizeContentAccessCommand(params: {
     },
     loadResult: async (client: PoolClient, resultRef: string) => {
       // Idempotent replay: grant remains active.
-      // rawAccessToken is NOT re-issued — CSPRNG tokens are one-time secrets.
-      // Caller must retain the token from the original response.
+      // KEYED_DETERMINISTIC_HMAC_SHA256: re-derive same token from same canonical identity.
+      // Token key is validated above — deterministic derivation ensures recovery on response loss.
       const grant = await accessRepo.getGrantById(client, context.institutionId, resultRef);
       if (!grant) {
         throw new Error(`Grant ${resultRef} not found on reload`);
       }
+      const recoveredToken = deriveAccessToken({
+        tokenKey: accessGrantTokenKey,
+        institutionId: context.institutionId,
+        commandScope: AUTHORIZE_COMMAND_SCOPE,
+        idempotencyKey,
+        canonicalFingerprint: fingerprint,
+      });
       return {
         grant,
-        rawAccessToken: undefined, // Not re-derivable by design (CSPRNG, no secret)
+        rawAccessToken: recoveredToken,
         expiresInSeconds: Math.max(
           0,
           Math.floor((grant.expiresAt.getTime() - Date.now()) / 1000),
