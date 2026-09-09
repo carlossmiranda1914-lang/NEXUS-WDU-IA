@@ -35,6 +35,26 @@ export interface RecordAssessmentParams {
   errorMessage?: string;
 }
 
+function sortObjectKeys(obj: any): any {
+  if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) {
+    return obj;
+  }
+  const sorted: Record<string, any> = {};
+  for (const key of Object.keys(obj).sort()) {
+    sorted[key] = sortObjectKeys(obj[key]);
+  }
+  return sorted;
+}
+
+function areAssessmentFactsEqual(
+  a: Record<string, unknown> | null | undefined,
+  b: Record<string, unknown> | null | undefined,
+): boolean {
+  const normA = a ? JSON.stringify(sortObjectKeys(a)) : '{}';
+  const normB = b ? JSON.stringify(sortObjectKeys(b)) : '{}';
+  return normA === normB;
+}
+
 export class PostgresDocumentVerificationRepository {
   public async createOrGetVerification(
     client: pg.PoolClient,
@@ -180,9 +200,22 @@ export class PostgresDocumentVerificationRepository {
     if (existingRes.rows.length > 0) {
       const existing = existingRes.rows[0];
 
-      // Exact idempotent replay or conflicting same-attempt result:
-      // ZERO UPDATE on existing assessment. Original row remains byte-for-byte immutable.
-      return this.mapAssessmentRow(existing);
+      const isStatusEqual = existing.status === params.status;
+      const isProviderEqual = existing.provider === params.provider;
+      const isErrorCodeEqual = (existing.error_code || null) === (params.errorCode || null);
+      const isErrorMessageEqual = (existing.error_message || null) === (params.errorMessage || null);
+      const areFactsEqual = areAssessmentFactsEqual(existing.facts, params.facts);
+
+      if (isStatusEqual && isProviderEqual && isErrorCodeEqual && isErrorMessageEqual && areFactsEqual) {
+        // Exact idempotent replay: return existing unchanged without mutation
+        return this.mapAssessmentRow(existing);
+      }
+
+      // Conflicting same-attempt result -> FAIL CLOSED
+      // Original assessment row remains 100% byte-for-byte immutable in PostgreSQL.
+      throw new Error(
+        `TECHNICAL_ASSESSMENT_CONFLICT: Conflicting assessment result recorded for verification ${params.verificationId}, assessment_type ${params.assessmentType}, attempt ${params.attemptNumber}`,
+      );
     }
 
     // 2. New assessment insert (append-only)

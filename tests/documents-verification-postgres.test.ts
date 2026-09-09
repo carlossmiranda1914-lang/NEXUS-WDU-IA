@@ -272,39 +272,78 @@ try {
   assert.strictEqual(lateFinalize.result.evaluation.overallStatus, 'quarantined');
   assert.strictEqual(lateFinalize.result.evaluation.isReadyForAvailability, false);
 
-  // 3b. ASSESSMENT IMMUTABILITY (ZERO UPDATE) & FAIL CLOSED:
-  // Case A: Existing FAIL assessment -> attempt conflicting PASS on same attempt
+  // 3b. ASSESSMENT IMMUTABILITY (ZERO UPDATE) & CONFLICT HANDLING:
+  // Case A: Existing FAIL assessment -> exact replay returns existing, conflicting PASS throws TECHNICAL_ASSESSMENT_CONFLICT
   const beforeFailRow = (
-    await client.query<{ id: string; status: string; facts: any; created_at: Date }>(
-      `SELECT id, status, facts, created_at FROM document_technical_assessments
+    await client.query<{
+      id: string;
+      status: any;
+      provider: string;
+      error_code: string | null;
+      error_message: string | null;
+      facts: any;
+      created_at: Date;
+    }>(
+      `SELECT id, status, provider, error_code, error_message, facts, created_at FROM document_technical_assessments
        WHERE verification_id = $1 AND assessment_type = 'malware' AND attempt_number = 1`,
       [pipelineRes2.result.verification.id],
     )
   ).rows[0];
 
-  const conflictPassRes = await verificationRepo.recordAssessmentResult(client, {
+  // Exact idempotent replay of FAIL:
+  const exactReplayFail = await verificationRepo.recordAssessmentResult(client, {
     institutionId,
     documentId: doc2.id,
     versionId: ver2.id,
     verificationId: pipelineRes2.result.verification.id,
     assessmentType: 'malware',
-    status: 'pass', // Conflicting late clean on same attempt
-    provider: 'late_clean_scanner',
+    status: beforeFailRow.status,
+    provider: beforeFailRow.provider,
     attemptNumber: 1,
-    facts: { lateFact: 'should_not_overwrite' },
+    facts: beforeFailRow.facts,
+    errorCode: beforeFailRow.error_code || undefined,
+    errorMessage: beforeFailRow.error_message || undefined,
   });
-  assert.strictEqual(conflictPassRes.status, 'fail', 'Conflicting PASS must return existing immutable FAIL assessment');
+  assert.strictEqual(exactReplayFail.id, beforeFailRow.id, 'Exact replay of FAIL must return existing assessment');
+  assert.strictEqual(exactReplayFail.status, 'fail');
+
+  // Conflicting PASS on existing FAIL -> MUST FAIL CLOSED (TECHNICAL_ASSESSMENT_CONFLICT)
+  await assert.rejects(
+    async () => {
+      await verificationRepo.recordAssessmentResult(client, {
+        institutionId,
+        documentId: doc2.id,
+        versionId: ver2.id,
+        verificationId: pipelineRes2.result.verification.id,
+        assessmentType: 'malware',
+        status: 'pass', // Conflicting late clean on same attempt
+        provider: 'late_clean_scanner',
+        attemptNumber: 1,
+        facts: { lateFact: 'should_not_overwrite' },
+      });
+    },
+    /TECHNICAL_ASSESSMENT_CONFLICT/,
+    'Conflicting PASS on existing FAIL must throw TECHNICAL_ASSESSMENT_CONFLICT',
+  );
 
   const afterFailRow = (
-    await client.query<{ id: string; status: string; facts: any; created_at: Date }>(
-      `SELECT id, status, facts, created_at FROM document_technical_assessments
+    await client.query<{
+      id: string;
+      status: any;
+      provider: string;
+      error_code: string | null;
+      error_message: string | null;
+      facts: any;
+      created_at: Date;
+    }>(
+      `SELECT id, status, provider, error_code, error_message, facts, created_at FROM document_technical_assessments
        WHERE verification_id = $1 AND assessment_type = 'malware' AND attempt_number = 1`,
       [pipelineRes2.result.verification.id],
     )
   ).rows[0];
-  assert.deepStrictEqual(beforeFailRow, afterFailRow, 'Original FAIL assessment row must be byte-for-byte unchanged in PostgreSQL');
+  assert.deepStrictEqual(beforeFailRow, afterFailRow, 'Original FAIL assessment row must remain byte-for-byte unchanged in PostgreSQL');
 
-  // Case B: Existing PASS assessment -> attempt conflicting FAIL on same attempt
+  // Case B: Existing PASS assessment -> exact replay returns existing, conflicting FAIL throws TECHNICAL_ASSESSMENT_CONFLICT
   const { doc: docPassImm, version: verPassImm } = await createAndUploadDocument(
     'identification',
     'imm_pass.pdf',
@@ -319,7 +358,7 @@ try {
     input: { documentId: docPassImm.id, versionId: verPassImm.id },
   });
 
-  await verificationRepo.recordAssessmentResult(client, {
+  const originalPassAssessment = await verificationRepo.recordAssessmentResult(client, {
     institutionId,
     documentId: docPassImm.id,
     versionId: verPassImm.id,
@@ -332,34 +371,71 @@ try {
   });
 
   const beforePassRow = (
-    await client.query<{ id: string; status: string; facts: any; created_at: Date }>(
-      `SELECT id, status, facts, created_at FROM document_technical_assessments
+    await client.query<{
+      id: string;
+      status: any;
+      provider: string;
+      error_code: string | null;
+      error_message: string | null;
+      facts: any;
+      created_at: Date;
+    }>(
+      `SELECT id, status, provider, error_code, error_message, facts, created_at FROM document_technical_assessments
        WHERE verification_id = $1 AND assessment_type = 'integrity' AND attempt_number = 1`,
       [startPassImm.result.id],
     )
   ).rows[0];
 
-  const conflictFailRes = await verificationRepo.recordAssessmentResult(client, {
+  // Exact idempotent replay of PASS:
+  const exactReplayPass = await verificationRepo.recordAssessmentResult(client, {
     institutionId,
     documentId: docPassImm.id,
     versionId: verPassImm.id,
     verificationId: startPassImm.result.id,
     assessmentType: 'integrity',
-    status: 'fail',
-    provider: 'conflicting_verifier',
+    status: 'pass',
+    provider: 'original_verifier',
     attemptNumber: 1,
-    facts: { corrupted: 'should_not_overwrite' },
+    facts: { original: 'imm_fact' },
   });
-  assert.strictEqual(conflictFailRes.status, 'pass', 'Re-recording on same attempt returns original immutable assessment');
+  assert.strictEqual(exactReplayPass.id, originalPassAssessment.id, 'Exact replay of PASS must return existing assessment');
+  assert.strictEqual(exactReplayPass.status, 'pass');
+
+  // Conflicting FAIL on existing PASS -> MUST FAIL CLOSED (TECHNICAL_ASSESSMENT_CONFLICT)
+  await assert.rejects(
+    async () => {
+      await verificationRepo.recordAssessmentResult(client, {
+        institutionId,
+        documentId: docPassImm.id,
+        versionId: verPassImm.id,
+        verificationId: startPassImm.result.id,
+        assessmentType: 'integrity',
+        status: 'fail',
+        provider: 'conflicting_verifier',
+        attemptNumber: 1,
+        facts: { corrupted: 'should_not_overwrite' },
+      });
+    },
+    /TECHNICAL_ASSESSMENT_CONFLICT/,
+    'Conflicting FAIL on existing PASS must throw TECHNICAL_ASSESSMENT_CONFLICT',
+  );
 
   const afterPassRow = (
-    await client.query<{ id: string; status: string; facts: any; created_at: Date }>(
-      `SELECT id, status, facts, created_at FROM document_technical_assessments
+    await client.query<{
+      id: string;
+      status: any;
+      provider: string;
+      error_code: string | null;
+      error_message: string | null;
+      facts: any;
+      created_at: Date;
+    }>(
+      `SELECT id, status, provider, error_code, error_message, facts, created_at FROM document_technical_assessments
        WHERE verification_id = $1 AND assessment_type = 'integrity' AND attempt_number = 1`,
       [startPassImm.result.id],
     )
   ).rows[0];
-  assert.deepStrictEqual(beforePassRow, afterPassRow, 'Original PASS assessment row must be byte-for-byte unchanged in PostgreSQL');
+  assert.deepStrictEqual(beforePassRow, afterPassRow, 'Original PASS assessment row must remain byte-for-byte unchanged in PostgreSQL');
 
   // 4. INTEGRITY_HASH_FAIL -> QUARANTINED
   const { doc: doc3, version: ver3, session: sess3 } = await createAndUploadDocument(
