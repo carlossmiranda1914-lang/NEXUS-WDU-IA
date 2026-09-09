@@ -20,10 +20,12 @@ assert.match(clientSource, /listArtifacts\(/, 'the client must obtain private ar
 assert.match(clientSource, /issueReceipt\(/, 'issuance must be delegated to the authoritative endpoint');
 assert.match(clientSource, /Idempotency-Key/, 'issuance must carry an idempotency key for double-click and timeout recovery');
 assert.match(clientSource, /listActiveReceiptSeries\(/, 'the client must derive effective receipt series from the authoritative API');
+assert.match(clientSource, /generateArtifact\(/, 'the client must generate versioned evidence through the authoritative route');
 const paymentsListSource = fs.readFileSync(path.join(root, 'src/components/finance/payments/FinancePaymentsListView.tsx'), 'utf8');
 assert.match(paymentsListSource, /Emitir recibo oficial/, 'a confirmed payment must expose the bounded source-context action');
 assert.match(workspaceSource, /Visualizar|View/, 'the workspace must offer a read-only document preview');
 assert.match(workspaceSource, /PDF/, 'the workspace must offer the private official artifact action');
+assert.match(workspaceSource, /Imprimir/, 'the workspace must offer print only for private artifact bytes');
 assert.match(workspaceSource, /Proveniência/, 'the preview must expose persisted source provenance');
 assert.match(workspaceSource, /Correç/, 'the preview must expose an authoritative correction relationship');
 assert.doesNotMatch(workspaceSource, /Word|Excel|PowerPoint/, 'the Finance UX must not expose office editing');
