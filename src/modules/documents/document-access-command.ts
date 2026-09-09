@@ -1,9 +1,16 @@
 /**
  * Documents Foundation I5 Secure Content Access Commands
  * Mission: DOCUMENTS-FOUNDATION-I5
+ *
+ * Security invariants:
+ *   TOKEN_STRATEGY=CSPRNG >=32 bytes (crypto.randomBytes(32))
+ *   NO_RAW_TOKEN_AT_REST — only SHA-256 hash persisted
+ *   IDEMPOTENT_RETRY_RETURNS_USABLE_AUTHORIZATION — replayed command returns active grant
+ *   CURRENT_ACTOR_MUST_EQUAL_GRANTEE — enforced during token exchange
+ *   HARDCODED_SECRET_FALLBACK=REMOVED — no production defaults in source
+ *   CALLER_CONTROLLED_POLICY_ENGINE=REMOVED — policyEngine is a trusted dependency
  */
 
-import crypto from 'crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
 import {
@@ -13,6 +20,7 @@ import {
   ContentStreamResult,
   CONTENT_ACCESS_GRANT_TTL_SECONDS,
   hashAccessToken,
+  generateSecureAccessToken,
   sanitizeDisplayFilename,
 } from './document-access-model.ts';
 import {
@@ -26,34 +34,15 @@ import { ObjectStorageProvider } from './object-storage-provider.ts';
 import { createCanonicalDocumentsFingerprint } from './document-model.ts';
 import { executeIdempotentDocumentsCommand } from './document-command.ts';
 
-// Deterministic seed for HMAC-based token derivation per idempotent command
-const ACCESS_GRANT_TOKEN_SECRET =
-  process.env.DOCUMENTS_ACCESS_GRANT_SECRET ||
-  'nexus_edu_ia_documents_access_grant_deterministic_seed_v1_secure';
-
-function deriveDeterministicAccessToken(params: {
-  institutionId: string;
-  idempotencyKey: string;
-  fingerprint: string;
-}): string {
-  return crypto
-    .createHmac('sha256', ACCESS_GRANT_TOKEN_SECRET)
-    .update(`${params.institutionId}:${params.idempotencyKey}:${params.fingerprint}`)
-    .digest('hex');
-}
-
 export interface AuthorizeContentAccessCommandInput {
   documentId: string;
   versionId: string;
   action: GrantAction;
-  policyEngine: DocumentAccessPolicyEngine;
   correlationId?: string;
 }
 
 export interface ExchangeGrantForStreamCommandInput {
   rawAccessToken: string;
-  policyEngine: DocumentAccessPolicyEngine;
-  storageProvider: ObjectStorageProvider;
   displayFilename?: string;
   correlationId?: string;
 }
@@ -99,14 +88,25 @@ export function createRevokeGrantFingerprint(
 
 /**
  * Authorize content access and issue a time-bounded server-mediated access grant.
+ *
+ * policyEngine: trusted application dependency — must not come from request payload.
+ * Token is generated via CSPRNG (>=32 bytes). Only the SHA-256 hash is persisted.
+ * On idempotent replay the grant remains active; rawAccessToken is not re-issued
+ * (caller must retain the token from the original response).
  */
 export async function authorizeContentAccessCommand(params: {
   pool: Pool;
   context: InstitutionalContext;
   idempotencyKey: string;
+  policyEngine: DocumentAccessPolicyEngine;
   input: AuthorizeContentAccessCommandInput;
 }): Promise<{ replayed: boolean; result: ContentAccessAuthorizationPayload }> {
-  const { pool, context, idempotencyKey, input } = params;
+  const { pool, context, idempotencyKey, policyEngine, input } = params;
+
+  // FAIL_CLOSED: policyEngine must be a trusted dependency
+  if (!policyEngine || typeof policyEngine.evaluateAccess !== 'function') {
+    throw new Error('POLICY_ENGINE_MISSING: A trusted policy engine is required to authorize content access');
+  }
 
   const fingerprint = createAuthorizeContentAccessFingerprint(
     context.institutionId,
@@ -114,11 +114,8 @@ export async function authorizeContentAccessCommand(params: {
     context.personId,
   );
 
-  const rawToken = deriveDeterministicAccessToken({
-    institutionId: context.institutionId,
-    idempotencyKey,
-    fingerprint,
-  });
+  // CSPRNG token — generated once, never re-derivable from any secret
+  const rawToken = generateSecureAccessToken();
   const tokenHash = hashAccessToken(rawToken);
 
   return executeIdempotentDocumentsCommand<ContentAccessAuthorizationPayload>({
@@ -152,7 +149,7 @@ export async function authorizeContentAccessCommand(params: {
         );
       }
 
-      // 2. Evaluate Policy
+      // 2. Evaluate Policy (trusted dependency — not caller-supplied)
       const accessAction = input.action === 'open' ? 'open_content' : 'download_content';
       const evalParams: EvaluateAccessParams = {
         institutionId: context.institutionId,
@@ -164,7 +161,7 @@ export async function authorizeContentAccessCommand(params: {
         versionStatus: version.status,
       };
 
-      const evalResult = input.policyEngine.evaluateAccess(evalParams);
+      const evalResult = policyEngine.evaluateAccess(evalParams);
       if (!evalResult.allowed) {
         // Record factual denial audit event
         await auditRepo.recordAuditEvent(client, {
@@ -187,7 +184,7 @@ export async function authorizeContentAccessCommand(params: {
         throw new Error(evalResult.reason || 'POLICY_DENIED: Access to document content is denied');
       }
 
-      // 3. Create Access Grant
+      // 3. Create Access Grant (only tokenHash persisted — raw token never at rest)
       const expiresAt = new Date(Date.now() + CONTENT_ACCESS_GRANT_TTL_SECONDS * 1000);
       const grant = await accessRepo.createAccessGrant(client, {
         institutionId: context.institutionId,
@@ -227,13 +224,16 @@ export async function authorizeContentAccessCommand(params: {
       };
     },
     loadResult: async (client: PoolClient, resultRef: string) => {
+      // Idempotent replay: grant remains active.
+      // rawAccessToken is NOT re-issued — CSPRNG tokens are one-time secrets.
+      // Caller must retain the token from the original response.
       const grant = await accessRepo.getGrantById(client, context.institutionId, resultRef);
       if (!grant) {
         throw new Error(`Grant ${resultRef} not found on reload`);
       }
       return {
         grant,
-        rawAccessToken: rawToken, // Usable deterministic token on replay
+        rawAccessToken: undefined, // Not re-derivable by design (CSPRNG, no secret)
         expiresInSeconds: Math.max(
           0,
           Math.floor((grant.expiresAt.getTime() - Date.now()) / 1000),
@@ -246,13 +246,26 @@ export async function authorizeContentAccessCommand(params: {
 /**
  * Exchange an active, non-revoked grant token for a validated content stream.
  * Server revalidates grant state, membership, role, and policy in real-time.
+ *
+ * policyEngine and storageProvider: trusted application dependencies.
+ * CURRENT_ACTOR_MUST_EQUAL_GRANTEE: context.personId must match grant.granteePersonId.
  */
 export async function exchangeGrantForContentStreamCommand(params: {
   pool: Pool;
   context: InstitutionalContext;
+  policyEngine: DocumentAccessPolicyEngine;
+  storageProvider: ObjectStorageProvider;
   input: ExchangeGrantForStreamCommandInput;
 }): Promise<ContentStreamResult> {
-  const { pool, context, input } = params;
+  const { pool, context, policyEngine, storageProvider, input } = params;
+
+  // FAIL_CLOSED: trusted dependencies must be present
+  if (!policyEngine || typeof policyEngine.evaluateAccess !== 'function') {
+    throw new Error('POLICY_ENGINE_MISSING: A trusted policy engine is required to exchange access grant');
+  }
+  if (!storageProvider || typeof storageProvider.openReadStream !== 'function') {
+    throw new Error('STORAGE_PROVIDER_MISSING: A trusted storage provider is required to exchange access grant');
+  }
 
   if (!input.rawAccessToken || typeof input.rawAccessToken !== 'string') {
     throw new Error('TOKEN_REQUIRED: Raw access token is mandatory for content stream exchange');
@@ -264,7 +277,7 @@ export async function exchangeGrantForContentStreamCommand(params: {
   try {
     await client.query('BEGIN');
 
-    // 1. Fetch and Lock Grant
+    // 1. Fetch and Lock Grant (scoped to context institution for tenant isolation)
     const grant = await accessRepo.getGrantByTokenHashForUpdate(
       client,
       context.institutionId,
@@ -277,14 +290,24 @@ export async function exchangeGrantForContentStreamCommand(params: {
       );
     }
 
-    // 2. Check Immediate Revocation
+    // 2. CURRENT_ACTOR_MUST_EQUAL_GRANTEE
+    // Proves: the current authenticated actor is exactly the person who received the grant.
+    // Prevents: token stolen by another person within the same institution.
+    if (context.institutionId !== grant.institutionId || context.personId !== grant.granteePersonId) {
+      throw new Error(
+        `GRANT_GRANTEE_MISMATCH: The authenticated actor does not match the grant grantee. ` +
+        `Access denied.`,
+      );
+    }
+
+    // 3. Check Immediate Revocation
     if (grant.status === 'revoked') {
       throw new Error(
         `GRANT_REVOKED: Access grant ${grant.id} has been revoked (reason: ${grant.revocationReason || 'unknown'})`,
       );
     }
 
-    // 3. Check Expiry
+    // 4. Check Expiry
     if (grant.status === 'expired' || grant.expiresAt.getTime() <= Date.now()) {
       throw new Error(`GRANT_EXPIRED: Access grant ${grant.id} expired at ${grant.expiresAt.toISOString()}`);
     }
@@ -293,7 +316,7 @@ export async function exchangeGrantForContentStreamCommand(params: {
       throw new Error(`GRANT_INACTIVE: Access grant is in state "${grant.status}"`);
     }
 
-    // 4. Real-time Membership & Role Revalidation
+    // 5. Real-time Membership & Role Revalidation (of grantee — proven equal to actor above)
     const granteeMembership = await accessRepo.getGranteeMembership(
       client,
       context.institutionId,
@@ -306,7 +329,7 @@ export async function exchangeGrantForContentStreamCommand(params: {
       );
     }
 
-    // 5. Fetch Document and Version
+    // 6. Fetch Document and Version
     const doc = await docRepo.getDocumentById(client, context.institutionId, grant.documentId);
     if (!doc) {
       throw new Error(`DOCUMENT_NOT_FOUND: Document ${grant.documentId} does not exist`);
@@ -317,9 +340,9 @@ export async function exchangeGrantForContentStreamCommand(params: {
       throw new Error(`VERSION_NOT_FOUND: Version ${grant.versionId} does not exist`);
     }
 
-    // 6. Real-time Policy Re-evaluation with Current Role
+    // 7. Real-time Policy Re-evaluation with Current Role (trusted dependency)
     const accessAction = grant.action === 'open' ? 'open_content' : 'download_content';
-    const evalResult = input.policyEngine.evaluateAccess({
+    const evalResult = policyEngine.evaluateAccess({
       institutionId: context.institutionId,
       personId: grant.granteePersonId,
       role: granteeMembership.role,
@@ -335,7 +358,7 @@ export async function exchangeGrantForContentStreamCommand(params: {
       );
     }
 
-    // 7. Get Storage Object Reference
+    // 8. Get Storage Object Reference
     const storageRef = await docRepo.getStorageReferenceForVersion(
       client,
       context.institutionId,
@@ -345,17 +368,17 @@ export async function exchangeGrantForContentStreamCommand(params: {
       throw new Error(`STORAGE_REFERENCE_NOT_FOUND: Storage reference missing for version ${version.id}`);
     }
 
-    // 8. Record Grant Usage
+    // 9. Record Grant Usage
     await accessRepo.recordGrantUsage(client, context.institutionId, grant.id);
 
-    // 9. Open Content Stream
-    const stream = await input.storageProvider.openReadStream({
+    // 10. Open Content Stream (trusted storage provider)
+    const stream = await storageProvider.openReadStream({
       institutionId: context.institutionId,
       storageBucket: storageRef.storageBucket,
       storageKey: storageRef.storageKey,
     });
 
-    // 10. Record factual content stream opened audit event
+    // 11. Record factual content stream opened audit event
     await auditRepo.recordAuditEvent(client, {
       institutionId: context.institutionId,
       documentId: doc.id,

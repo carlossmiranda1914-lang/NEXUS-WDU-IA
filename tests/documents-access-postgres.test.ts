@@ -241,11 +241,11 @@ try {
       pool,
       context: teacherContext,
       idempotencyKey: 'idemp-auth-1',
+      policyEngine,
       input: {
         documentId: doc1.id,
         versionId: ver1.id,
         action: 'open',
-        policyEngine,
       },
     });
 
@@ -267,10 +267,10 @@ try {
     const streamRes1 = await exchangeGrantForContentStreamCommand({
       pool,
       context: teacherContext,
+      policyEngine,
+      storageProvider,
       input: {
         rawAccessToken: authRes1.result.rawAccessToken!,
-        policyEngine,
-        storageProvider,
       },
     });
 
@@ -310,11 +310,11 @@ try {
           pool,
           context: adminContext,
           idempotencyKey: 'idemp-auth-received',
+          policyEngine,
           input: {
             documentId: docReceived.id,
             versionId: verReceived.id,
             action: 'open',
-            policyEngine,
           },
         });
       },
@@ -340,11 +340,11 @@ try {
           pool,
           context: adminContext,
           idempotencyKey: 'idemp-auth-quar',
+          policyEngine,
           input: {
             documentId: docQuar.id,
             versionId: verQuar.id,
             action: 'open',
-            policyEngine,
           },
         });
       },
@@ -365,11 +365,11 @@ try {
       pool,
       context: teacherContext,
       idempotencyKey: 'idemp-auth-revoke-test',
+      policyEngine,
       input: {
         documentId: docRevoke.id,
         versionId: verRevoke.id,
         action: 'open',
-        policyEngine,
       },
     });
 
@@ -391,10 +391,10 @@ try {
         await exchangeGrantForContentStreamCommand({
           pool,
           context: teacherContext,
+          policyEngine,
+          storageProvider,
           input: {
             rawAccessToken: authRevokeRes.result.rawAccessToken!,
-            policyEngine,
-            storageProvider,
           },
         });
       },
@@ -407,11 +407,11 @@ try {
       pool,
       context: teacherContext,
       idempotencyKey: 'idemp-auth-expire-test',
+      policyEngine,
       input: {
         documentId: docRevoke.id,
         versionId: verRevoke.id,
         action: 'open',
-        policyEngine,
       },
     });
 
@@ -428,10 +428,10 @@ try {
         await exchangeGrantForContentStreamCommand({
           pool,
           context: teacherContext,
+          policyEngine,
+          storageProvider,
           input: {
             rawAccessToken: authExpireRes.result.rawAccessToken!,
-            policyEngine,
-            storageProvider,
           },
         });
       },
@@ -444,11 +444,11 @@ try {
       pool,
       context: teacherContext,
       idempotencyKey: 'idemp-auth-member-test',
+      policyEngine,
       input: {
         documentId: docRevoke.id,
         versionId: verRevoke.id,
         action: 'open',
-        policyEngine,
       },
     });
 
@@ -463,10 +463,10 @@ try {
         await exchangeGrantForContentStreamCommand({
           pool,
           context: teacherContext,
+          policyEngine,
+          storageProvider,
           input: {
             rawAccessToken: authMemberRes.result.rawAccessToken!,
-            policyEngine,
-            storageProvider,
           },
         });
       },
@@ -485,11 +485,11 @@ try {
       pool,
       context: teacherContext,
       idempotencyKey: 'idemp-auth-role-test',
+      policyEngine,
       input: {
         documentId: doc1.id,
         versionId: ver1.id,
         action: 'open',
-        policyEngine,
       },
     });
 
@@ -504,10 +504,10 @@ try {
         await exchangeGrantForContentStreamCommand({
           pool,
           context: teacherContext,
+          policyEngine,
+          storageProvider,
           input: {
             rawAccessToken: authRoleRes.result.rawAccessToken!,
-            policyEngine,
-            storageProvider,
           },
         });
       },
@@ -528,16 +528,51 @@ try {
           pool,
           context: teacherContext,
           idempotencyKey: 'idemp-auth-download-denied',
+          policyEngine,
           input: {
             documentId: doc1.id,
             versionId: ver1.id,
             action: 'download',
-            policyEngine,
           },
         });
       },
       /ACTION_NOT_PERMITTED/,
       'Download must be denied when policy only permits open',
+    );
+
+    // 9. STOLEN_TOKEN_SAME_INSTITUTION (P1-1)
+    // Person A (teacher) receives a grant. Person B (admin) is in the same institution
+    // and obtains Person A's raw token. Person B must be DENIED on exchange.
+    const authStolenRes = await authorizeContentAccessCommand({
+      pool,
+      context: teacherContext, // Person A
+      idempotencyKey: 'idemp-auth-stolen-token-test',
+      policyEngine,
+      input: {
+        documentId: doc1.id,
+        versionId: ver1.id,
+        action: 'open',
+      },
+    });
+
+    assert.ok(authStolenRes.result.rawAccessToken, 'Person A must receive a raw token');
+    assert.strictEqual(authStolenRes.result.grant.granteePersonId, teacherPersonId, 'Grant must be for Person A');
+
+    // Person B (admin) attempts to exchange Person A's token — same institution, different person
+    await assert.rejects(
+      async () => {
+        await exchangeGrantForContentStreamCommand({
+          pool,
+          context: adminContext, // Person B — same institution, different personId
+          policyEngine,
+          storageProvider,
+          input: {
+            rawAccessToken: authStolenRes.result.rawAccessToken!, // Person A's token
+          },
+        });
+      },
+      /GRANT_GRANTEE_MISMATCH/,
+      'Person B using Person A token in same institution must be DENIED with GRANT_GRANTEE_MISMATCH',
     );
 
     // 8. NO_RAW_TOKEN_AT_REST: Verify PostgreSQL table contains only SHA256 hashes
@@ -550,7 +585,7 @@ try {
       assert.match(row.token_hash, /^[0-9a-f]{64}$/, 'Token hash must be lowercase hex');
     }
 
-    console.log('[DOCUMENTS-ACCESS-POSTGRES] PASS: Full PostgreSQL access grant lifecycle, immediate revocation, membership revalidation, and security verified.');
+    console.log('[DOCUMENTS-ACCESS-POSTGRES] PASS: Full PostgreSQL access grant lifecycle, immediate revocation, membership revalidation, stolen-token same-institution denial, and security verified.');
   } finally {
     client.release();
   }

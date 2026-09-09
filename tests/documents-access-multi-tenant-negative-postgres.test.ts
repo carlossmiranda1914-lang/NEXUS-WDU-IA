@@ -188,11 +188,11 @@ try {
           pool,
           context: contextB,
           idempotencyKey: 'idemp-cross-tenant-auth',
+          policyEngine,
           input: {
             documentId: docAId,
             versionId: verAId,
             action: 'open',
-            policyEngine,
           },
         });
       },
@@ -205,11 +205,11 @@ try {
       pool,
       context: contextA,
       idempotencyKey: 'idemp-grant-a',
+      policyEngine,
       input: {
         documentId: docAId,
         versionId: verAId,
         action: 'open',
-        policyEngine,
       },
     });
 
@@ -218,10 +218,10 @@ try {
         await exchangeGrantForContentStreamCommand({
           pool,
           context: contextB, // Using Institution B context
+          policyEngine,
+          storageProvider,
           input: {
             rawAccessToken: grantA.result.rawAccessToken!,
-            policyEngine,
-            storageProvider,
           },
         });
       },

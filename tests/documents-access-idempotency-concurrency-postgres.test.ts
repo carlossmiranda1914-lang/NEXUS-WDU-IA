@@ -186,11 +186,11 @@ try {
       pool,
       context: teacherContext,
       idempotencyKey: 'idemp-grant-exact-1',
+      policyEngine,
       input: {
         documentId: docId,
         versionId: verId,
         action: 'open',
-        policyEngine,
       },
     });
     assert.strictEqual(auth1.replayed, false);
@@ -200,16 +200,18 @@ try {
       pool,
       context: teacherContext,
       idempotencyKey: 'idemp-grant-exact-1',
+      policyEngine,
       input: {
         documentId: docId,
         versionId: verId,
         action: 'open',
-        policyEngine,
       },
     });
     assert.strictEqual(auth1Replay.replayed, true);
     assert.strictEqual(auth1Replay.result.grant.id, auth1.result.grant.id);
-    assert.strictEqual(auth1Replay.result.rawAccessToken, auth1.result.rawAccessToken, 'Replay must return usable raw token');
+    // CSPRNG: rawAccessToken is not re-issued on replay by design (one-time secret).
+    // The grant remains active and the caller retains the original token.
+    assert.strictEqual(auth1Replay.result.rawAccessToken, undefined, 'Replay must not re-issue rawAccessToken (CSPRNG strategy)');
 
     // 2. IDEMPOTENCY_CONFLICT
     await assert.rejects(
@@ -218,11 +220,11 @@ try {
           pool,
           context: teacherContext,
           idempotencyKey: 'idemp-grant-exact-1',
+          policyEngine,
           input: {
             documentId: docId,
             versionId: verId,
             action: 'download', // Conflicting action with same key
-            policyEngine,
           },
         });
       },
@@ -236,11 +238,11 @@ try {
         pool,
         context: teacherContext,
         idempotencyKey: `idemp-concurrent-${i}`,
+        policyEngine,
         input: {
           documentId: docId,
           versionId: verId,
           action: 'open',
-          policyEngine,
         },
       }),
     );
@@ -274,10 +276,10 @@ try {
         await exchangeGrantForContentStreamCommand({
           pool,
           context: teacherContext,
+          policyEngine,
+          storageProvider,
           input: {
             rawAccessToken: targetGrant.rawAccessToken!,
-            policyEngine,
-            storageProvider,
           },
         });
       },
