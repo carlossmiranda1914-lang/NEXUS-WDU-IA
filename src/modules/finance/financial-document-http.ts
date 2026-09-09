@@ -7,6 +7,15 @@ import { createCanonicalFinanceFingerprint, executeIdempotentFinanceCommand } fr
 
 type DocumentRow = { id: string; document_type: string; status: string; sequence_number: string; issued_at: Date; source_snapshot: Record<string, unknown>; corrects_document_id: string | null; fiscal_adapter_key: string | null; series_code: string };
 const view = (row: DocumentRow) => ({ id: row.id, type: row.document_type, status: row.status, seriesCode: row.series_code, sequenceNumber: Number(row.sequence_number), issuedAt: row.issued_at.toISOString(), sourceSnapshot: row.source_snapshot, correctsDocumentId: row.corrects_document_id, fiscalAdapterKey: row.fiscal_adapter_key });
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const decodeCursor = (value: unknown) => {
+  if (value === undefined) return null;
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{8,160}$/.test(value)) throw new Error('INVALID_CURSOR');
+  const id = Buffer.from(value, 'base64url').toString('utf8');
+  if (!uuid.test(id)) throw new Error('INVALID_CURSOR');
+  return id;
+};
+const encodeCursor = (id: string) => Buffer.from(id, 'utf8').toString('base64url');
 
 export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth = requireAuth): void {
   const actor = (req: AuthRequest, res: Response, action: 'read' | 'issue' | 'correct' | 'fiscal_config_read' | 'fiscal_config_manage' | 'series_read' | 'series_manage' = 'read') => {
@@ -18,15 +27,24 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
   const select = `SELECT d.id,d.document_type,d.status,d.sequence_number,d.issued_at,d.source_snapshot,d.corrects_document_id,d.fiscal_adapter_key,s.code series_code FROM finance_financial_documents d JOIN finance_financial_document_series s ON s.institution_id=d.institution_id AND s.id=d.series_id`;
   app.get('/api/finance/documents', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res); if (!context) return;
-    const limit = Math.min(Math.max(Number(req.query.limit) || 25, 1), 100);
-    const result = await pool.query<DocumentRow>(`${select} WHERE d.institution_id=$1 ORDER BY d.issued_at DESC,d.id DESC LIMIT $2`, [context.institutionId, limit]);
-    res.json({ items: result.rows.map(view), nextCursor: null });
+    const parsedLimit = req.query.limit === undefined ? 25 : Number(req.query.limit);
+    if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) return res.status(422).json({ code: 'FINANCIAL_DOCUMENT_INVALID_QUERY', error: 'A paginação é inválida.' });
+    let cursorId: string | null;
+    try { cursorId = decodeCursor(req.query.cursor); } catch { return res.status(422).json({ code: 'FINANCIAL_DOCUMENT_INVALID_CURSOR', error: 'O cursor é inválido.' }); }
+    const result = await pool.query<DocumentRow>(`WITH cursor_row AS (SELECT issued_at,id FROM finance_financial_documents WHERE institution_id=$1 AND id=$2) ${select} WHERE d.institution_id=$1 AND ($2::uuid IS NULL OR EXISTS (SELECT 1 FROM cursor_row) AND (d.issued_at,d.id)<(SELECT issued_at,id FROM cursor_row)) ORDER BY d.issued_at DESC,d.id DESC LIMIT $3`, [context.institutionId, cursorId, parsedLimit + 1]);
+    const hasMore = result.rows.length > parsedLimit; const rows = hasMore ? result.rows.slice(0, parsedLimit) : result.rows;
+    if (cursorId && result.rows.length === 0) { const exists = await pool.query<{ id: string }>('SELECT id FROM finance_financial_documents WHERE institution_id=$1 AND id=$2', [context.institutionId, cursorId]); if (!exists.rows[0]) return res.status(422).json({ code: 'FINANCIAL_DOCUMENT_INVALID_CURSOR', error: 'O cursor é inválido.' }); }
+    res.json({ items: rows.map(view), page: { nextCursor: hasMore && rows.length ? encodeCursor(rows[rows.length - 1]!.id) : null } });
   });
   app.get('/api/finance/documents/:id', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res); if (!context) return;
     const result = await pool.query<DocumentRow>(`${select} WHERE d.institution_id=$1 AND d.id=$2`, [context.institutionId, req.params.id]);
     const row = result.rows[0]; if (!row) return res.status(404).json({ code: 'FINANCIAL_DOCUMENT_NOT_FOUND', error: 'Documento financeiro não encontrado.' });
-    res.json(view(row));
+    const [sources, corrections] = await Promise.all([
+      pool.query<{ source_type: string; source_id: string; snapshot: Record<string, unknown> }>('SELECT source_type,source_id,snapshot FROM finance_financial_document_sources WHERE institution_id=$1 AND document_id=$2 ORDER BY source_type,source_id', [context.institutionId, row.id]),
+      pool.query<DocumentRow>(`${select} WHERE d.institution_id=$1 AND d.corrects_document_id=$2 ORDER BY d.issued_at ASC,d.id ASC`, [context.institutionId, row.id]),
+    ]);
+    res.json({ ...view(row), sources: sources.rows.map(source => ({ type: source.source_type, id: source.source_id, snapshot: source.snapshot })), corrections: corrections.rows.map(view) });
   });
   const key = (req: AuthRequest, res: Response) => { const value = req.header('Idempotency-Key')?.trim(); if (!value) { res.status(422).json({ code: 'IDEMPOTENCY_KEY_REQUIRED', error: 'O cabeçalho Idempotency-Key é obrigatório.' }); return undefined; } return value; };
   const handleCommand = (res: Response, error: unknown) => {
