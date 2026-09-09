@@ -24,6 +24,7 @@ test('F7-01 issuance is idempotent, tenant-safe, and allocates series numbers at
 
 test('F7-01 repository exposes an atomic issuance authority', () => {
   assert.equal(typeof PostgresFinancialDocumentRepository, 'function');
+  assert.equal(typeof (PostgresFinancialDocumentRepository.prototype as { issueCorrection?: unknown }).issueCorrection, 'function', 'F7-01 requires a persistent correction issuance boundary');
 });
 
 test('F7-01 issuance reuses the canonical Finance idempotency authority', async () => {
@@ -113,4 +114,37 @@ test('F7-01 migration makes issued documents append-only', async () => {
 test('F7-01 failed issuance leaves no documentary fact', async () => {
   await verifyApprovedTestConnection(); const schema=`finance_document_rollback_${randomUUID().replaceAll('-', '')}`; const quote=(value:string)=>`"${value.replaceAll('"','""')}"`; const pool=new pg.Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${quote(schema)},public`}); const institutionId=randomUUID(); let paymentId: string;
   try { const client=await pool.connect(); try { await client.query(`CREATE SCHEMA ${quote(schema)}`); await runMigrations(client,await discoverMigrations(path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../src/db/migrations'))); await client.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'Rollback','rollback','active')",[institutionId]); paymentId=await seedConfirmedPayment(client,institutionId); } finally { client.release(); } const repo=new PostgresFinancialDocumentRepository(pool); await assert.rejects(()=>repo.issue({institutionId,sourceInstitutionId:institutionId,sourceType:'payment',sourceId:paymentId!,seriesId:randomUUID(),idempotencyKey:'rollback-command',documentType:'receipt'})); const count=await pool.query('SELECT count(*)::int count FROM finance_financial_documents WHERE institution_id=$1',[institutionId]); assert.equal(count.rows[0].count,0); } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(()=>undefined); await pool.end(); }
+});
+
+test('F7-01 correction creates an idempotent immutable fact without changing economic truth', async () => {
+  await verifyApprovedTestConnection();
+  const schema = `finance_document_correction_${randomUUID().replaceAll('-', '')}`;
+  const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
+  const pool = new pg.Pool({ connectionString: process.env.TEST_DATABASE_URL, options: `-c search_path=${quote(schema)},public` });
+  const institutionId = randomUUID(); const seriesId = randomUUID(); let paymentId: string;
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query(`CREATE SCHEMA ${quote(schema)}`);
+      await runMigrations(client, await discoverMigrations(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations')));
+      await client.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'Correction','correction','active')", [institutionId]);
+      await client.query("INSERT INTO finance_financial_document_series(id,institution_id,code) VALUES($1,$2,'COR')", [seriesId, institutionId]);
+      paymentId = await seedConfirmedPayment(client, institutionId);
+    } finally { client.release(); }
+    const repo = new PostgresFinancialDocumentRepository(pool);
+    const original = await repo.issue({ institutionId, sourceInstitutionId: institutionId, sourceType: 'payment', sourceId: paymentId!, seriesId, idempotencyKey: 'original', documentType: 'receipt' });
+    const before = await pool.query<{ source_snapshot: Record<string, unknown>; payments: number; journals: number }>("SELECT (SELECT source_snapshot FROM finance_financial_documents WHERE id=$1) source_snapshot,(SELECT count(*)::int FROM finance_payments WHERE institution_id=$2) payments,(SELECT count(*)::int FROM finance_journal_transactions WHERE institution_id=$2) journals", [original.id, institutionId]);
+    const command = { institutionId, originalDocumentId: original.id, seriesId, documentType: 'credit_note', idempotencyKey: 'correction-001' };
+    const correction = await repo.issueCorrection(command);
+    const replay = await repo.issueCorrection(command);
+    assert.equal(correction.id, replay.id); assert.equal(correction.sequenceNumber, 2);
+    const after = await pool.query<{ status: string; corrects_document_id: string; source_snapshot: Record<string, unknown>; payments: number; journals: number; audit: number; outbox: number }>("SELECT (SELECT status FROM finance_financial_documents WHERE id=$1) status,(SELECT corrects_document_id FROM finance_financial_documents WHERE id=$2) corrects_document_id,(SELECT source_snapshot FROM finance_financial_documents WHERE id=$1) source_snapshot,(SELECT count(*)::int FROM finance_payments WHERE institution_id=$3) payments,(SELECT count(*)::int FROM finance_journal_transactions WHERE institution_id=$3) journals,(SELECT count(*)::int FROM finance_audit_records WHERE institution_id=$3 AND event_type='financial_document_corrected') audit,(SELECT count(*)::int FROM finance_outbox WHERE institution_id=$3 AND topic='financial_document_corrected') outbox", [original.id, correction.id, institutionId]);
+    assert.equal(after.rows[0]?.status, 'issued'); assert.equal(after.rows[0]?.corrects_document_id, original.id);
+    assert.deepEqual(after.rows[0]?.source_snapshot, before.rows[0]?.source_snapshot, 'original provenance remains queryable unchanged');
+    assert.equal(after.rows[0]?.payments, before.rows[0]?.payments, 'correction must not mutate payments'); assert.equal(after.rows[0]?.journals, before.rows[0]?.journals, 'correction creates no economic journal');
+    assert.equal(after.rows[0]?.audit, 1); assert.equal(after.rows[0]?.outbox, 1);
+    await assert.rejects(() => repo.issueCorrection({ ...command, idempotencyKey: 'rollback', seriesId: randomUUID() }), /SERIES_NOT_FOUND/);
+    const corrections = await pool.query('SELECT count(*)::int count FROM finance_financial_documents WHERE institution_id=$1 AND corrects_document_id=$2', [institutionId, original.id]);
+    assert.equal(corrections.rows[0].count, 1, 'failed correction rolls back without a partial fact');
+  } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(() => undefined); await pool.end(); }
 });
