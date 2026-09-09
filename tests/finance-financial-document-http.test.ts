@@ -21,6 +21,9 @@ test('F7-04 Financial Document reads are capability-gated and tenant-scoped', as
     assert.equal(detail.status, 404);
     const deniedIssue = await fetch(`${base}/api/finance/documents/issue`, { method: 'POST', headers: { Authorization: 'Bearer director', 'Idempotency-Key': 'denied' } });
     assert.equal(deniedIssue.status, 403);
+    const deniedConfig = await fetch(`${base}/api/finance/fiscal-configurations`, { method: 'POST', headers: { Authorization: 'Bearer financial', 'Idempotency-Key': 'denied' } });
+    const deniedSeries = await fetch(`${base}/api/finance/document-series`, { method: 'POST', headers: { Authorization: 'Bearer financial', 'Idempotency-Key': 'denied' } });
+    assert.equal(deniedConfig.status, 403); assert.equal(deniedSeries.status, 403);
     assert.ok(calls.every(call => call.values.includes('tenant-a')), 'every lookup must bind the server-derived institution');
   } finally { server.close(); }
 });

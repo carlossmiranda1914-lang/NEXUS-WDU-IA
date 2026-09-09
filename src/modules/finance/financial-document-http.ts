@@ -8,7 +8,7 @@ type DocumentRow = { id: string; document_type: string; status: string; sequence
 const view = (row: DocumentRow) => ({ id: row.id, type: row.document_type, status: row.status, seriesCode: row.series_code, sequenceNumber: Number(row.sequence_number), issuedAt: row.issued_at.toISOString(), sourceSnapshot: row.source_snapshot, correctsDocumentId: row.corrects_document_id, fiscalAdapterKey: row.fiscal_adapter_key });
 
 export function registerFinancialDocumentRoutes(app: Express, pool: Pick<Pool, 'query'>, auth = requireAuth): void {
-  const actor = (req: AuthRequest, res: Response, action: 'read' | 'issue' | 'correct' = 'read') => {
+  const actor = (req: AuthRequest, res: Response, action: 'read' | 'issue' | 'correct' | 'fiscal_config_read' | 'fiscal_config_manage' | 'series_read' | 'series_manage' = 'read') => {
     const context = req.institutionalContext;
     if (!context) { res.status(401).json({ code: 'UNAUTHORIZED', error: 'Contexto institucional não encontrado.' }); return undefined; }
     if (!canAccessFinancialDocuments(context.role, action)) { res.status(403).json({ code: 'FINANCIAL_DOCUMENT_FORBIDDEN', error: 'Acesso não autorizado a documentos financeiros.' }); return undefined; }
@@ -41,5 +41,23 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pick<Pool, '
   app.post('/api/finance/documents/:id/corrections', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'correct'); const idempotencyKey = key(req, res); if (!context || !idempotencyKey) return;
     try { const result = await new PostgresFinancialDocumentRepository(pool as Pool).issueCorrection({ institutionId: context.institutionId, originalDocumentId: req.params.id, seriesId: req.body?.seriesId, documentType: req.body?.documentType, idempotencyKey }); res.status(201).json(result); } catch (error) { handleCommand(res, error); }
+  });
+  app.get('/api/finance/fiscal-configurations', auth, async (req: AuthRequest, res) => {
+    const context = actor(req, res, 'fiscal_config_read'); if (!context) return;
+    const result = await pool.query(`SELECT id,version,adapter_key,operational_configuration,effective_from,effective_to FROM finance_fiscal_configuration_versions WHERE institution_id=$1 ORDER BY version DESC`, [context.institutionId]); res.json({ items: result.rows });
+  });
+  app.post('/api/finance/fiscal-configurations', auth, async (req: AuthRequest, res) => {
+    const context = actor(req, res, 'fiscal_config_manage'); if (!context) return;
+    const idempotencyKey = key(req, res); if (!idempotencyKey) return;
+    try { const result = await pool.query(`INSERT INTO finance_fiscal_configuration_versions(institution_id,version,adapter_key,operational_configuration,effective_from,effective_to) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,version,adapter_key,effective_from,effective_to`, [context.institutionId, req.body?.version, req.body?.adapterKey, req.body?.operationalConfiguration ?? {}, req.body?.effectiveFrom, req.body?.effectiveTo ?? null]); res.status(201).json(result.rows[0]); } catch { res.status(422).json({ code: 'FISCAL_CONFIGURATION_VALIDATION', error: 'Configuração fiscal inválida.' }); }
+  });
+  app.get('/api/finance/document-series', auth, async (req: AuthRequest, res) => {
+    const context = actor(req, res, 'series_read'); if (!context) return;
+    const result = await pool.query(`SELECT id,code,document_type,status,effective_from,effective_to,fiscal_configuration_id FROM finance_financial_document_series WHERE institution_id=$1 ORDER BY code`, [context.institutionId]); res.json({ items: result.rows });
+  });
+  app.post('/api/finance/document-series', auth, async (req: AuthRequest, res) => {
+    const context = actor(req, res, 'series_manage'); if (!context) return;
+    const idempotencyKey = key(req, res); if (!idempotencyKey) return;
+    try { const result = await pool.query(`INSERT INTO finance_financial_document_series(institution_id,code,document_type,status,effective_from,effective_to,fiscal_configuration_id) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,code,document_type,status,effective_from,effective_to,fiscal_configuration_id`, [context.institutionId, req.body?.code, req.body?.documentType ?? 'receipt', req.body?.status ?? 'active', req.body?.effectiveFrom, req.body?.effectiveTo ?? null, req.body?.fiscalConfigurationId ?? null]); res.status(201).json(result.rows[0]); } catch { res.status(422).json({ code: 'FINANCIAL_DOCUMENT_SERIES_VALIDATION', error: 'Série documental inválida.' }); }
   });
 }
