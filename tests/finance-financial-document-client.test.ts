@@ -67,3 +67,18 @@ test('F7-06 invokes its stored fetch function as a client method', async () => {
   assert.equal(failure?.errorName, 'TypeError');
   assert.equal(failure?.errorMessage, 'Illegal invocation');
 });
+
+test('F7-06 default browser fetch preserves the global receiver', async () => {
+  const originalFetch = globalThis.fetch;
+  const receiverSensitiveFetch = async function (this: unknown) {
+    if (this !== globalThis) throw new TypeError('Illegal invocation');
+    return response({ items: [] });
+  } as typeof fetch;
+  globalThis.fetch = receiverSensitiveFetch;
+  try {
+    const client = new FinancialDocumentClient(undefined, async () => null, () => undefined);
+    assert.deepEqual(await client.list(), []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

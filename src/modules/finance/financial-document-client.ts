@@ -18,10 +18,17 @@ const defaultUatTraceReporter: UatTraceReporter = (event) => {
   void fetch('/__uat/trace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(event) }).catch(() => undefined);
 };
 
+const defaultFetch: typeof fetch = (input, init) => {
+  if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+    return window.fetch(input, init);
+  }
+  return globalThis.fetch(input, init);
+};
+
 export class FinancialDocumentClient {
   private transportControlsCaptured = false;
   constructor(
-    private readonly fetcher: typeof fetch = globalThis.fetch,
+    private readonly fetcher: typeof fetch = defaultFetch,
     private readonly getToken = async () => auth.currentUser?.getIdToken(),
     private readonly trace: UatTraceReporter = defaultUatTraceReporter,
     private readonly userPresent = () => Boolean(auth.currentUser),
