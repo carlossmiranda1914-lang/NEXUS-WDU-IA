@@ -324,9 +324,41 @@ export async function createUploadSessionCommand(input: {
     loadResult: async (client, resultRef) => {
       const session = await uploadRepo.getSessionById(client, context.institutionId, resultRef);
       if (!session) throw new Error('Persisted upload session missing on replay');
+
+      const now = new Date();
+      if (
+        session.status === 'completed' ||
+        session.status === 'cancelled' ||
+        session.status === 'failed' ||
+        session.status === 'expired' ||
+        now > session.expiresAt
+      ) {
+        return {
+          session,
+          rawToken: '[TERMINAL_SESSION_UNUSABLE]',
+          effectiveLimit,
+        };
+      }
+
+      // Idempotent replay credential recovery protocol:
+      // Emit a fresh CSPRNG token, atomically rotate the token hash in DB, and invalidate any prior lost token
+      const freshRawToken = generateCsprngUploadToken();
+      const freshTokenHash = hashUploadToken(freshRawToken);
+      const newAuthorizedUntil = new Date(
+        Math.min(now.getTime() + 15 * 60 * 1000, session.expiresAt.getTime()),
+      );
+
+      const refreshedSession = await uploadRepo.rotateSessionToken(
+        client,
+        context.institutionId,
+        session.id,
+        freshTokenHash,
+        newAuthorizedUntil,
+      );
+
       return {
-        session,
-        rawToken: '[REPLAYED_MASKED_TOKEN]',
+        session: refreshedSession,
+        rawToken: freshRawToken,
         effectiveLimit,
       };
     },
@@ -462,9 +494,40 @@ export async function resumeUploadSessionCommand(input: {
     loadResult: async (client, resultRef) => {
       const session = await uploadRepo.getSessionById(client, context.institutionId, resultRef);
       if (!session) throw new Error('Persisted upload session missing on replay');
+
+      const now = new Date();
+      if (
+        session.status === 'completed' ||
+        session.status === 'cancelled' ||
+        session.status === 'failed' ||
+        session.status === 'expired' ||
+        now > session.expiresAt
+      ) {
+        return {
+          session,
+          rawToken: '[TERMINAL_SESSION_UNUSABLE]',
+        };
+      }
+
+      // Idempotent replay credential recovery protocol:
+      // Emit a fresh CSPRNG token, atomically rotate the token hash in DB, and invalidate any prior lost token
+      const freshRawToken = generateCsprngUploadToken();
+      const freshTokenHash = hashUploadToken(freshRawToken);
+      const newAuthorizedUntil = new Date(
+        Math.min(now.getTime() + 15 * 60 * 1000, session.expiresAt.getTime()),
+      );
+
+      const refreshedSession = await uploadRepo.rotateSessionToken(
+        client,
+        context.institutionId,
+        session.id,
+        freshTokenHash,
+        newAuthorizedUntil,
+      );
+
       return {
-        session,
-        rawToken: '[REPLAYED_MASKED_TOKEN]',
+        session: refreshedSession,
+        rawToken: freshRawToken,
       };
     },
   });

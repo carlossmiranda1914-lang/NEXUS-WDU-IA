@@ -7,6 +7,7 @@ import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mj
 import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
 import { PostgresDocumentRepository } from '../src/modules/documents/document-repository.ts';
 import { PostgresDocumentUploadRepository } from '../src/modules/documents/document-upload-repository.ts';
+import { PostgresDocumentAuditRepository } from '../src/modules/documents/document-audit.ts';
 import {
   createUploadSessionCommand,
   resumeUploadSessionCommand,
@@ -422,7 +423,258 @@ try {
     'Reusing idempotency key with different payload must throw IDEMPOTENCY_CONFLICT',
   );
 
-  console.log('[DOCUMENTS-UPLOAD-CONCURRENCY] PASS: Double completion, cancel/complete race, token rotation concurrency, CAS stale rejection, and idempotency verified.');
+  // 7. CREATE SESSION REQUIRED TEST — RESPONSE LOSS RETRY
+  const createRetryDoc = await docRepo.createDocument(client, {
+    institutionId,
+    category: 'identification',
+    createdByPersonId: personId,
+  });
+
+  const createLossKey = 'idemp-create-response-loss-key';
+  const createPayload = {
+    documentId: createRetryDoc.id,
+    declaredFilename: 'idemp_create_test.pdf',
+    declaredMimeType: 'application/pdf',
+    declaredByteSize: 4096,
+    policyConfig: { globalMaxByteSize: 10 * 1024 * 1024 },
+    storageProvider: 'test-memory',
+    storageBucket: 'vault',
+    provenance: {
+      sourceDomain: 'portal',
+      method: 'direct_upload',
+      correlationId: 'req-loss-001',
+    },
+  };
+
+  // First call succeeds in DB, but simulate response lost before client receives it
+  const firstCreateRes = await createUploadSessionCommand({
+    pool,
+    context,
+    idempotencyKey: createLossKey,
+    input: createPayload,
+  });
+  const firstCreatedSessionId = firstCreateRes.result.session.id;
+  const firstCreatedRawToken = firstCreateRes.result.rawToken;
+
+  // Client retries with EXACT SAME idempotency key and payload
+  const retryCreateRes = await createUploadSessionCommand({
+    pool,
+    context,
+    idempotencyKey: createLossKey,
+    input: createPayload,
+  });
+  const retryCreatedSessionId = retryCreateRes.result.session.id;
+  const retryCreatedRawToken = retryCreateRes.result.rawToken;
+
+  // Assertions:
+  // SAME_SESSION_ID=YES
+  assert.strictEqual(retryCreatedSessionId, firstCreatedSessionId, 'Retry must yield the EXACT same logical session ID');
+
+  // SESSION_COUNT=1 & DUPLICATE_SESSION=NO
+  const sessionCountRes = await client.query<{ count: string }>(
+    `SELECT count(*) FROM document_upload_sessions WHERE document_id = $1`,
+    [createRetryDoc.id],
+  );
+  assert.strictEqual(parseInt(sessionCountRes.rows[0].count, 10), 1, 'Only exactly 1 upload session must exist in DB');
+
+  // DUPLICATE_SUCCESS_AUDIT=NO
+  const auditRepo = new PostgresDocumentAuditRepository();
+  const createAudits = await auditRepo.getAuditEventsForDocument(client, institutionId, createRetryDoc.id);
+  const createdAuditEvents = createAudits.filter((a) => a.action === 'document.upload_session_created');
+  assert.strictEqual(createdAuditEvents.length, 1, 'Idempotent replay must NOT emit duplicate success audit events');
+
+  // RETRY_TOKEN_USABLE=YES
+  assert.ok(retryCreatedRawToken, 'Retry must provide a usable raw token');
+  assert.notStrictEqual(retryCreatedRawToken, '[REPLAYED_MASKED_TOKEN]', 'Masked token placeholder is prohibited');
+
+  // Verify token is usable to complete upload
+  await storageProvider.simulateDirectUpload({
+    storageBucket: retryCreateRes.result.session.storageBucket,
+    storageKey: retryCreateRes.result.session.storageKey,
+    content: Buffer.from('Idempotent create retry upload content'),
+    mimeType: 'application/pdf',
+  });
+
+  const completeRetryCreateRes = await completeUploadSessionCommand({
+    pool,
+    context,
+    storageProvider,
+    idempotencyKey: 'idemp-complete-after-create-retry',
+    input: {
+      sessionId: retryCreatedSessionId,
+      rawToken: retryCreatedRawToken,
+      provenance: {
+        originType: 'user_upload',
+        actorPersonId: personId,
+        sourceDomain: 'portal',
+        method: 'direct_upload',
+      },
+    },
+  });
+  assert.strictEqual(completeRetryCreateRes.result.session.status, 'completed');
+  assert.strictEqual(completeRetryCreateRes.result.version.documentId, createRetryDoc.id);
+
+  // 8. RESUME REQUIRED TEST — RESPONSE LOSS RETRY
+  const resumeRetryDoc = await docRepo.createDocument(client, {
+    institutionId,
+    category: 'academic_transcript',
+    createdByPersonId: personId,
+  });
+
+  const initialResumeSessRes = await createUploadSessionCommand({
+    pool,
+    context,
+    idempotencyKey: 'idemp-resume-loss-init',
+    input: {
+      documentId: resumeRetryDoc.id,
+      declaredFilename: 'resume_loss_test.pdf',
+      declaredMimeType: 'application/pdf',
+      declaredByteSize: 8192,
+      policyConfig: { globalMaxByteSize: 10 * 1024 * 1024 },
+      storageProvider: 'test-memory',
+      storageBucket: 'vault',
+    },
+  });
+
+  const initialRawToken = initialResumeSessRes.result.rawToken;
+  const initialSessionId = initialResumeSessRes.result.session.id;
+
+  const resumeLossKey = 'idemp-resume-loss-op-key';
+  const resumePayload = {
+    sessionId: initialSessionId,
+    rawToken: initialRawToken,
+    correlationId: 'req-resume-loss-001',
+  };
+
+  // First resume call succeeds in DB (token rotated from initialRawToken -> firstResumeToken)
+  // Simulate HTTP response lost: client never received firstResumeToken
+  const firstResumeRes = await resumeUploadSessionCommand({
+    pool,
+    context,
+    idempotencyKey: resumeLossKey,
+    input: resumePayload,
+  });
+  const firstResumeRawToken = firstResumeRes.result.rawToken;
+
+  // Client retries SAME resume command with SAME idempotency key and SAME initial fingerprint
+  const retryResumeRes = await resumeUploadSessionCommand({
+    pool,
+    context,
+    idempotencyKey: resumeLossKey,
+    input: resumePayload,
+  });
+  const retryResumeRawToken = retryResumeRes.result.rawToken;
+
+  // Assertions:
+  // SAME_SESSION_ID=YES
+  assert.strictEqual(retryResumeRes.result.session.id, initialSessionId, 'Resume retry must preserve same session ID');
+
+  // Fetch current session from DB
+  const dbSessionAfterResumeRetry = await uploadRepo.getSessionById(client, institutionId, initialSessionId);
+  assert.ok(dbSessionAfterResumeRetry);
+
+  // OLD_TOKEN_INVALID=YES
+  assert.strictEqual(
+    verifyUploadToken(initialRawToken, dbSessionAfterResumeRetry.uploadTokenHash),
+    false,
+    'Initial pre-resume token must be invalid',
+  );
+
+  // PREVIOUS_REPLAY_CREDENTIAL_INVALIDATED=YES & ONE_CANONICAL_ACTIVE_TOKEN=YES
+  // The first rotation token is superseded by the retry replay rotation token
+  assert.strictEqual(
+    verifyUploadToken(firstResumeRawToken, dbSessionAfterResumeRetry.uploadTokenHash),
+    false,
+    'First rotated token (lost in transit) must be invalidated upon replay rotation',
+  );
+  assert.strictEqual(
+    verifyUploadToken(retryResumeRawToken, dbSessionAfterResumeRetry.uploadTokenHash),
+    true,
+    'Retry token must be the ONE canonical active token in database',
+  );
+
+  // RETRY_RETURNS_USABLE_TOKEN=YES & SESSION_NOT_STRANDED=YES
+  await storageProvider.simulateDirectUpload({
+    storageBucket: dbSessionAfterResumeRetry.storageBucket,
+    storageKey: dbSessionAfterResumeRetry.storageKey,
+    content: Buffer.from('Resume retry upload content'),
+    mimeType: 'application/pdf',
+  });
+
+  const completeAfterResumeRetry = await completeUploadSessionCommand({
+    pool,
+    context,
+    storageProvider,
+    idempotencyKey: 'idemp-complete-after-resume-retry',
+    input: {
+      sessionId: initialSessionId,
+      rawToken: retryResumeRawToken,
+      provenance: {
+        originType: 'user_upload',
+        actorPersonId: personId,
+        sourceDomain: 'portal',
+        method: 'direct_upload',
+      },
+    },
+  });
+  assert.strictEqual(completeAfterResumeRetry.result.session.status, 'completed');
+  assert.strictEqual(completeAfterResumeRetry.result.version.documentId, resumeRetryDoc.id);
+
+  // 9. SECURITY NEGATIVES & RAW TOKEN DB SCAN
+  const allRawTokens = [
+    rawToken,
+    raceSessRes.result.rawToken,
+    sessA.result.rawToken,
+    sessB.result.rawToken,
+    originalRawToken,
+    staleSessRes.result.rawToken,
+    firstCreatedRawToken,
+    retryCreatedRawToken,
+    initialRawToken,
+    firstResumeRawToken,
+    retryResumeRawToken,
+  ];
+
+  // Scan document_upload_sessions
+  const allSessionsInDb = await client.query(`SELECT * FROM document_upload_sessions`);
+  for (const row of allSessionsInDb.rows) {
+    const rowJson = JSON.stringify(row);
+    for (const tok of allRawTokens) {
+      assert.strictEqual(
+        rowJson.includes(tok),
+        false,
+        `RAW_TOKEN_IN_DOCUMENT_UPLOAD_SESSIONS detected! Token "${tok}" found in row: ${rowJson}`,
+      );
+    }
+  }
+
+  // Scan document_idempotency_records
+  const allIdempRecords = await client.query(`SELECT * FROM document_idempotency_records`);
+  for (const row of allIdempRecords.rows) {
+    const rowJson = JSON.stringify(row);
+    for (const tok of allRawTokens) {
+      assert.strictEqual(
+        rowJson.includes(tok),
+        false,
+        `RAW_TOKEN_IN_IDEMPOTENCY_LEDGER detected! Token "${tok}" found in row: ${rowJson}`,
+      );
+    }
+  }
+
+  // Scan document_audit_events
+  const allAuditsInDb = await client.query(`SELECT * FROM document_audit_events`);
+  for (const row of allAuditsInDb.rows) {
+    const rowJson = JSON.stringify(row);
+    for (const tok of allRawTokens) {
+      assert.strictEqual(
+        rowJson.includes(tok),
+        false,
+        `RAW_TOKEN_IN_DOCUMENT_AUDIT_EVENTS detected! Token "${tok}" found in row: ${rowJson}`,
+      );
+    }
+  }
+
+  console.log('[DOCUMENTS-UPLOAD-CONCURRENCY] PASS: Double completion, cancel/complete race, token rotation concurrency, CAS stale rejection, idempotency retry replay, and security DB scans verified.');
 } finally {
   try {
     await client.query('RESET search_path');
