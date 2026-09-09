@@ -99,14 +99,16 @@ for (const file of docFiles) {
       );
     }
 
-    // Verify I4 capabilities are not implemented in I3
-    const forbiddenI4Terms = ['malware_scan', 'quarantine_reason', 'scan_engine', 'magic_number_verified'];
-    for (const term of forbiddenI4Terms) {
-      assert.strictEqual(
-        content.includes(term),
-        false,
-        `Document module file ${file} must not contain I4 verification term "${term}"`,
-      );
+    // Verify I4 capabilities are not implemented in I3 upload files
+    if (file.startsWith('document-upload') || file === 'object-storage-provider.ts') {
+      const forbiddenI4Terms = ['malware_scan', 'quarantine_reason', 'scan_engine', 'magic_number_verified'];
+      for (const term of forbiddenI4Terms) {
+        assert.strictEqual(
+          content.includes(term),
+          false,
+          `Document upload file ${file} must not contain I4 verification term "${term}"`,
+        );
+      }
     }
   }
 }

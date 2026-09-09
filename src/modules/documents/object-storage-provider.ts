@@ -63,9 +63,23 @@ export interface DeleteObjectParams {
   storageKey: string;
 }
 
+export interface OpenReadStreamParams {
+  institutionId?: string;
+  storageBucket: string;
+  storageKey: string;
+}
+
+export interface ReadRangeParams {
+  institutionId?: string;
+  storageBucket: string;
+  storageKey: string;
+  startByte: number;
+  endByte: number;
+}
+
 /**
  * Provider-neutral object storage abstraction interface.
- * Production concrete provider is NONE in I3.
+ * Production concrete provider is NONE in I3/I4.
  */
 export interface ObjectStorageProvider {
   readonly providerName: string;
@@ -79,4 +93,8 @@ export interface ObjectStorageProvider {
   headObject(params: HeadObjectParams): Promise<HeadObjectResult>;
 
   deleteUncommittedObject(params: DeleteObjectParams): Promise<boolean>;
+
+  openReadStream(params: OpenReadStreamParams): Promise<NodeJS.ReadableStream>;
+
+  readRange(params: ReadRangeParams): Promise<Buffer>;
 }
