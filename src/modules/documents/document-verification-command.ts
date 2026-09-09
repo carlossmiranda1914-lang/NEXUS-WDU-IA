@@ -567,9 +567,11 @@ export async function executeTechnicalVerificationPipelineCommand(params: {
       stream.on('data', (chunk: Buffer) => {
         hash.update(chunk);
         totalBytes += chunk.length;
-        if (prefixBytesCollected < maxPrefix) {
-          prefixChunks.push(chunk);
-          prefixBytesCollected += chunk.length;
+        const remaining = maxPrefix - prefixBytesCollected;
+        if (remaining > 0) {
+          const slice = chunk.subarray(0, Math.min(chunk.length, remaining));
+          prefixChunks.push(slice);
+          prefixBytesCollected += slice.length;
         }
       });
       stream.on('end', () => resolve());
@@ -625,8 +627,34 @@ export async function executeTechnicalVerificationPipelineCommand(params: {
       },
     });
 
-    // 3. Real Content-Type Assessment (Bounded Detection)
-    const detectedType = input.contentTypeDetector.detect(prefixBuffer);
+    // 3. Real Content-Type Assessment (Bounded Detection with Range Support when needed)
+    let detectedType = input.contentTypeDetector.detect(prefixBuffer);
+    if (detectedType.isContainer) {
+      const declaredIsOpc =
+        version.mimeType.includes('openxmlformats') ||
+        version.mimeType.includes('wordprocessingml') ||
+        version.mimeType.includes('spreadsheetml') ||
+        version.mimeType.includes('presentationml');
+      if (declaredIsOpc && totalBytes > prefixBuffer.length) {
+        const config = input.contentTypeDetector.getConfig();
+        const rangeLimit = Math.min(
+          totalBytes,
+          config.maxContainerMetadataBytes,
+          config.zipMetadataInspectionLimit,
+        );
+        if (rangeLimit > prefixBuffer.length) {
+          const extendedBuffer = await input.storageProvider.readRange({
+            institutionId: context.institutionId,
+            storageBucket: storageRef.storageBucket,
+            storageKey: storageRef.storageKey,
+            startByte: 0,
+            endByte: rangeLimit - 1,
+          });
+          detectedType = input.contentTypeDetector.detect(extendedBuffer);
+        }
+      }
+    }
+
     const compatibility = input.contentTypeDetector.evaluateCompatibility(
       version.mimeType,
       `file${detectedType.canonicalExtension}`,

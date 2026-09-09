@@ -272,8 +272,17 @@ try {
   assert.strictEqual(lateFinalize.result.evaluation.overallStatus, 'quarantined');
   assert.strictEqual(lateFinalize.result.evaluation.isReadyForAvailability, false);
 
-  // 3b. ASSESSMENT IMMUTABILITY & FAIL DOMINATION: Recording PASS on failed assessment preserves FAIL
-  const failAssessmentRes = await verificationRepo.recordAssessmentResult(client, {
+  // 3b. ASSESSMENT IMMUTABILITY (ZERO UPDATE) & FAIL CLOSED:
+  // Case A: Existing FAIL assessment -> attempt conflicting PASS on same attempt
+  const beforeFailRow = (
+    await client.query<{ id: string; status: string; facts: any; created_at: Date }>(
+      `SELECT id, status, facts, created_at FROM document_technical_assessments
+       WHERE verification_id = $1 AND assessment_type = 'malware' AND attempt_number = 1`,
+      [pipelineRes2.result.verification.id],
+    )
+  ).rows[0];
+
+  const conflictPassRes = await verificationRepo.recordAssessmentResult(client, {
     institutionId,
     documentId: doc2.id,
     versionId: ver2.id,
@@ -282,8 +291,75 @@ try {
     status: 'pass', // Conflicting late clean on same attempt
     provider: 'late_clean_scanner',
     attemptNumber: 1,
+    facts: { lateFact: 'should_not_overwrite' },
   });
-  assert.strictEqual(failAssessmentRes.status, 'fail', 'Conflicting PASS must NOT overwrite existing FAIL assessment');
+  assert.strictEqual(conflictPassRes.status, 'fail', 'Conflicting PASS must return existing immutable FAIL assessment');
+
+  const afterFailRow = (
+    await client.query<{ id: string; status: string; facts: any; created_at: Date }>(
+      `SELECT id, status, facts, created_at FROM document_technical_assessments
+       WHERE verification_id = $1 AND assessment_type = 'malware' AND attempt_number = 1`,
+      [pipelineRes2.result.verification.id],
+    )
+  ).rows[0];
+  assert.deepStrictEqual(beforeFailRow, afterFailRow, 'Original FAIL assessment row must be byte-for-byte unchanged in PostgreSQL');
+
+  // Case B: Existing PASS assessment -> attempt conflicting FAIL on same attempt
+  const { doc: docPassImm, version: verPassImm } = await createAndUploadDocument(
+    'identification',
+    'imm_pass.pdf',
+    'application/pdf',
+    cleanPdfBytes,
+    'idemp-v-pass-imm',
+  );
+  const startPassImm = await startTechnicalVerificationCommand({
+    pool,
+    context,
+    idempotencyKey: 'idemp-start-pass-imm',
+    input: { documentId: docPassImm.id, versionId: verPassImm.id },
+  });
+
+  await verificationRepo.recordAssessmentResult(client, {
+    institutionId,
+    documentId: docPassImm.id,
+    versionId: verPassImm.id,
+    verificationId: startPassImm.result.id,
+    assessmentType: 'integrity',
+    status: 'pass',
+    provider: 'original_verifier',
+    attemptNumber: 1,
+    facts: { original: 'imm_fact' },
+  });
+
+  const beforePassRow = (
+    await client.query<{ id: string; status: string; facts: any; created_at: Date }>(
+      `SELECT id, status, facts, created_at FROM document_technical_assessments
+       WHERE verification_id = $1 AND assessment_type = 'integrity' AND attempt_number = 1`,
+      [startPassImm.result.id],
+    )
+  ).rows[0];
+
+  const conflictFailRes = await verificationRepo.recordAssessmentResult(client, {
+    institutionId,
+    documentId: docPassImm.id,
+    versionId: verPassImm.id,
+    verificationId: startPassImm.result.id,
+    assessmentType: 'integrity',
+    status: 'fail',
+    provider: 'conflicting_verifier',
+    attemptNumber: 1,
+    facts: { corrupted: 'should_not_overwrite' },
+  });
+  assert.strictEqual(conflictFailRes.status, 'pass', 'Re-recording on same attempt returns original immutable assessment');
+
+  const afterPassRow = (
+    await client.query<{ id: string; status: string; facts: any; created_at: Date }>(
+      `SELECT id, status, facts, created_at FROM document_technical_assessments
+       WHERE verification_id = $1 AND assessment_type = 'integrity' AND attempt_number = 1`,
+      [startPassImm.result.id],
+    )
+  ).rows[0];
+  assert.deepStrictEqual(beforePassRow, afterPassRow, 'Original PASS assessment row must be byte-for-byte unchanged in PostgreSQL');
 
   // 4. INTEGRITY_HASH_FAIL -> QUARANTINED
   const { doc: doc3, version: ver3, session: sess3 } = await createAndUploadDocument(
@@ -435,8 +511,68 @@ try {
     },
   });
 
-  assert.strictEqual(pipelineResLarge.result.verification.status, 'available');
-  assert.strictEqual(pipelineResLarge.result.versionStatus, 'available');
+  // 9. RANGE-BASED OPC METADATA INSPECTION (when prefix < container header size)
+  function createSyntheticZipBuffer(entries: { filename: string; content: string }[]): Buffer {
+    const parts: Buffer[] = [];
+    for (const entry of entries) {
+      const fnBuf = Buffer.from(entry.filename, 'utf8');
+      const contentBuf = Buffer.from(entry.content, 'utf8');
+      const header = Buffer.alloc(30);
+      header.writeUInt32LE(0x04034b50, 0); // PK\x03\x04
+      header.writeUInt16LE(20, 4);
+      header.writeUInt16LE(0, 6);
+      header.writeUInt16LE(0, 8);
+      header.writeUInt16LE(0, 10);
+      header.writeUInt16LE(0, 12);
+      header.writeUInt32LE(0, 14);
+      header.writeUInt32LE(contentBuf.length, 18);
+      header.writeUInt32LE(contentBuf.length, 22);
+      header.writeUInt16LE(fnBuf.length, 26);
+      header.writeUInt16LE(0, 28);
+      parts.push(header);
+      parts.push(fnBuf);
+      parts.push(contentBuf);
+    }
+    return Buffer.concat(parts);
+  }
+
+  const docxBytes = createSyntheticZipBuffer([
+    { filename: '[Content_Types].xml', content: '<?xml version="1.0"?><Types/>' },
+    { filename: 'word/document.xml', content: '<w:document><w:body/></w:document>' },
+  ]);
+
+  const { doc: docDocx, version: verDocx } = await createAndUploadDocument(
+    'identification',
+    'statement.docx',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    docxBytes,
+    'idemp-vDocx',
+  );
+
+  // Detector with only 40 bytes max prefix (so word/ header lies outside initial stream prefix)
+  const smallPrefixDetector = new ContentTypeDetector({
+    maxPrefixInspectionBytes: 40,
+    zipMetadataInspectionLimit: 64 * 1024,
+    maxContainerEntryCount: 100,
+    maxContainerMetadataBytes: 128 * 1024,
+  });
+
+  const pipelineResDocx = await executeTechnicalVerificationPipelineCommand({
+    pool,
+    context,
+    idempotencyKey: 'idemp-pipe-docx-range',
+    input: {
+      documentId: docDocx.id,
+      versionId: verDocx.id,
+      storageProvider,
+      malwareScanner,
+      contentTypeDetector: smallPrefixDetector,
+      retryPolicy,
+    },
+  });
+
+  assert.strictEqual(pipelineResDocx.result.verification.status, 'available');
+  assert.strictEqual(pipelineResDocx.result.versionStatus, 'available');
 
   console.log('[DOCUMENTS-VERIFICATION-POSTGRES] PASS: Full technical verification lifecycle, assessments, quarantine, inconclusive handling, and streaming verified.');
 } finally {

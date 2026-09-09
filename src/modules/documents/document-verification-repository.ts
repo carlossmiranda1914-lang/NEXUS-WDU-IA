@@ -180,58 +180,8 @@ export class PostgresDocumentVerificationRepository {
     if (existingRes.rows.length > 0) {
       const existing = existingRes.rows[0];
 
-      // Idempotent replay: exact same status -> return immutable existing record
-      if (existing.status === params.status) {
-        return this.mapAssessmentRow(existing);
-      }
-
-      // Conflicting result on same attempt: FAIL/MALICIOUS dominates!
-      // If existing is already fail/error, a late/conflicting pass cannot erase it.
-      if (existing.status === 'fail' || existing.status === 'error') {
-        return this.mapAssessmentRow(existing);
-      }
-
-      // If existing was pass and incoming is fail/error, fail dominates (fail-closed transition)
-      if (params.status === 'fail' || params.status === 'error') {
-        const updateRes = await client.query<{
-          id: string;
-          institution_id: string;
-          document_id: string;
-          version_id: string;
-          verification_id: string;
-          assessment_type: TechnicalAssessmentType;
-          status: TechnicalAssessmentStatus;
-          provider: string;
-          attempt_number: number;
-          started_at: Date;
-          completed_at: Date | null;
-          facts: Record<string, unknown>;
-          error_code: string | null;
-          error_message: string | null;
-          created_at: Date;
-        }>(
-          `UPDATE document_technical_assessments
-           SET status = $1,
-               facts = $2,
-               error_code = $3,
-               error_message = $4,
-               completed_at = $5
-           WHERE institution_id = $6 AND id = $7
-           RETURNING *`,
-          [
-            params.status,
-            JSON.stringify({ ...existing.facts, ...params.facts, conflictDominated: true }),
-            params.errorCode || null,
-            params.errorMessage || null,
-            params.completedAt || new Date(),
-            params.institutionId,
-            existing.id,
-          ],
-        );
-        return this.mapAssessmentRow(updateRes.rows[0]);
-      }
-
-      // Inconclusive / other conflict -> fail closed without overwriting fail
+      // Exact idempotent replay or conflicting same-attempt result:
+      // ZERO UPDATE on existing assessment. Original row remains byte-for-byte immutable.
       return this.mapAssessmentRow(existing);
     }
 

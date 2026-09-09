@@ -94,7 +94,7 @@ export class ContentTypeDetector {
     }
 
     // 4. ZIP / OpenXML Container: PK\x03\x04 (0x50, 0x4B, 0x03, 0x04)
-    if (prefix.length >= 4 && prefix[0] === 0x50 && prefix[1] === 0x4b && prefix[2] === 0x03 && prefix[3] === 0x04) {
+    if (buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04) {
       return this.inspectZipContainer(buffer);
     }
 
