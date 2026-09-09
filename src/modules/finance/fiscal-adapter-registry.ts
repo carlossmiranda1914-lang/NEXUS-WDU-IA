@@ -1,4 +1,9 @@
-export type FiscalAdapter = Readonly<{ key: string; supportedJurisdictions: readonly string[] }>;
+export type FiscalAdapter = Readonly<{
+  key: string;
+  supportedJurisdictions: readonly string[];
+  /** A policy pack is explicit evidence, not a claim that its fields are globally mandatory. */
+  policy: Readonly<{ version: string; supportedDocumentTypes: readonly string[] }>;
+}>;
 
 export class FiscalAdapterRegistry {
   constructor(private readonly adapters: readonly FiscalAdapter[]) {}

@@ -60,9 +60,12 @@ test('F7-01 PostgreSQL issuance replays idempotently and allocates a series numb
     assert.equal(replay.replayed, true, 'the HTTP boundary needs canonical replay information');
     const documents = await pool.query('SELECT count(*)::int count FROM finance_financial_documents WHERE institution_id=$1', [institutionId]);
     assert.equal(documents.rows[0].count, 1);
-    const fiscalProvenance = await pool.query<{ fiscal_configuration_id: string | null; fiscal_adapter_key: string | null }>('SELECT fiscal_configuration_id,fiscal_adapter_key FROM finance_financial_documents WHERE id=$1', [first.id]);
+    const fiscalProvenance = await pool.query<{ fiscal_configuration_id: string | null; fiscal_adapter_key: string | null; fiscal_policy_version: string | null; fiscal_policy_snapshot: { adapterKey?: string; documentType?: string } | null; jurisdiction_extension_data: Record<string, unknown> | null }>('SELECT fiscal_configuration_id,fiscal_adapter_key,fiscal_policy_version,fiscal_policy_snapshot,jurisdiction_extension_data FROM finance_financial_documents WHERE id=$1', [first.id]);
     assert.notEqual(fiscalProvenance.rows[0]?.fiscal_configuration_id, null, 'issuance must persist the server-resolved fiscal configuration');
     assert.equal(fiscalProvenance.rows[0]?.fiscal_adapter_key, 'core');
+    assert.equal(fiscalProvenance.rows[0]?.fiscal_policy_version, 'core-1', 'an issued document must retain the resolved policy version, not only a mutable adapter key');
+    assert.deepEqual(fiscalProvenance.rows[0]?.fiscal_policy_snapshot, { adapterKey: 'core', documentType: 'receipt', policyVersion: 'core-1' });
+    assert.deepEqual(fiscalProvenance.rows[0]?.jurisdiction_extension_data, {}, 'the international core supports extension evidence without globally requiring legal fields');
     const provenance = await pool.query<{ source_snapshot: { sourceId: string; sourceType: string }; source_id: string; source_type: string }>('SELECT d.source_snapshot,s.source_id,s.source_type FROM finance_financial_documents d JOIN finance_financial_document_sources s ON s.document_id=d.id AND s.institution_id=d.institution_id WHERE d.institution_id=$1', [institutionId]);
     assert.equal(provenance.rows[0]?.source_snapshot.sourceType, 'payment');
     assert.equal(provenance.rows[0]?.source_snapshot.sourceId, paymentId!, 'issuance provenance must reference the server-locked payment');

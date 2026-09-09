@@ -6,7 +6,7 @@ import { FiscalAdapterRegistry, type FiscalAdapter } from './fiscal-adapter-regi
 
 // F7-02 intentionally provides only a synthetic adapter. Production
 // jurisdictions must be explicitly registered before they can issue.
-const builtInFiscalAdapters: readonly FiscalAdapter[] = [{ key: 'core', supportedJurisdictions: ['NEXUS_TEST'] }];
+const builtInFiscalAdapters: readonly FiscalAdapter[] = [{ key: 'core', supportedJurisdictions: ['NEXUS_TEST'], policy: { version: 'core-1', supportedDocumentTypes: ['receipt', 'credit_note'] } }];
 
 export type FinancialDocumentIssuanceCommand = {
   institutionId: string;
@@ -58,10 +58,12 @@ export class PostgresFinancialDocumentRepository {
         [command.institutionId, sourceRow.financial_profile_version],
       );
       if (!financialProfile.rows[0]) throw new Error('FINANCIAL_PROFILE_NOT_FOUND');
-      this.fiscalAdapters.select(
+      const fiscalAdapter = this.fiscalAdapters.select(
         { primaryJurisdiction: financialProfile.rows[0].primary_jurisdiction },
         { adapterKey: fiscalConfiguration.rows[0].adapter_key },
       );
+      if (!fiscalAdapter.policy.supportedDocumentTypes.includes(command.documentType)) throw new Error('FISCAL_DOCUMENT_TYPE_UNSUPPORTED');
+      const fiscalPolicySnapshot = { adapterKey: fiscalAdapter.key, documentType: command.documentType, policyVersion: fiscalAdapter.policy.version };
       const sourceSnapshot = {
         sourceType: command.sourceType,
         sourceId: sourceRow.id,
@@ -80,7 +82,7 @@ export class PostgresFinancialDocumentRepository {
       const sequenceNumber = Number(series.rows[0].next_sequence_number);
       const id = randomUUID();
       await client.query('UPDATE finance_financial_document_series SET next_sequence_number=$3 WHERE institution_id=$1 AND id=$2', [command.institutionId, command.seriesId, sequenceNumber + 1]);
-      await client.query("INSERT INTO finance_financial_documents(id,institution_id,document_type,status,series_id,sequence_number,source_snapshot,fiscal_configuration_id,fiscal_adapter_key,issued_at) VALUES($1,$2,$3,'issued',$4,$5,$6,$7,$8,now())", [id, command.institutionId, command.documentType, command.seriesId, sequenceNumber, sourceSnapshot, fiscalConfiguration.rows[0].id, fiscalConfiguration.rows[0].adapter_key]);
+      await client.query("INSERT INTO finance_financial_documents(id,institution_id,document_type,status,series_id,sequence_number,source_snapshot,fiscal_configuration_id,fiscal_adapter_key,fiscal_policy_version,fiscal_policy_snapshot,jurisdiction_extension_data,issued_at) VALUES($1,$2,$3,'issued',$4,$5,$6,$7,$8,$9,$10,$11,now())", [id, command.institutionId, command.documentType, command.seriesId, sequenceNumber, sourceSnapshot, fiscalConfiguration.rows[0].id, fiscalAdapter.key, fiscalAdapter.policy.version, fiscalPolicySnapshot, {}]);
       await client.query('INSERT INTO finance_financial_document_sources(institution_id,document_id,source_type,source_id,snapshot) VALUES($1,$2,$3,$4,$5)', [command.institutionId, id, command.sourceType, command.sourceId, sourceSnapshot]);
       await client.query("INSERT INTO finance_audit_records(institution_id,event_type,metadata) VALUES($1,'financial_document_issued',$2)", [command.institutionId, { documentId: id, seriesId: command.seriesId, sequenceNumber }]);
       await client.query("INSERT INTO finance_outbox(institution_id,topic,aggregate_id,payload) VALUES($1,'financial_document_issued',$2,$3)", [command.institutionId, id, { documentId: id, seriesId: command.seriesId, sequenceNumber }]);
@@ -97,8 +99,8 @@ export class PostgresFinancialDocumentRepository {
       identity: { institutionId: command.institutionId, operationNamespace: 'financial_document_correction', idempotencyKey: command.idempotencyKey, canonicalFingerprint: createCanonicalFinanceFingerprint(command) },
       execute: async client => {
         // Lock the original fact and its provenance before the new series counter.
-        const original = await client.query<{ id: string; source_snapshot: Record<string, unknown>; fiscal_configuration_id: string | null; fiscal_adapter_key: string | null }>(
-          "SELECT id,source_snapshot,fiscal_configuration_id,fiscal_adapter_key FROM finance_financial_documents WHERE institution_id=$1 AND id=$2 AND status='issued' FOR UPDATE",
+        const original = await client.query<{ id: string; source_snapshot: Record<string, unknown>; fiscal_configuration_id: string | null; fiscal_adapter_key: string | null; fiscal_policy_version: string | null; fiscal_policy_snapshot: Record<string, unknown>; jurisdiction_extension_data: Record<string, unknown> }>(
+          "SELECT id,source_snapshot,fiscal_configuration_id,fiscal_adapter_key,fiscal_policy_version,fiscal_policy_snapshot,jurisdiction_extension_data FROM finance_financial_documents WHERE institution_id=$1 AND id=$2 AND status='issued' FOR UPDATE",
           [command.institutionId, command.originalDocumentId],
         );
         if (!original.rows[0]) throw new Error('FINANCIAL_DOCUMENT_ORIGINAL_NOT_FOUND');
@@ -115,7 +117,7 @@ export class PostgresFinancialDocumentRepository {
         const sequenceNumber = Number(series.rows[0].next_sequence_number);
         const id = randomUUID();
         await client.query('UPDATE finance_financial_document_series SET next_sequence_number=$3 WHERE institution_id=$1 AND id=$2', [command.institutionId, command.seriesId, sequenceNumber + 1]);
-        await client.query("INSERT INTO finance_financial_documents(id,institution_id,document_type,status,series_id,sequence_number,source_snapshot,corrects_document_id,fiscal_configuration_id,fiscal_adapter_key,issued_at) VALUES($1,$2,$3,'issued',$4,$5,$6,$7,$8,$9,now())", [id, command.institutionId, command.documentType, command.seriesId, sequenceNumber, original.rows[0].source_snapshot, command.originalDocumentId, original.rows[0].fiscal_configuration_id, original.rows[0].fiscal_adapter_key]);
+        await client.query("INSERT INTO finance_financial_documents(id,institution_id,document_type,status,series_id,sequence_number,source_snapshot,corrects_document_id,fiscal_configuration_id,fiscal_adapter_key,fiscal_policy_version,fiscal_policy_snapshot,jurisdiction_extension_data,issued_at) VALUES($1,$2,$3,'issued',$4,$5,$6,$7,$8,$9,$10,$11,$12,now())", [id, command.institutionId, command.documentType, command.seriesId, sequenceNumber, original.rows[0].source_snapshot, command.originalDocumentId, original.rows[0].fiscal_configuration_id, original.rows[0].fiscal_adapter_key, original.rows[0].fiscal_policy_version, original.rows[0].fiscal_policy_snapshot, original.rows[0].jurisdiction_extension_data]);
         for (const source of originalSources.rows) {
           await client.query('INSERT INTO finance_financial_document_sources(institution_id,document_id,source_type,source_id,snapshot) VALUES($1,$2,$3,$4,$5)', [command.institutionId, id, source.source_type, source.source_id, source.snapshot]);
         }

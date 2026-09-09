@@ -38,7 +38,7 @@ test('F7-02 resolves only the effective fiscal configuration for its institution
 });
 
 test('F7-02 adapter selection is derived from the financial profile and fails closed', () => {
-  const registry = new FiscalAdapterRegistry([{ key: 'core', supportedJurisdictions: ['NEXUS_TEST'] }]);
+  const registry = new FiscalAdapterRegistry([{ key: 'core', supportedJurisdictions: ['NEXUS_TEST'], policy: { version: 'core-1', supportedDocumentTypes: ['receipt'] } }]);
   assert.equal(registry.select({ primaryJurisdiction: 'NEXUS_TEST' }, { adapterKey: 'core' }).key, 'core');
   assert.throws(() => registry.select({ primaryJurisdiction: 'UNSUPPORTED' }, { adapterKey: 'core' }), /FISCAL_ADAPTER_UNSUPPORTED_JURISDICTION/);
 });

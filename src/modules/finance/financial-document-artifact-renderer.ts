@@ -7,6 +7,9 @@ export type FinancialDocumentRenderInput = {
   sourceSnapshot: Record<string, unknown>;
   sources: Array<{ type: string; id: string; snapshot: Record<string, unknown> }>;
   correctsDocumentId: string | null;
+  fiscalPolicyVersion?: string | null;
+  fiscalPolicySnapshot?: Record<string, unknown> | null;
+  jurisdictionExtensionData?: Record<string, unknown> | null;
   renderVersion: string;
   templateVersion: string;
 };
@@ -25,6 +28,8 @@ export function renderFinancialDocumentPdf(input: FinancialDocumentRenderInput):
     `Amount: ${snapshot.amount ?? 'not represented in issued snapshot'} ${snapshot.currency ?? ''}`.trim(),
     `Provenance: ${input.sources.map(source => `${source.type}:${source.id}`).join(', ') || 'none'}`,
     `Corrects: ${input.correctsDocumentId ?? 'none'}`,
+    `Policy provenance: ${input.fiscalPolicySnapshot?.adapterKey ?? 'not captured'}; version: ${input.fiscalPolicyVersion ?? input.fiscalPolicySnapshot?.policyVersion ?? 'not captured'}`,
+    `Jurisdiction extension fields: ${Object.keys(input.jurisdictionExtensionData ?? {}).sort().join(', ') || 'none'}`,
     `Renderer: ${input.renderVersion}; template: ${input.templateVersion}`,
   ];
   const content = ['BT', '/F1 12 Tf', '54 780 Td', ...lines.flatMap((line, index) => [index === 0 ? `(${pdfText(line)}) Tj` : `0 -22 Td (${pdfText(line)}) Tj`]), 'ET'].join('\n');
