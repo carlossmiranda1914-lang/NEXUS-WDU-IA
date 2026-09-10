@@ -124,6 +124,14 @@ async function main() {
 
   const identityFixture = Boolean(process.env.NEXUS_UAT_FIREBASE_UID?.trim());
   const prerequisites = database && migrations && identityFixture;
+  const firebaseLocalhostConfirmed = process.env.NEXUS_UAT_FIREBASE_LOCALHOST_CONFIRMED === 'true';
+  if (firebase && firebaseLocalhostConfirmed && prerequisites && backend && runtimeIdentityMatches) {
+    console.log('UAT_PREFLIGHT=PASS');
+    console.log(`CANONICAL_UAT_ORIGIN=${CANONICAL_UAT_ORIGIN}`);
+    console.log('FIREBASE_LOCALHOST_AUTHORIZED=YES');
+    console.log('READY_FOR_HUMAN_UAT=YES');
+    return;
+  }
   const status = {
     UAT_PREFLIGHT: 'FAIL',
     EXPECTED_WORKTREE: serverProcess.commandMatches ? 'PASS' : 'FAIL',
