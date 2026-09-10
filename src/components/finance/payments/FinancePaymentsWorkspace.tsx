@@ -64,6 +64,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   return (
     <div className="w-full">
       {readiness?.status === 'INCOMPLETE' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Configuração necessária</strong><p>Os recebimentos estão disponíveis, mas ainda não é possível emitir recibos oficiais.</p>{readiness.canManageConfiguration && <button type="button" onClick={onOpenFinanceConfiguration} className="mt-2 rounded-md border px-3 py-1">Concluir configuração</button>}</section>}
+      {readiness?.status === 'BLOCKED' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Emissão oficial indisponível</strong><p>A política documental da instituição não tem um adaptador jurisdicional aprovado. Não será atribuído qualquer número de recibo.</p></section>}
       {view === 'list' && (
         <FinancePaymentsListView
           payments={payments}
