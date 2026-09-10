@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FinanceConfigurationError, FinanceReadinessClient, financeReadinessClient, type FinanceReadinessDto } from '../../../modules/finance/finance-readiness-client.ts';
+import { AuroraStateNotice } from '../../aurora/AuroraStateNotice.tsx';
 
 const requirementLabel: Record<FinanceReadinessDto['requirements'][number]['code'], string> = {
   FINANCIAL_PROFILE: 'Perfil financeiro institucional',
@@ -33,10 +34,10 @@ export function FinanceConfigurationWorkspace({ readinessClient = financeReadine
   };
   return <section data-testid="finance-configuration-workspace" className="rounded-xl border border-zinc-200 bg-white p-6">
     <h2 className="text-xl font-bold">Configuração Financeira</h2>
-    {error && <p role="alert" className="mt-3 text-sm text-rose-600">{error}</p>}
-    {success && <p role="status" className="mt-3 rounded-md bg-emerald-50 p-3 text-sm text-emerald-800">{success}</p>}
-    {readiness?.status === 'READY' && <p className="mt-3 text-sm text-emerald-700">Finance operacionalmente pronta.</p>}
-    {readiness?.status === 'BLOCKED' && <p className="mt-3 text-sm text-rose-600">A configuração financeira requer atenção administrativa.</p>}
+    {error && <div className="mt-3"><AuroraStateNotice tone="danger" title="Não foi possível confirmar a configuração financeira">{error}</AuroraStateNotice></div>}
+    {success && <div className="mt-3"><AuroraStateNotice tone="success" title="Prontidão atualizada">{success}</AuroraStateNotice></div>}
+    {readiness?.status === 'READY' && <div className="mt-3"><AuroraStateNotice tone="success" title="Finance pronta">Finance operacionalmente pronta.</AuroraStateNotice></div>}
+    {readiness?.status === 'BLOCKED' && <div className="mt-3"><AuroraStateNotice tone="warning" title="Configuração requer atenção">A configuração financeira requer atenção administrativa.</AuroraStateNotice></div>}
     {readiness?.status === 'INCOMPLETE' && <><h3 className="mt-4 font-semibold">Configuração necessária</h3><p className="text-sm text-zinc-600">Os recebimentos estão disponíveis, mas ainda não é possível emitir recibos oficiais.</p>
       {firstIncomplete && <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm"><strong>Passo atual: {requirementLabel[firstIncomplete.code]}</strong><p className="mt-1">{firstIncomplete.code === 'FINANCIAL_PROFILE' ? 'O perfil financeiro institucional ainda não está efetivo. Esta autoridade não é criada nesta página; contacte a administração institucional.' : firstIncomplete.code === 'FISCAL_CONFIGURATION' ? 'Crie primeiro a configuração fiscal institucional neutra. Depois confirmaremos novamente a prontidão antes de pedir a série.' : 'Defina uma série de recibos depois de a configuração fiscal estar efetiva.'}</p></div>}
       {readiness.canManageConfiguration && firstIncomplete?.state === 'MISSING' && firstIncomplete.code === 'RECEIPT_SERIES' && !editing && <button type="button" onClick={() => setEditing(true)} className="mt-4 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Concluir configuração</button>}
