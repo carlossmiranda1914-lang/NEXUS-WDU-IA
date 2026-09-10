@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { Payment } from '../../../modules/finance/payment-model.ts';
 import { paymentClient } from '../../../modules/finance/payment-client.ts';
 import { FinancePaymentsListView } from './FinancePaymentsListView.tsx';
 import { FinancePaymentCreateView } from './FinancePaymentCreateView.tsx';
 import { FinancePaymentProvidersView } from './FinancePaymentProvidersView.tsx';
 import { financialDocumentClient } from '../../../modules/finance/financial-document-client.ts';
+import { browserDocumentIntentStorage, resolvePersistentDocumentIntentKey } from '../../../modules/finance/financial-document-intent.ts';
 import { financeReadinessClient, type FinanceReadinessDto } from '../../../modules/finance/finance-readiness-client.ts';
 
 export type PaymentSubView = 'list' | 'create' | 'providers';
@@ -38,7 +39,6 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   const [canIssueDocument, setCanIssueDocument] = useState(false);
   const [readiness, setReadiness] = useState<FinanceReadinessDto | null>(null);
   const [receiptEligibility, setReceiptEligibility] = useState<Record<string, { eligible: boolean; reason?: string }>>({});
-  const receiptKeys = useRef(new Map<string, string>());
 
   const loadPayments = useCallback(async () => {
     setLoading(true);
@@ -69,8 +69,11 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
     try {
       const series = await financialDocumentClient.listActiveReceiptSeries();
       const selected = series[0]; if (!selected) throw new Error('Não existe uma série de recibos efetiva configurada.');
-      const key = receiptKeys.current.get(payment.id) ?? `document-receipt-${crypto.randomUUID()}`;
-      receiptKeys.current.set(payment.id, key);
+      const key = resolvePersistentDocumentIntentKey(
+        browserDocumentIntentStorage(),
+        `finance-document-intent:receipt:${payment.id}:${selected.id}`,
+        () => `document-receipt-${crypto.randomUUID()}`,
+      );
       const result = await financialDocumentClient.issueReceipt({ sourceId: payment.id, seriesId: selected.id, idempotencyKey: key });
       setIssuanceNotice(`Recibo oficial ${result.replayed ? 'recuperado' : 'emitido'}: n.º ${result.sequenceNumber}.`);
     } catch (err: any) { setError(err?.message || 'Não foi possível emitir o recibo oficial. Tente novamente para recuperar a operação.'); }

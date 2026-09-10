@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { financialDocumentClient, type FinancialDocumentCapabilities, type FinancialDocumentDetail, type FinancialDocumentProjection, type FinancialDocumentArtifactProjection } from '../../../modules/finance/financial-document-client.ts';
+import { browserDocumentIntentStorage, resolvePersistentDocumentIntentKey } from '../../../modules/finance/financial-document-intent.ts';
 import { AuroraStateNotice } from '../../aurora/AuroraStateNotice.tsx';
 
 export function FinancialDocumentsWorkspace({ theme = 'light' }: { theme?: string }) {
@@ -10,7 +11,6 @@ export function FinancialDocumentsWorkspace({ theme = 'light' }: { theme?: strin
   const [detail, setDetail] = useState<FinancialDocumentDetail | null>(null);
   const [artifacts, setArtifacts] = useState<FinancialDocumentArtifactProjection[]>([]);
   const [capabilities, setCapabilities] = useState<FinancialDocumentCapabilities>({ issue: false, correct: false });
-  const correctionKeys = useRef(new Map<string, string>());
   useEffect(() => { Promise.all([financialDocumentClient.list(), financialDocumentClient.capabilities()]).then(([documents, permissions]) => { setItems(documents); setCapabilities(permissions); }).catch((loadError: unknown) => {
     const code = loadError instanceof Error ? loadError.message : '';
     setError(code === 'FINANCIAL_DOCUMENT_AUTH_REQUIRED'
@@ -29,7 +29,7 @@ export function FinancialDocumentsWorkspace({ theme = 'light' }: { theme?: strin
     : 'Origem financeira registada';
   const generateArtifact = async () => { if (!selected) return; try { await financialDocumentClient.generateArtifact(selected.id); setArtifacts(await financialDocumentClient.listArtifacts(selected.id)); } catch { setError('Não foi possível gerar o PDF oficial. O documento emitido permanece inalterado.'); } };
   const openArtifact = async (artifact: FinancialDocumentArtifactProjection, print = false) => { try { const bytes = await financialDocumentClient.artifactContent(artifact.id); const url = URL.createObjectURL(bytes); const page = window.open(url, '_blank', 'noopener'); if (print && page) page.addEventListener('load', () => page.print(), { once: true }); } catch { setError('Não foi possível recuperar o PDF oficial autorizado.'); } };
-  const createCorrection = async () => { if (!selected) return; try { const series = await financialDocumentClient.listActiveCorrectionSeries(); const selectedSeries = series[0]; if (!selectedSeries) throw new Error('Não existe uma série de notas de crédito efetiva configurada.'); const key = correctionKeys.current.get(selected.id) ?? `document-correction-${crypto.randomUUID()}`; correctionKeys.current.set(selected.id, key); await financialDocumentClient.issueCorrection({ originalDocumentId: selected.id, seriesId: selectedSeries.id, idempotencyKey: key }); setDetail(await financialDocumentClient.detail(selected.id)); setItems(await financialDocumentClient.list()); } catch (error: any) { setError(error?.message || 'Não foi possível criar a correção autorizada. Tente novamente para recuperar a operação.'); } };
+  const createCorrection = async () => { if (!selected) return; try { const series = await financialDocumentClient.listActiveCorrectionSeries(); const selectedSeries = series[0]; if (!selectedSeries) throw new Error('Não existe uma série de notas de crédito efetiva configurada.'); const key = resolvePersistentDocumentIntentKey(browserDocumentIntentStorage(), `finance-document-intent:correction:${selected.id}:${selectedSeries.id}`, () => `document-correction-${crypto.randomUUID()}`); await financialDocumentClient.issueCorrection({ originalDocumentId: selected.id, seriesId: selectedSeries.id, idempotencyKey: key }); setDetail(await financialDocumentClient.detail(selected.id)); setItems(await financialDocumentClient.list()); } catch (error: any) { setError(error?.message || 'Não foi possível criar a correção autorizada. Tente novamente para recuperar a operação.'); } };
   return <section data-testid="financial-documents-workspace" className={`rounded-xl border p-6 ${light ? 'bg-[var(--color-surface-raised)] border-[var(--color-border-default)]' : 'bg-zinc-900 border-zinc-800'}`}>
     <h2 className="text-xl font-bold">Documentos Financeiros</h2>
     <p className="mt-1 text-sm text-zinc-500">Histórico oficial somente leitura. Os valores e números emitidos não são editáveis.</p>

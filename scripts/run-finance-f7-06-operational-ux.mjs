@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 
 const envTestLocal = path.resolve(process.cwd(), '.env.test.local');
 if (existsSync(envTestLocal)) dotenv.config({ path: envTestLocal, override: true });
-const suites = ['tests/finance-financial-document-client.test.ts', 'tests/finance-financial-document-ui.test.ts', 'tests/finance-payment-ui.test.ts'];
+const suites = ['tests/finance-financial-document-client.test.ts', 'tests/finance-financial-document-ui.test.ts', 'tests/finance-payment-ui.test.ts', 'tests/finance-document-intent.test.ts'];
 const resultIndex = process.argv.indexOf('--result-file'); const resultFile = resultIndex < 0 ? null : process.argv[resultIndex + 1];
 if (resultIndex >= 0 && !resultFile) throw new Error('--result-file requires a path');
 const publish = result => { if (resultFile) writeFileSync(resultFile, `${JSON.stringify(result)}\n`); };
