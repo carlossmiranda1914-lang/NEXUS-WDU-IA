@@ -4,8 +4,9 @@ import { FinanceFeeCatalogueWorkspace } from './fee-catalogue/FinanceFeeCatalogu
 import { FinancialObligationsWorkspace } from './obligations/FinancialObligationsWorkspace.tsx';
 import { FinancePaymentsWorkspace } from './payments/FinancePaymentsWorkspace.tsx';
 import { FinancialDocumentsWorkspace } from './documents/FinancialDocumentsWorkspace.tsx';
+import { FinanceConfigurationWorkspace } from './configuration/FinanceConfigurationWorkspace.tsx';
 
-export type FinanceTab = 'operations' | 'catalogue' | 'obligations' | 'recebimentos' | 'documents';
+export type FinanceTab = 'operations' | 'catalogue' | 'obligations' | 'recebimentos' | 'documents' | 'configuration';
 
 export interface FinanceWorkspaceProps {
   theme?: string;
@@ -97,6 +98,7 @@ export function FinanceWorkspace({
           data-testid="finance-tab-documents"
           className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'documents' ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400' : 'border-transparent text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'}`}
         >Documentos Financeiros</button>
+        <button type="button" onClick={() => setActiveTab('configuration')} data-testid="finance-tab-configuration" className={`px-4 py-2.5 text-sm font-semibold transition-all border-b-2 -mb-px flex items-center gap-2 whitespace-nowrap ${activeTab === 'configuration' ? 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400' : 'border-transparent text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'}`}>Configuração</button>
       </div>
 
       {/* Active Finance Surface */}
@@ -110,8 +112,9 @@ export function FinanceWorkspace({
         )}
         {activeTab === 'catalogue' && <FinanceFeeCatalogueWorkspace theme={theme} />}
         {activeTab === 'obligations' && <FinancialObligationsWorkspace theme={theme} />}
-        {activeTab === 'recebimentos' && <FinancePaymentsWorkspace theme={theme} />}
+        {activeTab === 'recebimentos' && <FinancePaymentsWorkspace theme={theme} onOpenFinanceConfiguration={() => setActiveTab('configuration')} />}
         {activeTab === 'documents' && <FinancialDocumentsWorkspace theme={theme} />}
+        {activeTab === 'configuration' && <FinanceConfigurationWorkspace />}
       </div>
     </div>
   );

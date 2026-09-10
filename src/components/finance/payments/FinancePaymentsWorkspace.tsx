@@ -5,20 +5,23 @@ import { FinancePaymentsListView } from './FinancePaymentsListView.tsx';
 import { FinancePaymentCreateView } from './FinancePaymentCreateView.tsx';
 import { FinancePaymentProvidersView } from './FinancePaymentProvidersView.tsx';
 import { financialDocumentClient } from '../../../modules/finance/financial-document-client.ts';
+import { financeReadinessClient, type FinanceReadinessDto } from '../../../modules/finance/finance-readiness-client.ts';
 
 export type PaymentSubView = 'list' | 'create' | 'providers';
 
 export interface FinancePaymentsWorkspaceProps {
   theme?: string;
+  onOpenFinanceConfiguration?: () => void;
 }
 
-export function FinancePaymentsWorkspace({ theme = 'light' }: FinancePaymentsWorkspaceProps) {
+export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfiguration }: FinancePaymentsWorkspaceProps) {
   const [view, setView] = useState<PaymentSubView>('list');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [issuanceNotice, setIssuanceNotice] = useState<string | null>(null);
   const [canIssueDocument, setCanIssueDocument] = useState(false);
+  const [readiness, setReadiness] = useState<FinanceReadinessDto | null>(null);
   const receiptKeys = useRef(new Map<string, string>());
 
   const loadPayments = useCallback(async () => {
@@ -38,6 +41,7 @@ export function FinancePaymentsWorkspace({ theme = 'light' }: FinancePaymentsWor
     loadPayments();
   }, [loadPayments]);
   useEffect(() => { financialDocumentClient.capabilities().then(capabilities => setCanIssueDocument(capabilities.issue)).catch(() => setCanIssueDocument(false)); }, []);
+  useEffect(() => { financeReadinessClient.get().then(setReadiness).catch(() => setReadiness(null)); }, []);
 
   const handleCreated = (newPayment: Payment) => {
     setPayments((prev) => [newPayment, ...prev]);
@@ -57,6 +61,7 @@ export function FinancePaymentsWorkspace({ theme = 'light' }: FinancePaymentsWor
 
   return (
     <div className="w-full">
+      {readiness?.status === 'INCOMPLETE' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Configuração necessária</strong><p>Os recebimentos estão disponíveis, mas ainda não é possível emitir recibos oficiais.</p>{readiness.canManageConfiguration && <button type="button" onClick={onOpenFinanceConfiguration} className="mt-2 rounded-md border px-3 py-1">Concluir configuração</button>}</section>}
       {view === 'list' && (
         <FinancePaymentsListView
           payments={payments}

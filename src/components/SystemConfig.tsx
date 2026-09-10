@@ -1,9 +1,10 @@
 import { useState, type ComponentProps } from 'react';
 import AcademicYearManagement from './AcademicYearManagement';
 import SystemConfigLegacy from './SystemConfigLegacy';
+import { InstitutionConfigurationWorkspace } from './institution/InstitutionConfigurationWorkspace';
 
 type Props = ComponentProps<typeof SystemConfigLegacy>;
-type View = 'settings' | 'academic-year';
+type View = 'settings' | 'academic-year' | 'finance';
 
 export default function SystemConfig(props: Props) {
   const canManageAcademicYear = props.currentRole === 'admin' || props.currentRole === 'director';
@@ -14,10 +15,6 @@ export default function SystemConfig(props: Props) {
       <p className="mt-2">A administração legada de utilizadores, permissões, sincronização e reposição de dados não está ligada a uma autoridade institucional autorizada. Nenhuma alteração foi aplicada.</p>
     </section>
   );
-
-  if (!canManageAcademicYear) {
-    return unavailable;
-  }
 
   return (
     <div className="space-y-6">
@@ -40,9 +37,10 @@ export default function SystemConfig(props: Props) {
         >
           Ano Letivo
         </button>
+        <button type="button" role="tab" aria-selected={view === 'finance'} onClick={() => setView('finance')} className={`border-b-2 px-1 pb-3 transition-colors ${view === 'finance' ? 'border-emerald-500 text-emerald-300' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>Financeiro</button>
       </div>
 
-      {view === 'academic-year' ? (
+      {view === 'finance' ? <InstitutionConfigurationWorkspace /> : view === 'academic-year' && canManageAcademicYear ? (
         <AcademicYearManagement currentRole={props.currentRole} firebaseUser={props.firebaseUser} />
       ) : (
         unavailable
