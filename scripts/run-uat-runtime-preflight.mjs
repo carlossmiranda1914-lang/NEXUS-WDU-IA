@@ -3,12 +3,18 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 import pg from 'pg';
 import { readApprovedTestTarget, verifyApprovedTestConnection } from './nexus-test-db-safety.mjs';
 import { discoverMigrations } from '../src/db/migration-runner.ts';
 
 export const CANONICAL_UAT_ORIGIN = 'http://localhost:3000';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// The bootstrap deliberately keeps UAT configuration ignored and external to
+// Git. Load it here so the standalone canonical preflight observes the same
+// approved disposable target and identity fixture as the test server.
+dotenv.config({ path: path.join(root, '.env.test.local'), override: true });
 
 function git(...args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8', windowsHide: true }).trim();
