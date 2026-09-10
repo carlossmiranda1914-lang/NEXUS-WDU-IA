@@ -71,7 +71,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
           onRefresh={loadPayments}
           onOpenCreate={() => setView('create')}
           onOpenProviders={() => setView('providers')}
-          onIssueReceipt={canIssueDocument ? issueReceipt : undefined}
+          onIssueReceipt={readiness?.status === 'READY' && canIssueDocument ? issueReceipt : undefined}
         />
       )}
 

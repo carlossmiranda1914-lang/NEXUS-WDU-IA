@@ -24,3 +24,18 @@ test('Finance readiness client preserves safe authorization errors', async () =>
   const client = new FinanceReadinessClient(async () => ({ ok: false, status: 403 }) as Response, async () => null);
   await assert.rejects(() => client.get(), /FINANCE_READINESS_FORBIDDEN/);
 });
+
+test('Finance readiness client reuses fiscal configuration and receipt-series endpoints without browser authority', async () => {
+  const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const client = new FinanceReadinessClient(async (input, init) => {
+    calls.push({ input, init });
+    return { ok: true, json: async () => ready } as Response;
+  }, async () => 'token');
+
+  await client.createFiscalConfiguration({ idempotencyKey: 'fiscal-key' });
+  await client.createReceiptSeries({ code: 'RECEIPTS', idempotencyKey: 'series-key' });
+
+  assert.equal(calls[0]?.input, '/api/finance/fiscal-configurations');
+  assert.equal(calls[1]?.input, '/api/finance/document-series');
+  assert.doesNotMatch(JSON.stringify(calls), /institutionId|nextSequenceNumber/);
+});
