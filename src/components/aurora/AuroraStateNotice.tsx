@@ -12,6 +12,6 @@ const toneClass: Record<AuroraStateTone, string> = {
 export function AuroraStateNotice({ tone, title, children, action }: { tone: AuroraStateTone; title: string; children: React.ReactNode; action?: React.ReactNode }) {
   const role = tone === 'danger' ? 'alert' : 'status';
   return <section role={role} className={`flex items-start justify-between gap-4 rounded-xl border p-4 text-sm ${toneClass[tone]}`}>
-    <div><strong className="block font-semibold">{title}</strong><div className="mt-1">{children}</div></div>{action && <div className="shrink-0">{action}</div>
+    <div><strong className="block font-semibold">{title}</strong><div className="mt-1">{children}</div></div>{action && <div className="shrink-0">{action}</div>}
   </section>;
 }
