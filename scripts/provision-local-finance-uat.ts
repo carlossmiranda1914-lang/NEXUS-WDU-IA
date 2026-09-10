@@ -95,6 +95,12 @@ async function ensureDocumentaryUatConfiguration(actor: InstitutionalContext): P
      ON CONFLICT (institution_id,code) DO NOTHING`,
     [actor.institutionId, fiscalConfigurationId],
   );
+  await pool.query(
+    `INSERT INTO finance_financial_document_series (institution_id,code,document_type,status,effective_from,fiscal_configuration_id)
+     VALUES($1,'000-UAT-CN','credit_note','active',now(),$2)
+     ON CONFLICT (institution_id,code) DO NOTHING`,
+    [actor.institutionId, fiscalConfigurationId],
+  );
 }
 
 async function verifyFixture(actor: InstitutionalContext, accountId: string, obligationId: string, paymentReference: string): Promise<void> {
