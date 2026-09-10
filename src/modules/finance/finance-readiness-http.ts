@@ -6,10 +6,9 @@ import { PostgresFiscalConfigurationStore } from './fiscal-configuration.ts';
 import { PostgresFinancialDocumentSeriesStore } from './financial-document-series.ts';
 import { canAccessFinancialDocuments } from './financial-document-policy.ts';
 import { resolveFinanceReadiness } from './finance-readiness.ts';
-import { coreFiscalAdapters } from './financial-document-eligibility.ts';
-import { FiscalAdapterRegistry } from './fiscal-adapter-registry.ts';
+import { FiscalAdapterRegistry, productionFiscalAdapterRegistry } from './fiscal-adapter-registry.ts';
 
-export function registerFinanceReadinessRoutes(app: Express, pool: Pool, auth = requireAuth): void {
+export function registerFinanceReadinessRoutes(app: Express, pool: Pool, auth = requireAuth, fiscalAdapters: FiscalAdapterRegistry = productionFiscalAdapterRegistry): void {
   app.get('/api/finance/readiness', auth, async (req: AuthRequest, res: Response) => {
     const context = req.institutionalContext;
     if (!context) return void res.status(401).json({ code: 'UNAUTHORIZED', error: 'Contexto institucional não encontrado.' });
@@ -33,7 +32,7 @@ export function registerFinanceReadinessRoutes(app: Express, pool: Pool, auth = 
         ]);
         if (!profile) throw new Error('FINANCIAL_PROFILE_NOT_FOUND');
         if (!receiptSeries) throw new Error('RECEIPT_SERIES_NOT_EFFECTIVE');
-        new FiscalAdapterRegistry(coreFiscalAdapters).select(profile, configuration);
+        fiscalAdapters.select(profile, configuration);
       },
     });
     res.json(readiness);

@@ -17,4 +17,28 @@ export class FiscalAdapterRegistry {
     if (adapter.key !== fiscalConfiguration.adapterKey) throw new Error('FISCAL_CONFIGURATION_ADAPTER_MISMATCH');
     return adapter;
   }
+
+  has(adapterKey: string): boolean {
+    return this.adapters.some((adapter) => adapter.key === adapterKey);
+  }
 }
+
+/** No jurisdiction has been approved for production fiscal operation yet. */
+export const productionFiscalAdapterRegistry = new FiscalAdapterRegistry([]);
+
+const syntheticUatAdapter: FiscalAdapter = {
+  key: 'core',
+  supportedJurisdictions: ['NEXUS_TEST'],
+  policy: { version: 'core-1', supportedDocumentTypes: ['receipt', 'credit_note'] },
+};
+
+/**
+ * Test/UAT-only composition.  It is selected by server bootstrap, never by a
+ * browser request, institution profile, or fiscal-configuration payload.
+ */
+export const createSyntheticUatFiscalAdapterRegistry = () => new FiscalAdapterRegistry([syntheticUatAdapter]);
+
+export const runtimeFiscalAdapterRegistry = () =>
+  process.env.NEXUS_UAT_SYNTHETIC_FISCAL_ADAPTERS === 'true'
+    ? createSyntheticUatFiscalAdapterRegistry()
+    : productionFiscalAdapterRegistry;

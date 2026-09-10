@@ -79,6 +79,7 @@ import { registerObligationDiscountRoutes } from './src/modules/finance/obligati
 import { registerFinanceOperationalContextRoutes } from './src/modules/finance/finance-operational-context-http.ts';
 import { registerFinancialDocumentRoutes } from './src/modules/finance/financial-document-http.ts';
 import { registerFinanceReadinessRoutes } from './src/modules/finance/finance-readiness-http.ts';
+import { runtimeFiscalAdapterRegistry } from './src/modules/finance/fiscal-adapter-registry.ts';
 import type { FinancialProfileStore } from './src/modules/finance/financial-context.ts';
 import { isInstitutionOwned, resolveInstitutionOwnedResourceIds } from './src/auth/institution-resource-ownership.ts';
 import { eq, desc, sql, and, ne, inArray } from 'drizzle-orm';
@@ -394,8 +395,9 @@ async function startServer() {
     registerPaymentWebhookRoutes(app, pool);
     registerPaymentProviderRoutes(app, pool);
     registerFinanceOperationalContextRoutes(app, pool);
-    registerFinancialDocumentRoutes(app, pool);
-    registerFinanceReadinessRoutes(app, pool);
+    const fiscalAdapters = runtimeFiscalAdapterRegistry();
+    registerFinancialDocumentRoutes(app, pool, undefined, fiscalAdapters);
+    registerFinanceReadinessRoutes(app, pool, undefined, fiscalAdapters);
 
   console.log('[SERVER] Servidor iniciado. Base de dados pronta para uso operacional.');
 

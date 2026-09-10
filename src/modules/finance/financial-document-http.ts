@@ -6,6 +6,7 @@ import { PostgresFinancialDocumentRepository } from './financial-document-servic
 import { canonicalDocumentaryEligibilityReason, resolveReceiptEligibility } from './financial-document-eligibility.ts';
 import { FinancialDocumentArtifactService, type FinancialDocumentArtifact } from './financial-document-artifact-service.ts';
 import { createCanonicalFinanceFingerprint, executeIdempotentFinanceCommand } from './finance-command.ts';
+import { FiscalAdapterRegistry, productionFiscalAdapterRegistry } from './fiscal-adapter-registry.ts';
 
 type DocumentRow = { id: string; document_type: string; status: string; sequence_number: string; issued_at: Date; source_snapshot: Record<string, unknown>; corrects_document_id: string | null; fiscal_adapter_key: string | null; series_code: string };
 const view = (row: DocumentRow) => ({ id: row.id, type: row.document_type, status: row.status, seriesCode: row.series_code, sequenceNumber: Number(row.sequence_number), issuedAt: row.issued_at.toISOString(), sourceSnapshot: row.source_snapshot, correctsDocumentId: row.corrects_document_id, fiscalAdapterKey: row.fiscal_adapter_key });
@@ -20,7 +21,7 @@ const decodeCursor = (value: unknown) => {
 };
 const encodeCursor = (id: string) => Buffer.from(id, 'utf8').toString('base64url');
 
-export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth = requireAuth): void {
+export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth = requireAuth, fiscalAdapters: FiscalAdapterRegistry = productionFiscalAdapterRegistry): void {
   const actor = (req: AuthRequest, res: Response, action: 'read' | 'issue' | 'correct' | 'fiscal_config_read' | 'fiscal_config_manage' | 'series_read' | 'series_manage' = 'read') => {
     const context = req.institutionalContext;
     if (!context) { res.status(401).json({ code: 'UNAUTHORIZED', error: 'Contexto institucional não encontrado.' }); return undefined; }
@@ -60,12 +61,12 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
   app.get('/api/finance/payments/:id/receipt-eligibility', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'issue'); if (!context) return;
     const seriesId = typeof req.query.seriesId === 'string' ? req.query.seriesId : '';
-    const result = await resolveReceiptEligibility(pool, { institutionId: context.institutionId, paymentId: req.params.id, seriesId, documentType: 'receipt' });
+    const result = await resolveReceiptEligibility(pool, fiscalAdapters, { institutionId: context.institutionId, paymentId: req.params.id, seriesId, documentType: 'receipt' });
     res.json(result.eligible === true ? { status: 'ELIGIBLE' } : { status: 'BLOCKED', reasonCode: result.reasonCode });
   });
   app.post('/api/finance/documents/issue', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'issue'); const idempotencyKey = key(req, res); if (!context || !idempotencyKey) return;
-    try { const result = await new PostgresFinancialDocumentRepository(pool as Pool).issue({ institutionId: context.institutionId, sourceInstitutionId: context.institutionId, sourceType: 'payment', sourceId: req.body?.sourceId, seriesId: req.body?.seriesId, documentType: req.body?.documentType, idempotencyKey }); res.status(result.replayed ? 200 : 201).json(result); } catch (error) { handleCommand(res, error); }
+    try { const result = await new PostgresFinancialDocumentRepository(pool as Pool, fiscalAdapters).issue({ institutionId: context.institutionId, sourceInstitutionId: context.institutionId, sourceType: 'payment', sourceId: req.body?.sourceId, seriesId: req.body?.seriesId, documentType: req.body?.documentType, idempotencyKey }); res.status(result.replayed ? 200 : 201).json(result); } catch (error) { handleCommand(res, error); }
   });
   app.post('/api/finance/documents/:id/corrections', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'correct'); const idempotencyKey = key(req, res); if (!context || !idempotencyKey) return;
@@ -94,7 +95,7 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
     const command = { version: req.body?.version, adapterKey: req.body?.adapterKey, operationalConfiguration: req.body?.operationalConfiguration ?? {}, effectiveFrom: req.body?.effectiveFrom, effectiveTo: req.body?.effectiveTo ?? null };
     // `core` is a synthetic NEXUS_TEST adapter. It is never a production-facing
     // configuration choice and can only be provisioned by an explicitly-authorized test runtime.
-    if (command.adapterKey !== 'core' || process.env.TEST_DATABASE_LOCAL_AUTHORIZED !== 'true') {
+    if (!fiscalAdapters.has(command.adapterKey)) {
       return void res.status(422).json({ code: 'FISCAL_ADAPTER_NOT_REGISTERED', error: 'O adaptador fiscal indicado não está autorizado neste ambiente.' });
     }
     try { const result = await executeIdempotentFinanceCommand({ pool, identity: { institutionId: context.institutionId, operationNamespace: 'financial_document_fiscal_configuration', idempotencyKey, canonicalFingerprint: createCanonicalFinanceFingerprint(command) }, execute: async client => { const inserted = await client.query<{ id: string; version: number; adapter_key: string; effective_from: Date; effective_to: Date | null }>(`INSERT INTO finance_fiscal_configuration_versions(institution_id,version,adapter_key,operational_configuration,effective_from,effective_to) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,version,adapter_key,effective_from,effective_to`, [context.institutionId, command.version, command.adapterKey, command.operationalConfiguration, command.effectiveFrom, command.effectiveTo]); return { resultRef: inserted.rows[0]!.id, result: inserted.rows[0]! }; }, loadResult: async (client, id) => { const loaded = await client.query<{ id: string; version: number; adapter_key: string; effective_from: Date; effective_to: Date | null }>('SELECT id,version,adapter_key,effective_from,effective_to FROM finance_fiscal_configuration_versions WHERE institution_id=$1 AND id=$2', [context.institutionId, id]); if (!loaded.rows[0]) throw new Error('FISCAL_CONFIGURATION_RESULT_MISSING'); return loaded.rows[0]; } }); res.status(result.replayed ? 200 : 201).json(result.result); } catch { res.status(422).json({ code: 'FISCAL_CONFIGURATION_VALIDATION', error: 'Configuração fiscal inválida.' }); }

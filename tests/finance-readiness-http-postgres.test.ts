@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import test from 'node:test';
 import express from 'express';
 import { registerFinanceReadinessRoutes } from '../src/modules/finance/finance-readiness-http.ts';
+import { createSyntheticUatFiscalAdapterRegistry } from '../src/modules/finance/fiscal-adapter-registry.ts';
 
 test('Finance readiness HTTP derives only the resolved tenant and existing capabilities', async () => {
   const calls: unknown[][] = [];
@@ -18,7 +19,7 @@ test('Finance readiness HTTP derives only the resolved tenant and existing capab
   } };
   const app = express();
   const auth: any = (req: any, _res: any, next: any) => { if (req.header('Authorization') === 'Bearer admin') req.institutionalContext = { institutionId: 'tenant-a', role: 'institution_admin' }; if (req.header('Authorization') === 'Bearer reader') req.institutionalContext = { institutionId: 'tenant-a', role: 'director' }; if (req.header('Authorization') === 'Bearer denied') req.institutionalContext = { institutionId: 'tenant-a', role: 'teacher' }; next(); };
-  registerFinanceReadinessRoutes(app, pool, auth);
+  registerFinanceReadinessRoutes(app, pool, auth, createSyntheticUatFiscalAdapterRegistry());
   const server = http.createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
   try {
     const base = `http://127.0.0.1:${(server.address() as any).port}/api/finance/readiness`;
@@ -26,7 +27,7 @@ test('Finance readiness HTTP derives only the resolved tenant and existing capab
     assert.equal((await fetch(base, { headers: { Authorization: 'Bearer denied' } })).status, 403);
     const admin = await fetch(`${base}?institutionId=foreign`, { headers: { Authorization: 'Bearer admin' } });
     assert.equal(admin.status, 200);
-    assert.deepEqual(await admin.json(), { module: 'FINANCE', status: 'INCOMPLETE', requirements: [{ code: 'FINANCIAL_PROFILE', state: 'COMPLETE' }, { code: 'FISCAL_CONFIGURATION', state: 'COMPLETE' }, { code: 'RECEIPT_SERIES', state: 'MISSING' }], canManageConfiguration: true });
+    assert.deepEqual(await admin.json(), { module: 'FINANCE', status: 'INCOMPLETE', requirements: [{ code: 'FINANCIAL_PROFILE', state: 'COMPLETE' }, { code: 'FISCAL_CONFIGURATION', state: 'COMPLETE' }, { code: 'RECEIPT_SERIES', state: 'MISSING' }], receiptIssuance: { status: 'BLOCKED', reasonCode: 'FINANCE_MODULE_NOT_READY' }, canManageConfiguration: true });
     const reader = await fetch(base, { headers: { Authorization: 'Bearer reader' } });
     assert.equal((await reader.json()).canManageConfiguration, false);
     assert.ok(calls.every(values => values.includes('tenant-a')), 'readiness must use only the server-derived institution');

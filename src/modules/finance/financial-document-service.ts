@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createCanonicalFinanceFingerprint, executeIdempotentFinanceCommand } from './finance-command.ts';
 import { resolveReceiptEligibility } from './financial-document-eligibility.ts';
+import { FiscalAdapterRegistry, productionFiscalAdapterRegistry } from './fiscal-adapter-registry.ts';
 
 export type FinancialDocumentIssuanceCommand = {
   institutionId: string;
@@ -28,7 +29,7 @@ export async function issueFinancialDocumentCommand(_dependencies: unknown, comm
 }
 
 export class PostgresFinancialDocumentRepository {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly fiscalAdapters: FiscalAdapterRegistry = productionFiscalAdapterRegistry) {}
 
   async issue(command: FinancialDocumentIssuanceCommand & { documentType: string }) {
     validateDocumentSourceInstitution(command.institutionId, command.sourceInstitutionId);
@@ -36,7 +37,7 @@ export class PostgresFinancialDocumentRepository {
       pool: this.pool,
       identity: { institutionId: command.institutionId, operationNamespace: 'financial_document_issuance', idempotencyKey: command.idempotencyKey, canonicalFingerprint: createCanonicalFinanceFingerprint(command) },
       execute: async client => {
-      const eligibility = await resolveReceiptEligibility(client, { institutionId: command.institutionId, paymentId: command.sourceId, seriesId: command.seriesId, documentType: command.documentType, lock: true });
+      const eligibility = await resolveReceiptEligibility(client, this.fiscalAdapters, { institutionId: command.institutionId, paymentId: command.sourceId, seriesId: command.seriesId, documentType: command.documentType, lock: true });
       if (eligibility.eligible === false) throw new Error(eligibility.reasonCode);
       const sourceRow = eligibility.payment;
       const fiscalAdapter = eligibility.adapter;
