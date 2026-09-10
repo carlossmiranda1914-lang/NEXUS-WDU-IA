@@ -6,6 +6,35 @@
   --font-display: "Inter", system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
 
+  /* Nexus Aurora primitives. Components consume the semantic aliases below. */
+  --aurora-green-void: #031D18;
+  --aurora-green-deep: #064C3C;
+  --aurora-action-primary: #0B8B62;
+  --aurora-accent-vivid: #28C76F;
+  --aurora-accent-lime: #9BEA4A;
+  --aurora-surface-canvas: #F5FAF7;
+  --aurora-surface-raised: #FFFFFF;
+  --aurora-surface-mint: #DDF9E8;
+  --aurora-text-primary: #102E27;
+  --aurora-border-default: #D8E8E0;
+  --aurora-info: #3478E5;
+  --aurora-success: #15803D;
+  --aurora-warning: #F2A93B;
+  --aurora-danger: #E65362;
+
+  --color-surface-canvas: var(--aurora-surface-canvas);
+  --color-surface-raised: var(--aurora-surface-raised);
+  --color-surface-workspace: var(--aurora-surface-mint);
+  --color-text-primary: var(--aurora-text-primary);
+  --color-text-secondary: #45645B;
+  --color-border-default: var(--aurora-border-default);
+  --color-action-primary: var(--aurora-action-primary);
+  --color-state-info: var(--aurora-info);
+  --color-state-success: var(--aurora-success);
+  --color-state-warning: var(--aurora-warning);
+  --color-state-danger: var(--aurora-danger);
+  --color-focus-ring: #00A6A6;
+
   /* Premium Institutional Palette */
   --color-brand-bg: #F8FAFC;
   --color-brand-card: #FFFFFF;
@@ -75,6 +104,31 @@
   --text-2xl: 1.5rem;        /* 24px (Título secundário: 24px, peso 600) */
   --text-3xl: 1.875rem;      /* 30px (Título principal: 30px, peso 700) */
   --text-4xl: 1.875rem;      /* 30px (Título principal: 30px, peso 700) */
+}
+
+/* Aurora semantic aliases. System mode resolves to one of these sets in App. */
+body.light {
+  --aurora-surface-canvas: #F5FAF7;
+  --aurora-surface-raised: #FFFFFF;
+  --aurora-surface-mint: #DDF9E8;
+  --aurora-text-primary: #102E27;
+  --aurora-border-default: #D8E8E0;
+}
+
+body.dark {
+  --aurora-surface-canvas: #031D18;
+  --aurora-surface-raised: #0A2C24;
+  --aurora-surface-mint: #103C31;
+  --aurora-text-primary: #ECFDF5;
+  --aurora-border-default: #245447;
+}
+
+body.tonal {
+  --aurora-surface-canvas: #EAF7F1;
+  --aurora-surface-raised: #FFFFFF;
+  --aurora-surface-mint: #DDF9E8;
+  --aurora-text-primary: #102E27;
+  --aurora-border-default: #C6E5D7;
 }
 
 body {

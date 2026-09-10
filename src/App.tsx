@@ -401,18 +401,22 @@ export default function App() {
   const [isCopilotOpen, setIsCopilotOpen] = useState<boolean>(false);
   const [showRecoveryInfo, setShowRecoveryInfo] = useState<boolean>(false);
 
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    return (localStorage.getItem('nexus_theme') as 'light' | 'dark') || 'light';
+  const [theme, setTheme] = useState<'light' | 'dark' | 'tonal' | 'system'>(() => {
+    return (localStorage.getItem('nexus_theme') as 'light' | 'dark' | 'tonal' | 'system') || 'light';
   });
 
   useEffect(() => {
     localStorage.setItem('nexus_theme', theme);
     const body = document.body;
-    if (theme === 'light') {
-      body.classList.add('light');
-    } else {
-      body.classList.remove('light');
-    }
+    const resolveSystemTheme = () => window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const resolved = theme === 'system' ? resolveSystemTheme() : theme;
+    body.classList.remove('light', 'dark', 'tonal');
+    body.classList.add(resolved);
+    if (theme !== 'system') return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const update = () => { body.classList.remove('light', 'dark'); body.classList.add(resolveSystemTheme()); };
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
   }, [theme]);
 
   // Browser-held role controls are presentation only; authority stays server-side.
