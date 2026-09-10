@@ -13,6 +13,7 @@ import { obligationAdjustmentClient } from '../../../modules/finance/obligation-
 import { obligationDiscountClient } from '../../../modules/finance/obligation-discount-client.ts';
 import { FinanceObligationAdjustmentView } from './FinanceObligationAdjustmentView.tsx';
 import { FinanceObligationDiscountView } from './FinanceObligationDiscountView.tsx';
+import { AuroraPageHeader } from '../../aurora/AuroraPageHeader.tsx';
 
 export interface FinanceOperationalContextWorkspaceProps {
   theme?: string;
@@ -286,9 +287,13 @@ export function FinanceOperationalContextWorkspace({
           isLight ? 'bg-white border-zinc-200 shadow-sm' : 'bg-zinc-900 border-zinc-800'
         }`}
       >
+        <AuroraPageHeader
+          title="Situação Financeira"
+          description="Consulte o contexto financeiro autorizado a partir de uma conta institucional."
+        />
         <div>
-          <h2 className={`text-xl font-bold tracking-tight ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
-            Selecionar Conta Financeira
+          <h2 className={`text-lg font-bold tracking-tight ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
+            Selecionar conta financeira
           </h2>
           <p className={`text-sm mt-1 ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}>
             Pesquise pelo número de conta (ex: CTA-000001), nome da conta ou responsável financeiro.

@@ -1,6 +1,7 @@
 import React from 'react';
 import type { FeeCatalogueRecord } from '../../../modules/finance/fee-catalogue-client.ts';
 import { formatDisplayDate } from './fee-catalogue-date.ts';
+import { AuroraPageHeader } from '../../aurora/AuroraPageHeader.tsx';
 
 export interface FeeCatalogueListProps {
   items: FeeCatalogueRecord[];
@@ -46,14 +47,10 @@ export function FeeCatalogueList({
 
   return (
     <main className="p-6 max-w-6xl mx-auto text-zinc-100">
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-zinc-800 mb-6 gap-4">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight text-white">Catálogo de Emolumentos</h2>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            Definições financeiras institucionais e vigência temporal de propinas. Não gera cobranças ou pagamentos diretos.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+      <AuroraPageHeader
+        title="Catálogo de Emolumentos"
+        description="Definições financeiras institucionais e vigência temporal de propinas. Não gera cobranças ou pagamentos diretos."
+        actions={<div className="flex items-center gap-3">
           <div className="flex items-center rounded-lg border border-zinc-700/60 bg-zinc-900/60 p-1 text-xs">
             <button
               type="button"
@@ -103,8 +100,8 @@ export function FeeCatalogueList({
           >
             + Novo emolumento
           </button>
-        </div>
-      </header>
+        </div>}
+      />
 
       {error && (
         <div className="p-4 mb-6 rounded-lg bg-rose-950/40 border border-rose-500/40 text-rose-300 text-sm flex items-start justify-between gap-3">

@@ -3,6 +3,7 @@ import {
   financialObligationClient,
   type FinancialObligationRecord,
 } from '../../../modules/finance/financial-obligation-client.ts';
+import { AuroraPageHeader } from '../../aurora/AuroraPageHeader.tsx';
 
 export interface FinancialObligationsListViewProps {
   refreshTrigger: number;
@@ -54,16 +55,11 @@ export function FinancialObligationsListView({
   return (
     <div className="p-6 max-w-7xl mx-auto text-zinc-100">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-zinc-800 gap-4">
-        <div>
-          <h1 data-testid="obligations-list-title" className="text-2xl font-bold tracking-tight text-white">
-            Obrigações Financeiras
-          </h1>
-          <p className="text-sm text-zinc-400 mt-1">
-            Gestão e emissão de montantes legítimos a cobrar associados a contas financeiras e catálogo de emolumentos.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
+      <AuroraPageHeader
+        title="Obrigações Financeiras"
+        titleTestId="obligations-list-title"
+        description="Gestão e emissão de montantes legítimos a cobrar associados a contas financeiras e catálogo de emolumentos."
+        actions={<div className="flex items-center gap-3">
           <button
             type="button"
             data-testid="manage-accounts-button"
@@ -80,8 +76,8 @@ export function FinancialObligationsListView({
           >
             <span>+</span> Nova obrigação
           </button>
-        </div>
-      </div>
+        </div>}
+      />
 
       {/* Search */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
