@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createCanonicalFinanceFingerprint, executeIdempotentFinanceCommand } from './finance-command.ts';
 import { FiscalAdapterRegistry, type FiscalAdapter } from './fiscal-adapter-registry.ts';
+import { resolveReceiptEligibility } from './financial-document-eligibility.ts';
 
 // F7-02 intentionally provides only a synthetic adapter. Production
 // jurisdictions must be explicitly registered before they can issue.
@@ -40,6 +41,8 @@ export class PostgresFinancialDocumentRepository {
       pool: this.pool,
       identity: { institutionId: command.institutionId, operationNamespace: 'financial_document_issuance', idempotencyKey: command.idempotencyKey, canonicalFingerprint: createCanonicalFinanceFingerprint(command) },
       execute: async client => {
+      const eligibility = await resolveReceiptEligibility(client, { institutionId: command.institutionId, paymentId: command.sourceId, seriesId: command.seriesId, documentType: command.documentType });
+      if (eligibility.eligible === false) throw new Error(eligibility.reasonCode);
       // Lock the authoritative Finance source first, then the institution series.
       // The document snapshot is built from this server-side row, never caller input.
       const source = await client.query<{ id: string; amount: string; currency: string; payment_reference: string; effective_at: Date; journal_transaction_id: string; financial_profile_version: number }>(

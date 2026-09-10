@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { requireAuth, type AuthRequest } from '../../middleware/auth.ts';
 import { canAccessFinancialDocuments } from './financial-document-policy.ts';
 import { PostgresFinancialDocumentRepository } from './financial-document-service.ts';
+import { resolveReceiptEligibility } from './financial-document-eligibility.ts';
 import { FinancialDocumentArtifactService, type FinancialDocumentArtifact } from './financial-document-artifact-service.ts';
 import { createCanonicalFinanceFingerprint, executeIdempotentFinanceCommand } from './finance-command.ts';
 
@@ -53,8 +54,15 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
     const message = error instanceof Error ? error.message : '';
     if (message === 'Finance command fingerprint conflict') return res.status(409).json({ code: 'FINANCIAL_DOCUMENT_CONFLICT', error: 'Conflito de idempotência.' });
     if (/SOURCE_NOT_ELIGIBLE|SOURCE_NOT_FOUND|ORIGINAL_NOT_FOUND|SERIES_NOT_EFFECTIVE/.test(message)) return res.status(404).json({ code: 'FINANCIAL_DOCUMENT_NOT_FOUND', error: 'Documento ou recurso financeiro não encontrado.' });
-    return res.status(422).json({ code: 'FINANCIAL_DOCUMENT_VALIDATION', error: 'O pedido de documento financeiro não é elegível.' });
+    const safe = /SOURCE_NOT_ELIGIBLE|FINANCIAL_PROFILE_NOT_FOUND|FISCAL_CONFIGURATION_NOT_EFFECTIVE|FISCAL_ADAPTER_UNSUPPORTED_JURISDICTION|FISCAL_CONFIGURATION_ADAPTER_MISMATCH|DOCUMENT_TYPE_UNSUPPORTED|RECEIPT_SERIES_NOT_EFFECTIVE/.test(message) ? message : 'FINANCIAL_DOCUMENT_VALIDATION';
+    return res.status(422).json({ code: safe, error: 'O pedido de documento financeiro não é elegível.' });
   };
+  app.get('/api/finance/payments/:id/receipt-eligibility', auth, async (req: AuthRequest, res) => {
+    const context = actor(req, res, 'issue'); if (!context) return;
+    const seriesId = typeof req.query.seriesId === 'string' ? req.query.seriesId : '';
+    const result = await resolveReceiptEligibility(pool, { institutionId: context.institutionId, paymentId: req.params.id, seriesId, documentType: 'receipt' });
+    res.json(result.eligible === true ? { status: 'ELIGIBLE' } : { status: 'BLOCKED', reasonCode: result.reasonCode });
+  });
   app.post('/api/finance/documents/issue', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'issue'); const idempotencyKey = key(req, res); if (!context || !idempotencyKey) return;
     try { const result = await new PostgresFinancialDocumentRepository(pool as Pool).issue({ institutionId: context.institutionId, sourceInstitutionId: context.institutionId, sourceType: 'payment', sourceId: req.body?.sourceId, seriesId: req.body?.seriesId, documentType: req.body?.documentType, idempotencyKey }); res.status(result.replayed ? 200 : 201).json(result); } catch (error) { handleCommand(res, error); }

@@ -5,6 +5,7 @@ export type FinancialDocumentCapabilities = { issue: boolean; correct: boolean }
 export type FinancialDocumentDetail = FinancialDocumentProjection & { sources: Array<{ type: string; id: string; snapshot: Record<string, unknown> }>; corrections: FinancialDocumentProjection[] };
 export type FinancialDocumentArtifactProjection = { id: string; document_id: string; render_version: string; template_version: string; generated_at: string; content_hash: string; media_type: string; byte_size: number };
 type FinancialDocumentSeriesProjection = { id: string; document_type: string; status: string };
+export type ReceiptEligibilityProjection = { status: 'ELIGIBLE' } | { status: 'BLOCKED'; reasonCode: string };
 
 const defaultFetch: typeof fetch = (input, init) => {
   if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
@@ -39,6 +40,9 @@ export class FinancialDocumentClient {
   async generateArtifact(id: string): Promise<FinancialDocumentArtifactProjection> { return this.request<FinancialDocumentArtifactProjection>(`/api/finance/documents/${encodeURIComponent(id)}/artifacts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ renderVersion: 'renderer-1', templateVersion: 'template-1' }) }); }
   async issueReceipt(input: { sourceId: string; seriesId: string; idempotencyKey: string }): Promise<{ id: string; sequenceNumber: number; replayed: boolean }> {
     return this.request('/api/finance/documents/issue', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': input.idempotencyKey }, body: JSON.stringify({ sourceId: input.sourceId, seriesId: input.seriesId, documentType: 'receipt' }) });
+  }
+  async receiptEligibility(input: { paymentId: string; seriesId: string }): Promise<ReceiptEligibilityProjection> {
+    return this.request(`/api/finance/payments/${encodeURIComponent(input.paymentId)}/receipt-eligibility?seriesId=${encodeURIComponent(input.seriesId)}`);
   }
   async listActiveReceiptSeries(): Promise<FinancialDocumentSeriesProjection[]> { return (await this.request<{ items: FinancialDocumentSeriesProjection[] }>('/api/finance/document-series')).items.filter(series => series.document_type === 'receipt' && series.status === 'active'); }
   async listActiveCorrectionSeries(): Promise<FinancialDocumentSeriesProjection[]> { return (await this.request<{ items: FinancialDocumentSeriesProjection[] }>('/api/finance/document-series')).items.filter(series => series.document_type === 'credit_note' && series.status === 'active'); }
