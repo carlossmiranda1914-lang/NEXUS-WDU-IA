@@ -10,6 +10,6 @@ assert.match(workspace, /Operação[\s\S]*Recebimentos[\s\S]*Documentos/, 'opera
 assert.match(workspace, /Configuração[\s\S]*Emolumentos[\s\S]*Configuração Financeira/, 'configuration destinations must remain grouped');
 assert.match(workspace, /aria-current/, 'the current destination must be explicit to assistive technology');
 assert.doesNotMatch(workspace, /flex flex-wrap items-center gap-x-4/, 'Aurora workspace navigation must not remain a horizontal peer strip');
-assert.match(workspace, /md:grid-cols-\[15rem_minmax\(0,1fr\)\]/, 'desktop workspace must reserve little space for hierarchy and most space for work');
+assert.match(workspace, /md:grid-cols-\[12rem_minmax\(0,1fr\)\]/, 'desktop workspace must reserve little space for hierarchy and most space for work');
 
 console.log('FINANCE_AURORA_WORKSPACE_NAVIGATION=PASS');
