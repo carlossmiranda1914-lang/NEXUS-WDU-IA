@@ -9,6 +9,7 @@ for (const required of [
   "primary_jurisdiction === 'NEXUS_TEST'",
   "'NEXUS_TEST'",
   "'000-UAT-REC'",
+  "'000-UAT-CN'",
   "UAT-F7-RECEIPT-SOURCE",
   'ensureReceiptEligiblePayment',
 ]) assert.ok(source.includes(required), `Missing local Finance UAT documentary fixture invariant: ${required}`);
