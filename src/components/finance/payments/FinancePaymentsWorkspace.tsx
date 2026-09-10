@@ -22,7 +22,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   const [issuanceNotice, setIssuanceNotice] = useState<string | null>(null);
   const [canIssueDocument, setCanIssueDocument] = useState(false);
   const [readiness, setReadiness] = useState<FinanceReadinessDto | null>(null);
-  const [receiptEligibility, setReceiptEligibility] = useState<Record<string, boolean>>({});
+  const [receiptEligibility, setReceiptEligibility] = useState<Record<string, { eligible: boolean; reason?: string }>>({});
   const receiptKeys = useRef(new Map<string, string>());
 
   const loadPayments = useCallback(async () => {
@@ -43,7 +43,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   }, [loadPayments]);
   useEffect(() => { financialDocumentClient.capabilities().then(capabilities => setCanIssueDocument(capabilities.issue)).catch(() => setCanIssueDocument(false)); }, []);
   useEffect(() => { financeReadinessClient.get().then(setReadiness).catch(() => setReadiness(null)); }, []);
-  useEffect(() => { if (readiness?.status !== 'READY' || readiness?.receiptIssuance.status !== 'READY' || !canIssueDocument || payments.length === 0) return; financialDocumentClient.listActiveReceiptSeries().then(async series => { const selected = series[0]; if (!selected) return; const entries = await Promise.all(payments.map(async payment => [payment.id, (await financialDocumentClient.receiptEligibility({ paymentId: payment.id, seriesId: selected.id })).status === 'ELIGIBLE'] as const)); setReceiptEligibility(Object.fromEntries(entries)); }).catch(() => setReceiptEligibility({})); }, [readiness?.status, readiness?.receiptIssuance.status, canIssueDocument, payments]);
+  useEffect(() => { if (readiness?.status !== 'READY' || readiness?.receiptIssuance.status !== 'READY' || !canIssueDocument || payments.length === 0) return; financialDocumentClient.listActiveReceiptSeries().then(async series => { const selected = series[0]; if (!selected) return; const entries = await Promise.all(payments.map(async payment => { const result = await financialDocumentClient.receiptEligibility({ paymentId: payment.id, seriesId: selected.id }); return [payment.id, result.status === 'ELIGIBLE' ? { eligible: true } : { eligible: false, reason: result.reasonCode }] as const; })); setReceiptEligibility(Object.fromEntries(entries)); }).catch(() => setReceiptEligibility({})); }, [readiness?.status, readiness?.receiptIssuance.status, canIssueDocument, payments]);
 
   const handleCreated = (newPayment: Payment) => {
     setPayments((prev) => [newPayment, ...prev]);
@@ -75,7 +75,8 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
           onOpenCreate={() => setView('create')}
           onOpenProviders={() => setView('providers')}
           onIssueReceipt={readiness?.status === 'READY' && readiness?.receiptIssuance.status === 'READY' && canIssueDocument ? issueReceipt : undefined}
-          canIssueReceipt={payment => receiptEligibility[payment.id] === true}
+          canIssueReceipt={payment => receiptEligibility[payment.id]?.eligible === true}
+          receiptBlockReason={payment => receiptEligibility[payment.id]?.reason ?? (canIssueDocument ? 'A emissão deste recibo está bloqueada pela validação do servidor.' : 'A sua sessão não tem permissão para emitir recibos.')}
         />
       )}
 

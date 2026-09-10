@@ -11,6 +11,7 @@ export interface FinancePaymentsListViewProps {
   onOpenProviders: () => void;
   onIssueReceipt?: (payment: Payment) => void;
   canIssueReceipt?: (payment: Payment) => boolean;
+  receiptBlockReason?: (payment: Payment) => string | undefined;
 }
 
 export function FinancePaymentsListView({
@@ -23,6 +24,7 @@ export function FinancePaymentsListView({
   onOpenProviders,
   onIssueReceipt,
   canIssueReceipt,
+  receiptBlockReason,
 }: FinancePaymentsListViewProps) {
   const isLight = theme === 'light';
 
@@ -152,7 +154,7 @@ export function FinancePaymentsListView({
                         Não aplicado
                       </span>
                     </td>
-                    <td className="px-6 py-4">{p.status === 'confirmed' && onIssueReceipt && (canIssueReceipt?.(p) ?? true) ? <button type="button" data-testid={`issue-receipt-${p.id}`} onClick={() => onIssueReceipt(p)} className="rounded-md border px-2 py-1 text-xs font-semibold">Emitir recibo oficial</button> : <span className="text-xs text-zinc-500">Indisponível</span>}</td>
+                    <td className="px-6 py-4">{p.status === 'confirmed' && onIssueReceipt && (canIssueReceipt?.(p) ?? true) ? <button type="button" data-testid={`issue-receipt-${p.id}`} onClick={() => onIssueReceipt(p)} className="rounded-md border px-2 py-1 text-xs font-semibold">Emitir recibo oficial</button> : <span className="text-xs text-zinc-500">{receiptBlockReason?.(p) ?? 'Emissão não autorizada'}</span>}</td>
                   </tr>
                 ))}
               </tbody>
