@@ -14,6 +14,20 @@ export interface FinancePaymentsWorkspaceProps {
   onOpenFinanceConfiguration?: () => void;
 }
 
+const receiptEligibilityMessage = (reason?: string, canIssueDocument = false) => {
+  if (!canIssueDocument) return 'A sua associação institucional não tem permissão para emitir recibos.';
+  const messages: Record<string, string> = {
+    SOURCE_NOT_ELIGIBLE: 'Este pagamento não está elegível para emissão de recibo oficial.',
+    RECEIPT_SERIES_NOT_EFFECTIVE: 'Não existe uma série de recibos ativa e efetiva para este pagamento.',
+    FISCAL_CONFIGURATION_NOT_EFFECTIVE: 'A instituição não possui configuração fiscal efetiva para emissão oficial.',
+    FINANCIAL_PROFILE_NOT_FOUND: 'O perfil financeiro associado a este pagamento não está disponível.',
+    FISCAL_ADAPTER_UNSUPPORTED_JURISDICTION: 'A política documental da instituição não tem um adaptador jurisdicional aprovado.',
+    FISCAL_CONFIGURATION_ADAPTER_MISMATCH: 'A configuração fiscal ativa não corresponde à política documental da instituição.',
+    DOCUMENT_TYPE_UNSUPPORTED: 'A política documental ativa não suporta a emissão deste recibo.',
+  };
+  return reason ? messages[reason] ?? 'Este pagamento não reúne os requisitos para emissão oficial.' : 'A emissão deste recibo ainda não está disponível.';
+};
+
 export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfiguration }: FinancePaymentsWorkspaceProps) {
   const [view, setView] = useState<PaymentSubView>('list');
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -76,7 +90,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
           onOpenProviders={() => setView('providers')}
           onIssueReceipt={readiness?.status === 'READY' && readiness?.receiptIssuance.status === 'READY' && canIssueDocument ? issueReceipt : undefined}
           canIssueReceipt={payment => receiptEligibility[payment.id]?.eligible === true}
-          receiptBlockReason={payment => receiptEligibility[payment.id]?.reason ?? (canIssueDocument ? 'A emissão deste recibo está bloqueada pela validação do servidor.' : 'A sua sessão não tem permissão para emitir recibos.')}
+          receiptBlockReason={payment => receiptEligibilityMessage(receiptEligibility[payment.id]?.reason, canIssueDocument)}
         />
       )}
 
