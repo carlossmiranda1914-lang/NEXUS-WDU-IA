@@ -5,6 +5,7 @@ export type FinanceReadinessProjection = Readonly<{
   module: 'FINANCE';
   status: FinanceReadinessStatus;
   requirements: readonly FinanceReadinessRequirement[];
+  receiptIssuance: Readonly<{ status: 'READY' } | { status: 'BLOCKED'; reasonCode: string }>;
   canManageConfiguration: boolean;
 }>;
 
@@ -31,6 +32,7 @@ export async function resolveFinanceReadiness(input: {
   resolveFinancialProfile: Resolver;
   resolveFiscalConfiguration: Resolver;
   resolveReceiptSeries: Resolver;
+  resolveReceiptIssuance?: Resolver;
 }): Promise<FinanceReadinessProjection> {
   const states = await Promise.all([
     resolveRequirement(input.resolveFinancialProfile),
@@ -45,5 +47,11 @@ export async function resolveFinanceReadiness(input: {
   const status: FinanceReadinessStatus = requirements.some(item => item.state === 'BLOCKED')
     ? 'BLOCKED'
     : requirements.some(item => item.state === 'MISSING') ? 'INCOMPLETE' : 'READY';
-  return Object.freeze({ module: 'FINANCE', status, requirements: Object.freeze(requirements), canManageConfiguration: input.canManageConfiguration });
+  let receiptIssuance: FinanceReadinessProjection['receiptIssuance'] = { status: 'READY' };
+  if (status !== 'READY') receiptIssuance = { status: 'BLOCKED', reasonCode: 'FINANCE_MODULE_NOT_READY' };
+  else if (input.resolveReceiptIssuance) {
+    try { await input.resolveReceiptIssuance(); }
+    catch (error) { receiptIssuance = { status: 'BLOCKED', reasonCode: error instanceof Error ? error.message : 'RECEIPT_ISSUANCE_UNAVAILABLE' }; }
+  }
+  return Object.freeze({ module: 'FINANCE', status, requirements: Object.freeze(requirements), receiptIssuance: Object.freeze(receiptIssuance), canManageConfiguration: input.canManageConfiguration });
 }

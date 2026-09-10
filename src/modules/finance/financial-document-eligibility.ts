@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { FiscalAdapterRegistry, type FiscalAdapter } from './fiscal-adapter-registry.ts';
 
-const adapters: readonly FiscalAdapter[] = [{ key: 'core', supportedJurisdictions: ['NEXUS_TEST'], policy: { version: 'core-1', supportedDocumentTypes: ['receipt', 'credit_note'] } }];
+export const coreFiscalAdapters: readonly FiscalAdapter[] = [{ key: 'core', supportedJurisdictions: ['NEXUS_TEST'], policy: { version: 'core-1', supportedDocumentTypes: ['receipt', 'credit_note'] } }];
 
 export type ReceiptEligibility = Readonly<{ eligible: true; payment: { id: string; amount: string; currency: string; paymentReference: string; effectiveAt: Date; journalTransactionId: string; financialProfileVersion: number }; fiscalConfiguration: { id: string; adapterKey: string }; adapter: FiscalAdapter }> | Readonly<{ eligible: false; reasonCode: string }>;
 
@@ -10,7 +10,7 @@ export async function resolveReceiptEligibility(pool: Pick<Pool | PoolClient, 'q
   const row=payment.rows[0]; if(!row)return {eligible:false,reasonCode:'SOURCE_NOT_ELIGIBLE'};
   const fiscal=await pool.query<{id:string;adapter_key:string}>("SELECT id,adapter_key FROM finance_fiscal_configuration_versions WHERE institution_id=$1 AND effective_from<=now() AND (effective_to IS NULL OR effective_to>now()) ORDER BY version DESC LIMIT 1",[input.institutionId]); if(!fiscal.rows[0])return {eligible:false,reasonCode:'FISCAL_CONFIGURATION_NOT_EFFECTIVE'};
   const profile=await pool.query<{primary_jurisdiction:string}>('SELECT primary_jurisdiction FROM finance_profile_versions WHERE institution_id=$1 AND version=$2',[input.institutionId,row.financial_profile_version]); if(!profile.rows[0])return {eligible:false,reasonCode:'FINANCIAL_PROFILE_NOT_FOUND'};
-  let adapter:FiscalAdapter; try { adapter=new FiscalAdapterRegistry(adapters).select({primaryJurisdiction:profile.rows[0].primary_jurisdiction},{adapterKey:fiscal.rows[0].adapter_key}); } catch(error){return {eligible:false,reasonCode:error instanceof Error?error.message:'JURISDICTION_UNSUPPORTED'};}
+  let adapter:FiscalAdapter; try { adapter=new FiscalAdapterRegistry(coreFiscalAdapters).select({primaryJurisdiction:profile.rows[0].primary_jurisdiction},{adapterKey:fiscal.rows[0].adapter_key}); } catch(error){return {eligible:false,reasonCode:error instanceof Error?error.message:'JURISDICTION_UNSUPPORTED'};}
   if(!adapter.policy.supportedDocumentTypes.includes(input.documentType))return {eligible:false,reasonCode:'DOCUMENT_TYPE_UNSUPPORTED'};
   const series=await pool.query('SELECT 1 FROM finance_financial_document_series WHERE institution_id=$1 AND id=$2 AND document_type=$3 AND status=\'active\' AND effective_from<=now() AND (effective_to IS NULL OR effective_to>now())',[input.institutionId,input.seriesId,input.documentType]); if(!series.rows[0])return {eligible:false,reasonCode:'RECEIPT_SERIES_NOT_EFFECTIVE'};
   return {eligible:true,payment:{id:row.id,amount:row.amount,currency:row.currency,paymentReference:row.payment_reference,effectiveAt:row.effective_at,journalTransactionId:row.journal_transaction_id,financialProfileVersion:row.financial_profile_version},fiscalConfiguration:{id:fiscal.rows[0].id,adapterKey:fiscal.rows[0].adapter_key},adapter};

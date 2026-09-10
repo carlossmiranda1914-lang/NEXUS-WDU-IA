@@ -7,6 +7,13 @@ export type FinancialDocumentArtifactProjection = { id: string; document_id: str
 type FinancialDocumentSeriesProjection = { id: string; document_type: string; status: string };
 export type ReceiptEligibilityProjection = { status: 'ELIGIBLE' } | { status: 'BLOCKED'; reasonCode: string };
 
+export class FinancialDocumentApiError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+    this.name = 'FinancialDocumentApiError';
+  }
+}
+
 const defaultFetch: typeof fetch = (input, init) => {
   if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
     return window.fetch(input, init);
@@ -23,13 +30,7 @@ export class FinancialDocumentClient {
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     const token = await this.getToken().catch(() => null);
     const response = await this.fetcher(path, { ...init, headers: { ...(init?.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
-    if (!response.ok) throw new Error(
-      response.status === 401 ? 'FINANCIAL_DOCUMENT_AUTH_REQUIRED'
-        : response.status === 403 ? 'FINANCIAL_DOCUMENT_FORBIDDEN'
-          : response.status === 409 ? 'FINANCIAL_DOCUMENT_INSTITUTION_SELECTION_REQUIRED'
-            : response.status === 422 ? 'Não foi possível concluir a ação. Verifique a configuração fiscal e a série efetiva.'
-              : 'FINANCIAL_DOCUMENT_UNAVAILABLE',
-    );
+    if (!response.ok) throw await documentApiError(response);
     return response.json() as Promise<T>;
   }
 
@@ -55,6 +56,30 @@ export class FinancialDocumentClient {
     if (!response.ok) throw new Error('FINANCIAL_DOCUMENT_ARTIFACT_UNAVAILABLE');
     return response.blob();
   }
+}
+
+async function documentApiError(response: Response): Promise<FinancialDocumentApiError> {
+  const payload = await response.json().catch(() => ({})) as { code?: string };
+  const fallback = response.status === 401 ? 'FINANCIAL_DOCUMENT_AUTH_REQUIRED'
+    : response.status === 403 ? 'FINANCIAL_DOCUMENT_FORBIDDEN'
+      : response.status === 409 ? 'FINANCIAL_DOCUMENT_INSTITUTION_SELECTION_REQUIRED'
+        : response.status === 422 ? 'FINANCIAL_DOCUMENT_VALIDATION'
+          : 'FINANCIAL_DOCUMENT_UNAVAILABLE';
+  const code = payload.code ?? fallback;
+  const messages: Record<string, string> = {
+    FINANCIAL_DOCUMENT_AUTH_REQUIRED: 'FINANCIAL_DOCUMENT_AUTH_REQUIRED',
+    FINANCIAL_DOCUMENT_FORBIDDEN: 'FINANCIAL_DOCUMENT_FORBIDDEN',
+    FINANCIAL_DOCUMENT_INSTITUTION_SELECTION_REQUIRED: 'FINANCIAL_DOCUMENT_INSTITUTION_SELECTION_REQUIRED',
+    FISCAL_ADAPTER_UNSUPPORTED_JURISDICTION: 'A política documental desta instituição não tem um adaptador jurisdicional aprovado para emissão oficial.',
+    FISCAL_CONFIGURATION_ADAPTER_MISMATCH: 'A configuração fiscal ativa não corresponde à política documental da instituição.',
+    FISCAL_CONFIGURATION_NOT_EFFECTIVE: 'Não existe uma configuração fiscal efetiva para emissão oficial.',
+    FINANCIAL_PROFILE_NOT_FOUND: 'Não existe um perfil financeiro efetivo para a origem deste recebimento.',
+    RECEIPT_SERIES_NOT_EFFECTIVE: 'Não existe uma série de recibos ativa e efetiva.',
+    SOURCE_NOT_ELIGIBLE: 'Este pagamento não é elegível para emissão de recibo oficial.',
+    DOCUMENT_TYPE_UNSUPPORTED: 'A política documental ativa não suporta este tipo de documento.',
+    FINANCIAL_DOCUMENT_VALIDATION: 'Não foi possível concluir a ação. Verifique a configuração fiscal e a série efetiva.',
+  };
+  return new FinancialDocumentApiError(code, messages[code] ?? 'Não foi possível concluir a ação financeira.');
 }
 
 export const financialDocumentClient = new FinancialDocumentClient();

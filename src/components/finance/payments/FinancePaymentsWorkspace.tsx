@@ -43,7 +43,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   }, [loadPayments]);
   useEffect(() => { financialDocumentClient.capabilities().then(capabilities => setCanIssueDocument(capabilities.issue)).catch(() => setCanIssueDocument(false)); }, []);
   useEffect(() => { financeReadinessClient.get().then(setReadiness).catch(() => setReadiness(null)); }, []);
-  useEffect(() => { if (readiness?.status !== 'READY' || !canIssueDocument || payments.length === 0) return; financialDocumentClient.listActiveReceiptSeries().then(async series => { const selected = series[0]; if (!selected) return; const entries = await Promise.all(payments.map(async payment => [payment.id, (await financialDocumentClient.receiptEligibility({ paymentId: payment.id, seriesId: selected.id })).status === 'ELIGIBLE'] as const)); setReceiptEligibility(Object.fromEntries(entries)); }).catch(() => setReceiptEligibility({})); }, [readiness?.status, canIssueDocument, payments]);
+  useEffect(() => { if (readiness?.status !== 'READY' || readiness?.receiptIssuance.status !== 'READY' || !canIssueDocument || payments.length === 0) return; financialDocumentClient.listActiveReceiptSeries().then(async series => { const selected = series[0]; if (!selected) return; const entries = await Promise.all(payments.map(async payment => [payment.id, (await financialDocumentClient.receiptEligibility({ paymentId: payment.id, seriesId: selected.id })).status === 'ELIGIBLE'] as const)); setReceiptEligibility(Object.fromEntries(entries)); }).catch(() => setReceiptEligibility({})); }, [readiness?.status, readiness?.receiptIssuance.status, canIssueDocument, payments]);
 
   const handleCreated = (newPayment: Payment) => {
     setPayments((prev) => [newPayment, ...prev]);
@@ -64,7 +64,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   return (
     <div className="w-full">
       {readiness?.status === 'INCOMPLETE' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Configuração necessária</strong><p>Os recebimentos estão disponíveis, mas ainda não é possível emitir recibos oficiais.</p>{readiness.canManageConfiguration && <button type="button" onClick={onOpenFinanceConfiguration} className="mt-2 rounded-md border px-3 py-1">Concluir configuração</button>}</section>}
-      {readiness?.status === 'BLOCKED' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Emissão oficial indisponível</strong><p>A política documental da instituição não tem um adaptador jurisdicional aprovado. Não será atribuído qualquer número de recibo.</p></section>}
+      {readiness?.receiptIssuance.status === 'BLOCKED' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Emissão oficial indisponível</strong><p>A política documental da instituição não tem um adaptador jurisdicional aprovado. Não será atribuído qualquer número de recibo.</p></section>}
       {view === 'list' && (
         <FinancePaymentsListView
           payments={payments}
@@ -74,7 +74,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
           onRefresh={loadPayments}
           onOpenCreate={() => setView('create')}
           onOpenProviders={() => setView('providers')}
-          onIssueReceipt={readiness?.status === 'READY' && canIssueDocument ? issueReceipt : undefined}
+          onIssueReceipt={readiness?.status === 'READY' && readiness?.receiptIssuance.status === 'READY' && canIssueDocument ? issueReceipt : undefined}
           canIssueReceipt={payment => receiptEligibility[payment.id] === true}
         />
       )}

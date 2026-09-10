@@ -6,6 +6,8 @@ import { PostgresFiscalConfigurationStore } from './fiscal-configuration.ts';
 import { PostgresFinancialDocumentSeriesStore } from './financial-document-series.ts';
 import { canAccessFinancialDocuments } from './financial-document-policy.ts';
 import { resolveFinanceReadiness } from './finance-readiness.ts';
+import { coreFiscalAdapters } from './financial-document-eligibility.ts';
+import { FiscalAdapterRegistry } from './fiscal-adapter-registry.ts';
 
 export function registerFinanceReadinessRoutes(app: Express, pool: Pool, auth = requireAuth): void {
   app.get('/api/finance/readiness', auth, async (req: AuthRequest, res: Response) => {
@@ -23,6 +25,16 @@ export function registerFinanceReadinessRoutes(app: Express, pool: Pool, auth = 
       resolveFinancialProfile: () => profiles.resolveEffective(context.institutionId, at),
       resolveFiscalConfiguration: () => fiscal.requireEffective(context.institutionId, at),
       resolveReceiptSeries: () => series.findEffective(context.institutionId, 'receipt', at),
+      resolveReceiptIssuance: async () => {
+        const [profile, configuration, receiptSeries] = await Promise.all([
+          profiles.resolveEffective(context.institutionId, at),
+          fiscal.requireEffective(context.institutionId, at),
+          series.findEffective(context.institutionId, 'receipt', at),
+        ]);
+        if (!profile) throw new Error('FINANCIAL_PROFILE_NOT_FOUND');
+        if (!receiptSeries) throw new Error('RECEIPT_SERIES_NOT_EFFECTIVE');
+        new FiscalAdapterRegistry(coreFiscalAdapters).select(profile, configuration);
+      },
     });
     res.json(readiness);
   });

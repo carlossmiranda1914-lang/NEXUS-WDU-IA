@@ -5,6 +5,7 @@ export type FinanceReadinessDto = {
   status: 'READY' | 'INCOMPLETE' | 'BLOCKED';
   canManageConfiguration: boolean;
   requirements: Array<{ code: 'FINANCIAL_PROFILE' | 'FISCAL_CONFIGURATION' | 'RECEIPT_SERIES'; state: 'COMPLETE' | 'MISSING' | 'BLOCKED' }>;
+  receiptIssuance: { status: 'READY' } | { status: 'BLOCKED'; reasonCode: string };
 };
 
 export class FinanceConfigurationError extends Error {

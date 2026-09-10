@@ -35,6 +35,14 @@ test('Finance readiness is ready only when every effective authority exists', as
   assert.ok(result.requirements.every(item => item.state === 'COMPLETE'));
 });
 
+test('Finance readiness separates configured module state from blocked official receipt issuance', async () => {
+  const result = await resolveFinanceReadiness(input({
+    resolveReceiptIssuance: async () => { throw new Error('FISCAL_ADAPTER_UNSUPPORTED_JURISDICTION'); },
+  }));
+  assert.equal(result.status, 'READY');
+  assert.deepEqual(result.receiptIssuance, { status: 'BLOCKED', reasonCode: 'FISCAL_ADAPTER_UNSUPPORTED_JURISDICTION' });
+});
+
 test('Finance readiness blocks unexpected authority integrity failures', async () => {
   const result = await resolveFinanceReadiness(input({ resolveReceiptSeries: async () => { throw new Error('database integrity violation'); } }));
   assert.equal(result.status, 'BLOCKED');

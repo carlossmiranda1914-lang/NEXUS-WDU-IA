@@ -26,6 +26,21 @@ test('F7-06 turns unavailable issuance into an actionable configuration result',
   await assert.rejects(() => client.issueReceipt({ sourceId: 'pay-1', seriesId: 'series-1', idempotencyKey: 'receipt-stable-key' }), /configuração fiscal e a série efetiva/);
 });
 
+test('F7-06 preserves a safe server eligibility code instead of collapsing an official issuance rejection', async () => {
+  const client = new FinancialDocumentClient(async () => ({
+    ok: false,
+    status: 422,
+    json: async () => ({ code: 'FISCAL_ADAPTER_UNSUPPORTED_JURISDICTION' }),
+  }) as Response, async () => null);
+
+  await assert.rejects(
+    () => client.issueReceipt({ sourceId: 'pay-1', seriesId: 'series-1', idempotencyKey: 'receipt-stable-key' }),
+    (error: unknown) => error instanceof Error
+      && (error as Error & { code?: string }).code === 'FISCAL_ADAPTER_UNSUPPORTED_JURISDICTION'
+      && /adaptador jurisdicional aprovado/.test(error.message),
+  );
+});
+
 test('F7-06 preserves an authentication-required list failure for safe UAT diagnosis', async () => {
   const client = new FinancialDocumentClient(async () => authenticationRequired(), async () => null);
   await assert.rejects(() => client.list(), /FINANCIAL_DOCUMENT_AUTH_REQUIRED/);
