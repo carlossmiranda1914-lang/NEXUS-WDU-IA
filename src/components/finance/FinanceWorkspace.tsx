@@ -25,9 +25,9 @@ export function FinanceWorkspace({ theme = 'light', initialTab = 'operations', i
     onClick: () => setActiveTab(tab),
   });
 
-  return <div className="mx-auto grid w-full max-w-[1700px] gap-6 md:grid-cols-[15rem_minmax(0,1fr)]">
-    <nav aria-label="Navegação de Finanças e Contas" className={`self-start rounded-xl border p-3 shadow-sm md:sticky md:top-6 ${theme === 'light' ? 'border-zinc-200 bg-white/95' : 'border-zinc-800 bg-zinc-900/95'}`}>
-      <div className="grid gap-5">
+  return <div className="aurora-finance-surface mx-auto grid w-full max-w-[1700px] gap-4 md:grid-cols-[12rem_minmax(0,1fr)]">
+    <nav aria-label="Navegação de Finanças e Contas" className={`self-start rounded-xl border p-2 shadow-sm md:sticky md:top-6 ${theme === 'light' ? 'border-[var(--color-border-default)] bg-[var(--color-surface-raised)]' : 'border-zinc-800 bg-zinc-900/95'}`}>
+      <div className="grid gap-3">
         <section aria-labelledby="finance-nav-overview"><h2 id="finance-nav-overview" className="px-3 text-xs font-bold uppercase tracking-wide text-zinc-500">Visão Geral</h2><button type="button" data-testid="finance-tab-operations" {...destinationProps('operations')}>Situação Financeira</button></section>
         <section aria-labelledby="finance-nav-operation"><h2 id="finance-nav-operation" className="px-3 text-xs font-bold uppercase tracking-wide text-zinc-500">Operação</h2><div className="mt-1 grid gap-1"><button type="button" data-testid="finance-tab-obligations" {...destinationProps('obligations')}>Obrigações</button><button type="button" data-testid="finance-tab-recebimentos" {...destinationProps('recebimentos')}>Recebimentos</button><button type="button" data-testid="finance-tab-documents" {...destinationProps('documents')}>Documentos</button></div></section>
         <section aria-labelledby="finance-nav-configuration"><h2 id="finance-nav-configuration" className="px-3 text-xs font-bold uppercase tracking-wide text-zinc-500">Configuração</h2><div className="mt-1 grid gap-1"><button type="button" data-testid="finance-tab-catalogue" {...destinationProps('catalogue')}>Emolumentos</button><button type="button" data-testid="finance-tab-configuration" {...destinationProps('configuration')}>Configuração Financeira</button></div></section>

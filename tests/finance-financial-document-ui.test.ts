@@ -34,6 +34,9 @@ assert.match(workspaceSource, /Data de emissão/, 'the workspace must show the i
 assert.match(workspaceSource, /Moeda:/, 'the workspace must show the persisted document currency without deriving financial truth in the browser');
 assert.match(workspaceSource, /A sessão autenticada não foi reconhecida pelo servidor/, 'the workspace must surface a safe authentication diagnostic instead of masking it as a document-read failure');
 assert.match(workspaceSource, /Não existem documentos financeiros emitidos para esta instituição\./, 'an authorized empty collection must render an honest zero state');
+assert.match(workspaceSource, /Nota de crédito/, 'the workspace must translate the authoritative corrective document type for operators');
+assert.match(workspaceSource, /Pagamento .*paymentReference/, 'the workspace must prefer an authoritative payment reference over raw source UUIDs');
+assert.doesNotMatch(workspaceSource, /Visualizar PDF · \{artifact\.render_version\}/, 'renderer versions must not be promoted into the primary user action label');
 assert.doesNotMatch(workspaceSource, /Word|Excel|PowerPoint/, 'the Finance UX must not expose office editing');
 assert.match(financeWorkspaceSource, /finance-tab-documents/, 'the Finance workspace must expose the authorized document history entrypoint');
 console.log('FINANCIAL_DOCUMENT_UI_AUTHORIZED_BOUNDARY=PASS');
