@@ -12,6 +12,7 @@ export type PaymentSubView = 'list' | 'create' | 'providers';
 export interface FinancePaymentsWorkspaceProps {
   theme?: string;
   onOpenFinanceConfiguration?: () => void;
+  onOpenFinancialDocuments?: () => void;
 }
 
 const receiptEligibilityMessage = (reason?: string, canIssueDocument = false) => {
@@ -28,7 +29,7 @@ const receiptEligibilityMessage = (reason?: string, canIssueDocument = false) =>
   return reason ? messages[reason] ?? 'Este pagamento não reúne os requisitos para emissão oficial.' : 'A emissão deste recibo ainda não está disponível.';
 };
 
-export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfiguration }: FinancePaymentsWorkspaceProps) {
+export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfiguration, onOpenFinancialDocuments }: FinancePaymentsWorkspaceProps) {
   const [view, setView] = useState<PaymentSubView>('list');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,7 +95,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
         />
       )}
 
-      {issuanceNotice && <p data-testid="financial-document-issuance-notice" className="mt-3 text-sm text-emerald-700">{issuanceNotice}</p>}
+      {issuanceNotice && <div data-testid="financial-document-issuance-notice" className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><p>{issuanceNotice}</p>{onOpenFinancialDocuments && <button type="button" onClick={onOpenFinancialDocuments} className="rounded-md border border-emerald-300 bg-white px-3 py-1 font-semibold text-emerald-800">Abrir documento financeiro</button>}</div>}
 
       {view === 'create' && (
         <FinancePaymentCreateView
