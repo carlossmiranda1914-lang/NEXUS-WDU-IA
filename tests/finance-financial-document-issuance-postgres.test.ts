@@ -54,6 +54,10 @@ test('F7-01 PostgreSQL issuance replays idempotently and allocates a series numb
     const eligibility = new FinancialDocumentEligibilityService(pool);
     const command = { institutionId, sourceInstitutionId: institutionId, sourceType: 'payment' as const, sourceId: paymentId!, seriesId, idempotencyKey: 'financial-document-command-001', documentType: 'receipt' };
     assert.equal((await eligibility.requireReceipt(institutionId, paymentId!)).paymentId, paymentId!);
+    const beforePreflight = await pool.query<{ next: string; documents: number }>("SELECT (SELECT next_sequence_number::text FROM finance_financial_document_series WHERE id=$1) next,(SELECT count(*)::int FROM finance_financial_documents WHERE institution_id=$2) documents", [seriesId, institutionId]);
+    assert.equal((await eligibility.receipt({ institutionId, paymentId: paymentId!, seriesId })).eligible, true);
+    const afterPreflight = await pool.query<{ next: string; documents: number }>("SELECT (SELECT next_sequence_number::text FROM finance_financial_document_series WHERE id=$1) next,(SELECT count(*)::int FROM finance_financial_documents WHERE institution_id=$2) documents", [seriesId, institutionId]);
+    assert.deepEqual(afterPreflight.rows[0], beforePreflight.rows[0], 'preflight must not allocate a number or mutate Finance');
     const first = await repo.issue(command); const replay = await repo.issue(command);
     assert.equal(first.id, replay.id); assert.equal(first.sequenceNumber, 1);
     assert.equal(first.replayed, false, 'the first command result must distinguish creation from replay');
