@@ -3,7 +3,7 @@ import test from 'node:test';
 import { resolveDocumentParties, resolveDocumentaryPartySnapshot, UnsupportedOrganizationRecipientError } from '../src/modules/finance/document-party-resolution.ts';
 
 test('keeps beneficiary, billing party, payer and recipient independent', async () => {
-  const db = { query: async () => ({ rows: [{ person_id: 'maria' }] }) };
+  const db = { query: async <T>() => ({ rows: [{ person_id: 'maria' }] as T[] }) };
   const result = await resolveDocumentParties(db, { institutionId: 'tenant', financialAccountId: 'account', beneficiaryPersonId: 'joao', payerPersonId: 'pedro' });
   assert.equal(result.beneficiary?.authorityId, 'joao');
   assert.equal(result.billingParty.authorityId, 'maria');
@@ -12,13 +12,13 @@ test('keeps beneficiary, billing party, payer and recipient independent', async 
 });
 
 test('uses the person authority for a human snapshot rather than browser supplied labels', async () => {
-  const db = { query: async () => ({ rows: [{ name: 'Maria' }] }) };
+  const db = { query: async <T>() => ({ rows: [{ name: 'Maria' }] as T[] }) };
   const snapshot = await resolveDocumentaryPartySnapshot(db, { kind: 'person', authorityId: 'maria', resolvedFrom: 'billingParty' });
   assert.equal(snapshot.name, 'Maria');
 });
 
 test('fails closed without a billing party and does not fake organizations as people', async () => {
-  const db = { query: async () => ({ rows: [] }) };
+  const db = { query: async <T>() => ({ rows: [] as T[] }) };
   await assert.rejects(resolveDocumentParties(db, { institutionId: 'tenant', financialAccountId: 'account' }), /DOCUMENT_RECIPIENT_REQUIRED/);
   await assert.rejects(resolveDocumentParties(db, { institutionId: 'tenant', financialAccountId: 'account', recipientKind: 'organization' }), UnsupportedOrganizationRecipientError);
 });

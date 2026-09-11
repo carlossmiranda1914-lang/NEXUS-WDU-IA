@@ -7,6 +7,7 @@ import { PostgresFinancialDocumentSeriesStore } from './financial-document-serie
 import { canAccessFinancialDocuments } from './financial-document-policy.ts';
 import { resolveFinanceReadiness } from './finance-readiness.ts';
 import { FiscalAdapterRegistry, productionFiscalAdapterRegistry } from './fiscal-adapter-registry.ts';
+import { InstitutionLegalProfileRepository } from '../institution/institution-legal-profile.ts';
 
 export function registerFinanceReadinessRoutes(app: Express, pool: Pool, auth = requireAuth, fiscalAdapters: FiscalAdapterRegistry = productionFiscalAdapterRegistry): void {
   app.get('/api/finance/readiness', auth, async (req: AuthRequest, res: Response) => {
@@ -17,6 +18,7 @@ export function registerFinanceReadinessRoutes(app: Express, pool: Pool, auth = 
     const profiles = new PostgresFinancialProfileStore(pool);
     const fiscal = new PostgresFiscalConfigurationStore(pool);
     const series = new PostgresFinancialDocumentSeriesStore(pool);
+    const legalProfiles = new InstitutionLegalProfileRepository(pool);
     const readiness = await resolveFinanceReadiness({
       institutionId: context.institutionId,
       at,
@@ -24,6 +26,7 @@ export function registerFinanceReadinessRoutes(app: Express, pool: Pool, auth = 
       resolveFinancialProfile: () => profiles.resolveEffective(context.institutionId, at),
       resolveFiscalConfiguration: () => fiscal.requireEffective(context.institutionId, at),
       resolveReceiptSeries: () => series.findEffective(context.institutionId, 'receipt', at),
+      resolveInstitutionLegalProfile: () => legalProfiles.resolveEffective(context.institutionId, at),
       resolveReceiptIssuance: async () => {
         const [profile, configuration, receiptSeries] = await Promise.all([
           profiles.resolveEffective(context.institutionId, at),
