@@ -25,7 +25,7 @@ try {
 
     // Verify migrations discovery and run
     const migrations = await discoverMigrations(migrationsDir);
-    const has0035 = migrations.some(m => m.filename.includes('0035_finance_payments_and_provider_config'));
+    const has0035 = migrations.some(m => m.filename.includes('0104_finance_payments_and_provider_config'));
     assert.ok(has0035, 'Migration 0035 must be discoverable');
 
     await runMigrations(client, migrations);

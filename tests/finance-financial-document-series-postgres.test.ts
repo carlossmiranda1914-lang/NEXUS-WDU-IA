@@ -10,7 +10,7 @@ import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts
 import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 
 test('F7-02 provides a Finance-owned effective series configuration migration', async () => {
-  await assert.doesNotReject(() => readFile(new URL('../src/db/migrations/0043_finance_document_series_configuration.sql', import.meta.url), 'utf8'));
+  await assert.doesNotReject(() => readFile(new URL('../src/db/migrations/0112_finance_document_series_configuration.sql', import.meta.url), 'utf8'));
 });
 
 test('F7-02 series resolution fails closed when no active effective series exists', async () => {

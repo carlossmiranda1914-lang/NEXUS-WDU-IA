@@ -11,7 +11,7 @@ import { PostgresFiscalConfigurationStore } from '../src/modules/finance/fiscal-
 import { FiscalAdapterRegistry } from '../src/modules/finance/fiscal-adapter-registry.ts';
 
 test('F7-02 starts with a Finance-owned versioned fiscal configuration migration', async () => {
-  await assert.doesNotReject(() => readFile(new URL('../src/db/migrations/0042_finance_fiscal_configuration.sql', import.meta.url), 'utf8'));
+  await assert.doesNotReject(() => readFile(new URL('../src/db/migrations/0111_finance_fiscal_configuration.sql', import.meta.url), 'utf8'));
 });
 
 test('F7-02 fiscal configurations reject overlapping effective versions per institution', async () => {

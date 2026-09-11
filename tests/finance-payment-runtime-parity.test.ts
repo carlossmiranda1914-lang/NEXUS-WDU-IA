@@ -6,7 +6,7 @@ import { discoverMigrations } from '../src/db/migration-runner.ts';
 // 1. Verify Migration Tip includes 0035
 const migrationsDir = path.resolve('src/db/migrations');
 const migrations = await discoverMigrations(migrationsDir);
-const migration0035 = migrations.find((m) => m.filename.includes('0035_finance_payments_and_provider_config'));
+const migration0035 = migrations.find((m) => m.filename.includes('0104_finance_payments_and_provider_config'));
 assert.ok(migration0035, 'Migration 0035 must be discoverable at runtime tip');
 
 // 2. Verify Git branch
