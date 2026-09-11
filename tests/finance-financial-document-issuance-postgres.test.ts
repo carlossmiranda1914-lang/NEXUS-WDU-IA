@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { issueFinancialDocumentCommand, PostgresFinancialDocumentRepository } from '../src/modules/finance/financial-document-service.ts';
+import { canonicalDocumentarySnapshotValidators, issueFinancialDocumentCommand, PostgresFinancialDocumentRepository } from '../src/modules/finance/financial-document-service.ts';
 import { FinancialDocumentEligibilityService } from '../src/modules/finance/financial-document-eligibility.ts';
 import { createSyntheticUatFiscalAdapterRegistry } from '../src/modules/finance/fiscal-adapter-registry.ts';
 import { randomUUID } from 'node:crypto';
@@ -161,6 +161,19 @@ test('F7 document issuance fails closed without legal profile or billing recipie
     assert.equal(state.rows[0]?.next_sequence_number, '1');
     assert.equal(state.rows[0]?.count, 0);
   } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(() => undefined); await pool.end(); }
+});
+
+test('V2 PostgreSQL validation boundaries each fail before definitive number consumption', async () => {
+  await verifyApprovedTestConnection(); const schema=`finance_document_v2_boundaries_${randomUUID().replaceAll('-', '')}`; const quote=(value:string)=>`"${value.replaceAll('"','""')}"`; const pool=new pg.Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${quote(schema)},public`}); const institutionId=randomUUID(),seriesId=randomUUID(); let paymentId:string;
+  try { const client=await pool.connect(); try { await client.query(`CREATE SCHEMA ${quote(schema)}`); await runMigrations(client,await discoverMigrations(path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../src/db/migrations'))); await client.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'V2 boundaries','v2-boundaries','active')",[institutionId]); await client.query("INSERT INTO finance_financial_document_series(id,institution_id,code,next_sequence_number) VALUES($1,$2,'V2',1)",[seriesId,institutionId]); paymentId=await seedConfirmedPayment(client,institutionId); } finally {client.release();}
+    for (const boundary of ['structural','financial','documentType','jurisdiction'] as const) {
+      const validators={...canonicalDocumentarySnapshotValidators,[boundary]:()=>{throw new Error(`TEST_${boundary.toUpperCase()}_FAILURE`);}} as any;
+      const repo=new PostgresFinancialDocumentRepository(pool,createSyntheticUatFiscalAdapterRegistry(),validators);
+      await assert.rejects(()=>repo.issue({institutionId,sourceInstitutionId:institutionId,sourceType:'payment',sourceId:paymentId,seriesId,idempotencyKey:`boundary-${boundary}`,documentType:'receipt'}),new RegExp(`TEST_${boundary.toUpperCase()}_FAILURE`));
+      const state=await pool.query<{next:string;documents:number}>("SELECT (SELECT next_sequence_number::text FROM finance_financial_document_series WHERE id=$1) next,(SELECT count(*)::int FROM finance_financial_documents WHERE institution_id=$2) documents",[seriesId,institutionId]);
+      assert.deepEqual(state.rows[0],{next:'1',documents:0},`${boundary} failure must occur before definitive numbering`);
+    }
+  } finally {await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(()=>undefined);await pool.end();}
 });
 
 test('F7-01 concurrent distinct commands receive distinct sequential series numbers', async () => {
