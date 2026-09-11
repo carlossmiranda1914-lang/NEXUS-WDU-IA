@@ -8,6 +8,7 @@ import { resolveEffectiveInstitutionLegalProfile } from '../institution/institut
 import { resolveDocumentParties, resolveDocumentaryPartySnapshot } from './document-party-resolution.ts';
 import { composeReceiptDocumentarySnapshotV2, decodeDocumentarySnapshot } from './documentary-snapshot.ts';
 import { captureReceiptSettlement } from './documentary-settlement-capture.ts';
+import { validateDocumentaryDocumentType, validateDocumentaryFinancialReconciliation, validateDocumentaryJurisdiction, validateDocumentarySnapshotStructure } from './documentary-snapshot-validation.ts';
 
 export type FinancialDocumentIssuanceCommand = {
   institutionId: string;
@@ -69,6 +70,10 @@ export class PostgresFinancialDocumentRepository {
         obligations: settlement.obligations, allocations: settlement.allocations, ...(settlement.unallocated ? { unallocated: settlement.unallocated } : {}),
       });
       const fiscalPolicySnapshot = { adapterKey: fiscalAdapter.key, documentType: command.documentType, policyVersion: fiscalAdapter.policy.version };
+      validateDocumentarySnapshotStructure(documentarySnapshot);
+      validateDocumentaryFinancialReconciliation(documentarySnapshot, settlement);
+      validateDocumentaryDocumentType(documentarySnapshot, command.documentType);
+      validateDocumentaryJurisdiction(documentarySnapshot, documentaryPolicy);
       const sourceSnapshot = {
         sourceType: command.sourceType,
         sourceId: sourceRow.id,
@@ -131,6 +136,10 @@ export class PostgresFinancialDocumentRepository {
         };
         const sourceSnapshot = { sourceType: 'payment', sourceId: sourceRow.id, paymentReference: sourceRow.paymentReference, journalTransactionId: sourceRow.journalTransactionId, amount: sourceRow.amount, currency: sourceRow.currency, effectiveAt: sourceRow.effectiveAt.toISOString(), financialProfileVersion: sourceRow.financialProfileVersion };
         const fiscalPolicySnapshot = { adapterKey: eligibility.adapter.key, documentType: command.documentType, policyVersion: eligibility.adapter.policy.version };
+        validateDocumentarySnapshotStructure(documentarySnapshot);
+        validateDocumentaryFinancialReconciliation(documentarySnapshot, settlement);
+        validateDocumentaryDocumentType(documentarySnapshot, command.documentType);
+        validateDocumentaryJurisdiction(documentarySnapshot, documentaryPolicy);
         const series = await client.query<{ next_sequence_number: string }>(
           "SELECT next_sequence_number FROM finance_financial_document_series WHERE institution_id=$1 AND id=$2 AND status='active' AND effective_from<=now() AND (effective_to IS NULL OR effective_to>now()) FOR UPDATE",
           [command.institutionId, command.seriesId],
