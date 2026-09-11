@@ -9,6 +9,9 @@ import { PostgresFinancialObligationRepository } from '../src/modules/finance/fi
 import { PostgresPaymentRepository } from '../src/modules/finance/payment-repository.ts';
 import { PostgresAllocationRepository } from '../src/modules/finance/allocation-repository.ts';
 import { PostgresFinanceOperationalContextRepository } from '../src/modules/finance/finance-operational-context-repository.ts';
+import { InstitutionLegalProfileRepository } from '../src/modules/institution/institution-legal-profile.ts';
+import { FinancialDocumentEligibilityService } from '../src/modules/finance/financial-document-eligibility.ts';
+import { createSyntheticUatFiscalAdapterRegistry } from '../src/modules/finance/fiscal-adapter-registry.ts';
 
 if (process.env.TEST_DATABASE_LOCAL_AUTHORIZED !== 'true') {
   throw new Error('Local Finance UAT provisioning requires TEST_DATABASE_LOCAL_AUTHORIZED=true.');
@@ -26,7 +29,6 @@ const fixture = {
   obligationRef: 'UAT-F5-ADJUSTMENT-100-40-60',
   effectiveAt: '2026-09-08T12:00:00.000Z',
   dueAt: '2026-10-08T12:00:00.000Z',
-  feeEffectiveFrom: '2026-09-01T00:00:00.000Z',
   keys: {
     account: 'local-uat-finance-v1-account', fee: 'local-uat-finance-v1-fee',
     obligation: 'local-uat-finance-v1-obligation', payment: 'local-uat-finance-v1-payment', allocation: 'local-uat-finance-v1-allocation',
@@ -63,6 +65,18 @@ async function ensureProfile(actor: InstitutionalContext): Promise<void> {
   await pool.query(`INSERT INTO finance_profile_versions (institution_id, version, effective_from, primary_jurisdiction, functional_currency, financial_timezone, monetary_policy_version, enabled_currencies)
                     SELECT $1, COALESCE(MAX(version), 0) + 1, now(), 'NEXUS_TEST', 'EUR', 'Europe/Lisbon', 'local-uat-v2', '["EUR"]'
                     FROM finance_profile_versions WHERE institution_id=$1`, [actor.institutionId]);
+}
+
+async function ensureLegalProfile(actor: InstitutionalContext): Promise<void> {
+  const profiles = new InstitutionLegalProfileRepository(pool);
+  if (await profiles.resolveEffective(actor.institutionId, new Date())) return;
+  await profiles.createVersion({
+    institutionId: actor.institutionId,
+    legalName: `${actor.institutionName} — UAT`,
+    taxIdentifier: null,
+    registeredAddress: { countryCode: 'NEXUS_TEST', line1: 'Ambiente local descartável' },
+    effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
+  });
 }
 
 async function ensureDocumentaryUatConfiguration(actor: InstitutionalContext): Promise<void> {
@@ -108,26 +122,31 @@ async function verifyFixture(actor: InstitutionalContext, accountId: string, obl
   console.log(JSON.stringify({ fixture: 'FINANCE_UAT_100_40_60_READY', accountId, obligationId, paymentReference, original: position.original.amount, covered: position.covered.amount, remaining: position.remainingCoverable.amount }));
 }
 
-async function ensureReceiptEligiblePayment(actor: InstitutionalContext, accountId: string): Promise<string> {
-  const existing = await pool.query<{ payment_reference: string }>(
-    `SELECT payment_reference FROM finance_payments
+async function ensureReceiptEligiblePayment(actor: InstitutionalContext, accountId: string): Promise<{ id: string; reference: string }> {
+  const existing = await pool.query<{ id: string; payment_reference: string }>(
+    `SELECT id,payment_reference FROM finance_payments
      WHERE institution_id=$1 AND notes='UAT-F7-RECEIPT-SOURCE' AND status='confirmed'
      ORDER BY effective_at DESC LIMIT 1`,
     [actor.institutionId],
   );
-  if (existing.rows[0]) return existing.rows[0].payment_reference;
+  if (existing.rows[0]) {
+    await new FinancialDocumentEligibilityService(pool, createSyntheticUatFiscalAdapterRegistry()).requireReceipt(actor.institutionId, existing.rows[0].id);
+    return { id: existing.rows[0].id, reference: existing.rows[0].payment_reference };
+  }
   const profiles = new PostgresFinancialProfileStore(pool);
   const payments = new PostgresPaymentRepository(pool);
   const result = await payments.confirmPaymentInCommand(actor, {
     sourceType: 'manual_offline', method: 'cash', amount: '10.00', currency: 'EUR',
     financialAccountId: accountId, payerPersonId: actor.personId, notes: 'UAT-F7-RECEIPT-SOURCE', effectiveAt: new Date().toISOString(),
   }, fixture.keys.receiptPayment, profiles);
-  return result.payment.paymentReference;
+  await new FinancialDocumentEligibilityService(pool, createSyntheticUatFiscalAdapterRegistry()).requireReceipt(actor.institutionId, result.payment.id);
+  return { id: result.payment.id, reference: result.payment.paymentReference };
 }
 
 async function provision(): Promise<void> {
   const actor = await resolveActor();
   await ensureProfile(actor);
+  await ensureLegalProfile(actor);
   await ensureDocumentaryUatConfiguration(actor);
   const existing = await pool.query<{ account_id: string; obligation_id: string; payment_reference: string }>(
     `SELECT account.id AS account_id, obligation.id AS obligation_id, payment.payment_reference
@@ -141,8 +160,8 @@ async function provision(): Promise<void> {
   );
   if (existing.rows[0]) {
     await verifyFixture(actor, existing.rows[0].account_id, existing.rows[0].obligation_id, existing.rows[0].payment_reference);
-    const receiptPaymentReference = await ensureReceiptEligiblePayment(actor, existing.rows[0].account_id);
-    console.log(JSON.stringify({ fixture: 'FINANCE_UAT_RECEIPT_SOURCE_READY', paymentReference: receiptPaymentReference, jurisdiction: 'NEXUS_TEST', adapter: 'core' }));
+    const receiptPayment = await ensureReceiptEligiblePayment(actor, existing.rows[0].account_id);
+    console.log(JSON.stringify({ fixture: 'FINANCE_UAT_RECEIPT_SOURCE_READY', paymentReference: receiptPayment.reference, receiptEligibility: true, jurisdiction: 'NEXUS_TEST' }));
     return;
   }
   const profiles = new PostgresFinancialProfileStore(pool);
@@ -156,14 +175,14 @@ async function provision(): Promise<void> {
   const account = await accounts.create(actor, { name: fixture.accountName, primaryPersonId: actor.personId }, fixture.keys.account);
   const type = (await feeTypes.list(actor, 'active')).find((item) => item.codePrefix === 'PROP');
   if (!type) throw new Error('The canonical tuition fee type is unavailable.');
-  const fee = (await catalogue.create(actor, { feeTypeId: type.id, name: fixture.feeName, amount: '100.00', currency: 'EUR', effectiveFrom: fixture.feeEffectiveFrom }, fixture.keys.fee)).result;
+  const fee = (await catalogue.create(actor, { feeTypeId: type.id, name: fixture.feeName, amount: '100.00', currency: 'EUR', effectiveFrom: new Date().toISOString() }, fixture.keys.fee)).result;
   const obligation = await obligations.issue(actor, { financialAccountId: account.id, beneficiaryPersonId: actor.personId, feeCatalogueItemId: fee.id, sourceType: 'manual_finance', sourceRef: fixture.obligationRef, dueAt: fixture.dueAt }, fixture.keys.obligation);
   const payment = (await payments.confirmPaymentInCommand(actor, { sourceType: 'manual_offline', method: 'cash', amount: '40.00', currency: 'EUR', financialAccountId: account.id, payerPersonId: actor.personId, notes: fixture.obligationRef, effectiveAt: fixture.effectiveAt }, fixture.keys.payment, profiles)).payment;
   await allocations.confirmAllocationInCommand(actor, { paymentId: payment.id, effectiveAt: fixture.effectiveAt, lines: [{ obligationId: obligation.id, amount: '40.00', currency: 'EUR' }] }, fixture.keys.allocation);
 
   await verifyFixture(actor, account.id, obligation.id, payment.paymentReference);
-  const receiptPaymentReference = await ensureReceiptEligiblePayment(actor, account.id);
-  console.log(JSON.stringify({ fixture: 'FINANCE_UAT_RECEIPT_SOURCE_READY', paymentReference: receiptPaymentReference, jurisdiction: 'NEXUS_TEST', adapter: 'core' }));
+  const receiptPayment = await ensureReceiptEligiblePayment(actor, account.id);
+  console.log(JSON.stringify({ fixture: 'FINANCE_UAT_RECEIPT_SOURCE_READY', paymentReference: receiptPayment.reference, receiptEligibility: true, jurisdiction: 'NEXUS_TEST' }));
 }
 
 provision().finally(() => pool.end()).catch((error) => {
