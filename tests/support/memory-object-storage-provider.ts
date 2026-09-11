@@ -168,12 +168,24 @@ export class MemoryObjectStorageProvider implements ObjectStorageProvider {
   }
 
   async deleteUncommittedObject(params: DeleteObjectParams): Promise<boolean> {
-    if (this.failureInjections.has('delete')) {
+    if (this.failureInjections.has('deleteUncommitted')) {
       throw new Error('Injected deleteUncommittedObject failure in MemoryObjectStorageProvider');
     }
     const had = this.objects.has(`${params.storageBucket}/${params.storageKey}`);
     this.objects.delete(`${params.storageBucket}/${params.storageKey}`);
     return had;
+  }
+
+  async deleteObject(params: DeleteObjectParams): Promise<{ deleted: boolean; errorCode?: string }> {
+    if (this.failureInjections.has('delete')) {
+      throw new Error('Injected deleteObject failure in MemoryObjectStorageProvider');
+    }
+    const had = this.objects.has(`${params.storageBucket}/${params.storageKey}`);
+    this.objects.delete(`${params.storageBucket}/${params.storageKey}`);
+    return {
+      deleted: had,
+      errorCode: had ? undefined : 'OBJECT_NOT_FOUND',
+    };
   }
 
   async openReadStream(params: OpenReadStreamParams): Promise<NodeJS.ReadableStream> {
