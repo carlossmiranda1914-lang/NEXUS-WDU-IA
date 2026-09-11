@@ -326,6 +326,64 @@ describe('Documents Events & Outbox Integration (I7)', () => {
     }
   });
 
+  it('EVENT_CREATION_WITHOUT_RETRY_POLICY: does not silently invent max_attempts and uses operational policy at dispatch', async () => {
+    const client = await pool.connect();
+    let plainEventId: string;
+    try {
+      // 1. Create event without retry policy snapshot
+      const inserted = await outboxRepo.insertEvent(client, {
+        institutionId,
+        eventType: 'document.created',
+        aggregateType: 'document',
+        aggregateId: randomUUID(),
+        payload: { test: 'no-silent-retry-defaults' },
+      });
+      plainEventId = inserted.id;
+
+      // Assert that max_attempts is NULL in the database, NOT silently set to 3 or 5
+      assert.equal(inserted.maxAttempts, null, 'Event creation MUST NOT silently invent maxAttempts=3');
+
+      const rawDbRow = await client.query<{ max_attempts: number | null }>(
+        `SELECT max_attempts FROM document_outbox_events WHERE id = $1`,
+        [plainEventId],
+      );
+      assert.equal(rawDbRow.rows[0].max_attempts, null, 'DB column max_attempts must be NULL when no snapshot supplied');
+    } finally {
+      client.release();
+    }
+
+    // 2. Process with failing dispatcher and explicit operationalPolicy.maxAttempts = 1
+    const batchResult = await processDocumentOutboxBatchCommand({
+      pool,
+      authority: adminContext,
+      operationalPolicy: {
+        batchSize: 5,
+        leaseDurationSeconds: 30,
+        maxAttempts: 1, // Explicit operational policy determines dead-letter threshold
+        calculateBackoffSeconds: () => 1,
+      },
+      dispatcher: async (event) => {
+        if (event.id === plainEventId) {
+          throw new Error('SIMULATED_FAILURE_FOR_EXPLICIT_POLICY_TEST');
+        }
+      },
+    });
+
+    assert.ok(batchResult.deadLetterCount >= 1);
+
+    // Verify it transitioned to dead_letter based on operationalPolicy.maxAttempts = 1
+    const checkClient = await pool.connect();
+    try {
+      const eventRow = await outboxRepo.getEventById(checkClient, institutionId, plainEventId);
+      assert.ok(eventRow != null);
+      assert.equal(eventRow.status, 'dead_letter', 'Must transition to dead_letter using operationalPolicy.maxAttempts');
+      assert.equal(eventRow.attempts, 1);
+      assert.ok(eventRow.deadLetteredAt != null);
+    } finally {
+      checkClient.release();
+    }
+  });
+
   it('CROSS_TENANT_CLAIM_ISOLATION: worker claiming for Institution A cannot claim Institution B events', async () => {
     const otherInstId = '00000000-0000-0000-0000-000000000099';
     const client = await pool.connect();

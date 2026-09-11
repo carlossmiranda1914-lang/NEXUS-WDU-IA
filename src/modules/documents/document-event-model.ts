@@ -57,7 +57,7 @@ export interface DocumentOutboxEvent<TPayload extends Record<string, unknown> = 
   payload: TPayload;
   status: DocumentOutboxStatus;
   attempts: number;
-  maxAttempts: number;
+  maxAttempts: number | null;
   nextAttemptAt: Date;
   claimedAt: Date | null;
   claimExpiresAt: Date | null;
@@ -81,7 +81,7 @@ export interface CreateDocumentEventIntent<TPayload extends Record<string, unkno
   correlationId?: string | null;
   causationId?: string | null;
   payload: TPayload;
-  maxAttempts?: number;
+  maxAttempts?: number | null;
 }
 
 export function validateEventPayloadSecurity(payload: unknown): void {

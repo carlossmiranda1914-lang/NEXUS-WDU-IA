@@ -26,7 +26,7 @@ interface OutboxRow {
   payload: Record<string, unknown>;
   status: 'pending' | 'claimed' | 'published' | 'dead_letter';
   attempts: number;
-  max_attempts: number;
+  max_attempts: number | null;
   next_attempt_at: Date;
   claimed_at: Date | null;
   claim_expires_at: Date | null;
@@ -102,7 +102,7 @@ export class PostgresDocumentOutboxRepository {
     const maxAttempts =
       typeof intent.maxAttempts === 'number' && intent.maxAttempts > 0
         ? intent.maxAttempts
-        : 3;
+        : null;
 
     const query = `
       INSERT INTO document_outbox_events (
