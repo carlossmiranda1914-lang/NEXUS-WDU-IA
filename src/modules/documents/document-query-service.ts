@@ -33,36 +33,27 @@ export interface DocumentListResponse {
 }
 
 function computeCapabilities(
-  role: string,
   docStatus: DocumentStatus,
   currentVersionStatus: DocumentVersionStatus | null,
   activeHoldsCount: number,
 ): FrontendSafeDocumentCapabilities {
   const isArchived = docStatus === 'archived';
   const isVersionAvailable = currentVersionStatus === 'available';
-  const isVersionDeletedOrInProgress =
-    currentVersionStatus === 'deletion_in_progress' || currentVersionStatus === 'deleted';
 
-  // Read actions
+  // Read actions are safe advisory flags based strictly on factual availability; backend remains authoritative.
   const canOpen = !isArchived && isVersionAvailable;
   const canDownload = !isArchived && isVersionAvailable;
 
-  // Management actions
-  const isAdminOrStaff = ['admin', 'director', 'secretariat', 'institution_admin', 'superadmin'].includes(role);
-  const canUploadVersion = isAdminOrStaff && !isArchived && !isVersionDeletedOrInProgress;
-  const canPlaceHold = isAdminOrStaff && !isVersionDeletedOrInProgress;
-  const canReleaseHold = isAdminOrStaff && activeHoldsCount > 0;
-  const canAuthorizeDeletion = isAdminOrStaff && activeHoldsCount === 0 && !isVersionDeletedOrInProgress;
-  const canExecuteDeletion = isAdminOrStaff && activeHoldsCount === 0 && !isVersionDeletedOrInProgress;
-
+  // Management actions: return conservative false. No API-local role matrix is used.
+  // Backend command endpoints enforce authoritative policy and role authorization.
   return {
     canOpen,
     canDownload,
-    canUploadVersion,
-    canPlaceHold,
-    canReleaseHold,
-    canAuthorizeDeletion,
-    canExecuteDeletion,
+    canUploadVersion: false,
+    canPlaceHold: false,
+    canReleaseHold: false,
+    canAuthorizeDeletion: false,
+    canExecuteDeletion: false,
   };
 }
 
@@ -382,7 +373,6 @@ export async function listDocumentsQuery(
     }));
 
     const capabilities = computeCapabilities(
-      context.role,
       docRow.status,
       currentVersion?.status ?? null,
       activeHolds.length,
@@ -567,7 +557,6 @@ export async function getDocumentDetailQuery(
   }));
 
   const capabilities = computeCapabilities(
-    context.role,
     docRow.status,
     currentVersion?.status ?? null,
     activeHolds.length,
@@ -602,7 +591,7 @@ export async function getDocumentActivityQuery(
   );
 
   if (docCheck.rows.length === 0) {
-    return [];
+    throw new Error('DOCUMENT_NOT_FOUND: Document does not exist in this institution.');
   }
 
   const query = `

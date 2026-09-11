@@ -5,15 +5,16 @@ import { requireAuth, type AuthRequest } from '../../middleware/auth.ts';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
 import type { ObjectStorageProvider } from './object-storage-provider.ts';
 import type { DocumentAccessPolicyEngine } from './document-access-policy.ts';
-import { ConfigurableDocumentAccessPolicyEngine } from './document-access-policy.ts';
 import type { RetentionPolicyEngine } from './document-retention-policy.ts';
-import { ConfigurableRetentionPolicyEngine } from './document-retention-policy.ts';
 import { PostgresDocumentRepository } from './document-repository.ts';
 import {
   listDocumentsQuery,
   getDocumentDetailQuery,
   getDocumentActivityQuery,
 } from './document-query-service.ts';
+import {
+  createDocumentCommand,
+} from './document-command.ts';
 import {
   createUploadSessionCommand,
   completeUploadSessionCommand,
@@ -38,7 +39,10 @@ import {
   assertNoInternalSecretsInDto,
   type FrontendSafeUploadSessionDto,
 } from './document-dto.ts';
-import type { DocumentUploadSessionRecord } from './document-upload-model.ts';
+import type {
+  DocumentUploadSessionRecord,
+  DocumentSizePolicyConfig,
+} from './document-upload-model.ts';
 
 function reject(res: Response, status: number, error: string, code?: string) {
   return res.status(status).json({ error, ...(code ? { code } : {}) });
@@ -169,6 +173,9 @@ export function rejectDomainError(res: Response, error: unknown): Response {
     // 503 Service Unavailable
     if (
       msg.includes('POLICY_ENGINE_MISSING') ||
+      msg.includes('RETENTION_POLICY_ENGINE_MISSING') ||
+      msg.includes('UPLOAD_POLICY_MISSING') ||
+      msg.includes('STORAGE_CONFIGURATION_MISSING') ||
       msg.includes('STORAGE_PROVIDER_MISSING') ||
       msg.includes('ACCESS_GRANT_TOKEN_KEY_MISSING') ||
       msg.includes('JURISDICTION_PROFILE_MISSING') ||
@@ -187,6 +194,8 @@ export interface DocumentRouteDependencies {
   pool?: typeof pool;
   requireAuth?: RequestHandler;
   storageProvider?: ObjectStorageProvider;
+  storageBucket?: string;
+  uploadPolicyConfig?: DocumentSizePolicyConfig;
   policyEngine?: DocumentAccessPolicyEngine;
   retentionPolicyEngine?: RetentionPolicyEngine;
   accessGrantTokenKey?: string;
@@ -200,56 +209,34 @@ export function registerDocumentRoutes(
   const docPool = dependencies.pool ?? pool;
   const docAuth = dependencies.requireAuth ?? requireAuth;
 
-  // Safe default engines if not explicitly provided
+  // Strict operational authority from dependencies or environment; NO synthetic fallbacks in production
   const accessGrantTokenKey =
-    dependencies.accessGrantTokenKey ||
-    process.env.DOCUMENTS_ACCESS_GRANT_TOKEN_KEY ||
-    'default-synthetic-test-token-key-minimum-32-chars';
+    dependencies.accessGrantTokenKey || process.env.DOCUMENTS_ACCESS_GRANT_TOKEN_KEY || null;
 
   const deletionPseudonymizationKey =
     dependencies.deletionPseudonymizationKey ||
     process.env.DOCUMENTS_DELETION_PSEUDONYMIZATION_KEY ||
-    'default-synthetic-test-deletion-pseudonymization-key-32-chars';
+    null;
 
-  const policyEngine: DocumentAccessPolicyEngine =
-    dependencies.policyEngine ||
-    new ConfigurableDocumentAccessPolicyEngine([
-      { role: 'admin', category: '*', allowedActions: ['open_content', 'download_content'] },
-      { role: 'director', category: '*', allowedActions: ['open_content', 'download_content'] },
-      { role: 'secretariat', category: '*', allowedActions: ['open_content', 'download_content'] },
-      { role: 'institution_admin', category: '*', allowedActions: ['open_content', 'download_content'] },
-      { role: 'superadmin', category: '*', allowedActions: ['open_content', 'download_content'] },
-      { role: 'teacher', category: '*', allowedActions: ['open_content', 'download_content'] },
-      { role: 'student', category: '*', allowedActions: ['open_content', 'download_content'] },
-      { role: 'parent', category: '*', allowedActions: ['open_content', 'download_content'] },
-    ]);
+  const policyEngine: DocumentAccessPolicyEngine | null = dependencies.policyEngine || null;
 
-  const retentionPolicyEngine: RetentionPolicyEngine =
-    dependencies.retentionPolicyEngine ||
-    new ConfigurableRetentionPolicyEngine([
-      {
-        policyId: 'synthetic-default-retention',
-        policyVersion: '1.0',
-        jurisdictionProfileId: 'AO-STD',
-        jurisdictionProfileVersion: '1.0',
-        category: 'identification',
-        clockTriggerType: 'enrollment_completed',
-        retentionDurationDays: 365 * 5,
-        allowedHoldTypes: ['legal', 'administrative'],
-        allowedDeletionAuthorityScopePatterns: ['admin', 'director', 'institution_admin', 'superadmin'],
-      },
-      {
-        policyId: 'synthetic-general-retention',
-        policyVersion: '1.0',
-        jurisdictionProfileId: 'AO-STD',
-        jurisdictionProfileVersion: '1.0',
-        category: 'general',
-        clockTriggerType: 'creation',
-        retentionDurationDays: 365,
-        allowedHoldTypes: ['legal', 'administrative'],
-        allowedDeletionAuthorityScopePatterns: ['admin', 'director', 'institution_admin', 'superadmin'],
-      },
-    ]);
+  const retentionPolicyEngine: RetentionPolicyEngine | null =
+    dependencies.retentionPolicyEngine || null;
+
+  const uploadPolicyConfig: DocumentSizePolicyConfig | null =
+    dependencies.uploadPolicyConfig ||
+    (process.env.DOCUMENTS_GLOBAL_MAX_BYTE_SIZE
+      ? {
+          globalMaxByteSize: Number(process.env.DOCUMENTS_GLOBAL_MAX_BYTE_SIZE),
+          institutionMaxByteSize: process.env.DOCUMENTS_INSTITUTION_MAX_BYTE_SIZE
+            ? Number(process.env.DOCUMENTS_INSTITUTION_MAX_BYTE_SIZE)
+            : undefined,
+        }
+      : null);
+
+  const storageProvider: ObjectStorageProvider | null = dependencies.storageProvider || null;
+  const storageBucket: string | null =
+    dependencies.storageBucket || process.env.DOCUMENTS_STORAGE_BUCKET || null;
 
   // 1. GET /api/documents — List documents with bounded pagination and filters
   app.get('/api/documents', docAuth, async (req: AuthRequest, res: Response) => {
@@ -270,14 +257,14 @@ export function registerDocumentRoutes(
         updatedTo: req.query.updatedTo as string,
       });
 
-      assertNoInternalSecretsInDto(response);
+      assertNoInternalSecretsInDto(response.items);
       return res.json(response);
     } catch (error) {
       return rejectDomainError(res, error);
     }
   });
 
-  // 2. GET /api/documents/:id — Document Detail DTO
+  // 2. GET /api/documents/:id — Document detail with safe DTO
   app.get('/api/documents/:id', docAuth, async (req: AuthRequest, res: Response) => {
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
@@ -288,19 +275,19 @@ export function registerDocumentRoutes(
     }
 
     try {
-      const dto = await getDocumentDetailQuery(docPool, context, documentId);
-      if (!dto) {
+      const doc = await getDocumentDetailQuery(docPool, context, documentId);
+      if (!doc) {
         return reject(res, 404, 'Documento não encontrado no tenant.');
       }
 
-      assertNoInternalSecretsInDto(dto);
-      return res.json(dto);
+      assertNoInternalSecretsInDto(doc);
+      return res.json(doc);
     } catch (error) {
       return rejectDomainError(res, error);
     }
   });
 
-  // 3. GET /api/documents/:id/activity — Document Activity History
+  // 3. GET /api/documents/:id/activity — Document factual activity history
   app.get('/api/documents/:id/activity', docAuth, async (req: AuthRequest, res: Response) => {
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
@@ -311,12 +298,6 @@ export function registerDocumentRoutes(
     }
 
     try {
-      // Check document existence in tenant
-      const detail = await getDocumentDetailQuery(docPool, context, documentId);
-      if (!detail) {
-        return reject(res, 404, 'Documento não encontrado no tenant.');
-      }
-
       const activities = await getDocumentActivityQuery(docPool, context, documentId);
       assertNoInternalSecretsInDto(activities);
       return res.json({ items: activities });
@@ -329,6 +310,13 @@ export function registerDocumentRoutes(
   app.post('/api/documents/upload-sessions', docAuth, async (req: AuthRequest, res: Response) => {
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    if (!uploadPolicyConfig) {
+      return rejectDomainError(res, new Error('UPLOAD_POLICY_MISSING'));
+    }
+    if (!storageProvider || !storageBucket) {
+      return rejectDomainError(res, new Error('STORAGE_CONFIGURATION_MISSING'));
+    }
 
     const {
       documentId: rawDocId,
@@ -352,26 +340,30 @@ export function registerDocumentRoutes(
 
     try {
       let documentId = rawDocId;
+      const idempotencyKey = resolveIdempotencyKey(req, req.body?.idempotencyKey);
 
       if (!documentId) {
-        const docRepo = new PostgresDocumentRepository();
-        const client = await docPool.connect();
-        try {
-          const newDoc = await docRepo.createDocument(client, {
-            institutionId: context.institutionId,
-            category: (category && typeof category === 'string' ? category.trim() : 'general'),
-            classification: (classification && typeof classification === 'string' ? classification.trim() : null),
-            createdByPersonId: context.personId,
-          });
-          documentId = newDoc.id;
-        } finally {
-          client.release();
-        }
+        // Canonical I1/I7 document creation command: domain fact, audit, outbox event intent, idempotency
+        const docCreationRes = await createDocumentCommand({
+          pool: docPool,
+          context,
+          idempotencyKey: `doc-${idempotencyKey}`,
+          input: {
+            category: category && typeof category === 'string' ? category.trim() : 'general',
+            classification:
+              classification && typeof classification === 'string' ? classification.trim() : null,
+            provenance: {
+              sourceDomain: 'portal.documents',
+              method: 'upload_session_create_doc',
+              correlationId: req.header('x-correlation-id') || null,
+            },
+          },
+        });
+        documentId = docCreationRes.result.id;
       } else if (!validUuid(documentId)) {
         return reject(res, 400, 'documentId inválido.');
       }
 
-      const idempotencyKey = resolveIdempotencyKey(req, req.body?.idempotencyKey);
       const sessionResult = await createUploadSessionCommand({
         pool: docPool,
         context,
@@ -382,12 +374,9 @@ export function registerDocumentRoutes(
           declaredFilename,
           declaredMimeType,
           declaredByteSize,
-          policyConfig: {
-            globalMaxByteSize: 50 * 1024 * 1024,
-            institutionMaxByteSize: 25 * 1024 * 1024,
-          },
-          storageProvider: dependencies.storageProvider?.providerName || 'documents-storage',
-          storageBucket: 'documents-vault',
+          policyConfig: uploadPolicyConfig,
+          storageProvider: storageProvider.providerName,
+          storageBucket,
           provenance: {
             sourceDomain: 'portal.documents',
             method: 'upload_session',
@@ -418,6 +407,13 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    if (!uploadPolicyConfig) {
+      return rejectDomainError(res, new Error('UPLOAD_POLICY_MISSING'));
+    }
+    if (!storageProvider || !storageBucket) {
+      return rejectDomainError(res, new Error('STORAGE_CONFIGURATION_MISSING'));
+    }
+
     const documentId = req.params.id;
     if (!validUuid(documentId)) {
       return reject(res, 400, 'Identificador de documento inválido.');
@@ -452,12 +448,9 @@ export function registerDocumentRoutes(
           declaredFilename,
           declaredMimeType,
           declaredByteSize,
-          policyConfig: {
-            globalMaxByteSize: 50 * 1024 * 1024,
-            institutionMaxByteSize: 25 * 1024 * 1024,
-          },
-          storageProvider: dependencies.storageProvider?.providerName || 'documents-storage',
-          storageBucket: 'documents-vault',
+          policyConfig: uploadPolicyConfig,
+          storageProvider: storageProvider.providerName,
+          storageBucket,
           provenance: {
             sourceDomain: 'portal.documents',
             method: 'version_upload_session',
@@ -498,8 +491,8 @@ export function registerDocumentRoutes(
       return reject(res, 400, 'rawToken é obrigatório.');
     }
 
-    if (!dependencies.storageProvider) {
-      return reject(res, 503, 'Provedor de armazenamento de objetos não configurado.');
+    if (!storageProvider) {
+      return rejectDomainError(res, new Error('STORAGE_PROVIDER_MISSING'));
     }
 
     try {
@@ -507,7 +500,7 @@ export function registerDocumentRoutes(
       const completeRes = await completeUploadSessionCommand({
         pool: docPool,
         context,
-        storageProvider: dependencies.storageProvider,
+        storageProvider,
         idempotencyKey,
         input: {
           sessionId,
@@ -628,6 +621,13 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    if (!policyEngine) {
+      return rejectDomainError(res, new Error('POLICY_ENGINE_MISSING'));
+    }
+    if (!accessGrantTokenKey) {
+      return rejectDomainError(res, new Error('ACCESS_GRANT_TOKEN_KEY_MISSING'));
+    }
+
     const documentId = req.params.id;
     if (!validUuid(documentId)) {
       return reject(res, 400, 'Identificador de documento inválido.');
@@ -691,13 +691,16 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    if (!policyEngine) {
+      return rejectDomainError(res, new Error('POLICY_ENGINE_MISSING'));
+    }
+    if (!storageProvider) {
+      return rejectDomainError(res, new Error('STORAGE_PROVIDER_MISSING'));
+    }
+
     const { rawAccessToken, displayFilename } = req.body || {};
     if (!rawAccessToken || typeof rawAccessToken !== 'string') {
       return reject(res, 400, 'rawAccessToken é obrigatório.');
-    }
-
-    if (!dependencies.storageProvider) {
-      return reject(res, 503, 'Provedor de armazenamento não disponível para transmissão.');
     }
 
     try {
@@ -705,7 +708,7 @@ export function registerDocumentRoutes(
         pool: docPool,
         context,
         policyEngine,
-        storageProvider: dependencies.storageProvider,
+        storageProvider,
         input: {
           rawAccessToken,
           displayFilename,
@@ -765,6 +768,10 @@ export function registerDocumentRoutes(
   app.post('/api/documents/:id/holds', docAuth, async (req: AuthRequest, res: Response) => {
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    if (!retentionPolicyEngine) {
+      return rejectDomainError(res, new Error('RETENTION_POLICY_ENGINE_MISSING'));
+    }
 
     const documentId = req.params.id;
     if (!validUuid(documentId)) return reject(res, 400, 'Identificador de documento inválido.');
@@ -839,6 +846,10 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    if (!retentionPolicyEngine) {
+      return rejectDomainError(res, new Error('RETENTION_POLICY_ENGINE_MISSING'));
+    }
+
     const documentId = req.params.id;
     const holdId = req.params.holdId;
     if (!validUuid(documentId) || !validUuid(holdId)) {
@@ -909,6 +920,10 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    if (!retentionPolicyEngine) {
+      return rejectDomainError(res, new Error('RETENTION_POLICY_ENGINE_MISSING'));
+    }
+
     const documentId = req.params.id;
     if (!validUuid(documentId)) return reject(res, 400, 'Identificador de documento inválido.');
 
@@ -959,16 +974,19 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    if (!deletionPseudonymizationKey) {
+      return rejectDomainError(res, new Error('DELETION_PSEUDONYMIZATION_KEY_MISSING'));
+    }
+    if (!storageProvider) {
+      return rejectDomainError(res, new Error('STORAGE_PROVIDER_MISSING'));
+    }
+
     const documentId = req.params.id;
     if (!validUuid(documentId)) return reject(res, 400, 'Identificador de documento inválido.');
 
     const { deletionAuthorizationId } = req.body || {};
     if (!deletionAuthorizationId || !validUuid(deletionAuthorizationId)) {
       return reject(res, 400, 'deletionAuthorizationId inválido.');
-    }
-
-    if (!dependencies.storageProvider) {
-      return reject(res, 503, 'Provedor de armazenamento de objetos não configurado.');
     }
 
     try {
@@ -978,7 +996,7 @@ export function registerDocumentRoutes(
         context,
         idempotencyKey,
         deletionPseudonymizationKey,
-        storageProvider: dependencies.storageProvider,
+        storageProvider,
         input: {
           deletionAuthorizationId,
           correlationId: req.header('x-correlation-id') || null,
@@ -1001,6 +1019,13 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    if (!deletionPseudonymizationKey) {
+      return rejectDomainError(res, new Error('DELETION_PSEUDONYMIZATION_KEY_MISSING'));
+    }
+    if (!storageProvider) {
+      return rejectDomainError(res, new Error('STORAGE_PROVIDER_MISSING'));
+    }
+
     const documentId = req.params.id;
     if (!validUuid(documentId)) return reject(res, 400, 'Identificador de documento inválido.');
 
@@ -1009,16 +1034,12 @@ export function registerDocumentRoutes(
       return reject(res, 400, 'deletionAuthorizationId inválido.');
     }
 
-    if (!dependencies.storageProvider) {
-      return reject(res, 503, 'Provedor de armazenamento de objetos não configurado.');
-    }
-
     try {
       const reconcileRes = await reconcileDeletionCommand({
         pool: docPool,
         context,
         deletionPseudonymizationKey,
-        storageProvider: dependencies.storageProvider,
+        storageProvider,
         input: {
           deletionAuthorizationId,
           correlationId: req.header('x-correlation-id') || null,

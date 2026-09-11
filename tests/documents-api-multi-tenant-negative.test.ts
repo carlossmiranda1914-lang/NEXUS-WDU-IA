@@ -103,6 +103,11 @@ try {
     pool: pool as any,
     requireAuth: auth,
     storageProvider,
+    storageBucket: 'vault-a',
+    uploadPolicyConfig: {
+      globalMaxByteSize: 50 * 1024 * 1024,
+      institutionMaxByteSize: 25 * 1024 * 1024,
+    },
     policyEngine,
     retentionPolicyEngine,
     accessGrantTokenKey: 'synthetic-test-token-key-minimum-32-chars-long-secret',
@@ -320,6 +325,42 @@ try {
     body: { versionId: versionAId },
   });
   assert.equal(authDelBRes.status, 404, 'Authorizing deletion across tenants must return 404');
+
+  // 10. LOW_PRIVILEGE_ROLE_CANNOT_GAIN_MANAGEMENT_CAPABILITIES_FROM_API_LAYER (P1-2)
+  // A 'student' is a canonical role that must NOT receive management capabilities
+  // (canPlaceHold, canAuthorizeDeletion, canUploadVersion) from the conservative API layer.
+  console.log('[MULTI-TENANT 10] Arbitrary role cannot gain capabilities from API matrix');
+  const guestPersonId = randomUUID();
+  const guestMembershipId = randomUUID();
+  await client.query(`INSERT INTO people (id, name) VALUES ($1, 'Guest User')`, [guestPersonId]);
+  await client.query(
+    `INSERT INTO identities (person_id, provider, provider_subject) VALUES ($1, 'firebase', 'uid-guest-a')`,
+    [guestPersonId],
+  );
+  await client.query(
+    `INSERT INTO memberships (id, person_id, institution_id, role, status, approved_at)
+     VALUES ($1, $2, $3, 'student', 'active', now())`,
+    [guestMembershipId, guestPersonId, instA],
+  );
+
+  const guestDocRes = await request(`/api/documents/${docAId}`, { token: 'uid-guest-a' });
+  assert.equal(guestDocRes.status, 200);
+  const guestDocBody = (await guestDocRes.json()) as any;
+  assert.equal(
+    guestDocBody.capabilities.canPlaceHold,
+    false,
+    'Arbitrary role must NOT receive canPlaceHold capability from API layer',
+  );
+  assert.equal(
+    guestDocBody.capabilities.canAuthorizeDeletion,
+    false,
+    'Arbitrary role must NOT receive canAuthorizeDeletion capability from API layer',
+  );
+  assert.equal(
+    guestDocBody.capabilities.canUploadVersion,
+    false,
+    'Arbitrary role must NOT receive canUploadVersion capability from API layer',
+  );
 
   console.log('[DOCUMENTS-API-MULTI-TENANT] All multi-tenant negative assertions PASSED.');
 } finally {
