@@ -1,4 +1,4 @@
-﻿/**
+/**
  * P1-04 CHARACTERIZATION: INACTIVE TYPE DURING VERSION PUBLISHING
  *
  * Proves:
@@ -6,7 +6,7 @@
  * 2. Changing to an inactive target type: FAILS with validation error.
  * 3. Changing to an active target type: SUCCEEDS.
  * 4. History preserves original type references.
- * 
+ *
  * P1-03 CHARACTERIZATION: kind is derived from fee type, not from user input.
  * 5. kind on created/updated versions always equals the fee type canonical_key or code_prefix.
  */

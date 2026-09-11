@@ -108,7 +108,7 @@ export class PostgresFinancialObligationRepository {
     }
 
     const sql = `
-      SELECT 
+      SELECT
         o.id,
         o.institution_id,
         o.financial_account_id,
@@ -137,7 +137,7 @@ export class PostgresFinancialObligationRepository {
       JOIN finance_financial_accounts a ON (a.institution_id = o.institution_id AND a.id = o.financial_account_id)
       LEFT JOIN people p ON p.id = o.beneficiary_person_id
       JOIN finance_fee_catalogue_items fci ON (fci.institution_id = o.institution_id AND fci.id = o.fee_catalogue_item_id)
-      JOIN finance_fee_catalogue_versions fcv 
+      JOIN finance_fee_catalogue_versions fcv
         ON (fcv.institution_id = o.institution_id AND fcv.item_id = o.fee_catalogue_item_id AND fcv.version = o.fee_catalogue_version)
       WHERE ${conditions.join(' AND ')}
       ORDER BY o.effective_at DESC, o.created_at DESC
@@ -149,7 +149,7 @@ export class PostgresFinancialObligationRepository {
 
   async getById(actor: InstitutionalContext, id: string, client: Pool | PoolClient = this.pool): Promise<FinancialObligation> {
     const sql = `
-      SELECT 
+      SELECT
         o.id,
         o.institution_id,
         o.financial_account_id,
@@ -178,7 +178,7 @@ export class PostgresFinancialObligationRepository {
       JOIN finance_financial_accounts a ON (a.institution_id = o.institution_id AND a.id = o.financial_account_id)
       LEFT JOIN people p ON p.id = o.beneficiary_person_id
       JOIN finance_fee_catalogue_items fci ON (fci.institution_id = o.institution_id AND fci.id = o.fee_catalogue_item_id)
-      JOIN finance_fee_catalogue_versions fcv 
+      JOIN finance_fee_catalogue_versions fcv
         ON (fcv.institution_id = o.institution_id AND fcv.item_id = o.fee_catalogue_item_id AND fcv.version = o.fee_catalogue_version)
       WHERE o.institution_id = $1 AND o.id = $2
     `;

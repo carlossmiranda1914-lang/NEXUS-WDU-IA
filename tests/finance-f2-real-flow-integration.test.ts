@@ -61,7 +61,7 @@ async function runE2E() {
 
     // Seed test institutions, people, memberships
     await client.query(`
-      INSERT INTO institutions (id, name, slug) VALUES 
+      INSERT INTO institutions (id, name, slug) VALUES
         ('${institutionA}', 'Colégio Nexus A', 'colegio-nexus-a'),
         ('${institutionB}', 'Colégio Nexus B', 'colegio-nexus-b')
       ON CONFLICT (id) DO NOTHING;

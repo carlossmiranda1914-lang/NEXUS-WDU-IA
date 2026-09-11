@@ -104,7 +104,7 @@ export class PostgresFinancialAccountRepository {
     }
 
     const sql = `
-      SELECT 
+      SELECT
         a.id,
         a.institution_id,
         a.account_number,
@@ -118,9 +118,9 @@ export class PostgresFinancialAccountRepository {
         p.role AS party_role,
         p.status AS party_status
       FROM finance_financial_accounts a
-      LEFT JOIN finance_financial_account_parties p 
+      LEFT JOIN finance_financial_account_parties p
         ON p.financial_account_id = a.id AND p.role = 'primary_debtor' AND p.status = 'active'
-      LEFT JOIN people pe 
+      LEFT JOIN people pe
         ON pe.id = p.person_id
       WHERE a.institution_id = $1 ${statusClause} ${searchClause}
       ORDER BY a.account_number ASC
@@ -133,7 +133,7 @@ export class PostgresFinancialAccountRepository {
 
   async getById(actor: InstitutionalContext, id: string, client: Pool | PoolClient = this.pool): Promise<FinancialAccount> {
     const sql = `
-      SELECT 
+      SELECT
         a.id,
         a.institution_id,
         a.account_number,
@@ -147,9 +147,9 @@ export class PostgresFinancialAccountRepository {
         p.role AS party_role,
         p.status AS party_status
       FROM finance_financial_accounts a
-      LEFT JOIN finance_financial_account_parties p 
+      LEFT JOIN finance_financial_account_parties p
         ON p.financial_account_id = a.id AND p.role = 'primary_debtor'
-      LEFT JOIN people pe 
+      LEFT JOIN people pe
         ON pe.id = p.person_id
       WHERE a.institution_id = $1 AND a.id = $2
     `;
@@ -270,9 +270,9 @@ export class PostgresFinancialAccountRepository {
     }
 
     const res = await this.pool.query<AccountRow>(
-      `UPDATE finance_financial_accounts 
-       SET name = $3, updated_at = NOW() 
-       WHERE institution_id = $1 AND id = $2 
+      `UPDATE finance_financial_accounts
+       SET name = $3, updated_at = NOW()
+       WHERE institution_id = $1 AND id = $2
        RETURNING id, institution_id, account_number, name, status, created_at, updated_at`,
       [actor.institutionId, id, input.name],
     );
@@ -284,9 +284,9 @@ export class PostgresFinancialAccountRepository {
 
   async setStatus(actor: InstitutionalContext, id: string, status: FinancialAccountStatus): Promise<FinancialAccount> {
     const res = await this.pool.query<AccountRow>(
-      `UPDATE finance_financial_accounts 
-       SET status = $3, updated_at = NOW() 
-       WHERE institution_id = $1 AND id = $2 
+      `UPDATE finance_financial_accounts
+       SET status = $3, updated_at = NOW()
+       WHERE institution_id = $1 AND id = $2
        RETURNING id, institution_id, account_number, name, status, created_at, updated_at`,
       [actor.institutionId, id, status],
     );

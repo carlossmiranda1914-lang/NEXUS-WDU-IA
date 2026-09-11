@@ -51,7 +51,7 @@ async function runTests() {
 
     // Seed institutions, people, and memberships
     await client.query(`
-      INSERT INTO institutions (id, name, slug) VALUES 
+      INSERT INTO institutions (id, name, slug) VALUES
         ('${institutionA}', 'Inst A', 'inst-a'),
         ('${institutionB}', 'Inst B', 'inst-b')
       ON CONFLICT (id) DO NOTHING;
