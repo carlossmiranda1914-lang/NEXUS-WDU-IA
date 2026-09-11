@@ -67,7 +67,7 @@ const Dashboard = lazy(() => import('./components/Dashboard'));
 const EnrollmentOperationsWorkspace = lazy(() => import('./components/EnrollmentOperationsWorkspace'));
 const StudentRecordWorkspace = lazy(() => import('./components/StudentRecordWorkspace'));
 const TeachersList = lazy(() => import('./components/TeachersList'));
-const FinancialPanel = lazy(() => import('./components/FinancialPanel'));
+const FinanceWorkspace = lazy(() => import('./components/finance/FinanceWorkspace'));
 const CommunicationCenter = lazy(() => import('./components/CommunicationCenter'));
 const SystemConfig = lazy(() => import('./components/SystemConfig'));
 const AIAssistant = lazy(() => import('./components/AIAssistant'));
@@ -386,6 +386,8 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [studentRecordRef, setStudentRecordRef] = useState<string | null>(null);
+  const [financeAccountId, setFinanceAccountId] = useState<string | null>(null);
+  const [financeContextQuery, setFinanceContextQuery] = useState<{ financialAccountId?: string; studentRef?: string; enrollmentId?: string } | null>(null);
   // Until the backend resolves an active Membership, the client has no institutional authority.
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('student');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
@@ -412,6 +414,33 @@ export default function App() {
       body.classList.remove('light');
     }
   }, [theme]);
+
+  useEffect(() => {
+    const openFinance = (event: Event) => {
+      const detail = (event as CustomEvent<{ financialAccountId?: string; studentRef?: string; enrollmentId?: string } | string | undefined>).detail;
+      if (typeof detail === 'string' && detail.trim().length > 0) {
+        const id = detail.trim();
+        setFinanceAccountId(id);
+        setFinanceContextQuery({ financialAccountId: id });
+      } else if (typeof detail === 'object' && detail !== null) {
+        const id = detail.financialAccountId?.trim();
+        const studentRef = detail.studentRef?.trim();
+        const enrollmentId = detail.enrollmentId?.trim();
+        setFinanceAccountId(id || null);
+        setFinanceContextQuery({
+          ...(id ? { financialAccountId: id } : {}),
+          ...(studentRef ? { studentRef } : {}),
+          ...(enrollmentId ? { enrollmentId } : {}),
+        });
+      } else {
+        setFinanceAccountId(null);
+        setFinanceContextQuery(null);
+      }
+      setActiveTab('financials');
+    };
+    window.addEventListener('nexus-open-finance', openFinance);
+    return () => window.removeEventListener('nexus-open-finance', openFinance);
+  }, []);
 
   // Browser-held role controls are presentation only; authority stays server-side.
   const [rolePermissions, setRolePermissions] = useState<Record<UserRole, string[]>>(DEFAULT_PERMISSIONS);
@@ -2667,9 +2696,10 @@ export default function App() {
                   )}
 
                   {activeTab === 'financials' && (
-                    <FactualUnavailablePanel
-                      title="Operações financeiras indisponíveis"
-                      detail="Não existe autoridade institucional para faturação, exportação, sincronização, entrega por email ou reconciliação neste ambiente. Nenhuma fatura, exportação ou comunicação externa foi criada."
+                    <FinanceWorkspace
+                      theme={theme}
+                      initialFinancialAccountId={financeAccountId}
+                      initialContextQuery={financeContextQuery}
                     />
                   )}
 

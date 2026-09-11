@@ -1,0 +1,2 @@
+import assert from 'node:assert/strict'; import { INSTITUTIONAL_ROLES } from '../src/auth/institutional-context.ts'; import { canAccessFeeCatalogue } from '../src/modules/finance/fee-catalogue-policy.ts';
+for(const role of INSTITUTIONAL_ROLES){assert.equal(canAccessFeeCatalogue(role,'read'),['institution_admin','financial','director'].includes(role));assert.equal(canAccessFeeCatalogue(role,'write'),['institution_admin','financial'].includes(role));}console.log('Finance fee catalogue policy: PASS');

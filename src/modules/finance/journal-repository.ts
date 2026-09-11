@@ -12,12 +12,13 @@ export class PostgresJournalRepository implements JournalRepository {
     throw new Error('Journal confirmation must execute through the canonical idempotent command boundary');
   }
   async confirmInTransaction(client: PoolClient, input: ConfirmJournalInput): Promise<{ transactionId: string }> {
-    if (input.journalType !== 'foundation_value_received') throw new Error('Foundation reversal confirmation is guarded by executeFoundationReversal');
+    if (input.journalType === 'foundation_reversal') throw new Error('Foundation reversal confirmation is guarded by executeFoundationReversal');
     return this.persistConfirmed(client, input);
   }
   private async persistConfirmed(client: PoolClient, input: ConfirmJournalInput): Promise<{ transactionId: string }> {
     const validated = validateConfirmation(input); const transactionId = randomUUID();
-    await client.query(`INSERT INTO finance_journal_transactions (id,institution_id,status,currency,amount,command_id,journal_type,actor_person_id,financial_profile_version,effective_at,confirmed_at,reverses_transaction_id,reason) VALUES ($1,$2,'confirmed',$3,$4,$5,$6,$7,$8,$9,now(),$10,$11)`, [transactionId,input.institutionId,validated.currency,validated.amount.canonicalAmount(),input.commandId,input.journalType,input.actorPersonId,input.financialProfileVersion,input.effectiveAt,input.reversesTransactionId ?? null,input.reason ?? null]);
+    const actorKind = input.actorKind ?? 'human';
+    await client.query(`INSERT INTO finance_journal_transactions (id,institution_id,status,currency,amount,command_id,journal_type,actor_kind,actor_person_id,financial_profile_version,effective_at,confirmed_at,reverses_transaction_id,reason) VALUES ($1,$2,'confirmed',$3,$4,$5,$6,$7,$8,$9,$10,now(),$11,$12)`, [transactionId,input.institutionId,validated.currency,validated.amount.canonicalAmount(),input.commandId,input.journalType,actorKind,input.actorPersonId ?? null,input.financialProfileVersion,input.effectiveAt,input.reversesTransactionId ?? null,input.reason ?? null]);
       this.fail('after_transaction');
       for (const entry of input.entries) await client.query(`INSERT INTO finance_journal_entries (institution_id,transaction_id,currency,amount,position_type,source_ref) VALUES ($1,$2,$3,$4,$5,$6)`, [input.institutionId,transactionId,entry.money.currency,entry.money.canonicalAmount(),entry.positionType,entry.sourceRef]);
       this.fail('after_entries');
