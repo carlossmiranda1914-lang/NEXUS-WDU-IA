@@ -75,7 +75,7 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
   });
   app.post('/api/finance/documents/:id/corrections', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'correct'); const idempotencyKey = key(req, res); if (!context || !idempotencyKey) return;
-    try { const result = await new PostgresFinancialDocumentRepository(pool as Pool).issueCorrection({ institutionId: context.institutionId, originalDocumentId: req.params.id, seriesId: req.body?.seriesId, documentType: req.body?.documentType, idempotencyKey }); res.status(result.replayed ? 200 : 201).json(result); } catch (error) { handleCommand(res, error); }
+    try { const result = await new PostgresFinancialDocumentRepository(pool as Pool, fiscalAdapters).issueCorrection({ institutionId: context.institutionId, originalDocumentId: req.params.id, seriesId: req.body?.seriesId, documentType: req.body?.documentType, idempotencyKey }); res.status(result.replayed ? 200 : 201).json(result); } catch (error) { handleCommand(res, error); }
   });
   app.get('/api/finance/documents/:id/artifacts', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'read'); if (!context) return;
