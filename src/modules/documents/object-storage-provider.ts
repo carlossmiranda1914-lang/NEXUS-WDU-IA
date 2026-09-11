@@ -63,6 +63,16 @@ export interface DeleteObjectParams {
   storageKey: string;
 }
 
+/**
+ * Result of a committed-content deletion attempt.
+ * I6 — semantically distinct from deleteUncommittedObject (upload-abort).
+ * deleted=false means the object may still exist; caller must FAIL_CLOSED.
+ */
+export interface DeleteObjectResult {
+  deleted: boolean;
+  errorCode?: string;
+}
+
 export interface OpenReadStreamParams {
   institutionId?: string;
   storageBucket: string;
@@ -121,4 +131,12 @@ export interface ObjectStorageProvider {
   readRange(params: ReadRangeParams): Promise<Buffer>;
 
   createReadAuthorization?(params: CreateReadAuthParams): Promise<ReadAuthResult>;
+
+  /**
+   * I6: Definitively delete a committed storage object.
+   * SEMANTICALLY DISTINCT from deleteUncommittedObject (upload-abort).
+   * Caller MUST treat deleted=false or any thrown error as FAIL_CLOSED.
+   * PRODUCTION_REAL_STORAGE_DELETION=FORBIDDEN — test adapter only.
+   */
+  deleteObject(params: DeleteObjectParams): Promise<DeleteObjectResult>;
 }

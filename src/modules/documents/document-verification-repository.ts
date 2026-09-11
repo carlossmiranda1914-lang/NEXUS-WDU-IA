@@ -427,6 +427,10 @@ export class PostgresDocumentVerificationRepository {
         [institutionId, versionId],
       );
       const actual = check.rows[0]?.status || 'NOT_FOUND';
+      if (actual === newStatus) {
+        // Concurrently transitioned to target status by another worker — idempotent success
+        return;
+      }
       throw new Error(
         `DOCUMENT_VERSION_CONCURRENT_STATE_CONFLICT: expected status '${expectedStatus}', found '${actual}' for version ${versionId}`,
       );
