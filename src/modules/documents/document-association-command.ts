@@ -3,6 +3,7 @@ import type { InstitutionalContext } from '../../auth/institutional-context.ts';
 import { createCanonicalDocumentsFingerprint } from './document-model.ts';
 import { executeIdempotentDocumentsCommand } from './document-command.ts';
 import { PostgresDocumentAuditRepository } from './document-audit.ts';
+import { PostgresDocumentOutboxRepository } from './document-event-repository.ts';
 import type {
   DocumentAssociationRecord,
   AssociationStatus,
@@ -128,6 +129,7 @@ export async function createDocumentAssociationCommand(input: {
 
   const repo = new PostgresDocumentAssociationRepository();
   const auditRepo = new PostgresDocumentAuditRepository();
+  const outboxRepo = new PostgresDocumentOutboxRepository();
 
   return executeIdempotentDocumentsCommand({
     pool,
@@ -160,6 +162,26 @@ export async function createDocumentAssociationCommand(input: {
         correlationId: commandInput.correlationId,
         details: {
           associationId: association.id,
+          targetDomain: association.targetDomain,
+          targetResourceType: association.targetResourceType,
+          targetResourceId: association.targetResourceId,
+          purpose: association.purpose,
+        },
+      });
+
+      await outboxRepo.insertEvent(client, {
+        institutionId: context.institutionId,
+        eventType: 'document.association_created',
+        aggregateType: 'document_association',
+        aggregateId: association.id,
+        actorPersonId: context.personId,
+        actorKind: 'user',
+        correlationId: commandInput.correlationId ?? null,
+        causationId: association.id,
+        payload: {
+          associationId: association.id,
+          documentId: association.documentId,
+          pinnedVersionId: association.pinnedVersionId,
           targetDomain: association.targetDomain,
           targetResourceType: association.targetResourceType,
           targetResourceId: association.targetResourceId,

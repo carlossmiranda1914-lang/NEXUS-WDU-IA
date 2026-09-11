@@ -8,8 +8,15 @@ import type {
   ProvenanceOriginType,
 } from './document-model.ts';
 import { createCanonicalDocumentsFingerprint } from './document-model.ts';
-import { PostgresDocumentRepository } from './document-repository.ts';
-import { PostgresDocumentAuditRepository } from './document-audit.ts';
+import {
+  PostgresDocumentRepository,
+} from './document-repository.ts';
+import {
+  PostgresDocumentAuditRepository,
+} from './document-audit.ts';
+import {
+  PostgresDocumentOutboxRepository,
+} from './document-event-repository.ts';
 
 export interface DocumentsCommandIdentity {
   institutionId: string;
@@ -312,6 +319,36 @@ export async function createDocumentWithInitialVersionCommand(input: {
         },
       });
 
+      const outboxRepo = new PostgresDocumentOutboxRepository();
+      await outboxRepo.insertEventIntent(client, {
+        institutionId: context.institutionId,
+        eventType: 'document.created',
+        aggregateType: 'document',
+        aggregateId: doc.id,
+        actorPersonId: context.personId,
+        correlationId: creationInput.provenance.correlationId,
+        payload: {
+          category: doc.category,
+          classification: doc.classification,
+          initialVersionId: version.id,
+        },
+      });
+      await outboxRepo.insertEventIntent(client, {
+        institutionId: context.institutionId,
+        eventType: 'document.version_created',
+        aggregateType: 'document_version',
+        aggregateId: version.id,
+        actorPersonId: context.personId,
+        correlationId: creationInput.provenance.correlationId,
+        payload: {
+          documentId: doc.id,
+          versionNumber: version.versionNumber,
+          mimeType: version.mimeType,
+          byteSize: version.byteSize,
+          sha256Hash: version.sha256Hash,
+        },
+      });
+
       return {
         resultRef: `${doc.id}:${version.id}`,
         result: { document: doc, version, provenance, storageReference },
@@ -393,6 +430,23 @@ export async function appendDocumentVersionCommand(input: {
         outcome: 'success',
         correlationId: appendInput.provenance.correlationId,
         details: {
+          versionNumber: version.versionNumber,
+          mimeType: version.mimeType,
+          byteSize: version.byteSize,
+          sha256Hash: version.sha256Hash,
+        },
+      });
+
+      const outboxRepo = new PostgresDocumentOutboxRepository();
+      await outboxRepo.insertEventIntent(client, {
+        institutionId: context.institutionId,
+        eventType: 'document.version_created',
+        aggregateType: 'document_version',
+        aggregateId: version.id,
+        actorPersonId: context.personId,
+        correlationId: appendInput.provenance.correlationId,
+        payload: {
+          documentId: doc.id,
           versionNumber: version.versionNumber,
           mimeType: version.mimeType,
           byteSize: version.byteSize,
