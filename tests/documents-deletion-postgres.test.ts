@@ -96,7 +96,7 @@ const syntheticPolicies: RetentionPolicyConfig[] = [
     clockTriggerType: 'enrollment_closure',
     retentionDurationDays: 0,
     allowedHoldTypes: ['legal', 'administrative'],
-    allowedDeletionAuthorityScopePatterns: ['institutional_dpo'],
+    allowedDeletionAuthorityScopePatterns: ['institution_admin', 'director'],
   },
 ];
 
@@ -233,7 +233,6 @@ console.log('[DOCUMENTS-DELETION-POSTGRES] Running tests...');
     input: {
       documentId,
       versionId,
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
 
@@ -246,12 +245,12 @@ console.log('[DOCUMENTS-DELETION-POSTGRES] Running tests...');
     storageProvider,
     input: {
       deletionAuthorizationId: authRes.result.id,
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
 
   assert.strictEqual(execRes.replayed, false);
   assert.strictEqual(execRes.result.reconciliationRequired, false);
+  assert.ok(execRes.result.deletionRecord != null);
   assert.strictEqual(execRes.result.deletionRecord.result, 'deleted');
   assert.strictEqual(execRes.result.deletionRecord.storageDeletionConfirmed, true);
 
@@ -320,7 +319,6 @@ console.log('[DOCUMENTS-DELETION-POSTGRES] Running tests...');
     input: {
       documentId,
       versionId,
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
 
@@ -335,17 +333,22 @@ console.log('[DOCUMENTS-DELETION-POSTGRES] Running tests...');
     storageProvider,
     input: {
       deletionAuthorizationId: authRes.result.id,
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
 
   assert.strictEqual(execResFail.result.reconciliationRequired, true);
-  assert.strictEqual(execResFail.result.deletionRecord.result, 'reconciliation_required');
-  assert.strictEqual(execResFail.result.deletionRecord.storageDeletionConfirmed, false);
+  assert.strictEqual(execResFail.result.deletionRecord, null, 'DeletionRecord must be null when storage deletion fails');
 
   // Storage and DB checks during reconciliation_required:
   const checkClient = await pool.connect();
   try {
+    // Assert 0 deletion records exist for this authorization
+    const delRecRows = await checkClient.query(
+      `SELECT * FROM document_deletion_records WHERE institution_id = $1 AND deletion_authorization_id = $2`,
+      [institutionId, authRes.result.id],
+    );
+    assert.strictEqual(delRecRows.rows.length, 0, 'No deletion record should be written on failure');
+
     const authRepo = new PostgresDeletionAuthorizationRepository();
     const a = await authRepo.getById(checkClient, institutionId, authRes.result.id);
     assert.strictEqual(a?.authorizationStatus, 'deletion_reconciliation_required');
@@ -373,7 +376,6 @@ console.log('[DOCUMENTS-DELETION-POSTGRES] Running tests...');
     storageProvider,
     input: {
       deletionAuthorizationId: authRes.result.id,
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
 
@@ -396,6 +398,13 @@ console.log('[DOCUMENTS-DELETION-POSTGRES] Running tests...');
       [institutionId, versionId],
     );
     assert.strictEqual(srRows.rows.length, 0);
+
+    // Assert exactly 1 deletion record exists now (append-only)
+    const delRecRows = await checkClient2.query(
+      `SELECT * FROM document_deletion_records WHERE institution_id = $1 AND deletion_authorization_id = $2`,
+      [institutionId, authRes.result.id],
+    );
+    assert.strictEqual(delRecRows.rows.length, 1, 'Exactly one deletion record appended on final reconciliation');
   } finally {
     checkClient2.release();
   }
@@ -449,7 +458,6 @@ console.log('[DOCUMENTS-DELETION-POSTGRES] Running tests...');
     input: {
       documentId,
       versionId,
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
 
@@ -461,7 +469,6 @@ console.log('[DOCUMENTS-DELETION-POSTGRES] Running tests...');
     storageProvider,
     input: {
       deletionAuthorizationId: authRes.result.id,
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
 
@@ -476,6 +483,81 @@ console.log('[DOCUMENTS-DELETION-POSTGRES] Running tests...');
   }
 
   console.log('✔ Test 3 passed: Historical association and pinned version preserved after deletion');
+}
+
+// ── Test 4: Crash window recovery — Phase 1 persisted deletion_in_progress, retry resumes safely ──
+{
+  const { documentId, versionId, storageBucket, storageKey } = await createAvailableVersion('crash_rec.pdf');
+
+  await assignRetentionCommand({
+    pool,
+    context: adminContext,
+    idempotencyKey: `ret_assign_${randomUUID()}`,
+    policyEngine,
+    input: {
+      documentId,
+      versionId,
+      category: 'identification',
+      jurisdictionProfileId: 'SYNTHETIC_BR_MEC_STANDARD',
+      clockTriggerEventAt: new Date(Date.now() - 1000),
+    },
+  });
+
+  const authRes = await authorizeDeletionCommand({
+    pool,
+    context: dpoContext,
+    idempotencyKey: `auth_del_${randomUUID()}`,
+    policyEngine,
+    input: {
+      documentId,
+      versionId,
+    },
+  });
+
+  // Simulate a crash right after Phase 1 commit by directly setting version & auth to 'deletion_in_progress'
+  const cCrash = await pool.connect();
+  try {
+    await cCrash.query(
+      `UPDATE document_versions SET status = 'deletion_in_progress' WHERE institution_id = $1 AND id = $2`,
+      [institutionId, versionId],
+    );
+    await cCrash.query(
+      `UPDATE document_deletion_authorizations SET authorization_status = 'deletion_in_progress' WHERE institution_id = $1 AND id = $2`,
+      [institutionId, authRes.result.id],
+    );
+  } finally {
+    cCrash.release();
+  }
+
+  // Now resume/retry via executeDeletionCommand (or reconcileDeletionCommand)
+  const execResumeRes = await executeDeletionCommand({
+    pool,
+    context: dpoContext,
+    idempotencyKey: `exec_del_resume_${randomUUID()}`,
+    deletionPseudonymizationKey,
+    storageProvider,
+    input: {
+      deletionAuthorizationId: authRes.result.id,
+    },
+  });
+
+  assert.strictEqual(execResumeRes.result.reconciliationRequired, false);
+  assert.ok(execResumeRes.result.deletionRecord != null);
+  assert.strictEqual(execResumeRes.result.deletionRecord.result, 'deleted');
+
+  const headAfter = await storageProvider.headObject({ storageBucket, storageKey });
+  assert.strictEqual(headAfter.exists, false);
+
+  const cFinal = await pool.connect();
+  try {
+    const docRepo = new PostgresDocumentRepository();
+    const ver = await docRepo.getVersionById(cFinal, institutionId, versionId);
+    assert.strictEqual(ver?.status, 'deleted');
+  } finally {
+    cFinal.release();
+  }
+
+  console.log('✔ Test 4 passed: Crash window resumption after Phase 1 intent persistence verified');
 }
 
 const teardownClient = await pool.connect();

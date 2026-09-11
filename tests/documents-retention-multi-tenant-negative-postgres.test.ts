@@ -87,7 +87,7 @@ const syntheticPolicies: RetentionPolicyConfig[] = [
     clockTriggerType: 'enrollment_closure',
     retentionDurationDays: 0,
     allowedHoldTypes: ['legal', 'administrative'],
-    allowedDeletionAuthorityScopePatterns: ['institutional_dpo'],
+    allowedDeletionAuthorityScopePatterns: ['institution_admin'],
   },
 ];
 
@@ -244,7 +244,6 @@ await assert.rejects(
       holdType: 'legal',
       authority: 'Rogue Authority',
       reason: 'Malicious hold',
-      actorAuthorityScope: 'institutional_dpo',
     },
   }),
   /DOCUMENT_NOT_FOUND/,
@@ -263,7 +262,6 @@ const holdA = await placeHoldCommand({
     holdType: 'legal',
     authority: 'Alpha Legal Order',
     reason: 'Internal review',
-    actorAuthorityScope: 'institutional_dpo',
   },
 });
 
@@ -279,7 +277,6 @@ await assert.rejects(
       documentId: docA,
       versionId: verA,
       releaseReason: 'Unauthorized release',
-      actorAuthorityScope: 'institutional_dpo',
     },
   }),
   /HOLD_NOT_FOUND/,
@@ -297,7 +294,6 @@ await releaseHoldCommand({
     documentId: docA,
     versionId: verA,
     releaseReason: 'Internal review complete',
-    actorAuthorityScope: 'institutional_dpo',
   },
 });
 
@@ -311,7 +307,6 @@ await assert.rejects(
     input: {
       documentId: docA,
       versionId: verA,
-      actorAuthorityScope: 'institutional_dpo',
     },
   }),
   /DOCUMENT_NOT_FOUND/,

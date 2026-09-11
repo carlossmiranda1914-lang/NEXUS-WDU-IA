@@ -89,7 +89,7 @@ const syntheticPolicies: RetentionPolicyConfig[] = [
     clockTriggerType: 'enrollment_closure',
     retentionDurationDays: 0,
     allowedHoldTypes: ['legal', 'administrative'],
-    allowedDeletionAuthorityScopePatterns: ['institutional_dpo'],
+    allowedDeletionAuthorityScopePatterns: ['institution_admin', 'director'],
   },
 ];
 
@@ -222,7 +222,6 @@ const authA = await authorizeDeletionCommand({
   input: {
     documentId: docA,
     versionId: verA,
-    actorAuthorityScope: 'institutional_dpo',
   },
 });
 
@@ -236,7 +235,6 @@ await assert.rejects(
     storageProvider,
     input: {
       deletionAuthorizationId: authA.result.id,
-      actorAuthorityScope: 'institutional_dpo',
     },
   }),
   /DELETION_AUTHORIZATION_NOT_FOUND/,
@@ -252,7 +250,6 @@ await assert.rejects(
     storageProvider,
     input: {
       deletionAuthorizationId: authA.result.id,
-      actorAuthorityScope: 'institutional_dpo',
     },
   }),
   /DELETION_AUTHORIZATION_NOT_FOUND/,
@@ -268,10 +265,9 @@ const execA = await executeDeletionCommand({
   storageProvider,
   input: {
     deletionAuthorizationId: authA.result.id,
-    actorAuthorityScope: 'institutional_dpo',
   },
 });
-assert.strictEqual(execA.result.deletionRecord.result, 'deleted');
+assert.strictEqual(execA.result.deletionRecord?.result, 'deleted');
 console.log('✔ Test 3 passed: Tenant A authorized deletion successfully executed');
 
 const teardownClient = await pool.connect();

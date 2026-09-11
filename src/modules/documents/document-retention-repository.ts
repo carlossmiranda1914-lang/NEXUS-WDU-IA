@@ -377,8 +377,8 @@ export class PostgresDeletionRecordRepository {
       policyBasis: string;
       policyVersion: string;
       jurisdictionProfileId: string;
-      result: 'deleted' | 'partial_failure' | 'reconciliation_required';
-      storageDeletionConfirmed: boolean;
+      result: 'deleted';
+      storageDeletionConfirmed: true;
       actorAuthorityScope: string;
     },
   ): Promise<DeletionRecordData> {
@@ -438,7 +438,7 @@ export class PostgresDeletionRecordRepository {
       policyBasis: row.policy_basis as string,
       policyVersion: row.policy_version as string,
       jurisdictionProfileId: row.jurisdiction_profile_id as string,
-      result: row.result as 'deleted' | 'partial_failure' | 'reconciliation_required',
+      result: 'deleted',
       storageDeletionConfirmed: row.storage_deletion_confirmed as boolean,
       executedAt: row.executed_at as Date,
       actorAuthorityScope: row.actor_authority_scope as string,

@@ -4,32 +4,26 @@
  *
  * DELETION STATE SEQUENCE:
  *   DELETION_AUTHORIZED
- *   → DELETION_IN_PROGRESS           (guard: no holds, grants revoked)
- *   → [deleteObject() + headObject=NOT_FOUND]  — physical confirmation required
- *   → DELETE document_storage_references row  (explicit, not CASCADE)
- *   → document_version.status = 'deleted'      ← ONLY after confirmed physical deletion
- *   → DeletionRecord written (pseudonymized_ref, result='deleted', storage_deletion_confirmed=true)
+ *   → Phase 1: DB Transaction (durable intent, lock version FOR UPDATE, revoke grants, holds check)
+ *   → DELETION_IN_PROGRESS
+ *   → Phase 2: External storage effect (deleteObject() + headObject=NOT_FOUND)
+ *   → Phase 3: DB Transaction (remove storage_refs, version.status='deleted', append DeletionRecord)
  *   → DELETED  ✅ terminal
  *
- * On FAILURE or UNKNOWN provider outcome → FAIL_CLOSED:
- *   → authorization_status = 'deletion_reconciliation_required'
- *   → version.status remains 'deletion_in_progress'
- *   → storage_refs row NOT removed
- *   → DeletionRecord NOT written with result='deleted'
- *
- * INVARIANTS:
- *   - version.status='deleted' NEVER written before confirmed physical deletion
- *   - UNKNOWN provider outcome → FAIL_CLOSED (same as failure)
- *   - DeletionRecord.result='deleted' requires storage_deletion_confirmed=true (DB CHECK)
- *   - No raw document_id/version_id in DeletionRecord
- *   - No storage locator in DeletionRecord
- *   - Active grants revoked BEFORE first destructive storage call
- *   - Active holds re-checked BEFORE DELETION_IN_PROGRESS transition
+ * CRASH-SAFE INVARIANTS:
+ *   - Intent (DELETION_IN_PROGRESS, revoked grants) is committed BEFORE external storage effect
+ *   - If process crashes between DB intent and storage delete, or during storage delete,
+ *     retry / reconciliation safely resumes and completes physical delete + finalization.
+ *   - version.status='deleted' NEVER written before confirmed physical deletion.
+ *   - DeletionRecord is STRICTLY APPEND-ONLY (zero UPDATE queries, written only on confirmed delete).
+ *   - UNKNOWN provider outcome → FAIL_CLOSED (deletion_reconciliation_required).
+ *   - Hold-vs-delete race prevented via SELECT ... FOR UPDATE on document_versions.
+ *   - actor_authority_scope is derived from trusted InstitutionalContext.role (not caller-controlled).
  *
  * PRODUCTION_REAL_STORAGE_DELETION=FORBIDDEN (no real provider; test adapter only)
  */
 
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
 import type { ObjectStorageProvider } from './object-storage-provider.ts';
 import {
@@ -45,29 +39,23 @@ import {
   PostgresDeletionAuthorizationRepository,
   PostgresDeletionRecordRepository,
 } from './document-retention-repository.ts';
-import { PostgresDocumentRepository } from './document-repository.ts';
 import { PostgresDocumentAuditRepository } from './document-audit.ts';
-import { PostgresDocumentAccessRepository } from './document-access-repository.ts';
-import { executeIdempotentDocumentsCommand } from './document-command.ts';
 
 const retentionAssignmentRepo = new PostgresRetentionAssignmentRepository();
 const holdRepo = new PostgresRetentionHoldRepository();
 const deletionAuthRepo = new PostgresDeletionAuthorizationRepository();
 const deletionRecordRepo = new PostgresDeletionRecordRepository();
-const docRepo = new PostgresDocumentRepository();
 const auditRepo = new PostgresDocumentAuditRepository();
-const accessRepo = new PostgresDocumentAccessRepository();
 
 // ─── ExecuteDeletion ──────────────────────────────────────────────────────────
 
 export interface ExecuteDeletionInput {
   deletionAuthorizationId: string;
-  actorAuthorityScope: string;
   correlationId?: string | null;
 }
 
 export interface ExecuteDeletionResult {
-  deletionRecord: DeletionRecordData;
+  deletionRecord: DeletionRecordData | null;
   reconciliationRequired: boolean;
 }
 
@@ -87,26 +75,136 @@ export async function executeDeletionCommand(params: {
   // Validate key before anything else — fail closed on missing/weak key
   validateDeletionPseudonymizationKey(deletionPseudonymizationKey);
 
-  // Read authorization to get fingerprint material
+  const fingerprint = createDeletionExecutionFingerprint(
+    context.institutionId,
+    input.deletionAuthorizationId,
+  );
+
+  // Check idempotency ledger first
   const client0 = await pool.connect();
   let auth: Awaited<ReturnType<typeof deletionAuthRepo.getById>>;
-  let storageRef: { storageBucket: string; storageKey: string; storageProvider: string } | null = null;
   try {
+    const existingIdem = await client0.query<{
+      request_fingerprint: string;
+      result_ref: string | null;
+    }>(
+      `SELECT request_fingerprint, result_ref
+         FROM document_idempotency_records
+        WHERE institution_id = $1
+          AND command_scope = 'documents.deletion.execute'
+          AND idempotency_key = $2`,
+      [context.institutionId, idempotencyKey],
+    );
+
+    if (existingIdem.rows.length > 0) {
+      const row = existingIdem.rows[0];
+      if (row.request_fingerprint !== fingerprint) {
+        throw new Error(
+          `IDEMPOTENCY_FINGERPRINT_MISMATCH: Idempotency key '${idempotencyKey}' was previously used with a different fingerprint.`,
+        );
+      }
+      const existingRecord = await deletionRecordRepo.getByAuthorizationId(
+        client0, context.institutionId, input.deletionAuthorizationId,
+      );
+      if (existingRecord) {
+        return {
+          replayed: true,
+          result: { deletionRecord: existingRecord, reconciliationRequired: false },
+        };
+      }
+    }
+
     auth = await deletionAuthRepo.getById(client0, context.institutionId, input.deletionAuthorizationId);
     if (!auth) {
       throw new Error(`DELETION_AUTHORIZATION_NOT_FOUND: ${input.deletionAuthorizationId}`);
     }
+
     if (auth.authorizationStatus === 'deleted') {
-      // Already completed — allow idempotent replay via the idempotency ledger
-    } else if (!['authorized', 'deletion_reconciliation_required'].includes(auth.authorizationStatus)) {
+      const existingRecord = await deletionRecordRepo.getByAuthorizationId(
+        client0, context.institutionId, auth.id,
+      );
+      if (existingRecord) {
+        return {
+          replayed: true,
+          result: { deletionRecord: existingRecord, reconciliationRequired: false },
+        };
+      }
+    } else if (!['authorized', 'deletion_in_progress', 'deletion_reconciliation_required'].includes(auth.authorizationStatus)) {
       throw new Error(
         `DELETION_AUTHORIZATION_STATUS_INVALID: Cannot execute deletion for authorization ` +
         `with status='${auth.authorizationStatus}'.`,
       );
     }
+  } finally {
+    client0.release();
+  }
 
-    // Look up the storage reference
-    const srResult = await client0.query<{
+  // ─────────────────────────────────────────────────────────────────────────────
+  // PHASE 1: DB Transaction — Persist Durable Intent (Lock, Holds, Grants, Status)
+  // ─────────────────────────────────────────────────────────────────────────────
+  const client1 = await pool.connect();
+  let storageRef: { storageBucket: string; storageKey: string; storageProvider: string } | null = null;
+  try {
+    await client1.query('BEGIN');
+
+    // Acquire row-level lock on document_versions to serialize with concurrent placeHoldCommand/executeDeletionCommand
+    const verLock = await client1.query<{ id: string; status: string }>(
+      `SELECT id, status FROM document_versions
+        WHERE institution_id = $1 AND id = $2
+        FOR UPDATE`,
+      [context.institutionId, auth.versionId],
+    );
+    if (verLock.rows.length === 0) {
+      throw new Error(`DOCUMENT_VERSION_NOT_FOUND: version ${auth.versionId}`);
+    }
+    const currentVerStatus = verLock.rows[0].status;
+    if (currentVerStatus === 'deleted') {
+      await client1.query('COMMIT');
+      const dr = await deletionRecordRepo.getByAuthorizationId(client1, context.institutionId, auth.id);
+      return { replayed: true, result: { deletionRecord: dr, reconciliationRequired: false } };
+    }
+
+    // Re-check active holds inside transaction
+    const activeHolds = await holdRepo.countActiveHoldsForVersion(
+      client1, context.institutionId, auth.versionId,
+    );
+    if (activeHolds > 0) {
+      throw new Error(
+        `ACTIVE_HOLD_PREVENTS_DELETION: ${activeHolds} active hold(s) block deletion.`,
+      );
+    }
+
+    // Revoke all active content access grants BEFORE destructive storage call
+    await client1.query(
+      `UPDATE document_content_access_grants
+          SET status = 'revoked',
+              revoked_at = now(),
+              revocation_reason = 'legal_deletion_in_progress',
+              updated_at = now()
+        WHERE institution_id = $1 AND version_id = $2 AND status = 'active'`,
+      [context.institutionId, auth.versionId],
+    );
+
+    // Mark version as deletion_in_progress
+    await client1.query(
+      `UPDATE document_versions
+          SET status = 'deletion_in_progress'
+        WHERE institution_id = $1 AND id = $2
+          AND status != 'deleted'`,
+      [context.institutionId, auth.versionId],
+    );
+
+    // Transition authorization to deletion_in_progress
+    await client1.query(
+      `UPDATE document_deletion_authorizations
+          SET authorization_status = 'deletion_in_progress', updated_at = now()
+        WHERE institution_id = $1 AND id = $2
+          AND authorization_status IN ('authorized', 'deletion_in_progress', 'deletion_reconciliation_required')`,
+      [context.institutionId, auth.id],
+    );
+
+    // Read storage reference
+    const srResult = await client1.query<{
       storage_bucket: string; storage_key: string; storage_provider: string;
     }>(
       `SELECT storage_bucket, storage_key, storage_provider
@@ -122,253 +220,186 @@ export async function executeDeletionCommand(params: {
         storageProvider: srResult.rows[0].storage_provider,
       };
     }
+
+    // Commit Phase 1 — durable deletion intent is now persisted in DB
+    await client1.query('COMMIT');
+  } catch (p1Err) {
+    await client1.query('ROLLBACK').catch(() => undefined);
+    throw p1Err;
   } finally {
-    client0.release();
+    client1.release();
   }
 
-  const fingerprint = createDeletionExecutionFingerprint(
-    context.institutionId,
-    input.deletionAuthorizationId,
-  );
+  // ─────────────────────────────────────────────────────────────────────────────
+  // PHASE 2: External Storage Deletion & Confirmation
+  // ─────────────────────────────────────────────────────────────────────────────
+  let physicalDeleteConfirmed = false;
+  let failReason = '';
 
-  return executeIdempotentDocumentsCommand<ExecuteDeletionResult>({
-    pool,
-    context,
-    identity: {
-      institutionId: context.institutionId,
-      commandScope: 'documents.deletion.execute',
-      idempotencyKey,
-      canonicalFingerprint: fingerprint,
-    },
-    execute: async (client: PoolClient) => {
-      // ── STEP 1: Re-check active holds inside transaction (concurrency guard) ──
-      const activeHolds = await holdRepo.countActiveHoldsForVersion(
-        client, context.institutionId, auth!.versionId,
-      );
-      if (activeHolds > 0) {
-        throw new Error(
-          `ACTIVE_HOLD_PREVENTS_DELETION: ${activeHolds} active hold(s) block deletion.`,
-        );
-      }
-
-      // ── STEP 2: Revoke all active content access grants for this version ──────
-      // Grants revoked BEFORE any destructive storage call
-      await client.query(
-        `UPDATE document_content_access_grants
-            SET status = 'revoked',
-                revoked_at = now(),
-                revocation_reason = 'legal_deletion_in_progress',
-                updated_at = now()
-          WHERE institution_id = $1 AND version_id = $2 AND status = 'active'`,
-        [context.institutionId, auth!.versionId],
-      );
-
-      // ── STEP 3: Mark version as DELETION_IN_PROGRESS ──────────────────────────
-      // version.status='deleted' is NEVER written here — only after confirmed physical deletion
-      const versionUpdate = await client.query(
-        `UPDATE document_versions
-            SET status = 'deletion_in_progress'
-          WHERE institution_id = $1 AND id = $2
-            AND status NOT IN ('deletion_in_progress', 'deleted')
-          RETURNING document_id`,
-        [context.institutionId, auth!.versionId],
-      );
-      if (versionUpdate.rows.length === 0) {
-        // Already in progress or deleted — this is safe for reconciliation
-      }
-
-      // ── STEP 4: Transition authorization to deletion_in_progress ─────────────
-      await deletionAuthRepo.updateStatus(
-        client, context.institutionId, auth!.id,
-        'deletion_in_progress',
-        'authorized',
-      );
-
-      // Commit the DELETION_IN_PROGRESS state before touching storage
-      await client.query('COMMIT');
-
-      // ─────────────────────────────────────────────────────────────────────────
-      // STEPS 5-8 are outside the DB transaction (cross-system, non-atomic)
-      // ─────────────────────────────────────────────────────────────────────────
-
-      const deletionOperationId = generateDeletionOperationId();
-      const pseudonymizedRef = deriveDeletionPseudonymizedRef({
-        deletionPseudonymizationKey,
+  if (storageRef) {
+    try {
+      const deleteResult = await storageProvider.deleteObject({
         institutionId: context.institutionId,
-        documentId: auth!.documentId,
-        versionId: auth!.versionId,
-        deletionAuthorizationId: auth!.id,
+        storageBucket: storageRef.storageBucket,
+        storageKey: storageRef.storageKey,
       });
 
-      // ── STEP 5: Physical storage deletion ────────────────────────────────────
-      let physicalDeleteConfirmed = false;
-      let failReason = '';
-
-      if (storageRef) {
+      if (deleteResult.deleted || deleteResult.errorCode === 'OBJECT_NOT_FOUND') {
         try {
-          const deleteResult = await storageProvider.deleteObject({
+          const headResult = await storageProvider.headObject({
             institutionId: context.institutionId,
             storageBucket: storageRef.storageBucket,
             storageKey: storageRef.storageKey,
           });
-
-          if (deleteResult.deleted) {
-            // ── STEP 6: Confirm via headObject ────────────────────────────────
-            try {
-              const headResult = await storageProvider.headObject({
-                institutionId: context.institutionId,
-                storageBucket: storageRef.storageBucket,
-                storageKey: storageRef.storageKey,
-              });
-              if (!headResult.exists) {
-                physicalDeleteConfirmed = true;
-              } else {
-                // Object still exists — provider lied or eventual consistency delay
-                failReason = 'STORAGE_OBJECT_STILL_EXISTS_AFTER_DELETE';
-              }
-            } catch {
-              // headObject error = unknown outcome → FAIL_CLOSED
-              failReason = 'HEAD_OBJECT_ERROR_AFTER_DELETE';
-            }
+          if (!headResult.exists) {
+            physicalDeleteConfirmed = true;
           } else {
-            failReason = deleteResult.errorCode ?? 'DELETE_RETURNED_NOT_DELETED';
+            failReason = 'STORAGE_OBJECT_STILL_EXISTS_AFTER_DELETE';
           }
-        } catch (storageErr: unknown) {
-          // Any exception (timeout, network, provider error) → FAIL_CLOSED
-          failReason = `STORAGE_EXCEPTION: ${storageErr instanceof Error ? storageErr.message : String(storageErr)}`;
+        } catch {
+          // headObject error = unknown outcome → FAIL_CLOSED
+          failReason = 'HEAD_OBJECT_ERROR_AFTER_DELETE';
         }
       } else {
-        // No storage reference — version may never have had committed bytes (edge case)
-        // Treat as confirmed (no physical object to delete)
-        physicalDeleteConfirmed = true;
+        failReason = deleteResult.errorCode ?? 'DELETE_RETURNED_NOT_DELETED';
+      }
+    } catch (storageErr: unknown) {
+      // Any exception → FAIL_CLOSED
+      failReason = `STORAGE_EXCEPTION: ${storageErr instanceof Error ? storageErr.message : String(storageErr)}`;
+    }
+  } else {
+    // No storage reference (e.g. metadata-only version)
+    physicalDeleteConfirmed = true;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // PHASE 3: DB Finalization & Immutable DeletionRecord
+  // ─────────────────────────────────────────────────────────────────────────────
+  const client2 = await pool.connect();
+  try {
+    await client2.query('BEGIN');
+
+    if (physicalDeleteConfirmed) {
+      // 1. Remove StorageObjectReference (explicit, not CASCADE)
+      if (storageRef) {
+        await client2.query(
+          `DELETE FROM document_storage_references
+            WHERE institution_id = $1 AND version_id = $2`,
+          [context.institutionId, auth.versionId],
+        );
       }
 
-      // Begin new transaction for finalization
-      const client2 = await pool.connect();
-      try {
-        await client2.query('BEGIN');
-
-        let deletionRecord: DeletionRecordData;
-
-        if (physicalDeleteConfirmed) {
-          // ── STEP 7: Remove StorageObjectReference (explicit, not CASCADE) ────
-          if (storageRef) {
-            await client2.query(
-              `DELETE FROM document_storage_references
-                WHERE institution_id = $1 AND version_id = $2`,
-              [context.institutionId, auth!.versionId],
-            );
-          }
-
-          // ── STEP 8: Mark version as deleted — ONLY after confirmed deletion ──
-          await client2.query(
-            `UPDATE document_versions
-                SET status = 'deleted'
-              WHERE institution_id = $1 AND id = $2
-                AND status = 'deletion_in_progress'`,
-            [context.institutionId, auth!.versionId],
-          );
-
-          await deletionAuthRepo.updateStatus(
-            client2, context.institutionId, auth!.id, 'deleted',
-          );
-          await retentionAssignmentRepo.updateStatus(
-            client2, context.institutionId, auth!.retentionAssignmentId, 'deleted',
-          );
-
-          // ── Write DeletionRecord: result='deleted' requires storage_deletion_confirmed=true ──
-          deletionRecord = await deletionRecordRepo.insert(client2, {
-            institutionId: context.institutionId,
-            deletionAuthorizationId: auth!.id,
-            deletionOperationId,
-            pseudonymizedRef,
-            policyBasis: auth!.policyBasis,
-            policyVersion: auth!.policyVersion,
-            jurisdictionProfileId: auth!.jurisdictionProfileId,
-            result: 'deleted',
-            storageDeletionConfirmed: true,
-            actorAuthorityScope: input.actorAuthorityScope,
-          });
-
-          await auditRepo.recordAuditEvent(client2, {
-            institutionId: context.institutionId,
-            documentId: auth!.documentId,
-            versionId: null,   // version row exists but is tombstoned; no FK navigation for audit
-            actorPersonId: context.personId,
-            action: 'document.version_deleted',
-            outcome: 'success',
-            correlationId: input.correlationId ?? null,
-            details: {
-              deletionOperationId,
-              policyBasis: auth!.policyBasis,
-              storageDeletionConfirmed: true,
-            },
-          });
-
-          await client2.query('COMMIT');
-          return {
-            resultRef: deletionRecord.id,
-            result: { deletionRecord, reconciliationRequired: false },
-          };
-        } else {
-          // ── FAIL_CLOSED: unknown/failed storage outcome ───────────────────────
-          await deletionAuthRepo.updateStatus(
-            client2, context.institutionId, auth!.id,
-            'deletion_reconciliation_required',
-          );
-
-          deletionRecord = await deletionRecordRepo.insert(client2, {
-            institutionId: context.institutionId,
-            deletionAuthorizationId: auth!.id,
-            deletionOperationId,
-            pseudonymizedRef,
-            policyBasis: auth!.policyBasis,
-            policyVersion: auth!.policyVersion,
-            jurisdictionProfileId: auth!.jurisdictionProfileId,
-            result: 'reconciliation_required',
-            storageDeletionConfirmed: false,
-            actorAuthorityScope: input.actorAuthorityScope,
-          });
-
-          await auditRepo.recordAuditEvent(client2, {
-            institutionId: context.institutionId,
-            documentId: auth!.documentId,
-            versionId: auth!.versionId,
-            actorPersonId: context.personId,
-            action: 'document.deletion_reconciliation_required',
-            outcome: 'failed',
-            correlationId: input.correlationId ?? null,
-            details: { deletionOperationId, failReason },
-          });
-
-          await client2.query('COMMIT');
-          return {
-            resultRef: deletionRecord.id,
-            result: { deletionRecord, reconciliationRequired: true },
-          };
-        }
-      } catch (finalizeErr) {
-        await client2.query('ROLLBACK').catch(() => undefined);
-        throw finalizeErr;
-      } finally {
-        client2.release();
-      }
-    },
-    loadResult: async (client: PoolClient, resultRef: string) => {
-      const dr = await deletionRecordRepo.getByAuthorizationId(
-        client, context.institutionId, input.deletionAuthorizationId,
+      // 2. Mark version as deleted — ONLY after confirmed physical deletion
+      await client2.query(
+        `UPDATE document_versions
+            SET status = 'deleted'
+          WHERE institution_id = $1 AND id = $2
+            AND status = 'deletion_in_progress'`,
+        [context.institutionId, auth.versionId],
       );
-      if (!dr) throw new Error(`DELETION_RECORD_NOT_FOUND: ${resultRef}`);
-      return { deletionRecord: dr, reconciliationRequired: dr.result === 'reconciliation_required' };
-    },
-  });
+
+      await deletionAuthRepo.updateStatus(
+        client2, context.institutionId, auth.id, 'deleted',
+      );
+      await retentionAssignmentRepo.updateStatus(
+        client2, context.institutionId, auth.retentionAssignmentId, 'deleted',
+      );
+
+      // 3. Check if DeletionRecord already written (e.g. concurrent race)
+      let deletionRecord = await deletionRecordRepo.getByAuthorizationId(
+        client2, context.institutionId, auth.id,
+      );
+      if (!deletionRecord) {
+        const deletionOperationId = generateDeletionOperationId();
+        const pseudonymizedRef = deriveDeletionPseudonymizedRef({
+          deletionPseudonymizationKey,
+          institutionId: context.institutionId,
+          documentId: auth.documentId,
+          versionId: auth.versionId,
+          deletionAuthorizationId: auth.id,
+        });
+
+        // Append-only insert (result='deleted', storageDeletionConfirmed=true)
+        deletionRecord = await deletionRecordRepo.insert(client2, {
+          institutionId: context.institutionId,
+          deletionAuthorizationId: auth.id,
+          deletionOperationId,
+          pseudonymizedRef,
+          policyBasis: auth.policyBasis,
+          policyVersion: auth.policyVersion,
+          jurisdictionProfileId: auth.jurisdictionProfileId,
+          result: 'deleted',
+          storageDeletionConfirmed: true,
+          actorAuthorityScope: context.role,
+        });
+      }
+
+      await auditRepo.recordAuditEvent(client2, {
+        institutionId: context.institutionId,
+        documentId: auth.documentId,
+        versionId: null, // version row tombstoned; no FK navigation for audit
+        actorPersonId: context.personId,
+        action: 'document.version_deleted',
+        outcome: 'success',
+        correlationId: input.correlationId ?? null,
+        details: {
+          deletionAuthorizationId: auth.id,
+          policyBasis: auth.policyBasis,
+          storageDeletionConfirmed: true,
+        },
+      });
+
+      // 4. Record in document_idempotency_records
+      await client2.query(
+        `INSERT INTO document_idempotency_records (
+          institution_id, command_scope, idempotency_key,
+          request_fingerprint, result_ref, status
+        ) VALUES ($1, 'documents.deletion.execute', $2, $3, $4, 'completed')
+        ON CONFLICT (institution_id, command_scope, idempotency_key) DO NOTHING`,
+        [context.institutionId, idempotencyKey, fingerprint, deletionRecord.id],
+      );
+
+      await client2.query('COMMIT');
+      return {
+        replayed: false,
+        result: { deletionRecord, reconciliationRequired: false },
+      };
+    } else {
+      // ── FAIL_CLOSED: unknown or failed storage outcome ───────────────────────
+      await deletionAuthRepo.updateStatus(
+        client2, context.institutionId, auth.id,
+        'deletion_reconciliation_required',
+      );
+
+      await auditRepo.recordAuditEvent(client2, {
+        institutionId: context.institutionId,
+        documentId: auth.documentId,
+        versionId: auth.versionId,
+        actorPersonId: context.personId,
+        action: 'document.deletion_reconciliation_required',
+        outcome: 'failed',
+        correlationId: input.correlationId ?? null,
+        details: { failReason },
+      });
+
+      await client2.query('COMMIT');
+      return {
+        replayed: false,
+        result: { deletionRecord: null, reconciliationRequired: true },
+      };
+    }
+  } catch (finalizeErr) {
+    await client2.query('ROLLBACK').catch(() => undefined);
+    throw finalizeErr;
+  } finally {
+    client2.release();
+  }
 }
 
 // ─── ReconcileDeletion ────────────────────────────────────────────────────────
 
 export interface ReconcileDeletionInput {
   deletionAuthorizationId: string;
-  actorAuthorityScope: string;
   correlationId?: string | null;
 }
 
@@ -385,7 +416,6 @@ export async function reconcileDeletionCommand(params: {
 
   let auth: Awaited<ReturnType<typeof deletionAuthRepo.getById>>;
   let storageRef: { storageBucket: string; storageKey: string } | null = null;
-  let existingRecord: Awaited<ReturnType<typeof deletionRecordRepo.getByAuthorizationId>>;
 
   const client = await pool.connect();
   try {
@@ -394,6 +424,10 @@ export async function reconcileDeletionCommand(params: {
     );
     if (!auth) {
       throw new Error(`DELETION_AUTHORIZATION_NOT_FOUND: ${input.deletionAuthorizationId}`);
+    }
+    if (auth.authorizationStatus === 'deleted') {
+      const dr = await deletionRecordRepo.getByAuthorizationId(client, context.institutionId, auth.id);
+      if (dr) return { deletionRecord: dr, reconciliationRequired: false };
     }
     if (auth.authorizationStatus !== 'deletion_reconciliation_required' &&
         auth.authorizationStatus !== 'deletion_in_progress') {
@@ -418,10 +452,6 @@ export async function reconcileDeletionCommand(params: {
         storageKey: srResult.rows[0].storage_key,
       };
     }
-
-    existingRecord = await deletionRecordRepo.getByAuthorizationId(
-      client, context.institutionId, auth.id,
-    );
   } finally {
     client.release();
   }
@@ -429,7 +459,6 @@ export async function reconcileDeletionCommand(params: {
   // Probe storage
   let storageGone = false;
   if (!storageRef) {
-    // No storage ref exists — either deleted by a previous partial run or never had committed bytes
     storageGone = true;
   } else {
     try {
@@ -441,7 +470,6 @@ export async function reconcileDeletionCommand(params: {
       if (!headResult.exists) {
         storageGone = true;
       } else {
-        // Object still exists — try controlled delete
         const deleteResult = await storageProvider.deleteObject({
           institutionId: context.institutionId,
           storageBucket: storageRef.storageBucket,
@@ -457,19 +485,10 @@ export async function reconcileDeletionCommand(params: {
         }
       }
     } catch {
-      // headObject/deleteObject error → FAIL_CLOSED: remain reconciliation_required
+      // headObject/deleteObject error → FAIL_CLOSED
       storageGone = false;
     }
   }
-
-  const deletionOperationId = existingRecord?.deletionOperationId ?? generateDeletionOperationId();
-  const pseudonymizedRef = deriveDeletionPseudonymizedRef({
-    deletionPseudonymizationKey,
-    institutionId: context.institutionId,
-    documentId: auth.documentId,
-    versionId: auth.versionId,
-    deletionAuthorizationId: auth.id,
-  });
 
   const client2 = await pool.connect();
   try {
@@ -485,78 +504,71 @@ export async function reconcileDeletionCommand(params: {
         );
       }
 
-        await client2.query(
-          `UPDATE document_versions
-              SET status = 'deleted'
-            WHERE institution_id = $1 AND id = $2
-              AND status = 'deletion_in_progress'`,
-          [context.institutionId, auth.versionId],
-        );
+      await client2.query(
+        `UPDATE document_versions
+            SET status = 'deleted'
+          WHERE institution_id = $1 AND id = $2
+            AND status = 'deletion_in_progress'`,
+        [context.institutionId, auth.versionId],
+      );
 
-        await deletionAuthRepo.updateStatus(client2, context.institutionId, auth.id, 'deleted');
-        await retentionAssignmentRepo.updateStatus(
-          client2, context.institutionId, auth.retentionAssignmentId, 'deleted',
-        );
+      await deletionAuthRepo.updateStatus(client2, context.institutionId, auth.id, 'deleted');
+      await retentionAssignmentRepo.updateStatus(
+        client2, context.institutionId, auth.retentionAssignmentId, 'deleted',
+      );
 
-        let deletionRecord: DeletionRecordData;
-        if (existingRecord) {
-          // Record already exists — update result to deleted
-          await client2.query(
-            `UPDATE document_deletion_records
-                SET result = 'deleted', storage_deletion_confirmed = true
-              WHERE institution_id = $1 AND deletion_authorization_id = $2`,
-            [context.institutionId, auth.id],
-          );
-          deletionRecord = (await deletionRecordRepo.getByAuthorizationId(client2, context.institutionId, auth.id))!;
-        } else {
-          deletionRecord = await deletionRecordRepo.insert(client2, {
-            institutionId: context.institutionId,
-            deletionAuthorizationId: auth.id,
-            deletionOperationId,
-            pseudonymizedRef,
-            policyBasis: auth.policyBasis,
-            policyVersion: auth.policyVersion,
-            jurisdictionProfileId: auth.jurisdictionProfileId,
-            result: 'deleted',
-            storageDeletionConfirmed: true,
-            actorAuthorityScope: input.actorAuthorityScope,
-          });
-        }
-
-        await auditRepo.recordAuditEvent(client2, {
+      let deletionRecord = await deletionRecordRepo.getByAuthorizationId(
+        client2, context.institutionId, auth.id,
+      );
+      if (!deletionRecord) {
+        const deletionOperationId = generateDeletionOperationId();
+        const pseudonymizedRef = deriveDeletionPseudonymizedRef({
+          deletionPseudonymizationKey,
           institutionId: context.institutionId,
           documentId: auth.documentId,
-          versionId: null,
-          actorPersonId: context.personId,
-          action: 'document.deletion_reconciled',
-          outcome: 'success',
-          correlationId: input.correlationId ?? null,
-          details: { deletionOperationId, storageDeletionConfirmed: true },
+          versionId: auth.versionId,
+          deletionAuthorizationId: auth.id,
         });
 
-        await client2.query('COMMIT');
-        return { deletionRecord, reconciliationRequired: false };
-      } else {
-        // Storage still exists or probing failed — remain RECONCILIATION_REQUIRED
-        await deletionAuthRepo.updateStatus(
-          client2, context.institutionId, auth.id, 'deletion_reconciliation_required',
-        );
-        await client2.query('COMMIT');
-
-        const dr = (await (async () => {
-          const c = await pool.connect();
-          try {
-            return await deletionRecordRepo.getByAuthorizationId(c, context.institutionId, auth.id);
-          } finally { c.release(); }
-        })());
-
-        if (!dr) throw new Error('DELETION_RECORD_MISSING_AFTER_RECONCILIATION');
-        return { deletionRecord: dr, reconciliationRequired: true };
+        deletionRecord = await deletionRecordRepo.insert(client2, {
+          institutionId: context.institutionId,
+          deletionAuthorizationId: auth.id,
+          deletionOperationId,
+          pseudonymizedRef,
+          policyBasis: auth.policyBasis,
+          policyVersion: auth.policyVersion,
+          jurisdictionProfileId: auth.jurisdictionProfileId,
+          result: 'deleted',
+          storageDeletionConfirmed: true,
+          actorAuthorityScope: context.role,
+        });
       }
-    } catch (err) {
-      await client2.query('ROLLBACK').catch(() => undefined);
-      throw err;
-    } finally {
-      client2.release();
+
+      await auditRepo.recordAuditEvent(client2, {
+        institutionId: context.institutionId,
+        documentId: auth.documentId,
+        versionId: null,
+        actorPersonId: context.personId,
+        action: 'document.deletion_reconciled',
+        outcome: 'success',
+        correlationId: input.correlationId ?? null,
+        details: { storageDeletionConfirmed: true },
+      });
+
+      await client2.query('COMMIT');
+      return { deletionRecord, reconciliationRequired: false };
+    } else {
+      // Storage still exists or probing failed — remain RECONCILIATION_REQUIRED
+      await deletionAuthRepo.updateStatus(
+        client2, context.institutionId, auth.id, 'deletion_reconciliation_required',
+      );
+      await client2.query('COMMIT');
+      return { deletionRecord: null, reconciliationRequired: true };
     }
+  } catch (err) {
+    await client2.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client2.release();
+  }
 }

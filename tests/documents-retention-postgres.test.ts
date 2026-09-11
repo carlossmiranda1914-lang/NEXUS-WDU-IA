@@ -106,7 +106,7 @@ const syntheticPolicies: RetentionPolicyConfig[] = [
     clockTriggerType: 'student_graduation_or_withdrawal',
     retentionDurationDays: 365, // 1 year synthetic
     allowedHoldTypes: ['legal', 'administrative'],
-    allowedDeletionAuthorityScopePatterns: ['institutional_dpo', 'legal_officer'],
+    allowedDeletionAuthorityScopePatterns: ['institution_admin', 'director'],
   },
   {
     policyId: 'SYNTHETIC_SHORT_RETENTION_V1',
@@ -117,7 +117,7 @@ const syntheticPolicies: RetentionPolicyConfig[] = [
     clockTriggerType: 'enrollment_closure',
     retentionDurationDays: 0, // 0 days synthetic = immediately expired
     allowedHoldTypes: ['legal', 'administrative'],
-    allowedDeletionAuthorityScopePatterns: ['institutional_dpo'],
+    allowedDeletionAuthorityScopePatterns: ['institution_admin'],
   },
 ];
 
@@ -380,7 +380,6 @@ console.log('[DOCUMENTS-RETENTION-POSTGRES] Running tests...');
       holdType: 'legal',
       authority: 'Court Order 2026-99A',
       reason: 'Pending judicial discovery',
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
   assert.strictEqual(holdRes.result.holdStatus, 'active');
@@ -406,7 +405,6 @@ console.log('[DOCUMENTS-RETENTION-POSTGRES] Running tests...');
       input: {
         documentId,
         versionId,
-        actorAuthorityScope: 'institutional_dpo',
       },
     }),
     /ACTIVE_HOLD_PREVENTS_DELETION/,
@@ -423,7 +421,6 @@ console.log('[DOCUMENTS-RETENTION-POSTGRES] Running tests...');
       documentId,
       versionId,
       releaseReason: 'Judicial discovery concluded without finding',
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
   assert.strictEqual(releaseRes.result.holdStatus, 'released');
@@ -470,13 +467,12 @@ console.log('[DOCUMENTS-RETENTION-POSTGRES] Running tests...');
       input: {
         documentId,
         versionId,
-        actorAuthorityScope: 'teacher',
       },
     }),
     /DELETION_AUTHORIZATION_DENIED/,
   );
 
-  // 2. DPO authorized -> SUCCESS
+  // 2. Admin authorized -> SUCCESS
   const authRes = await authorizeDeletionCommand({
     pool,
     context: dpoContext,
@@ -485,7 +481,6 @@ console.log('[DOCUMENTS-RETENTION-POSTGRES] Running tests...');
     input: {
       documentId,
       versionId,
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
   assert.strictEqual(authRes.result.authorizationStatus, 'authorized');

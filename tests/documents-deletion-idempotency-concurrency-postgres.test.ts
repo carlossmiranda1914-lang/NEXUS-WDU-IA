@@ -21,6 +21,7 @@ import {
 import {
   assignRetentionCommand,
   authorizeDeletionCommand,
+  placeHoldCommand,
 } from '../src/modules/documents/document-retention-command.ts';
 import {
   executeDeletionCommand,
@@ -41,6 +42,7 @@ const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
 const pool = new pg.Pool({
   connectionString: process.env.TEST_DATABASE_URL,
   options: `-c search_path=${quote(schema)},public`,
+  max: 10,
 });
 const migrationsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src/db/migrations');
 
@@ -87,7 +89,7 @@ const syntheticPolicies: RetentionPolicyConfig[] = [
     clockTriggerType: 'enrollment_closure',
     retentionDurationDays: 0,
     allowedHoldTypes: ['legal', 'administrative'],
-    allowedDeletionAuthorityScopePatterns: ['institutional_dpo'],
+    allowedDeletionAuthorityScopePatterns: ['institution_admin', 'director'],
   },
 ];
 
@@ -219,7 +221,6 @@ console.log('[DOCUMENTS-DELETION-IDEMPOTENCY] Running tests...');
     input: {
       documentId,
       versionId,
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
 
@@ -233,10 +234,10 @@ console.log('[DOCUMENTS-DELETION-IDEMPOTENCY] Running tests...');
     storageProvider,
     input: {
       deletionAuthorizationId: authRes.result.id,
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
   assert.strictEqual(first.replayed, false);
+  assert.ok(first.result.deletionRecord != null);
   assert.strictEqual(first.result.deletionRecord.result, 'deleted');
 
   const second = await executeDeletionCommand({
@@ -247,13 +248,219 @@ console.log('[DOCUMENTS-DELETION-IDEMPOTENCY] Running tests...');
     storageProvider,
     input: {
       deletionAuthorizationId: authRes.result.id,
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
   assert.strictEqual(second.replayed, true);
-  assert.strictEqual(second.result.deletionRecord.id, first.result.deletionRecord.id);
+  assert.strictEqual(second.result.deletionRecord?.id, first.result.deletionRecord.id);
 
   console.log('✔ Test 1 passed: ExecuteDeletion idempotent replay verified');
+}
+
+// ── Test 2: Double execution concurrency race on ExecuteDeletion ───────────────
+{
+  const { documentId, versionId } = await createAvailableVersion();
+
+  await assignRetentionCommand({
+    pool,
+    context: adminContext,
+    idempotencyKey: `ret_assign_${randomUUID()}`,
+    policyEngine,
+    input: {
+      documentId,
+      versionId,
+      category: 'identification',
+      jurisdictionProfileId: 'SYNTHETIC_BR_MEC_STANDARD',
+      clockTriggerEventAt: new Date(Date.now() - 1000),
+    },
+  });
+
+  const authRes = await authorizeDeletionCommand({
+    pool,
+    context: dpoContext,
+    idempotencyKey: `auth_del_${randomUUID()}`,
+    policyEngine,
+    input: {
+      documentId,
+      versionId,
+    },
+  });
+
+  // Launch two concurrent executeDeletionCommand calls with different idempotency keys
+  const [r1, r2] = await Promise.allSettled([
+    executeDeletionCommand({
+      pool,
+      context: dpoContext,
+      idempotencyKey: `exec_del_race_1_${randomUUID()}`,
+      deletionPseudonymizationKey,
+      storageProvider,
+      input: { deletionAuthorizationId: authRes.result.id },
+    }),
+    executeDeletionCommand({
+      pool,
+      context: dpoContext,
+      idempotencyKey: `exec_del_race_2_${randomUUID()}`,
+      deletionPseudonymizationKey,
+      storageProvider,
+      input: { deletionAuthorizationId: authRes.result.id },
+    }),
+  ]);
+
+  const fulfilled = [r1, r2].filter((r) => r.status === 'fulfilled') as PromiseFulfilledResult<Awaited<ReturnType<typeof executeDeletionCommand>>>[];
+  assert.strictEqual(fulfilled.length, 2, 'Both concurrent executions should safely resolve without duplicate deletion effects');
+  assert.ok(fulfilled[0].value.result.deletionRecord != null);
+  assert.ok(fulfilled[1].value.result.deletionRecord != null);
+  assert.strictEqual(
+    fulfilled[0].value.result.deletionRecord?.id,
+    fulfilled[1].value.result.deletionRecord?.id,
+    'Both concurrent callers resolve to the exact same immutable DeletionRecord',
+  );
+
+  // Verify only 1 DeletionRecord exists in DB for this authorization
+  const checkClient = await pool.connect();
+  try {
+    const rows = await checkClient.query(
+      `SELECT count(*) FROM document_deletion_records WHERE institution_id = $1 AND deletion_authorization_id = $2`,
+      [institutionId, authRes.result.id],
+    );
+    assert.strictEqual(parseInt(rows.rows[0].count, 10), 1, 'Exactly one deletion record created across concurrent racers');
+  } finally {
+    checkClient.release();
+  }
+
+  console.log('✔ Test 2 passed: Double execution concurrency race mutually excluded & append-only preserved');
+}
+
+// ── Test 3: Hold-vs-Delete concurrency race & mutual exclusion ──────────────────
+{
+  // Subtest 3A: Hold placed first blocks deletion
+  {
+    const { documentId, versionId } = await createAvailableVersion();
+
+    await assignRetentionCommand({
+      pool,
+      context: adminContext,
+      idempotencyKey: `ret_assign_${randomUUID()}`,
+      policyEngine,
+      input: {
+        documentId,
+        versionId,
+        category: 'identification',
+        jurisdictionProfileId: 'SYNTHETIC_BR_MEC_STANDARD',
+        clockTriggerEventAt: new Date(Date.now() - 1000),
+      },
+    });
+
+    const authRes = await authorizeDeletionCommand({
+      pool,
+      context: dpoContext,
+      idempotencyKey: `auth_del_${randomUUID()}`,
+      policyEngine,
+      input: {
+        documentId,
+        versionId,
+      },
+    });
+
+    await placeHoldCommand({
+      pool,
+      context: adminContext,
+      idempotencyKey: `hold_${randomUUID()}`,
+      policyEngine,
+      input: {
+        documentId,
+        versionId,
+        holdType: 'legal',
+        authority: 'Legal Department',
+        reason: 'Litigation hold',
+      },
+    });
+
+    // Attempting deletion while hold is active must fail
+    await assert.rejects(
+      () =>
+        executeDeletionCommand({
+          pool,
+          context: dpoContext,
+          idempotencyKey: `exec_del_blocked_${randomUUID()}`,
+          deletionPseudonymizationKey,
+          storageProvider,
+          input: { deletionAuthorizationId: authRes.result.id },
+        }),
+      /ACTIVE_HOLD_PREVENTS_DELETION/,
+    );
+  }
+
+  // Subtest 3B: Concurrent race between PlaceHold and ExecuteDeletion
+  {
+    const { documentId, versionId } = await createAvailableVersion();
+
+    await assignRetentionCommand({
+      pool,
+      context: adminContext,
+      idempotencyKey: `ret_assign_${randomUUID()}`,
+      policyEngine,
+      input: {
+        documentId,
+        versionId,
+        category: 'identification',
+        jurisdictionProfileId: 'SYNTHETIC_BR_MEC_STANDARD',
+        clockTriggerEventAt: new Date(Date.now() - 1000),
+      },
+    });
+
+    const authRes = await authorizeDeletionCommand({
+      pool,
+      context: dpoContext,
+      idempotencyKey: `auth_del_${randomUUID()}`,
+      policyEngine,
+      input: {
+        documentId,
+        versionId,
+      },
+    });
+
+    const [holdSettled, delSettled] = await Promise.allSettled([
+      placeHoldCommand({
+        pool,
+        context: adminContext,
+        idempotencyKey: `hold_race_${randomUUID()}`,
+        policyEngine,
+        input: {
+          documentId,
+          versionId,
+          holdType: 'legal',
+          authority: 'Legal Department',
+          reason: 'Race hold',
+        },
+      }),
+      executeDeletionCommand({
+        pool,
+        context: dpoContext,
+        idempotencyKey: `exec_del_race_${randomUUID()}`,
+        deletionPseudonymizationKey,
+        storageProvider,
+        input: { deletionAuthorizationId: authRes.result.id },
+      }),
+    ]);
+
+    // Either hold succeeded and deletion was rejected with ACTIVE_HOLD_PREVENTS_DELETION,
+    // or deletion succeeded and hold was rejected with VERSION_DELETION_IN_PROGRESS.
+    const holdWon = holdSettled.status === 'fulfilled' && delSettled.status === 'rejected';
+    const delWon = delSettled.status === 'fulfilled' && holdSettled.status === 'rejected';
+
+    assert.ok(
+      holdWon || delWon,
+      `Hold-vs-delete race must resolve deterministically to one winner: holdWon=${holdWon}, delWon=${delWon}`,
+    );
+
+    if (holdWon) {
+      assert.match((delSettled as PromiseRejectedResult).reason?.message, /ACTIVE_HOLD_PREVENTS_DELETION/);
+    } else {
+      assert.match((holdSettled as PromiseRejectedResult).reason?.message, /VERSION_DELETION_IN_PROGRESS/);
+    }
+  }
+
+  console.log('✔ Test 3 passed: Hold-vs-Delete race serialization on version lock verified');
 }
 
 const teardownClient = await pool.connect();

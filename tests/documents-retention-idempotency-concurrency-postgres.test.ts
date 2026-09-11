@@ -86,7 +86,7 @@ const syntheticPolicies: RetentionPolicyConfig[] = [
     clockTriggerType: 'enrollment_closure',
     retentionDurationDays: 0,
     allowedHoldTypes: ['legal', 'administrative'],
-    allowedDeletionAuthorityScopePatterns: ['institutional_dpo'],
+    allowedDeletionAuthorityScopePatterns: ['institution_admin'],
   },
 ];
 
@@ -278,7 +278,6 @@ console.log('[DOCUMENTS-RETENTION-IDEMPOTENCY] Running tests...');
       holdType: 'legal',
       authority: 'Court Order 101',
       reason: 'Pending subpoena',
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
   assert.strictEqual(firstHold.replayed, false);
@@ -294,7 +293,6 @@ console.log('[DOCUMENTS-RETENTION-IDEMPOTENCY] Running tests...');
       holdType: 'legal',
       authority: 'Court Order 101',
       reason: 'Pending subpoena',
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
   assert.strictEqual(secondHold.replayed, true);
@@ -312,7 +310,6 @@ console.log('[DOCUMENTS-RETENTION-IDEMPOTENCY] Running tests...');
       documentId,
       versionId,
       releaseReason: 'Subpoena lifted',
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
   assert.strictEqual(firstRel.replayed, false);
@@ -327,7 +324,6 @@ console.log('[DOCUMENTS-RETENTION-IDEMPOTENCY] Running tests...');
       documentId,
       versionId,
       releaseReason: 'Subpoena lifted',
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
   assert.strictEqual(secondRel.replayed, true);
@@ -362,7 +358,6 @@ console.log('[DOCUMENTS-RETENTION-IDEMPOTENCY] Running tests...');
     input: {
       documentId,
       versionId,
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
   assert.strictEqual(firstAuth.replayed, false);
@@ -375,7 +370,6 @@ console.log('[DOCUMENTS-RETENTION-IDEMPOTENCY] Running tests...');
     input: {
       documentId,
       versionId,
-      actorAuthorityScope: 'institutional_dpo',
     },
   });
   assert.strictEqual(secondAuth.replayed, true);

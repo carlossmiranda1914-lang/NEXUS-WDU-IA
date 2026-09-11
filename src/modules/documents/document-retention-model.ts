@@ -100,6 +100,7 @@ export interface DeletionAuthorizationRecord {
 // ─── Deletion Record (minimal pseudonymized evidence) ────────────────────────
 // MUST NOT contain: raw document_id, raw version_id, storage locator,
 //                   binary content, filename, content hash, credentials.
+// STRICTLY APPEND-ONLY: DeletionRecord rows are NEVER updated or deleted.
 export interface DeletionRecordData {
   id: string;
   institutionId: string;
@@ -109,7 +110,7 @@ export interface DeletionRecordData {
   policyBasis: string;
   policyVersion: string;
   jurisdictionProfileId: string;
-  result: DeletionResult;
+  result: 'deleted';
   storageDeletionConfirmed: boolean;
   executedAt: Date;
   actorAuthorityScope: string;

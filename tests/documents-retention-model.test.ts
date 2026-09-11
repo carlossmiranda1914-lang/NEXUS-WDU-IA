@@ -111,7 +111,7 @@ test('DOCUMENTS-RETENTION-POLICY: Synthetic policy engine, duration and authorit
       clockTriggerType: 'student_graduation_or_withdrawal',
       retentionDurationDays: 1825, // 5 years synthetic
       allowedHoldTypes: ['legal', 'administrative'],
-      allowedDeletionAuthorityScopePatterns: ['institutional_dpo', 'legal_officer'],
+      allowedDeletionAuthorityScopePatterns: ['institution_admin', 'director'],
     },
     {
       policyId: 'SYNTHETIC_MEDICAL_REPORT_RETENTION_V1',
@@ -122,7 +122,7 @@ test('DOCUMENTS-RETENTION-POLICY: Synthetic policy engine, duration and authorit
       clockTriggerType: 'student_graduation_or_withdrawal',
       retentionDurationDays: 7300, // 20 years synthetic
       allowedHoldTypes: ['legal'],
-      allowedDeletionAuthorityScopePatterns: ['legal_officer'],
+      allowedDeletionAuthorityScopePatterns: ['institution_admin'],
     },
   ];
 
@@ -159,9 +159,9 @@ test('DOCUMENTS-RETENTION-POLICY: Synthetic policy engine, duration and authorit
   const diffDays = Math.round((retainUntil.getTime() - clockTrigger.getTime()) / (1000 * 60 * 60 * 24));
   assert.strictEqual(diffDays, 1825);
 
-  // 5. Deletion authority checks
-  assert.strictEqual(engine.isDeletionAuthorized(policy!, 'institutional_dpo'), true);
-  assert.strictEqual(engine.isDeletionAuthorized(policy!, 'legal_officer'), true);
+  // 5. Deletion authority checks (roles derived from InstitutionalContext)
+  assert.strictEqual(engine.isDeletionAuthorized(policy!, 'institution_admin'), true);
+  assert.strictEqual(engine.isDeletionAuthorized(policy!, 'director'), true);
   assert.strictEqual(engine.isDeletionAuthorized(policy!, 'teacher'), false);
   assert.strictEqual(engine.isDeletionAuthorized(policy!, 'student'), false);
 
@@ -173,8 +173,8 @@ test('DOCUMENTS-RETENTION-POLICY: Synthetic policy engine, duration and authorit
   });
   assert.ok(medPolicy != null);
   // medPolicy only allows 'legal' hold
-  assert.strictEqual(engine.isHoldAuthorized(medPolicy!, 'legal', 'legal_officer'), true);
-  assert.strictEqual(engine.isHoldAuthorized(medPolicy!, 'administrative', 'legal_officer'), false);
+  assert.strictEqual(engine.isHoldAuthorized(medPolicy!, 'legal', 'institution_admin'), true);
+  assert.strictEqual(engine.isHoldAuthorized(medPolicy!, 'administrative', 'institution_admin'), false);
   assert.strictEqual(engine.isHoldAuthorized(medPolicy!, 'legal', 'teacher'), false);
 
   console.log('[DOCUMENTS-RETENTION-MODEL] PASS: Unit models, HMAC derivation and retention policy engine verified.');

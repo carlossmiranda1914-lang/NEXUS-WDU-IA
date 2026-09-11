@@ -203,7 +203,6 @@ export async function evaluateDeletionEligibilityCommand(params: {
 export interface AuthorizeDeletionInput {
   documentId: string;
   versionId: string;
-  actorAuthorityScope: string;
   correlationId?: string | null;
 }
 
@@ -238,16 +237,16 @@ export async function authorizeDeletionCommand(params: {
     client0.release();
   }
 
-  // Verify actor authority scope against policy
+  // Verify actor authority derived from trusted context.role against policy
   const policy = policyEngine.resolvePolicy({
     institutionId: context.institutionId,
     category: assignment.category,
     jurisdictionProfileId: assignment.jurisdictionProfileId,
     policyId: assignment.policyId,
   });
-  if (!policy || !policyEngine.isDeletionAuthorized(policy, input.actorAuthorityScope)) {
+  if (!policy || !policyEngine.isDeletionAuthorized(policy, context.role)) {
     throw new Error(
-      `DELETION_AUTHORIZATION_DENIED: Actor authority scope '${input.actorAuthorityScope}' ` +
+      `DELETION_AUTHORIZATION_DENIED: Actor role '${context.role}' ` +
       `is not permitted to authorize deletion under policy '${assignment.policyId}'.`,
     );
   }
@@ -300,7 +299,7 @@ export async function authorizeDeletionCommand(params: {
         details: {
           authorizationId: auth.id,
           policyBasis: assignment.policyId,
-          actorAuthorityScope: input.actorAuthorityScope,
+          actorAuthorityScope: context.role,
         },
       });
 
@@ -322,7 +321,6 @@ export interface PlaceHoldInput {
   holdType: 'legal' | 'administrative';
   authority: string;
   reason: string;
-  actorAuthorityScope: string;
   correlationId?: string | null;
 }
 
@@ -357,9 +355,9 @@ export async function placeHoldCommand(params: {
     category: policyCategory,
     jurisdictionProfileId: policyJurisdiction,
   });
-  if (!policy || !policyEngine.isHoldAuthorized(policy, input.holdType, input.actorAuthorityScope)) {
+  if (!policy || !policyEngine.isHoldAuthorized(policy, input.holdType, context.role)) {
     throw new Error(
-      `HOLD_AUTHORITY_DENIED: Actor scope '${input.actorAuthorityScope}' cannot place ` +
+      `HOLD_AUTHORITY_DENIED: Actor role '${context.role}' cannot place ` +
       `a '${input.holdType}' hold under policy '${policy?.policyId ?? 'none'}'.`,
     );
   }
@@ -382,6 +380,23 @@ export async function placeHoldCommand(params: {
       canonicalFingerprint: fingerprint,
     },
     execute: async (client: PoolClient) => {
+      // Serialize with concurrent deletion: lock document_versions row
+      const verLock = await client.query<{ id: string; status: string }>(
+        `SELECT id, status FROM document_versions
+          WHERE institution_id = $1 AND id = $2
+          FOR UPDATE`,
+        [context.institutionId, input.versionId],
+      );
+      if (verLock.rows.length === 0) {
+        throw new Error(`DOCUMENT_NOT_FOUND: version ${input.versionId}`);
+      }
+      const verStatus = verLock.rows[0].status;
+      if (verStatus === 'deletion_in_progress' || verStatus === 'deleted') {
+        throw new Error(
+          `VERSION_DELETION_IN_PROGRESS: Cannot place hold on version with status='${verStatus}'.`,
+        );
+      }
+
       const hold = await holdRepo.insert(client, {
         institutionId: context.institutionId,
         documentId: input.documentId,
@@ -425,7 +440,6 @@ export interface ReleaseHoldInput {
   documentId: string;
   versionId: string;
   releaseReason: string;
-  actorAuthorityScope: string;
   correlationId?: string | null;
 }
 
@@ -462,8 +476,8 @@ export async function releaseHoldCommand(params: {
     category: policyCategory,
     jurisdictionProfileId: policyJurisdiction,
   });
-  if (!policy || !policyEngine.isHoldAuthorized(policy, existingHold.holdType, input.actorAuthorityScope)) {
-    throw new Error(`HOLD_AUTHORITY_DENIED: Actor scope '${input.actorAuthorityScope}' cannot release hold.`);
+  if (!policy || !policyEngine.isHoldAuthorized(policy, existingHold.holdType, context.role)) {
+    throw new Error(`HOLD_AUTHORITY_DENIED: Actor role '${context.role}' cannot release hold.`);
   }
 
   const fingerprint = createHoldReleaseFingerprint(
@@ -482,6 +496,14 @@ export async function releaseHoldCommand(params: {
       canonicalFingerprint: fingerprint,
     },
     execute: async (client: PoolClient) => {
+      // Serialize with concurrent deletion: lock document_versions row
+      await client.query(
+        `SELECT id, status FROM document_versions
+          WHERE institution_id = $1 AND id = $2
+          FOR UPDATE`,
+        [context.institutionId, input.versionId],
+      );
+
       const released = await holdRepo.releaseHold(
         client,
         context.institutionId,
