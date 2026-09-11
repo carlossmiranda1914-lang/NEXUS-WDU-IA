@@ -14,3 +14,7 @@ test('composes receipt presentation truth from resolved authorities', () => {
   assert.equal(snapshot.payment?.reference, 'PAG-1');
   assert.equal(snapshot.totals.documentTotal, '10.00');
 });
+
+test('rejects incomplete receipt evidence before a document can be numbered', () => {
+  assert.throws(() => createDocumentarySnapshot({ issuer: { legalName: 'Escola', taxIdentifier: null, address: { countryCode: 'PT', line1: '' } }, recipient: { name: 'Maria', authorityId: 'person-1' }, operation: { reference: 'PAG-1' }, payment: { reference: 'PAG-1', amount: '10.00', currency: 'EUR' }, totals: { documentTotal: '10.00', currency: 'EUR' }, jurisdiction: { code: 'core', policyVersion: 'core-1' } }), /DOCUMENTARY_SNAPSHOT_ISSUER_ADDRESS_REQUIRED/);
+});

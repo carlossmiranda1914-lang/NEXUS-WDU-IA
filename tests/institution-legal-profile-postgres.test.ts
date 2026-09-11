@@ -31,3 +31,37 @@ test('legal profiles are institution-scoped, effective-dated, and historically v
     } finally { client.release(); }
   } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(() => undefined); await pool.end(); }
 });
+
+test('characterizes that concurrent first legal-profile versions currently race on allocation', async () => {
+  await verifyApprovedTestConnection();
+  const schema = `institution_legal_race_${randomUUID().replaceAll('-', '')}`;
+  const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
+  const pool = new pg.Pool({ connectionString: process.env.TEST_DATABASE_URL, options: `-c search_path=${quote(schema)},public` });
+  try {
+    const setup = await pool.connect();
+    const institutionId = randomUUID();
+    try {
+      await setup.query(`CREATE SCHEMA ${quote(schema)}`);
+      await runMigrations(setup, await discoverMigrations(path.resolve(process.cwd(), 'src/db/migrations')));
+      await setup.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'Race','legal-race','active')", [institutionId]);
+    } finally { setup.release(); }
+    const [left, right] = await Promise.all([pool.connect(), pool.connect()]);
+    try {
+      await Promise.all([left.query('BEGIN'), right.query('BEGIN')]);
+      await Promise.all([
+        left.query('UPDATE institution_legal_profiles SET effective_to=$2 WHERE institution_id=$1 AND effective_to IS NULL AND effective_from < $2', [institutionId, new Date('2026-01-01T00:00:00Z')]),
+        right.query('UPDATE institution_legal_profiles SET effective_to=$2 WHERE institution_id=$1 AND effective_to IS NULL AND effective_from < $2', [institutionId, new Date('2026-01-01T00:00:00Z')]),
+      ]);
+      const [leftMax, rightMax] = await Promise.all([
+        left.query<{ version: number }>('SELECT COALESCE(MAX(version),0)::int version FROM institution_legal_profiles WHERE institution_id=$1', [institutionId]),
+        right.query<{ version: number }>('SELECT COALESCE(MAX(version),0)::int version FROM institution_legal_profiles WHERE institution_id=$1', [institutionId]),
+      ]);
+      assert.equal(leftMax.rows[0]?.version, 0);
+      assert.equal(rightMax.rows[0]?.version, 0, 'there is no per-institution allocation lock before MAX(version)');
+      await left.query("INSERT INTO institution_legal_profiles(institution_id,version,legal_name,registered_address,effective_from) VALUES($1,1,'A',$2,$3)", [institutionId, { countryCode: 'PT', line1: 'Rua' }, new Date('2026-01-01T00:00:00Z')]);
+      await left.query('COMMIT');
+      await assert.rejects(() => right.query("INSERT INTO institution_legal_profiles(institution_id,version,legal_name,registered_address,effective_from) VALUES($1,1,'B',$2,$3)", [institutionId, { countryCode: 'PT', line1: 'Rua' }, new Date('2026-01-01T00:00:00Z')]));
+      await right.query('ROLLBACK');
+    } finally { left.release(); right.release(); }
+  } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(() => undefined); await pool.end(); }
+});
