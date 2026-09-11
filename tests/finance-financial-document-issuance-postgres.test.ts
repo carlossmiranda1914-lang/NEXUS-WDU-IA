@@ -76,12 +76,14 @@ test('F7-01 PostgreSQL issuance replays idempotently and allocates a series numb
     assert.equal(fiscalProvenance.rows[0]?.fiscal_policy_version, 'core-1', 'an issued document must retain the resolved policy version, not only a mutable adapter key');
     assert.deepEqual(fiscalProvenance.rows[0]?.fiscal_policy_snapshot, { adapterKey: 'core', documentType: 'receipt', policyVersion: 'core-1' });
     assert.deepEqual(fiscalProvenance.rows[0]?.jurisdiction_extension_data, {}, 'the international core supports extension evidence without globally requiring legal fields');
-    const documentarySnapshot = await pool.query<{ documentary_snapshot: { schemaVersion: number; issuer: { legalName: string }; recipient: { name: string }; payment: { reference: string } }; documentary_snapshot_schema_version: number }>('SELECT documentary_snapshot,documentary_snapshot_schema_version FROM finance_financial_documents WHERE id=$1', [first.id]);
-    assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot_schema_version, 1);
-    assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.schemaVersion, 1);
+    const documentarySnapshot = await pool.query<{ documentary_snapshot: { snapshotVersion: number; issuer: { legalName: string }; recipient: { name: string }; payment: { reference: string }; allocations: unknown[]; unallocated: { amount: string } }; documentary_snapshot_schema_version: number }>('SELECT documentary_snapshot,documentary_snapshot_schema_version FROM finance_financial_documents WHERE id=$1', [first.id]);
+    assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot_schema_version, 2, 'new issuance must persist the V2 discriminator');
+    assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.snapshotVersion, 2, 'new issuance must never silently fall back to V1');
     assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.issuer.legalName, 'Document Institution');
     assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.recipient.name, 'Document recipient');
     assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.payment.reference, `PAY-${paymentId!.slice(0, 8)}`);
+    assert.deepEqual(documentarySnapshot.rows[0]?.documentary_snapshot.allocations, [], 'a payment without allocations must not fabricate settlement entries');
+    assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.unallocated.amount, documentarySnapshot.rows[0]?.documentary_snapshot.payment.amount, 'unallocated payment value must remain explicit and exact');
     await pool.query("UPDATE people SET name='Renamed live recipient' WHERE name='Document recipient'");
     await new InstitutionLegalProfileRepository(pool).createVersion({ institutionId, legalName: 'Renamed live institution', taxIdentifier: 'PT999999990', registeredAddress: { countryCode: 'PT', line1: 'Rua do Nexus, 2' }, effectiveFrom: new Date() });
     const replayAfterLiveChange = await repo.issue(command);
@@ -212,7 +214,9 @@ test('F7-01 correction creates an idempotent immutable fact without changing eco
     assert.equal(after.rows[0]?.status, 'issued'); assert.equal(after.rows[0]?.corrects_document_id, original.id);
     assert.deepEqual(after.rows[0]?.source_snapshot, before.rows[0]?.source_snapshot, 'original provenance remains queryable unchanged');
     assert.deepEqual(after.rows[0]?.documentary_snapshot, before.rows[0]?.documentary_snapshot, 'original documentary evidence remains queryable unchanged');
-    assert.deepEqual(after.rows[0]?.correction_snapshot, before.rows[0]?.documentary_snapshot, 'correction retains the immutable documentary evidence it corrects');
+    assert.equal((after.rows[0]?.correction_snapshot as { snapshotVersion?: number })?.snapshotVersion, 2, 'a correction after cutover must own a V2 snapshot');
+    assert.notDeepEqual(after.rows[0]?.correction_snapshot, before.rows[0]?.documentary_snapshot, 'a correction must never copy the original snapshot as new truth');
+    assert.deepEqual((after.rows[0]?.correction_snapshot as { correction?: { originalDocumentId?: string } })?.correction, { originalDocumentId: original.id, originalSnapshotVersion: 2 }, 'the new correction snapshot must preserve first-class original provenance');
     assert.equal(after.rows[0]?.payments, before.rows[0]?.payments, 'correction must not mutate payments'); assert.equal(after.rows[0]?.journals, before.rows[0]?.journals, 'correction creates no economic journal');
     assert.equal(after.rows[0]?.audit, 1); assert.equal(after.rows[0]?.outbox, 1);
     await assert.rejects(() => repo.issueCorrection({ ...command, idempotencyKey: 'rollback', seriesId: randomUUID() }), /SERIES_NOT_EFFECTIVE/);

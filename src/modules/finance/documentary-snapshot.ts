@@ -76,6 +76,21 @@ export function createDocumentarySnapshotV2(input: Omit<DocumentarySnapshotV2, '
   return deepFreeze({ snapshotVersion: 2 as const, ...input }) as DocumentarySnapshotV2;
 }
 
+export function composeReceiptDocumentarySnapshotV2(input: {
+  documentType: string; issuedAt: Date; issuer: DocumentarySnapshotV1['issuer']; recipient: DocumentaryPartySnapshot; billingParty: DocumentaryPartySnapshot; payer?: DocumentaryPartySnapshot;
+  paymentAuthorityId: string; paymentReference: string; paymentConfirmedAt: Date; paymentMethod: string; amount: string; currency: string; jurisdictionCode: string; policyVersion: string;
+  financialProfileVersion: number; fiscalConfigurationVersion: number; seriesId: string; adapterKey: string;
+}): DocumentarySnapshotV2 {
+  return createDocumentarySnapshotV2({
+    document: { type: input.documentType, issuedAt: input.issuedAt.toISOString(), currency: input.currency }, issuer: input.issuer, recipient: input.recipient,
+    billingParty: input.billingParty, ...(input.payer ? { payer: input.payer } : {}), operation: { reference: input.paymentReference }, obligations: [],
+    payment: { authorityId: input.paymentAuthorityId, reference: input.paymentReference, confirmedAt: input.paymentConfirmedAt.toISOString(), method: input.paymentMethod, amount: input.amount, currency: input.currency },
+    allocations: [], unallocated: { amount: input.amount, currency: input.currency }, totals: { documentTotal: input.amount, currency: input.currency }, tax: { treatment: 'not_applicable' },
+    jurisdiction: { code: input.jurisdictionCode, policyVersion: input.policyVersion }, legalMentions: [],
+    policyProvenance: { financialProfileVersion: input.financialProfileVersion, fiscalConfigurationVersion: input.fiscalConfigurationVersion, seriesId: input.seriesId, adapterKey: input.adapterKey, policyVersion: input.policyVersion },
+  });
+}
+
 /** Explicit discriminator: legacy rows are recognized solely by their stored V1 schema marker. */
 export function decodeDocumentarySnapshot(value: unknown): DecodedDocumentarySnapshot {
   if (!value || typeof value !== 'object') throw new Error('DOCUMENTARY_SNAPSHOT_INVALID');

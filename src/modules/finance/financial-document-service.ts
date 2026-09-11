@@ -6,7 +6,7 @@ import { resolveReceiptEligibility } from './financial-document-eligibility.ts';
 import { FiscalAdapterRegistry, productionFiscalAdapterRegistry } from './fiscal-adapter-registry.ts';
 import { resolveEffectiveInstitutionLegalProfile } from '../institution/institution-legal-profile.ts';
 import { resolveDocumentParties, resolveDocumentaryPartySnapshot } from './document-party-resolution.ts';
-import { composeReceiptDocumentarySnapshot } from './documentary-snapshot.ts';
+import { composeReceiptDocumentarySnapshotV2, decodeDocumentarySnapshot } from './documentary-snapshot.ts';
 
 export type FinancialDocumentIssuanceCommand = {
   institutionId: string;
@@ -53,14 +53,15 @@ export class PostgresFinancialDocumentRepository {
         paymentId: sourceRow.id,
       });
       const recipient = await resolveDocumentaryPartySnapshot(client, parties.recipient);
-      const documentarySnapshot = composeReceiptDocumentarySnapshot({
+      const payer = parties.payer ? await resolveDocumentaryPartySnapshot(client, parties.payer) : undefined;
+      const issuedAt = new Date();
+      const documentarySnapshot = composeReceiptDocumentarySnapshotV2({
+        documentType: command.documentType, issuedAt,
         issuer: { legalName: issuerProfile.legalName, taxIdentifier: issuerProfile.taxIdentifier, address: { countryCode: issuerProfile.registeredAddress.countryCode, line1: issuerProfile.registeredAddress.line1 } },
         recipient: { name: recipient.name, authorityId: recipient.authorityId },
-        paymentReference: sourceRow.paymentReference,
-        amount: sourceRow.amount,
-        currency: sourceRow.currency,
-        jurisdictionCode: fiscalAdapter.key,
-        policyVersion: fiscalAdapter.policy.version,
+        billingParty: { name: recipient.name, authorityId: recipient.authorityId }, ...(payer ? { payer: { name: payer.name, authorityId: payer.authorityId } } : {}),
+        paymentAuthorityId: sourceRow.id, paymentReference: sourceRow.paymentReference, paymentConfirmedAt: sourceRow.effectiveAt, paymentMethod: sourceRow.method, amount: sourceRow.amount, currency: sourceRow.currency,
+        jurisdictionCode: fiscalAdapter.key, policyVersion: fiscalAdapter.policy.version, financialProfileVersion: sourceRow.financialProfileVersion, fiscalConfigurationVersion: eligibility.fiscalConfiguration.version, seriesId: command.seriesId, adapterKey: fiscalAdapter.key,
       });
       const fiscalPolicySnapshot = { adapterKey: fiscalAdapter.key, documentType: command.documentType, policyVersion: fiscalAdapter.policy.version };
       const sourceSnapshot = {
@@ -76,7 +77,7 @@ export class PostgresFinancialDocumentRepository {
       const sequenceNumber = eligibility.series.nextSequenceNumber;
       const id = randomUUID();
       await client.query('UPDATE finance_financial_document_series SET next_sequence_number=$3 WHERE institution_id=$1 AND id=$2', [command.institutionId, command.seriesId, sequenceNumber + 1]);
-      await client.query("INSERT INTO finance_financial_documents(id,institution_id,document_type,status,series_id,sequence_number,source_snapshot,documentary_snapshot,documentary_snapshot_schema_version,fiscal_configuration_id,fiscal_adapter_key,fiscal_policy_version,fiscal_policy_snapshot,jurisdiction_extension_data,issued_at) VALUES($1,$2,$3,'issued',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now())", [id, command.institutionId, command.documentType, command.seriesId, sequenceNumber, sourceSnapshot, documentarySnapshot, documentarySnapshot.schemaVersion, eligibility.fiscalConfiguration.id, fiscalAdapter.key, fiscalAdapter.policy.version, fiscalPolicySnapshot, {}]);
+      await client.query("INSERT INTO finance_financial_documents(id,institution_id,document_type,status,series_id,sequence_number,source_snapshot,documentary_snapshot,documentary_snapshot_schema_version,fiscal_configuration_id,fiscal_adapter_key,fiscal_policy_version,fiscal_policy_snapshot,jurisdiction_extension_data,issued_at) VALUES($1,$2,$3,'issued',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now())", [id, command.institutionId, command.documentType, command.seriesId, sequenceNumber, sourceSnapshot, documentarySnapshot, documentarySnapshot.snapshotVersion, eligibility.fiscalConfiguration.id, fiscalAdapter.key, fiscalAdapter.policy.version, fiscalPolicySnapshot, {}]);
       await client.query('INSERT INTO finance_financial_document_sources(institution_id,document_id,source_type,source_id,snapshot) VALUES($1,$2,$3,$4,$5)', [command.institutionId, id, command.sourceType, command.sourceId, sourceSnapshot]);
       await client.query("INSERT INTO finance_audit_records(institution_id,event_type,metadata) VALUES($1,'financial_document_issued',$2)", [command.institutionId, { documentId: id, seriesId: command.seriesId, sequenceNumber }]);
       await client.query("INSERT INTO finance_outbox(institution_id,topic,aggregate_id,payload) VALUES($1,'financial_document_issued',$2,$3)", [command.institutionId, id, { documentId: id, seriesId: command.seriesId, sequenceNumber }]);
@@ -103,6 +104,26 @@ export class PostgresFinancialDocumentRepository {
           [command.institutionId, command.originalDocumentId],
         );
         if (originalSources.rows.length === 0) throw new Error('FINANCIAL_DOCUMENT_ORIGINAL_PROVENANCE_MISSING');
+        const paymentSource = originalSources.rows.find(source => source.source_type === 'payment');
+        if (!paymentSource) throw new Error('FINANCIAL_DOCUMENT_CORRECTION_SOURCE_UNSUPPORTED');
+        const eligibility = await resolveReceiptEligibility(client, this.fiscalAdapters, { institutionId: command.institutionId, paymentId: paymentSource.source_id, seriesId: command.seriesId, documentType: 'receipt', lock: true });
+        if (eligibility.eligible === false) throw new Error(eligibility.reasonCode);
+        if (!eligibility.adapter.policy.supportedDocumentTypes.includes(command.documentType)) throw new Error('DOCUMENT_TYPE_UNSUPPORTED');
+        const sourceRow = eligibility.payment;
+        if (!sourceRow.financialAccountId) throw new Error('DOCUMENT_RECIPIENT_REQUIRED');
+        const issuerProfile = await resolveEffectiveInstitutionLegalProfile(client, command.institutionId, sourceRow.effectiveAt);
+        if (!issuerProfile) throw new Error('INSTITUTION_LEGAL_PROFILE_REQUIRED');
+        const parties = await resolveDocumentParties(client, { institutionId: command.institutionId, financialAccountId: sourceRow.financialAccountId, paymentId: sourceRow.id });
+        const recipient = await resolveDocumentaryPartySnapshot(client, parties.recipient);
+        const payer = parties.payer ? await resolveDocumentaryPartySnapshot(client, parties.payer) : undefined;
+        const originalSnapshotVersion = original.rows[0].documentary_snapshot ? decodeDocumentarySnapshot(original.rows[0].documentary_snapshot).snapshotVersion : 1;
+        const issuedAt = new Date();
+        const documentarySnapshot = {
+          ...composeReceiptDocumentarySnapshotV2({ documentType: command.documentType, issuedAt, issuer: { legalName: issuerProfile.legalName, taxIdentifier: issuerProfile.taxIdentifier, address: { countryCode: issuerProfile.registeredAddress.countryCode, line1: issuerProfile.registeredAddress.line1 } }, recipient: { name: recipient.name, authorityId: recipient.authorityId }, billingParty: { name: recipient.name, authorityId: recipient.authorityId }, ...(payer ? { payer: { name: payer.name, authorityId: payer.authorityId } } : {}), paymentAuthorityId: sourceRow.id, paymentReference: sourceRow.paymentReference, paymentConfirmedAt: sourceRow.effectiveAt, paymentMethod: sourceRow.method, amount: sourceRow.amount, currency: sourceRow.currency, jurisdictionCode: eligibility.adapter.key, policyVersion: eligibility.adapter.policy.version, financialProfileVersion: sourceRow.financialProfileVersion, fiscalConfigurationVersion: eligibility.fiscalConfiguration.version, seriesId: command.seriesId, adapterKey: eligibility.adapter.key }),
+          correction: { originalDocumentId: command.originalDocumentId, originalSnapshotVersion },
+        };
+        const sourceSnapshot = { sourceType: 'payment', sourceId: sourceRow.id, paymentReference: sourceRow.paymentReference, journalTransactionId: sourceRow.journalTransactionId, amount: sourceRow.amount, currency: sourceRow.currency, effectiveAt: sourceRow.effectiveAt.toISOString(), financialProfileVersion: sourceRow.financialProfileVersion };
+        const fiscalPolicySnapshot = { adapterKey: eligibility.adapter.key, documentType: command.documentType, policyVersion: eligibility.adapter.policy.version };
         const series = await client.query<{ next_sequence_number: string }>(
           "SELECT next_sequence_number FROM finance_financial_document_series WHERE institution_id=$1 AND id=$2 AND status='active' AND effective_from<=now() AND (effective_to IS NULL OR effective_to>now()) FOR UPDATE",
           [command.institutionId, command.seriesId],
@@ -111,9 +132,9 @@ export class PostgresFinancialDocumentRepository {
         const sequenceNumber = Number(series.rows[0].next_sequence_number);
         const id = randomUUID();
         await client.query('UPDATE finance_financial_document_series SET next_sequence_number=$3 WHERE institution_id=$1 AND id=$2', [command.institutionId, command.seriesId, sequenceNumber + 1]);
-        await client.query("INSERT INTO finance_financial_documents(id,institution_id,document_type,status,series_id,sequence_number,source_snapshot,documentary_snapshot,documentary_snapshot_schema_version,corrects_document_id,fiscal_configuration_id,fiscal_adapter_key,fiscal_policy_version,fiscal_policy_snapshot,jurisdiction_extension_data,issued_at) VALUES($1,$2,$3,'issued',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now())", [id, command.institutionId, command.documentType, command.seriesId, sequenceNumber, original.rows[0].source_snapshot, original.rows[0].documentary_snapshot, original.rows[0].documentary_snapshot_schema_version, command.originalDocumentId, original.rows[0].fiscal_configuration_id, original.rows[0].fiscal_adapter_key, original.rows[0].fiscal_policy_version, original.rows[0].fiscal_policy_snapshot, original.rows[0].jurisdiction_extension_data]);
+        await client.query("INSERT INTO finance_financial_documents(id,institution_id,document_type,status,series_id,sequence_number,source_snapshot,documentary_snapshot,documentary_snapshot_schema_version,corrects_document_id,fiscal_configuration_id,fiscal_adapter_key,fiscal_policy_version,fiscal_policy_snapshot,jurisdiction_extension_data,issued_at) VALUES($1,$2,$3,'issued',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now())", [id, command.institutionId, command.documentType, command.seriesId, sequenceNumber, sourceSnapshot, documentarySnapshot, 2, command.originalDocumentId, eligibility.fiscalConfiguration.id, eligibility.adapter.key, eligibility.adapter.policy.version, fiscalPolicySnapshot, {}]);
         for (const source of originalSources.rows) {
-          await client.query('INSERT INTO finance_financial_document_sources(institution_id,document_id,source_type,source_id,snapshot) VALUES($1,$2,$3,$4,$5)', [command.institutionId, id, source.source_type, source.source_id, source.snapshot]);
+          await client.query('INSERT INTO finance_financial_document_sources(institution_id,document_id,source_type,source_id,snapshot) VALUES($1,$2,$3,$4,$5)', [command.institutionId, id, source.source_type, source.source_id, sourceSnapshot]);
         }
         await client.query("INSERT INTO finance_audit_records(institution_id,event_type,metadata) VALUES($1,'financial_document_corrected',$2)", [command.institutionId, { documentId: id, originalDocumentId: command.originalDocumentId, seriesId: command.seriesId, sequenceNumber }]);
         await client.query("INSERT INTO finance_outbox(institution_id,topic,aggregate_id,payload) VALUES($1,'financial_document_corrected',$2,$3)", [command.institutionId, id, { documentId: id, originalDocumentId: command.originalDocumentId, seriesId: command.seriesId, sequenceNumber }]);
