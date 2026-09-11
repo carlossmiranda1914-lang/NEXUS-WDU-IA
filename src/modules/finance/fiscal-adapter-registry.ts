@@ -39,6 +39,16 @@ export class FiscalAdapterRegistry {
   has(adapterKey: string): boolean {
     return this.adapters.some((adapter) => adapter.key === adapterKey);
   }
+
+  supportsJurisdiction(jurisdiction: string): boolean {
+    return this.adapters.some((adapter) => adapter.supportedJurisdictions.includes(jurisdiction));
+  }
+
+  resolveForJurisdiction(jurisdiction: string): FiscalAdapter {
+    const matches = this.adapters.filter((adapter) => adapter.supportedJurisdictions.includes(jurisdiction));
+    if (matches.length !== 1) throw new Error('FISCAL_ADAPTER_UNSUPPORTED_JURISDICTION');
+    return matches[0]!;
+  }
 }
 
 /** No jurisdiction has been approved for production fiscal operation yet. */

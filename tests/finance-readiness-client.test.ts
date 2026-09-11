@@ -25,17 +25,17 @@ test('Finance readiness client preserves safe authorization errors', async () =>
   await assert.rejects(() => client.get(), /FINANCE_READINESS_FORBIDDEN/);
 });
 
-test('Finance readiness client reuses fiscal configuration and receipt-series endpoints without browser authority', async () => {
+test('Finance readiness client creates only local institutional prerequisites without browser authority', async () => {
   const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
   const client = new FinanceReadinessClient(async (input, init) => {
     calls.push({ input, init });
     return { ok: true, json: async () => ready } as Response;
   }, async () => 'token');
 
-  await client.createFiscalConfiguration({ idempotencyKey: 'fiscal-key' });
-  await client.createReceiptSeries({ code: 'RECEIPTS', idempotencyKey: 'series-key' });
+  await client.createLegalProfile({ legalName: 'Nexus', countryCode: 'AO', addressLine1: 'Rua', effectiveFrom: '2026-01-01T00:00:00.000Z' });
+  await client.createFinancialProfile({ primaryJurisdiction: 'AO', functionalCurrency: 'AOA', financialTimezone: 'Africa/Luanda', monetaryPolicyVersion: 'v1', enabledCurrencies: ['AOA'], effectiveFrom: '2026-01-01T00:00:00.000Z' });
 
-  assert.equal(calls[0]?.input, '/api/finance/fiscal-configurations');
-  assert.equal(calls[1]?.input, '/api/finance/document-series');
-  assert.doesNotMatch(JSON.stringify(calls), /institutionId|nextSequenceNumber/);
+  assert.equal(calls[0]?.input, '/api/institution/legal-profile');
+  assert.equal(calls[1]?.input, '/api/finance/profile');
+  assert.doesNotMatch(JSON.stringify(calls), /institutionId|nextSequenceNumber|adapterKey|core/);
 });

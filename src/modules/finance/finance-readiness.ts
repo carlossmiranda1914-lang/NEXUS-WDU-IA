@@ -8,6 +8,10 @@ export type FinanceReadinessProjection = Readonly<{
   requirements: readonly FinanceReadinessRequirement[];
   receiptIssuance: DocumentIssuanceReadiness;
   canManageConfiguration: boolean;
+  localPrerequisitesComplete: boolean;
+  jurisdictionPolicyAvailable: boolean;
+  fiscalConfigurationAvailable: boolean;
+  seriesConfigurationAvailable: boolean;
 }>;
 
 type Resolver = () => Promise<unknown>;
@@ -35,28 +39,32 @@ export async function resolveFinanceReadiness(input: {
   resolveReceiptSeries: Resolver;
   resolveInstitutionLegalProfile?: Resolver;
   resolveReceiptIssuance?: Resolver;
+  isJurisdictionPolicyAvailable?: (profile: unknown) => boolean;
 }): Promise<FinanceReadinessProjection> {
-  const states = await Promise.all([
-    resolveRequirement(input.resolveFinancialProfile),
-    resolveRequirement(input.resolveFiscalConfiguration),
-    resolveRequirement(input.resolveReceiptSeries),
-  ]);
+  const financialProfile = await resolveRequirement(input.resolveFinancialProfile);
+  const legalProfile = input.resolveInstitutionLegalProfile ? await resolveRequirement(input.resolveInstitutionLegalProfile) : 'COMPLETE';
+  const resolvedProfile = financialProfile === 'COMPLETE' ? await input.resolveFinancialProfile() : null;
+  const localPrerequisitesComplete = financialProfile === 'COMPLETE' && legalProfile === 'COMPLETE';
+  const jurisdictionPolicyAvailable = localPrerequisitesComplete && (input.isJurisdictionPolicyAvailable ? input.isJurisdictionPolicyAvailable(resolvedProfile) : true);
+  const fiscalState: ResolverResult = !jurisdictionPolicyAvailable && localPrerequisitesComplete ? 'BLOCKED' : await resolveRequirement(input.resolveFiscalConfiguration);
+  const seriesState: ResolverResult = !jurisdictionPolicyAvailable && localPrerequisitesComplete ? 'BLOCKED' : await resolveRequirement(input.resolveReceiptSeries);
   const requirements: FinanceReadinessRequirement[] = [
-    { code: 'FINANCIAL_PROFILE', state: states[0]! },
-    { code: 'FISCAL_CONFIGURATION', state: states[1]! },
-    { code: 'RECEIPT_SERIES', state: states[2]! },
+    ...(input.resolveInstitutionLegalProfile ? [{ code: 'INSTITUTION_LEGAL_PROFILE' as const, state: legalProfile }] : []),
+    { code: 'FINANCIAL_PROFILE', state: financialProfile },
+    { code: 'FISCAL_CONFIGURATION', state: fiscalState },
+    { code: 'RECEIPT_SERIES', state: seriesState },
   ];
   const status: FinanceReadinessStatus = requirements.some(item => item.state === 'BLOCKED')
     ? 'BLOCKED'
     : requirements.some(item => item.state === 'MISSING') ? 'INCOMPLETE' : 'READY';
   const documentaryRequirements: FinanceReadinessRequirement[] = [...requirements];
-  if (input.resolveInstitutionLegalProfile) documentaryRequirements.push({ code: 'INSTITUTION_LEGAL_PROFILE', state: await resolveRequirement(input.resolveInstitutionLegalProfile) });
   let receiptIssuance: DocumentIssuanceReadiness = { status: 'READY', documentType: 'receipt', requirements: Object.freeze(documentaryRequirements) };
-  if (status !== 'READY') receiptIssuance = { status: 'BLOCKED', documentType: 'receipt', reasonCode: 'FINANCE_MODULE_NOT_READY', requirements: Object.freeze(documentaryRequirements) };
+  if (!jurisdictionPolicyAvailable && localPrerequisitesComplete) receiptIssuance = { status: 'BLOCKED', documentType: 'receipt', reasonCode: 'JURISDICTION_POLICY_UNAVAILABLE', requirements: Object.freeze(documentaryRequirements) };
   else if (documentaryRequirements.some(item => item.code === 'INSTITUTION_LEGAL_PROFILE' && item.state !== 'COMPLETE')) receiptIssuance = { status: 'BLOCKED', documentType: 'receipt', reasonCode: 'INSTITUTION_LEGAL_PROFILE_REQUIRED', requirements: Object.freeze(documentaryRequirements) };
+  else if (status !== 'READY') receiptIssuance = { status: 'BLOCKED', documentType: 'receipt', reasonCode: 'FINANCE_MODULE_NOT_READY', requirements: Object.freeze(documentaryRequirements) };
   else if (input.resolveReceiptIssuance) {
     try { await input.resolveReceiptIssuance(); }
     catch (error) { receiptIssuance = { status: 'BLOCKED', documentType: 'receipt', reasonCode: error instanceof Error ? error.message : 'RECEIPT_ISSUANCE_UNAVAILABLE', requirements: Object.freeze(documentaryRequirements) }; }
   }
-  return Object.freeze({ module: 'FINANCE', status, requirements: Object.freeze(requirements), receiptIssuance: Object.freeze(receiptIssuance), canManageConfiguration: input.canManageConfiguration });
+  return Object.freeze({ module: 'FINANCE', status, requirements: Object.freeze(requirements), receiptIssuance: Object.freeze(receiptIssuance), canManageConfiguration: input.canManageConfiguration, localPrerequisitesComplete, jurisdictionPolicyAvailable, fiscalConfigurationAvailable: jurisdictionPolicyAvailable, seriesConfigurationAvailable: jurisdictionPolicyAvailable });
 }

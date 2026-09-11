@@ -47,11 +47,26 @@ test('Finance readiness separates configured module state from blocked official 
 
 test('Finance module readiness does not authorize receipt issuance without an effective legal profile', async () => {
   const result = await resolveFinanceReadiness(input({ resolveInstitutionLegalProfile: async () => null }));
-  assert.equal(result.status, 'READY');
+  assert.equal(result.status, 'INCOMPLETE');
   assert.equal(result.receiptIssuance.status, 'BLOCKED');
   assert.equal(result.receiptIssuance.documentType, 'receipt');
   assert.equal(result.receiptIssuance.reasonCode, 'INSTITUTION_LEGAL_PROFILE_REQUIRED');
   assert.deepEqual(result.receiptIssuance.requirements.find(item => item.code === 'INSTITUTION_LEGAL_PROFILE'), { code: 'INSTITUTION_LEGAL_PROFILE', state: 'MISSING' });
+});
+
+test('Finance readiness makes an unsupported jurisdiction explicitly unavailable after local prerequisites are complete', async () => {
+  const result = await resolveFinanceReadiness(input({
+    resolveInstitutionLegalProfile: async () => ({ id: 'legal' }),
+    isJurisdictionPolicyAvailable: () => false,
+  }));
+  assert.equal(result.status, 'BLOCKED');
+  assert.equal(result.localPrerequisitesComplete, true);
+  assert.equal(result.jurisdictionPolicyAvailable, false);
+  assert.equal(result.fiscalConfigurationAvailable, false);
+  assert.equal(result.seriesConfigurationAvailable, false);
+  assert.equal(result.receiptIssuance.status, 'BLOCKED');
+  assert.equal(result.receiptIssuance.reasonCode, 'JURISDICTION_POLICY_UNAVAILABLE');
+  assert.deepEqual(result.requirements.find(item => item.code === 'FISCAL_CONFIGURATION'), { code: 'FISCAL_CONFIGURATION', state: 'BLOCKED' });
 });
 
 test('Finance readiness blocks unexpected authority integrity failures', async () => {

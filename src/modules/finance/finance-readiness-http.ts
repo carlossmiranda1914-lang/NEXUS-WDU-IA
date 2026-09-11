@@ -27,6 +27,7 @@ export function registerFinanceReadinessRoutes(app: Express, pool: Pool, auth = 
       resolveFiscalConfiguration: () => fiscal.requireEffective(context.institutionId, at),
       resolveReceiptSeries: () => series.findEffective(context.institutionId, 'receipt', at),
       resolveInstitutionLegalProfile: () => legalProfiles.resolveEffective(context.institutionId, at),
+      isJurisdictionPolicyAvailable: (profile) => Boolean(profile && fiscalAdapters.supportsJurisdiction((profile as { primaryJurisdiction: string }).primaryJurisdiction)),
       resolveReceiptIssuance: async () => {
         const [profile, configuration, receiptSeries] = await Promise.all([
           profiles.resolveEffective(context.institutionId, at),

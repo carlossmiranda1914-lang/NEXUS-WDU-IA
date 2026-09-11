@@ -12,6 +12,7 @@ test('Finance readiness HTTP derives only the resolved tenant and existing capab
     calls.push(values);
     const tenant = values[0];
     if (tenant === 'foreign') return { rows: [] };
+    if (sql.includes('institution_legal_profiles')) return { rows: [{ id: 'legal-a', institution_id: 'tenant-a', version: 1, legal_name: 'Tenant A', tax_identifier: null, registered_address: { countryCode: 'NEXUS_TEST', line1: 'Rua' }, legal_email: null, legal_phone: null, logo_asset_reference: null, effective_from: new Date('2026-01-01'), effective_to: null }] };
     if (sql.includes('finance_profile_versions')) return { rows: [{ institution_id: 'tenant-a', version: 1, effective_from: new Date('2026-01-01'), effective_to: null, primary_jurisdiction: 'NEXUS_TEST', functional_currency: 'EUR', financial_timezone: 'Europe/Lisbon', monetary_policy_version: 'v1', enabled_currencies: ['EUR'] }] };
     if (sql.includes('finance_fiscal_configuration_versions')) return { rows: [{ id: 'fiscal-a', institution_id: 'tenant-a', version: 1, adapter_key: 'core', operational_configuration: {}, effective_from: new Date('2026-01-01'), effective_to: null }] };
     if (sql.includes('finance_financial_document_series')) return { rows: [] };
@@ -27,7 +28,12 @@ test('Finance readiness HTTP derives only the resolved tenant and existing capab
     assert.equal((await fetch(base, { headers: { Authorization: 'Bearer denied' } })).status, 403);
     const admin = await fetch(`${base}?institutionId=foreign`, { headers: { Authorization: 'Bearer admin' } });
     assert.equal(admin.status, 200);
-    assert.deepEqual(await admin.json(), { module: 'FINANCE', status: 'INCOMPLETE', requirements: [{ code: 'FINANCIAL_PROFILE', state: 'COMPLETE' }, { code: 'FISCAL_CONFIGURATION', state: 'COMPLETE' }, { code: 'RECEIPT_SERIES', state: 'MISSING' }], receiptIssuance: { status: 'BLOCKED', reasonCode: 'FINANCE_MODULE_NOT_READY' }, canManageConfiguration: true });
+    const readiness: any = await admin.json();
+    assert.equal(readiness.status, 'INCOMPLETE');
+    assert.equal(readiness.localPrerequisitesComplete, true);
+    assert.equal(readiness.jurisdictionPolicyAvailable, true);
+    assert.equal(readiness.receiptIssuance.reasonCode, 'FINANCE_MODULE_NOT_READY');
+    assert.deepEqual(readiness.requirements.map((item: any) => [item.code, item.state]), [['INSTITUTION_LEGAL_PROFILE', 'COMPLETE'], ['FINANCIAL_PROFILE', 'COMPLETE'], ['FISCAL_CONFIGURATION', 'COMPLETE'], ['RECEIPT_SERIES', 'MISSING']]);
     const reader = await fetch(base, { headers: { Authorization: 'Bearer reader' } });
     assert.equal((await reader.json()).canManageConfiguration, false);
     assert.ok(calls.every(values => values.includes('tenant-a')), 'readiness must use only the server-derived institution');

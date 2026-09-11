@@ -4,8 +4,12 @@ export type FinanceReadinessDto = {
   module: 'FINANCE';
   status: 'READY' | 'INCOMPLETE' | 'BLOCKED';
   canManageConfiguration: boolean;
-  requirements: Array<{ code: 'FINANCIAL_PROFILE' | 'FISCAL_CONFIGURATION' | 'RECEIPT_SERIES'; state: 'COMPLETE' | 'MISSING' | 'BLOCKED' }>;
+  requirements: Array<{ code: 'INSTITUTION_LEGAL_PROFILE' | 'FINANCIAL_PROFILE' | 'FISCAL_CONFIGURATION' | 'RECEIPT_SERIES'; state: 'COMPLETE' | 'MISSING' | 'BLOCKED' }>;
   receiptIssuance: { status: 'READY' } | { status: 'BLOCKED'; reasonCode: string };
+  localPrerequisitesComplete: boolean;
+  jurisdictionPolicyAvailable: boolean;
+  fiscalConfigurationAvailable: boolean;
+  seriesConfigurationAvailable: boolean;
 };
 
 export class FinanceConfigurationError extends Error {
@@ -30,24 +34,24 @@ export class FinanceReadinessClient {
     return response.json() as Promise<FinanceReadinessDto>;
   }
 
-  async createReceiptSeries(input: { code: string; idempotencyKey: string }): Promise<void> {
+  async createLegalProfile(input: { legalName: string; taxIdentifier?: string; countryCode: string; addressLine1: string; effectiveFrom: string }): Promise<void> {
     const token = await this.getToken().catch(() => null);
-    const response = await this.fetcher('/api/finance/document-series', {
+    const response = await this.fetcher('/api/institution/legal-profile', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': input.idempotencyKey, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ code: input.code, documentType: 'receipt', effectiveFrom: new Date().toISOString() }),
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ legalName: input.legalName, taxIdentifier: input.taxIdentifier, registeredAddress: { countryCode: input.countryCode, line1: input.addressLine1 }, effectiveFrom: input.effectiveFrom }),
     });
-    if (!response.ok) throw await configurationError(response, 'FINANCE_RECEIPT_SERIES_CONFIGURATION_FAILED');
+    if (!response.ok) throw await configurationError(response, 'INSTITUTION_LEGAL_PROFILE_FAILED');
   }
 
-  async createFiscalConfiguration(input: { idempotencyKey: string }): Promise<void> {
+  async createFinancialProfile(input: { primaryJurisdiction: string; functionalCurrency: string; financialTimezone: string; monetaryPolicyVersion: string; enabledCurrencies: string[]; effectiveFrom: string }): Promise<void> {
     const token = await this.getToken().catch(() => null);
-    const response = await this.fetcher('/api/finance/fiscal-configurations', {
+    const response = await this.fetcher('/api/finance/profile', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': input.idempotencyKey, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ version: 1, adapterKey: 'core', operationalConfiguration: {}, effectiveFrom: new Date().toISOString() }),
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(input),
     });
-    if (!response.ok) throw await configurationError(response, 'FINANCE_FISCAL_CONFIGURATION_FAILED');
+    if (!response.ok) throw await configurationError(response, 'FINANCIAL_PROFILE_FAILED');
   }
 }
 
@@ -61,6 +65,8 @@ async function configurationError(response: Response, fallback: string): Promise
     FISCAL_CONFIGURATION_VALIDATION: 'A configuração fiscal não é válida para a data indicada.',
     FINANCIAL_DOCUMENT_FORBIDDEN: 'Não tem permissão para concluir a configuração financeira.',
     UNAUTHORIZED: 'Inicie sessão novamente para concluir a configuração.',
+    INSTITUTION_LEGAL_PROFILE_INVALID: 'O perfil jurídico institucional não é válido.',
+    FINANCIAL_PROFILE_INVALID: 'O perfil financeiro institucional não é válido.',
   };
   return new FinanceConfigurationError(code, messages[code] ?? 'Ocorreu um erro inesperado ao guardar a configuração. Tente novamente.');
 }
