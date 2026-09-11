@@ -3,7 +3,7 @@
  * Mission: DOCUMENTS-FOUNDATION-I7
  */
 
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import {
   DocumentOutboxEvent,
   isSupportedDocumentEventSchemaVersion,
@@ -12,9 +12,18 @@ import {
   PostgresDocumentConsumerLedgerRepository,
 } from './document-event-repository.ts';
 
-export interface DocumentEventHandler {
-  (event: DocumentOutboxEvent): Promise<void>;
-}
+export type TransactionalDocumentEventHandler = (
+  client: PoolClient,
+  event: DocumentOutboxEvent,
+) => Promise<void>;
+
+export type NonTransactionalDocumentEventHandler = (
+  event: DocumentOutboxEvent,
+) => Promise<void>;
+
+export type DocumentEventHandler =
+  | TransactionalDocumentEventHandler
+  | NonTransactionalDocumentEventHandler;
 
 export interface ConsumerExecutionResult {
   success: boolean;
@@ -74,8 +83,12 @@ export async function processDocumentEventWithIdempotency(params: {
       return { success: true, alreadyProcessed: true, executed: false };
     }
 
-    // Execute business logic inside or coordinated with ledger transaction
-    await handler(event);
+    // Execute business logic with the transaction client for atomic persistent side effects
+    if (handler.length >= 2) {
+      await (handler as TransactionalDocumentEventHandler)(client, event);
+    } else {
+      await (handler as NonTransactionalDocumentEventHandler)(event);
+    }
 
     await client.query('COMMIT');
     return { success: true, alreadyProcessed: false, executed: true };

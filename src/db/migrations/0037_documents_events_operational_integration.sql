@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS document_outbox_events (
   payload JSONB NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(payload) = 'object'),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'claimed', 'published', 'dead_letter')),
   attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
-  max_attempts INTEGER NOT NULL DEFAULT 5 CHECK (max_attempts > 0),
+  max_attempts INTEGER NOT NULL CHECK (max_attempts > 0),
   next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   claimed_at TIMESTAMPTZ,
   claim_expires_at TIMESTAMPTZ,

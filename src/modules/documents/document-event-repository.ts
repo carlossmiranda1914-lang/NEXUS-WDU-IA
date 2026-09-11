@@ -198,6 +198,7 @@ export class PostgresDocumentOutboxRepository {
     errorCode: string,
     errorMessage: string,
     backoffSeconds: number,
+    policyMaxAttempts?: number,
   ): Promise<void> {
     // Check if max attempts reached -> transition to dead_letter
     const checkRes = await client.query<{ attempts: number; max_attempts: number }>(
@@ -207,7 +208,8 @@ export class PostgresDocumentOutboxRepository {
     if (checkRes.rows.length === 0) return;
 
     const row = checkRes.rows[0];
-    if (row.attempts >= row.max_attempts) {
+    const effectiveMaxAttempts = policyMaxAttempts ?? row.max_attempts;
+    if (row.attempts >= effectiveMaxAttempts) {
       const deadLetterQuery = `
         UPDATE document_outbox_events
            SET status = 'dead_letter',

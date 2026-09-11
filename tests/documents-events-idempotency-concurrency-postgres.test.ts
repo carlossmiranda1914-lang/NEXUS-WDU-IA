@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import pg from 'pg';
+import pg, { type PoolClient } from 'pg';
 import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
 import {
@@ -21,6 +21,7 @@ import {
 import {
   processDocumentEventWithIdempotency,
 } from '../src/modules/documents/document-event-consumer.ts';
+import type { DocumentOutboxEvent } from '../src/modules/documents/document-event-model.ts';
 import type { InstitutionalContext } from '../src/auth/institutional-context.ts';
 
 await verifyApprovedTestConnection();
@@ -67,6 +68,17 @@ describe('Documents Events Idempotency & Concurrency Integration (I7)', () => {
         `INSERT INTO people (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
         [adminPersonId, 'Admin Person'],
       );
+
+      // Dedicated persistent side-effects test table to prove atomic PostgreSQL transactions under redelivery/crash
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS test_consumer_persistent_effects (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          institution_id UUID NOT NULL REFERENCES institutions(id) ON DELETE RESTRICT,
+          event_id UUID NOT NULL REFERENCES document_outbox_events(id) ON DELETE CASCADE,
+          effect_payload TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+      `);
     } finally {
       client.release();
     }
@@ -240,53 +252,210 @@ describe('Documents Events Idempotency & Concurrency Integration (I7)', () => {
     }
   });
 
-  it('DUPLICATE_DELIVERY_CONSUMER_IDEMPOTENCY: consumer processes side-effect only once', async () => {
-    let sideEffectExecutionCount = 0;
-    const consumerId = 'consumer-audit-indexer';
+  it('DUPLICATE_DELIVERY_PERSISTENT_DB_SIDE_EFFECT_EXACTLY_ONCE: transactional DB mutation occurs exactly once', async () => {
+    const consumerId = 'consumer-persistent-indexer';
 
     const client = await pool.connect();
-    let eventToConsume: any;
+    let eventToConsume: DocumentOutboxEvent;
     try {
       eventToConsume = await outboxRepo.insertEvent(client, {
         institutionId,
         eventType: 'document.created',
         aggregateType: 'document',
         aggregateId: randomUUID(),
-        payload: { docRef: 'audit-target-1' },
+        payload: { docRef: 'persistent-target-1' },
       });
     } finally {
       client.release();
     }
 
-    const handler = async () => {
-      sideEffectExecutionCount++;
+    // Transactional handler writing a real database side effect using the provided transaction client
+    const transactionalHandler = async (txClient: PoolClient, evt: DocumentOutboxEvent) => {
+      await txClient.query(
+        `INSERT INTO test_consumer_persistent_effects (institution_id, event_id, effect_payload) VALUES ($1, $2, $3)`,
+        [institutionId, evt.id, JSON.stringify(evt.payload)],
+      );
     };
 
-    // First delivery
+    // First delivery: processes successfully and commits DB side effect + ledger record atomically
     const firstResult = await processDocumentEventWithIdempotency({
       pool,
       institutionId,
       consumerId,
       event: eventToConsume,
-      handler,
+      handler: transactionalHandler,
     });
 
     assert.equal(firstResult.success, true);
     assert.equal(firstResult.alreadyProcessed, false);
-    assert.equal(sideEffectExecutionCount, 1);
+    assert.equal(firstResult.executed, true);
 
-    // Duplicate delivery (redelivery)
+    // Verify DB side-effect table has EXACTLY 1 row
+    const verifyClient = await pool.connect();
+    try {
+      const dbRows = await verifyClient.query<{ count: string }>(
+        `SELECT COUNT(*) FROM test_consumer_persistent_effects WHERE institution_id = $1 AND event_id = $2`,
+        [institutionId, eventToConsume.id],
+      );
+      assert.equal(Number(dbRows.rows[0].count), 1, 'Exactly 1 DB side-effect row must exist after first delivery');
+    } finally {
+      verifyClient.release();
+    }
+
+    // Second delivery (redelivery): duplicate delivery detected, handler skipped, no duplicate DB side-effect
     const duplicateResult = await processDocumentEventWithIdempotency({
       pool,
       institutionId,
       consumerId,
       event: eventToConsume,
-      handler,
+      handler: transactionalHandler,
     });
 
     assert.equal(duplicateResult.success, true);
     assert.equal(duplicateResult.alreadyProcessed, true);
-    assert.equal(sideEffectExecutionCount, 1, 'Duplicate delivery MUST NOT trigger handler again');
+    assert.equal(duplicateResult.executed, false);
+
+    // Verify DB side-effect table STILL has EXACTLY 1 row
+    const recheckClient = await pool.connect();
+    try {
+      const dbRowsAfterDup = await recheckClient.query<{ count: string }>(
+        `SELECT COUNT(*) FROM test_consumer_persistent_effects WHERE institution_id = $1 AND event_id = $2`,
+        [institutionId, eventToConsume.id],
+      );
+      assert.equal(
+        Number(dbRowsAfterDup.rows[0].count),
+        1,
+        'Duplicate delivery MUST NOT create duplicate database rows',
+      );
+    } finally {
+      recheckClient.release();
+    }
+
+    // Concurrent duplicate deliveries: 5 concurrent workers processing the same event
+    const concurrentDeliveries = await Promise.all(
+      Array.from({ length: 5 }).map(() =>
+        processDocumentEventWithIdempotency({
+          pool,
+          institutionId,
+          consumerId,
+          event: eventToConsume,
+          handler: transactionalHandler,
+        }),
+      ),
+    );
+
+    for (const r of concurrentDeliveries) {
+      assert.equal(r.success, true);
+      assert.equal(r.alreadyProcessed, true);
+      assert.equal(r.executed, false);
+    }
+
+    // Verify DB side-effect table still remains exactly 1 row
+    const finalCheckClient = await pool.connect();
+    try {
+      const finalCount = await finalCheckClient.query<{ count: string }>(
+        `SELECT COUNT(*) FROM test_consumer_persistent_effects WHERE institution_id = $1 AND event_id = $2`,
+        [institutionId, eventToConsume.id],
+      );
+      assert.equal(Number(finalCount.rows[0].count), 1);
+    } finally {
+      finalCheckClient.release();
+    }
+  });
+
+  it('CRASH_RETRY_TRANSACTIONAL_SIDE_EFFECT_ROLLBACK: failed handler rolls back persistent side effect and succeeds on retry', async () => {
+    const consumerId = 'consumer-crash-retry-test';
+
+    const client = await pool.connect();
+    let crashEvent: DocumentOutboxEvent;
+    try {
+      crashEvent = await outboxRepo.insertEvent(client, {
+        institutionId,
+        eventType: 'document.created',
+        aggregateType: 'document',
+        aggregateId: randomUUID(),
+        payload: { docRef: 'crash-target-1' },
+      });
+    } finally {
+      client.release();
+    }
+
+    let shouldCrash = true;
+    const crashingHandler = async (txClient: PoolClient, evt: DocumentOutboxEvent) => {
+      // Perform persistent DB insert
+      await txClient.query(
+        `INSERT INTO test_consumer_persistent_effects (institution_id, event_id, effect_payload) VALUES ($1, $2, $3)`,
+        [institutionId, evt.id, JSON.stringify(evt.payload)],
+      );
+
+      if (shouldCrash) {
+        throw new Error('SIMULATED_CONSUMER_CRASH_DURING_PROCESSING');
+      }
+    };
+
+    // Attempt 1: Handler crashes -> atomic transaction rollback
+    await assert.rejects(
+      async () => {
+        await processDocumentEventWithIdempotency({
+          pool,
+          institutionId,
+          consumerId,
+          event: crashEvent,
+          handler: crashingHandler,
+        });
+      },
+      /SIMULATED_CONSUMER_CRASH_DURING_PROCESSING/,
+    );
+
+    // Verify DB side-effect table and ledger have 0 rows (fully rolled back!)
+    const verifyClient = await pool.connect();
+    try {
+      const sideEffectsRes = await verifyClient.query<{ count: string }>(
+        `SELECT COUNT(*) FROM test_consumer_persistent_effects WHERE institution_id = $1 AND event_id = $2`,
+        [institutionId, crashEvent.id],
+      );
+      assert.equal(Number(sideEffectsRes.rows[0].count), 0, 'Side-effect table must have 0 rows after crash rollback');
+
+      const ledgerRes = await verifyClient.query<{ count: string }>(
+        `SELECT COUNT(*) FROM document_event_consumer_ledger WHERE institution_id = $1 AND event_id = $2`,
+        [institutionId, crashEvent.id],
+      );
+      assert.equal(Number(ledgerRes.rows[0].count), 0, 'Consumer ledger must have 0 rows after crash rollback');
+    } finally {
+      verifyClient.release();
+    }
+
+    // Attempt 2: Retry succeeds
+    shouldCrash = false;
+    const retryResult = await processDocumentEventWithIdempotency({
+      pool,
+      institutionId,
+      consumerId,
+      event: crashEvent,
+      handler: crashingHandler,
+    });
+
+    assert.equal(retryResult.success, true);
+    assert.equal(retryResult.alreadyProcessed, false);
+    assert.equal(retryResult.executed, true);
+
+    // Verify DB side-effect table and ledger now have EXACTLY 1 row
+    const retryVerifyClient = await pool.connect();
+    try {
+      const sideEffectsRes = await retryVerifyClient.query<{ count: string }>(
+        `SELECT COUNT(*) FROM test_consumer_persistent_effects WHERE institution_id = $1 AND event_id = $2`,
+        [institutionId, crashEvent.id],
+      );
+      assert.equal(Number(sideEffectsRes.rows[0].count), 1, 'Side-effect table must have 1 row after successful retry');
+
+      const ledgerRes = await retryVerifyClient.query<{ count: string }>(
+        `SELECT COUNT(*) FROM document_event_consumer_ledger WHERE institution_id = $1 AND event_id = $2`,
+        [institutionId, crashEvent.id],
+      );
+      assert.equal(Number(ledgerRes.rows[0].count), 1, 'Consumer ledger must have 1 row after successful retry');
+    } finally {
+      retryVerifyClient.release();
+    }
   });
 
   it('UNSUPPORTED_SCHEMA_VERSION: consumer fails closed and does not record success', async () => {

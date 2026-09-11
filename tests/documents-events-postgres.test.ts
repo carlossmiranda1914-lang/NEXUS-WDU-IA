@@ -190,9 +190,13 @@ describe('Documents Events & Outbox Integration (I7)', () => {
 
     const batchResult = await processDocumentOutboxBatchCommand({
       pool,
-      context: adminContext,
-      batchSize: 10,
-      claimDurationSeconds: 30,
+      authority: adminContext,
+      operationalPolicy: {
+        batchSize: 10,
+        leaseDurationSeconds: 30,
+        maxAttempts: 3,
+        calculateBackoffSeconds: (attempt) => Math.min(60, Math.pow(2, attempt)),
+      },
       dispatcher: async (event) => {
         dispatchedEvents.push(event.id);
         await notificationBridge.publish(event);
@@ -221,6 +225,37 @@ describe('Documents Events & Outbox Integration (I7)', () => {
     }
   });
 
+  it('OUTBOX_BATCH_AUTHORITY_AND_POLICY_SECURITY: rejects raw strings and requires operational policy', async () => {
+    // 1. Missing operational policy -> fail closed
+    await assert.rejects(
+      async () => {
+        await processDocumentOutboxBatchCommand({
+          pool,
+          authority: adminContext,
+          operationalPolicy: undefined as any,
+        });
+      },
+      /OPERATIONAL_POLICY_REQUIRED/,
+    );
+
+    // 2. Raw caller string without trusted worker contract -> fail closed
+    await assert.rejects(
+      async () => {
+        await processDocumentOutboxBatchCommand({
+          pool,
+          authority: { institutionId: 'arbitrary-string' } as any,
+          operationalPolicy: {
+            batchSize: 10,
+            leaseDurationSeconds: 30,
+            maxAttempts: 3,
+            calculateBackoffSeconds: () => 10,
+          },
+        });
+      },
+      /UNAUTHORIZED_WORKER_AUTHORITY/,
+    );
+  });
+
   it('DEAD_LETTER_ON_MAX_ATTEMPTS: poison event transitions to dead_letter state', async () => {
     const client = await pool.connect();
     let poisonEventId: string;
@@ -242,8 +277,13 @@ describe('Documents Events & Outbox Integration (I7)', () => {
     // Process with a failing dispatcher
     const batchResult = await processDocumentOutboxBatchCommand({
       pool,
-      context: adminContext,
-      batchSize: 5,
+      authority: adminContext,
+      operationalPolicy: {
+        batchSize: 5,
+        leaseDurationSeconds: 30,
+        maxAttempts: 1,
+        calculateBackoffSeconds: () => 1,
+      },
       dispatcher: async (event) => {
         if (event.id === poisonEventId) {
           throw new Error('SIMULATED_DISPATCH_FAILURE: Network unreachable');
@@ -316,8 +356,13 @@ describe('Documents Events & Outbox Integration (I7)', () => {
     // Now run outbox batch with failing notification bridge
     const batchResult = await processDocumentOutboxBatchCommand({
       pool,
-      context: adminContext,
-      batchSize: 10,
+      authority: adminContext,
+      operationalPolicy: {
+        batchSize: 10,
+        leaseDurationSeconds: 30,
+        maxAttempts: 3,
+        calculateBackoffSeconds: () => 5,
+      },
       dispatcher: async (event) => {
         await failingBridge.publish(event);
       },

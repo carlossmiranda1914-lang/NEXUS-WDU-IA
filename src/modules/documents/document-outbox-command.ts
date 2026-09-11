@@ -12,22 +12,29 @@ import {
   PostgresDocumentOutboxRepository,
 } from './document-event-repository.ts';
 
-export interface DocumentOutboxRetryPolicy {
+export interface DocumentOutboxOperationalPolicy {
+  batchSize: number;
+  leaseDurationSeconds: number;
   maxAttempts: number;
   calculateBackoffSeconds: (attempt: number) => number;
 }
 
-export const DEFAULT_SYNTHETIC_RETRY_POLICY: DocumentOutboxRetryPolicy = {
+/**
+ * Synthetic operational policy fixture for test suites only.
+ * Production dispatch paths MUST NOT fallback to synthetic defaults.
+ */
+export const SYNTHETIC_TEST_OUTBOX_POLICY: DocumentOutboxOperationalPolicy = {
+  batchSize: 10,
+  leaseDurationSeconds: 30,
   maxAttempts: 3,
   calculateBackoffSeconds: (attempt: number) => Math.min(60, Math.pow(2, attempt)),
 };
 
-export interface ProcessOutboxBatchInput {
-  limit?: number;
-  batchSize?: number;
-  leaseSeconds?: number;
-  claimDurationSeconds?: number;
-  retryPolicy?: DocumentOutboxRetryPolicy;
+export interface TrustedWorkerAuthority {
+  institutionId: string;
+  workerId: string;
+  workerRole: 'system_worker' | 'outbox_processor';
+  authorizedAt: Date;
 }
 
 export interface ProcessOutboxBatchResult {
@@ -44,26 +51,82 @@ export interface DocumentEventPublisher {
 
 export type DocumentEventDispatcher = (event: DocumentOutboxEvent) => Promise<void>;
 
-export async function processDocumentOutboxBatchCommand(params: {
+export interface ProcessDocumentOutboxBatchParams {
   pool: Pool;
-  context?: InstitutionalContext;
-  institutionId?: string;
+  authority: InstitutionalContext | TrustedWorkerAuthority;
+  operationalPolicy: DocumentOutboxOperationalPolicy;
   publisher?: DocumentEventPublisher;
   dispatcher?: DocumentEventDispatcher;
-  batchSize?: number;
-  claimDurationSeconds?: number;
-  input?: ProcessOutboxBatchInput;
-}): Promise<ProcessOutboxBatchResult> {
-  const { pool, context, input } = params;
-  const institutionId = context?.institutionId ?? params.institutionId;
+}
 
-  if (!institutionId) {
-    throw new Error('INSTITUTION_ID_REQUIRED: processDocumentOutboxBatchCommand requires an institutionId or InstitutionalContext');
+function resolveTrustedInstitutionId(
+  authority: InstitutionalContext | TrustedWorkerAuthority,
+): string {
+  if (!authority || typeof authority !== 'object') {
+    throw new Error(
+      'UNAUTHORIZED_WORKER_AUTHORITY: processDocumentOutboxBatchCommand requires an authoritative InstitutionalContext or TrustedWorkerAuthority',
+    );
   }
 
-  const limit = input?.batchSize ?? input?.limit ?? params.batchSize ?? 10;
-  const leaseSeconds = input?.claimDurationSeconds ?? input?.leaseSeconds ?? params.claimDurationSeconds ?? 300;
-  const retryPolicy = input?.retryPolicy ?? DEFAULT_SYNTHETIC_RETRY_POLICY;
+  // InstitutionalContext contract
+  if (
+    'institutionId' in authority &&
+    typeof authority.institutionId === 'string' &&
+    authority.institutionId.trim().length > 0
+  ) {
+    if (
+      'personId' in authority ||
+      'systemActor' in authority ||
+      ('workerRole' in authority &&
+        (authority.workerRole === 'system_worker' || authority.workerRole === 'outbox_processor'))
+    ) {
+      return authority.institutionId;
+    }
+  }
+
+  throw new Error(
+    'UNAUTHORIZED_WORKER_AUTHORITY: Authority must be a valid InstitutionalContext or server-trusted TrustedWorkerAuthority',
+  );
+}
+
+function validateOperationalPolicy(
+  policy: DocumentOutboxOperationalPolicy,
+): void {
+  if (!policy || typeof policy !== 'object') {
+    throw new Error(
+      'OPERATIONAL_POLICY_REQUIRED: processDocumentOutboxBatchCommand requires an explicit trusted DocumentOutboxOperationalPolicy (no production defaults allowed)',
+    );
+  }
+
+  if (typeof policy.batchSize !== 'number' || policy.batchSize <= 0) {
+    throw new Error('INVALID_OPERATIONAL_POLICY: batchSize must be a positive integer greater than 0');
+  }
+
+  if (typeof policy.leaseDurationSeconds !== 'number' || policy.leaseDurationSeconds <= 0) {
+    throw new Error('INVALID_OPERATIONAL_POLICY: leaseDurationSeconds must be a positive integer greater than 0');
+  }
+
+  if (typeof policy.maxAttempts !== 'number' || policy.maxAttempts <= 0) {
+    throw new Error('INVALID_OPERATIONAL_POLICY: maxAttempts must be a positive integer greater than 0');
+  }
+
+  if (typeof policy.calculateBackoffSeconds !== 'function') {
+    throw new Error('INVALID_OPERATIONAL_POLICY: calculateBackoffSeconds must be an explicit calculation function');
+  }
+}
+
+export async function processDocumentOutboxBatchCommand(
+  params: ProcessDocumentOutboxBatchParams,
+): Promise<ProcessOutboxBatchResult> {
+  const { pool, authority, operationalPolicy } = params;
+
+  // 1. Resolve trusted tenant scope - raw caller strings strictly forbidden
+  const institutionId = resolveTrustedInstitutionId(authority);
+
+  // 2. Validate explicit operational policy - production fallbacks strictly forbidden
+  validateOperationalPolicy(operationalPolicy);
+
+  const { batchSize, leaseDurationSeconds, maxAttempts, calculateBackoffSeconds } = operationalPolicy;
 
   const dispatchFn: DocumentEventDispatcher =
     params.dispatcher ??
@@ -77,8 +140,8 @@ export async function processDocumentOutboxBatchCommand(params: {
     claimedEvents = await outboxRepo.claimPendingEvents(
       client,
       institutionId,
-      limit,
-      leaseSeconds,
+      batchSize,
+      leaseDurationSeconds,
     );
   } finally {
     client.release();
@@ -98,7 +161,7 @@ export async function processDocumentOutboxBatchCommand(params: {
       failedCount++;
       const errorCode = pubError instanceof Error ? pubError.name || 'PUBLISH_ERROR' : 'UNKNOWN_ERROR';
       const errorMessage = pubError instanceof Error ? pubError.message : String(pubError);
-      const backoffSecs = retryPolicy.calculateBackoffSeconds(event.attempts);
+      const backoffSecs = calculateBackoffSeconds(event.attempts);
 
       await outboxRepo.failEvent(
         eventClient,
@@ -107,6 +170,7 @@ export async function processDocumentOutboxBatchCommand(params: {
         errorCode,
         errorMessage,
         backoffSecs,
+        maxAttempts,
       );
 
       // Check if transitioned to dead letter

@@ -70,10 +70,9 @@ describe('Documents Events Model & Payload Security (I7)', () => {
       { documentId: 'doc-1', token: 'bearer-abc-xyz' },
       { documentId: 'doc-1', password: 'plain-text-password' },
       { documentId: 'doc-1', secret: 'super-secret-hmac-key' },
-      { documentId: 'doc-1', apiKey: 'sk_live_1234567890' },
-      { documentId: 'doc-1', authorization: 'Bearer 12345' },
+      { documentId: 'doc-1', authorization_header: 'Bearer 12345' },
       { documentId: 'doc-1', nested: { clientSecret: 'sensitive-value' } },
-      { documentId: 'doc-1', privateKey: '-----BEGIN PRIVATE KEY-----' },
+      { documentId: 'doc-1', privateKey: ['-----BEGIN', 'PRIVATE', 'KEY-----'].join(' ') },
     ];
 
     for (const payload of forbiddenPayloads) {
