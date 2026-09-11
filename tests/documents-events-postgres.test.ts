@@ -225,7 +225,7 @@ describe('Documents Events & Outbox Integration (I7)', () => {
     }
   });
 
-  it('OUTBOX_BATCH_AUTHORITY_AND_POLICY_SECURITY: rejects raw strings and requires operational policy', async () => {
+  it('OUTBOX_BATCH_AUTHORITY_AND_POLICY_SECURITY: rejects raw strings and forged worker authority and requires operational policy', async () => {
     // 1. Missing operational policy -> fail closed
     await assert.rejects(
       async () => {
@@ -233,6 +233,7 @@ describe('Documents Events & Outbox Integration (I7)', () => {
           pool,
           authority: adminContext,
           operationalPolicy: undefined as any,
+          dispatcher: async () => {},
         });
       },
       /OPERATIONAL_POLICY_REQUIRED/,
@@ -250,10 +251,106 @@ describe('Documents Events & Outbox Integration (I7)', () => {
             maxAttempts: 3,
             calculateBackoffSeconds: () => 10,
           },
+          dispatcher: async () => {},
         });
       },
       /UNAUTHORIZED_WORKER_AUTHORITY/,
     );
+
+    // 3. Forged worker authority plain object -> fail closed with UNAUTHORIZED_WORKER_AUTHORITY
+    await assert.rejects(
+      async () => {
+        await processDocumentOutboxBatchCommand({
+          pool,
+          authority: {
+            institutionId,
+            workerId: 'forged-worker-1',
+            workerRole: 'system_worker',
+            authorizedAt: new Date(),
+          } as any,
+          operationalPolicy: {
+            batchSize: 10,
+            leaseDurationSeconds: 30,
+            maxAttempts: 3,
+            calculateBackoffSeconds: () => 10,
+          },
+          dispatcher: async () => {},
+        });
+      },
+      /UNAUTHORIZED_WORKER_AUTHORITY/,
+    );
+  });
+
+  it('NO_PUBLISHER_OR_DISPATCHER: fails closed with DISPATCHER_REQUIRED and never falsely marks published', async () => {
+    const client = await pool.connect();
+    let unpubEventId: string;
+    try {
+      const inserted = await outboxRepo.insertEvent(client, {
+        institutionId,
+        eventType: 'document.created',
+        aggregateType: 'document',
+        aggregateId: randomUUID(),
+        payload: { test: 'no-publisher-fail-closed' },
+      });
+      unpubEventId = inserted.id;
+    } finally {
+      client.release();
+    }
+
+    // Call processDocumentOutboxBatchCommand with neither dispatcher nor publisher
+    await assert.rejects(
+      async () => {
+        await processDocumentOutboxBatchCommand({
+          pool,
+          authority: adminContext,
+          operationalPolicy: {
+            batchSize: 10,
+            leaseDurationSeconds: 30,
+            maxAttempts: 3,
+            calculateBackoffSeconds: () => 10,
+          },
+        });
+      },
+      /DISPATCHER_REQUIRED/,
+    );
+
+    // Verify event is NOT marked published; published_at remains NULL
+    const checkClient = await pool.connect();
+    try {
+      const eventRow = await outboxRepo.getEventById(checkClient, institutionId, unpubEventId);
+      assert.ok(eventRow != null);
+      assert.notEqual(eventRow.status, 'published');
+      assert.equal(eventRow.publishedAt, null, 'publishedAt must remain NULL when no dispatcher exists');
+    } finally {
+      checkClient.release();
+    }
+  });
+
+  it('CROSS_TENANT_CLAIM_ISOLATION: worker claiming for Institution A cannot claim Institution B events', async () => {
+    const otherInstId = '00000000-0000-0000-0000-000000000099';
+    const client = await pool.connect();
+    try {
+      await client.query(
+        `INSERT INTO institutions (id, name, slug) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+        [otherInstId, 'Other Academy', 'other-academy'],
+      );
+      await outboxRepo.insertEvent(client, {
+        institutionId: otherInstId,
+        eventType: 'document.created',
+        aggregateType: 'document',
+        aggregateId: randomUUID(),
+        payload: { tenant: 'other' },
+      });
+
+      // Claim as institutionId (tenant A)
+      const claimed = await outboxRepo.claimPendingEvents(client, institutionId, 50, 30);
+      for (const evt of claimed) {
+        assert.equal(evt.institutionId, institutionId, 'Claimed event must strictly match tenant A');
+        assert.notEqual(evt.institutionId, otherInstId, 'Tenant A worker must NEVER claim Tenant B event');
+      }
+    } finally {
+      client.release();
+    }
   });
 
   it('DEAD_LETTER_ON_MAX_ATTEMPTS: poison event transitions to dead_letter state', async () => {

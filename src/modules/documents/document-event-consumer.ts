@@ -12,18 +12,12 @@ import {
   PostgresDocumentConsumerLedgerRepository,
 } from './document-event-repository.ts';
 
-export type TransactionalDocumentEventHandler = (
+export type DocumentEventHandler = (
   client: PoolClient,
   event: DocumentOutboxEvent,
 ) => Promise<void>;
 
-export type NonTransactionalDocumentEventHandler = (
-  event: DocumentOutboxEvent,
-) => Promise<void>;
-
-export type DocumentEventHandler =
-  | TransactionalDocumentEventHandler
-  | NonTransactionalDocumentEventHandler;
+export type TransactionalDocumentEventHandler = DocumentEventHandler;
 
 export interface ConsumerExecutionResult {
   success: boolean;
@@ -83,12 +77,8 @@ export async function processDocumentEventWithIdempotency(params: {
       return { success: true, alreadyProcessed: true, executed: false };
     }
 
-    // Execute business logic with the transaction client for atomic persistent side effects
-    if (handler.length >= 2) {
-      await (handler as TransactionalDocumentEventHandler)(client, event);
-    } else {
-      await (handler as NonTransactionalDocumentEventHandler)(event);
-    }
+    // Invariant: Consumer ledger insert + persistent consumer side effect executed in SAME PostgreSQL transaction
+    await handler(client, event);
 
     await client.query('COMMIT');
     return { success: true, alreadyProcessed: false, executed: true };
@@ -138,7 +128,7 @@ export class MockNotificationBridge {
 export function createDocumentNotificationBridgeHandler(
   bridge: MockNotificationBridge,
 ): DocumentEventHandler {
-  return async (event: DocumentOutboxEvent) => {
+  return async (_client: PoolClient, event: DocumentOutboxEvent) => {
     switch (event.eventType) {
       case 'document.verification_passed':
         await bridge.notify({

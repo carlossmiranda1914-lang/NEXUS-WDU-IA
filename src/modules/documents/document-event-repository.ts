@@ -99,7 +99,10 @@ export class PostgresDocumentOutboxRepository {
         : intent.actorPersonId
         ? 'person'
         : 'system';
-    const maxAttempts = intent.maxAttempts ?? 5;
+    const maxAttempts =
+      typeof intent.maxAttempts === 'number' && intent.maxAttempts > 0
+        ? intent.maxAttempts
+        : 3;
 
     const query = `
       INSERT INTO document_outbox_events (
@@ -198,18 +201,23 @@ export class PostgresDocumentOutboxRepository {
     errorCode: string,
     errorMessage: string,
     backoffSeconds: number,
-    policyMaxAttempts?: number,
+    policyMaxAttempts: number,
   ): Promise<void> {
-    // Check if max attempts reached -> transition to dead_letter
-    const checkRes = await client.query<{ attempts: number; max_attempts: number }>(
-      `SELECT attempts, max_attempts FROM document_outbox_events WHERE institution_id = $1 AND id = $2`,
+    if (typeof backoffSeconds !== 'number' || backoffSeconds < 0) {
+      throw new Error('OPERATIONAL_POLICY_REQUIRED: backoffSeconds must be a non-negative number');
+    }
+    if (typeof policyMaxAttempts !== 'number' || policyMaxAttempts <= 0) {
+      throw new Error('OPERATIONAL_POLICY_REQUIRED: policyMaxAttempts must be a positive number');
+    }
+
+    const checkRes = await client.query<{ attempts: number }>(
+      `SELECT attempts FROM document_outbox_events WHERE institution_id = $1 AND id = $2`,
       [institutionId, eventId],
     );
     if (checkRes.rows.length === 0) return;
 
     const row = checkRes.rows[0];
-    const effectiveMaxAttempts = policyMaxAttempts ?? row.max_attempts;
-    if (row.attempts >= effectiveMaxAttempts) {
+    if (row.attempts >= policyMaxAttempts) {
       const deadLetterQuery = `
         UPDATE document_outbox_events
            SET status = 'dead_letter',
@@ -311,20 +319,23 @@ export class PostgresDocumentOutboxRepository {
     client: PoolClient,
     institutionId: string,
     eventId: string,
-    error: { errorCode?: string; errorMessage?: string; backoffSeconds?: number },
+    error: { errorCode: string; errorMessage: string; backoffSeconds: number; policyMaxAttempts: number },
   ): Promise<boolean> {
-    const errorCode = error.errorCode ?? 'PROCESSING_ERROR';
-    const errorMessage = error.errorMessage ?? 'Processing failed';
-    const backoffSeconds = error.backoffSeconds ?? 10;
+    if (typeof error.backoffSeconds !== 'number' || error.backoffSeconds < 0) {
+      throw new Error('OPERATIONAL_POLICY_REQUIRED: backoffSeconds must be a non-negative number');
+    }
+    if (typeof error.policyMaxAttempts !== 'number' || error.policyMaxAttempts <= 0) {
+      throw new Error('OPERATIONAL_POLICY_REQUIRED: policyMaxAttempts must be a positive number');
+    }
 
-    const checkRes = await client.query<{ attempts: number; max_attempts: number }>(
-      `SELECT attempts, max_attempts FROM document_outbox_events WHERE institution_id = $1 AND id = $2`,
+    const checkRes = await client.query<{ attempts: number }>(
+      `SELECT attempts FROM document_outbox_events WHERE institution_id = $1 AND id = $2`,
       [institutionId, eventId],
     );
     if (checkRes.rows.length === 0) return false;
 
     const row = checkRes.rows[0];
-    if (row.attempts >= row.max_attempts) {
+    if (row.attempts >= error.policyMaxAttempts) {
       const deadLetterQuery = `
         UPDATE document_outbox_events
            SET status = 'dead_letter',
@@ -338,7 +349,7 @@ export class PostgresDocumentOutboxRepository {
            AND id = $2
          RETURNING id
       `;
-      const dlRes = await client.query(deadLetterQuery, [institutionId, eventId, errorCode, errorMessage]);
+      const dlRes = await client.query(deadLetterQuery, [institutionId, eventId, error.errorCode, error.errorMessage]);
       return dlRes.rows.length > 0;
     } else {
       const retryQuery = `
@@ -354,7 +365,7 @@ export class PostgresDocumentOutboxRepository {
            AND id = $2
          RETURNING id
       `;
-      const retryRes = await client.query(retryQuery, [institutionId, eventId, backoffSeconds, errorCode, errorMessage]);
+      const retryRes = await client.query(retryQuery, [institutionId, eventId, error.backoffSeconds, error.errorCode, error.errorMessage]);
       return retryRes.rows.length > 0;
     }
   }

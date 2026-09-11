@@ -19,6 +19,9 @@ import {
   createDocumentWithInitialVersionCommand,
 } from '../src/modules/documents/document-command.ts';
 import {
+  processDocumentOutboxBatchCommand,
+} from '../src/modules/documents/document-outbox-command.ts';
+import {
   processDocumentEventWithIdempotency,
 } from '../src/modules/documents/document-event-consumer.ts';
 import type { DocumentOutboxEvent } from '../src/modules/documents/document-event-model.ts';
@@ -493,7 +496,7 @@ describe('Documents Events Idempotency & Concurrency Integration (I7)', () => {
       institutionId,
       consumerId,
       event: unsupportedEvent,
-      handler: async () => {
+      handler: async (_client, _event) => {
         handlerExecuted = true;
       },
     });
@@ -501,5 +504,63 @@ describe('Documents Events Idempotency & Concurrency Integration (I7)', () => {
     assert.equal(result.success, false);
     assert.equal(result.errorCode, 'UNSUPPORTED_SCHEMA_VERSION');
     assert.equal(handlerExecuted, false, 'Handler must not execute for unsupported schema version');
+  });
+
+  it('FORGED_WORKER_AUTHORITY: rejected with UNAUTHORIZED_WORKER_AUTHORITY and claims ZERO events', async () => {
+    // Insert a pending event
+    const client = await pool.connect();
+    let pendingEvtId: string;
+    try {
+      const inserted = await outboxRepo.insertEvent(client, {
+        institutionId,
+        eventType: 'document.created',
+        aggregateType: 'document',
+        aggregateId: randomUUID(),
+        payload: { doc: 'forged-authority-test' },
+      });
+      pendingEvtId = inserted.id;
+    } finally {
+      client.release();
+    }
+
+    // Attempt batch processing with forged worker authority
+    let claimedCount = 0;
+    await assert.rejects(
+      async () => {
+        const res = await processDocumentOutboxBatchCommand({
+          pool,
+          authority: {
+            institutionId,
+            workerId: 'forged-worker-99',
+            workerRole: 'system_worker',
+            authorizedAt: new Date(),
+          } as any,
+          operationalPolicy: {
+            batchSize: 10,
+            leaseDurationSeconds: 30,
+            maxAttempts: 3,
+            calculateBackoffSeconds: () => 10,
+          },
+          dispatcher: async () => {
+            claimedCount++;
+          },
+        });
+        claimedCount = res.claimedCount;
+      },
+      /UNAUTHORIZED_WORKER_AUTHORITY/,
+    );
+
+    assert.equal(claimedCount, 0, 'ZERO events must be claimed or dispatched when authority is forged');
+
+    // Verify pending event was NOT claimed
+    const checkClient = await pool.connect();
+    try {
+      const evt = await outboxRepo.getEventById(checkClient, institutionId, pendingEvtId);
+      assert.ok(evt != null);
+      assert.equal(evt.status, 'pending');
+      assert.equal(evt.claimedAt, null);
+    } finally {
+      checkClient.release();
+    }
   });
 });

@@ -145,6 +145,8 @@ describe('Documents Events Multi-Tenant Negative Security Tests (I7)', () => {
       const failByB = await outboxRepo.markEventFailed(client, institutionB, eventA.id, {
         errorCode: 'ERR_HACK',
         errorMessage: 'Unauthorized state update',
+        backoffSeconds: 10,
+        policyMaxAttempts: 3,
       });
       assert.equal(failByB, false, 'Institution B must not be able to fail Institution A event');
 

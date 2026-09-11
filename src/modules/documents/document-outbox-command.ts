@@ -30,13 +30,6 @@ export const SYNTHETIC_TEST_OUTBOX_POLICY: DocumentOutboxOperationalPolicy = {
   calculateBackoffSeconds: (attempt: number) => Math.min(60, Math.pow(2, attempt)),
 };
 
-export interface TrustedWorkerAuthority {
-  institutionId: string;
-  workerId: string;
-  workerRole: 'system_worker' | 'outbox_processor';
-  authorizedAt: Date;
-}
-
 export interface ProcessOutboxBatchResult {
   claimedCount: number;
   publishedCount: number;
@@ -53,40 +46,43 @@ export type DocumentEventDispatcher = (event: DocumentOutboxEvent) => Promise<vo
 
 export interface ProcessDocumentOutboxBatchParams {
   pool: Pool;
-  authority: InstitutionalContext | TrustedWorkerAuthority;
+  authority: InstitutionalContext;
   operationalPolicy: DocumentOutboxOperationalPolicy;
   publisher?: DocumentEventPublisher;
   dispatcher?: DocumentEventDispatcher;
 }
 
 function resolveTrustedInstitutionId(
-  authority: InstitutionalContext | TrustedWorkerAuthority,
+  authority: InstitutionalContext,
 ): string {
   if (!authority || typeof authority !== 'object') {
     throw new Error(
-      'UNAUTHORIZED_WORKER_AUTHORITY: processDocumentOutboxBatchCommand requires an authoritative InstitutionalContext or TrustedWorkerAuthority',
+      'UNAUTHORIZED_WORKER_AUTHORITY: processDocumentOutboxBatchCommand requires an authoritative InstitutionalContext',
     );
   }
 
-  // InstitutionalContext contract
+  // Validate InstitutionalContext fields strictly
   if (
-    'institutionId' in authority &&
-    typeof authority.institutionId === 'string' &&
-    authority.institutionId.trim().length > 0
+    typeof authority.institutionId !== 'string' ||
+    authority.institutionId.trim().length === 0 ||
+    typeof authority.personId !== 'string' ||
+    authority.personId.trim().length === 0 ||
+    typeof authority.role !== 'string' ||
+    !authority.role
   ) {
-    if (
-      'personId' in authority ||
-      'systemActor' in authority ||
-      ('workerRole' in authority &&
-        (authority.workerRole === 'system_worker' || authority.workerRole === 'outbox_processor'))
-    ) {
-      return authority.institutionId;
-    }
+    throw new Error(
+      'UNAUTHORIZED_WORKER_AUTHORITY: Authority must be an authentic InstitutionalContext with personId and institutional role',
+    );
   }
 
-  throw new Error(
-    'UNAUTHORIZED_WORKER_AUTHORITY: Authority must be a valid InstitutionalContext or server-trusted TrustedWorkerAuthority',
-  );
+  // Reject forged plain worker authority objects
+  if ('workerRole' in authority || 'workerId' in authority) {
+    throw new Error(
+      'UNAUTHORIZED_WORKER_AUTHORITY: Arbitrary or forged worker authority objects are rejected. Use authoritative InstitutionalContext.',
+    );
+  }
+
+  return authority.institutionId;
 }
 
 function validateOperationalPolicy(
@@ -98,15 +94,15 @@ function validateOperationalPolicy(
     );
   }
 
-  if (typeof policy.batchSize !== 'number' || policy.batchSize <= 0) {
+  if (typeof policy.batchSize !== 'number' || policy.batchSize <= 0 || !Number.isInteger(policy.batchSize)) {
     throw new Error('INVALID_OPERATIONAL_POLICY: batchSize must be a positive integer greater than 0');
   }
 
   if (typeof policy.leaseDurationSeconds !== 'number' || policy.leaseDurationSeconds <= 0) {
-    throw new Error('INVALID_OPERATIONAL_POLICY: leaseDurationSeconds must be a positive integer greater than 0');
+    throw new Error('INVALID_OPERATIONAL_POLICY: leaseDurationSeconds must be a positive number greater than 0');
   }
 
-  if (typeof policy.maxAttempts !== 'number' || policy.maxAttempts <= 0) {
+  if (typeof policy.maxAttempts !== 'number' || policy.maxAttempts <= 0 || !Number.isInteger(policy.maxAttempts)) {
     throw new Error('INVALID_OPERATIONAL_POLICY: maxAttempts must be a positive integer greater than 0');
   }
 
@@ -120,17 +116,23 @@ export async function processDocumentOutboxBatchCommand(
 ): Promise<ProcessOutboxBatchResult> {
   const { pool, authority, operationalPolicy } = params;
 
-  // 1. Resolve trusted tenant scope - raw caller strings strictly forbidden
+  // 1. Resolve trusted tenant scope - raw caller strings / forged worker objects strictly forbidden
   const institutionId = resolveTrustedInstitutionId(authority);
 
   // 2. Validate explicit operational policy - production fallbacks strictly forbidden
   validateOperationalPolicy(operationalPolicy);
 
+  // 3. Fail closed if neither dispatcher nor publisher is provided
+  if (!params.dispatcher && !params.publisher) {
+    throw new Error(
+      'DISPATCHER_REQUIRED: processDocumentOutboxBatchCommand requires an explicit dispatcher or publisher (fail closed)',
+    );
+  }
+
   const { batchSize, leaseDurationSeconds, maxAttempts, calculateBackoffSeconds } = operationalPolicy;
 
   const dispatchFn: DocumentEventDispatcher =
-    params.dispatcher ??
-    (params.publisher ? (event) => params.publisher!.publish(event) : async () => {});
+    params.dispatcher ?? ((event) => params.publisher!.publish(event));
 
   const outboxRepo = new PostgresDocumentOutboxRepository();
   const client = await pool.connect();
@@ -162,6 +164,10 @@ export async function processDocumentOutboxBatchCommand(
       const errorCode = pubError instanceof Error ? pubError.name || 'PUBLISH_ERROR' : 'UNKNOWN_ERROR';
       const errorMessage = pubError instanceof Error ? pubError.message : String(pubError);
       const backoffSecs = calculateBackoffSeconds(event.attempts);
+
+      if (typeof backoffSecs !== 'number' || backoffSecs < 0) {
+        throw new Error('INVALID_OPERATIONAL_POLICY: calculateBackoffSeconds returned an invalid backoff value');
+      }
 
       await outboxRepo.failEvent(
         eventClient,
