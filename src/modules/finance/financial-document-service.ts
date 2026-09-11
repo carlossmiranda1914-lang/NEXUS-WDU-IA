@@ -3,10 +3,11 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { createCanonicalFinanceFingerprint, executeIdempotentFinanceCommand } from './finance-command.ts';
 import { resolveReceiptEligibility } from './financial-document-eligibility.ts';
-import { FiscalAdapterRegistry, productionFiscalAdapterRegistry } from './fiscal-adapter-registry.ts';
+import { FiscalAdapterRegistry, productionFiscalAdapterRegistry, resolveDocumentaryPolicy } from './fiscal-adapter-registry.ts';
 import { resolveEffectiveInstitutionLegalProfile } from '../institution/institution-legal-profile.ts';
 import { resolveDocumentParties, resolveDocumentaryPartySnapshot } from './document-party-resolution.ts';
 import { composeReceiptDocumentarySnapshotV2, decodeDocumentarySnapshot } from './documentary-snapshot.ts';
+import { captureReceiptSettlement } from './documentary-settlement-capture.ts';
 
 export type FinancialDocumentIssuanceCommand = {
   institutionId: string;
@@ -44,6 +45,7 @@ export class PostgresFinancialDocumentRepository {
       if (eligibility.eligible === false) throw new Error(eligibility.reasonCode);
       const sourceRow = eligibility.payment;
       const fiscalAdapter = eligibility.adapter;
+      const documentaryPolicy = resolveDocumentaryPolicy(fiscalAdapter, command.documentType);
       if (!sourceRow.financialAccountId) throw new Error('DOCUMENT_RECIPIENT_REQUIRED');
       const issuerProfile = await resolveEffectiveInstitutionLegalProfile(client, command.institutionId, sourceRow.effectiveAt);
       if (!issuerProfile) throw new Error('INSTITUTION_LEGAL_PROFILE_REQUIRED');
@@ -54,7 +56,8 @@ export class PostgresFinancialDocumentRepository {
       });
       const recipient = await resolveDocumentaryPartySnapshot(client, parties.recipient);
       const payer = parties.payer ? await resolveDocumentaryPartySnapshot(client, parties.payer) : undefined;
-      const issuedAt = new Date();
+      const issuedAt = (await client.query<{ issued_at: Date }>('SELECT clock_timestamp() issued_at')).rows[0]!.issued_at;
+      const settlement = await captureReceiptSettlement(client, { institutionId: command.institutionId, paymentId: sourceRow.id, paymentAmount: sourceRow.amount, currency: sourceRow.currency, asOf: issuedAt });
       const documentarySnapshot = composeReceiptDocumentarySnapshotV2({
         documentType: command.documentType, issuedAt,
         issuer: { legalName: issuerProfile.legalName, taxIdentifier: issuerProfile.taxIdentifier, address: { countryCode: issuerProfile.registeredAddress.countryCode, line1: issuerProfile.registeredAddress.line1 } },
@@ -62,6 +65,8 @@ export class PostgresFinancialDocumentRepository {
         billingParty: { name: recipient.name, authorityId: recipient.authorityId }, ...(payer ? { payer: { name: payer.name, authorityId: payer.authorityId } } : {}),
         paymentAuthorityId: sourceRow.id, paymentReference: sourceRow.paymentReference, paymentConfirmedAt: sourceRow.effectiveAt, paymentMethod: sourceRow.method, amount: sourceRow.amount, currency: sourceRow.currency,
         jurisdictionCode: fiscalAdapter.key, policyVersion: fiscalAdapter.policy.version, financialProfileVersion: sourceRow.financialProfileVersion, fiscalConfigurationVersion: eligibility.fiscalConfiguration.version, seriesId: command.seriesId, adapterKey: fiscalAdapter.key,
+        taxTreatment: documentaryPolicy.taxTreatment, legalMentions: documentaryPolicy.legalMentions,
+        obligations: settlement.obligations, allocations: settlement.allocations, ...(settlement.unallocated ? { unallocated: settlement.unallocated } : {}),
       });
       const fiscalPolicySnapshot = { adapterKey: fiscalAdapter.key, documentType: command.documentType, policyVersion: fiscalAdapter.policy.version };
       const sourceSnapshot = {
@@ -108,7 +113,8 @@ export class PostgresFinancialDocumentRepository {
         if (!paymentSource) throw new Error('FINANCIAL_DOCUMENT_CORRECTION_SOURCE_UNSUPPORTED');
         const eligibility = await resolveReceiptEligibility(client, this.fiscalAdapters, { institutionId: command.institutionId, paymentId: paymentSource.source_id, seriesId: command.seriesId, documentType: 'receipt', lock: true });
         if (eligibility.eligible === false) throw new Error(eligibility.reasonCode);
-        if (!eligibility.adapter.policy.supportedDocumentTypes.includes(command.documentType)) throw new Error('DOCUMENT_TYPE_UNSUPPORTED');
+        // The Payment remains provenance only. The corrective type is authorized by its own explicit policy entry.
+        const documentaryPolicy = resolveDocumentaryPolicy(eligibility.adapter, command.documentType);
         const sourceRow = eligibility.payment;
         if (!sourceRow.financialAccountId) throw new Error('DOCUMENT_RECIPIENT_REQUIRED');
         const issuerProfile = await resolveEffectiveInstitutionLegalProfile(client, command.institutionId, sourceRow.effectiveAt);
@@ -117,9 +123,10 @@ export class PostgresFinancialDocumentRepository {
         const recipient = await resolveDocumentaryPartySnapshot(client, parties.recipient);
         const payer = parties.payer ? await resolveDocumentaryPartySnapshot(client, parties.payer) : undefined;
         const originalSnapshotVersion = original.rows[0].documentary_snapshot ? decodeDocumentarySnapshot(original.rows[0].documentary_snapshot).snapshotVersion : 1;
-        const issuedAt = new Date();
+        const issuedAt = (await client.query<{ issued_at: Date }>('SELECT clock_timestamp() issued_at')).rows[0]!.issued_at;
+        const settlement = await captureReceiptSettlement(client, { institutionId: command.institutionId, paymentId: sourceRow.id, paymentAmount: sourceRow.amount, currency: sourceRow.currency, asOf: issuedAt });
         const documentarySnapshot = {
-          ...composeReceiptDocumentarySnapshotV2({ documentType: command.documentType, issuedAt, issuer: { legalName: issuerProfile.legalName, taxIdentifier: issuerProfile.taxIdentifier, address: { countryCode: issuerProfile.registeredAddress.countryCode, line1: issuerProfile.registeredAddress.line1 } }, recipient: { name: recipient.name, authorityId: recipient.authorityId }, billingParty: { name: recipient.name, authorityId: recipient.authorityId }, ...(payer ? { payer: { name: payer.name, authorityId: payer.authorityId } } : {}), paymentAuthorityId: sourceRow.id, paymentReference: sourceRow.paymentReference, paymentConfirmedAt: sourceRow.effectiveAt, paymentMethod: sourceRow.method, amount: sourceRow.amount, currency: sourceRow.currency, jurisdictionCode: eligibility.adapter.key, policyVersion: eligibility.adapter.policy.version, financialProfileVersion: sourceRow.financialProfileVersion, fiscalConfigurationVersion: eligibility.fiscalConfiguration.version, seriesId: command.seriesId, adapterKey: eligibility.adapter.key }),
+          ...composeReceiptDocumentarySnapshotV2({ documentType: command.documentType, issuedAt, issuer: { legalName: issuerProfile.legalName, taxIdentifier: issuerProfile.taxIdentifier, address: { countryCode: issuerProfile.registeredAddress.countryCode, line1: issuerProfile.registeredAddress.line1 } }, recipient: { name: recipient.name, authorityId: recipient.authorityId }, billingParty: { name: recipient.name, authorityId: recipient.authorityId }, ...(payer ? { payer: { name: payer.name, authorityId: payer.authorityId } } : {}), paymentAuthorityId: sourceRow.id, paymentReference: sourceRow.paymentReference, paymentConfirmedAt: sourceRow.effectiveAt, paymentMethod: sourceRow.method, amount: sourceRow.amount, currency: sourceRow.currency, jurisdictionCode: eligibility.adapter.key, policyVersion: eligibility.adapter.policy.version, financialProfileVersion: sourceRow.financialProfileVersion, fiscalConfigurationVersion: eligibility.fiscalConfiguration.version, seriesId: command.seriesId, adapterKey: eligibility.adapter.key, taxTreatment: documentaryPolicy.taxTreatment, legalMentions: documentaryPolicy.legalMentions, obligations: settlement.obligations, allocations: settlement.allocations, ...(settlement.unallocated ? { unallocated: settlement.unallocated } : {}) }),
           correction: { originalDocumentId: command.originalDocumentId, originalSnapshotVersion },
         };
         const sourceSnapshot = { sourceType: 'payment', sourceId: sourceRow.id, paymentReference: sourceRow.paymentReference, journalTransactionId: sourceRow.journalTransactionId, amount: sourceRow.amount, currency: sourceRow.currency, effectiveAt: sourceRow.effectiveAt.toISOString(), financialProfileVersion: sourceRow.financialProfileVersion };

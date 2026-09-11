@@ -25,6 +25,20 @@ async function seedConfirmedPayment(client: pg.PoolClient, institutionId: string
   return paymentId;
 }
 
+async function seedAuthoritativePaymentAllocations(client: pg.PoolClient, institutionId: string, paymentId: string) {
+  const payment = await client.query<{ financial_account_id: string; actor_person_id: string }>('SELECT financial_account_id,actor_person_id FROM finance_payments WHERE institution_id=$1 AND id=$2', [institutionId, paymentId]);
+  const accountId = payment.rows[0]!.financial_account_id; const actorId = payment.rows[0]!.actor_person_id;
+  const feeTypeId = randomUUID(); const feeItemId = randomUUID();
+  await client.query("INSERT INTO finance_fee_types(id,institution_id,source,display_name,code_prefix) VALUES($1,$2,'institution_custom','Snapshot fee','SNAP')", [feeTypeId, institutionId]);
+  await client.query("INSERT INTO finance_fee_catalogue_items(id,institution_id,fee_type_id,code,current_version,created_by_person_id) VALUES($1,$2,$3,'SNAP-1',1,$4)", [feeItemId, institutionId, feeTypeId, actorId]);
+  await client.query("INSERT INTO finance_fee_catalogue_versions(institution_id,item_id,fee_type_id,version,name,kind,amount,currency,effective_from,created_by_person_id) VALUES($1,$2,$3,1,'Snapshot fee','fee',10,'EUR',now(),$4)", [institutionId, feeItemId, feeTypeId, actorId]);
+  const obligationA = randomUUID(); const obligationB = randomUUID();
+  for (const [id, reference] of [[obligationA, 'snapshot-a'], [obligationB, 'snapshot-b']] as const) await client.query("INSERT INTO finance_obligations(id,institution_id,financial_account_id,fee_catalogue_item_id,fee_catalogue_version,source_type,source_ref,amount,currency,status,financial_profile_version,created_by_person_id,idempotency_key) VALUES($1,$2,$3,$4,1,'manual_finance',$5,10,'EUR','open',1,$6,$7)", [id, institutionId, accountId, feeItemId, reference, actorId, `snapshot-${id}`]);
+  const journalId = randomUUID();
+  await client.query("INSERT INTO finance_journal_transactions(id,institution_id,status,currency,amount,command_id,journal_type,actor_person_id,financial_profile_version,confirmed_at) VALUES($1,$2,'confirmed','EUR',7,$3,'payment_allocation',$4,1,now())", [journalId, institutionId, `snapshot-allocation-${paymentId}`, actorId]);
+  for (const [obligationId, amount] of [[obligationA, '3'], [obligationB, '4']] as const) await client.query("INSERT INTO finance_allocations(id,institution_id,financial_account_id,payment_id,obligation_id,journal_transaction_id,amount,currency,effective_at,actor_person_id) VALUES($1,$2,$3,$4,$5,$6,$7,'EUR',now(),$8)", [randomUUID(), institutionId, accountId, paymentId, obligationId, journalId, amount, actorId]);
+}
+
 test('F7-01 issuance is idempotent, tenant-safe, and allocates series numbers atomically', async () => {
   const harness: any = {};
   await assert.rejects(() => issueFinancialDocumentCommand(harness, { institutionId: 'a', sourceInstitutionId: 'b', sourceType: 'payment', sourceId: 'payment-a', seriesId: 's', idempotencyKey: 'key-a' }));
@@ -55,6 +69,7 @@ test('F7-01 PostgreSQL issuance replays idempotently and allocates a series numb
       await client.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'Document institution','document-institution','active')", [institutionId]);
       await client.query("INSERT INTO finance_financial_document_series(id,institution_id,code,next_sequence_number) VALUES($1,$2,'DOC',1)", [seriesId, institutionId]);
       paymentId = await seedConfirmedPayment(client, institutionId);
+      await seedAuthoritativePaymentAllocations(client, institutionId, paymentId);
     } finally { client.release(); }
     const repo = new PostgresFinancialDocumentRepository(pool, createSyntheticUatFiscalAdapterRegistry());
     const eligibility = new FinancialDocumentEligibilityService(pool, createSyntheticUatFiscalAdapterRegistry());
@@ -82,8 +97,12 @@ test('F7-01 PostgreSQL issuance replays idempotently and allocates a series numb
     assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.issuer.legalName, 'Document Institution');
     assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.recipient.name, 'Document recipient');
     assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.payment.reference, `PAY-${paymentId!.slice(0, 8)}`);
-    assert.deepEqual(documentarySnapshot.rows[0]?.documentary_snapshot.allocations, [], 'a payment without allocations must not fabricate settlement entries');
-    assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.unallocated.amount, documentarySnapshot.rows[0]?.documentary_snapshot.payment.amount, 'unallocated payment value must remain explicit and exact');
+    const capturedSnapshot: any = documentarySnapshot.rows[0]?.documentary_snapshot;
+    assert.equal(capturedSnapshot.allocations.length, 2, 'V2 must persist each authoritative payment allocation');
+    assert.deepEqual(capturedSnapshot.allocations.map((allocation: any) => [allocation.before.amount, allocation.movement.amount, allocation.after.amount]).sort(), [['10', '3', '7'], ['10', '4', '6']], 'V2 must persist authoritative before/movement/after values');
+    assert.equal(capturedSnapshot.obligations.length, 2, 'V2 must preserve each allocated obligation');
+    assert.ok(capturedSnapshot.obligations.every((obligation: any) => obligation.components[0]?.provenance.sourceType === 'manual_finance'), 'components must retain their authoritative source provenance');
+    assert.equal(capturedSnapshot.unallocated.amount, '3', 'the residual is payment less authoritative allocations, never a fabricated full payment');
     await pool.query("UPDATE people SET name='Renamed live recipient' WHERE name='Document recipient'");
     await new InstitutionLegalProfileRepository(pool).createVersion({ institutionId, legalName: 'Renamed live institution', taxIdentifier: 'PT999999990', registeredAddress: { countryCode: 'PT', line1: 'Rua do Nexus, 2' }, effectiveFrom: new Date() });
     const replayAfterLiveChange = await repo.issue(command);
@@ -130,6 +149,7 @@ test('F7 document issuance fails closed without legal profile or billing recipie
       await client.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'Snapshot guard','snapshot-guard','active')", [institutionId]);
       await client.query("INSERT INTO finance_financial_document_series(id,institution_id,code,next_sequence_number) VALUES($1,$2,'GUARD',1)", [seriesId, institutionId]);
       paymentId = await seedConfirmedPayment(client, institutionId);
+      await seedAuthoritativePaymentAllocations(client, institutionId, paymentId);
       await client.query("UPDATE institution_legal_profiles SET effective_to=now()-interval '1 hour' WHERE institution_id=$1", [institutionId]);
     } finally { client.release(); }
     const repo = new PostgresFinancialDocumentRepository(pool, createSyntheticUatFiscalAdapterRegistry());
@@ -216,9 +236,14 @@ test('F7-01 correction creates an idempotent immutable fact without changing eco
     assert.deepEqual(after.rows[0]?.documentary_snapshot, before.rows[0]?.documentary_snapshot, 'original documentary evidence remains queryable unchanged');
     assert.equal((after.rows[0]?.correction_snapshot as { snapshotVersion?: number })?.snapshotVersion, 2, 'a correction after cutover must own a V2 snapshot');
     assert.notDeepEqual(after.rows[0]?.correction_snapshot, before.rows[0]?.documentary_snapshot, 'a correction must never copy the original snapshot as new truth');
+    assert.equal((after.rows[0]?.correction_snapshot as { document?: { type?: string } })?.document.type, 'credit_note', 'the corrective type is independently captured; Payment is provenance only');
     assert.deepEqual((after.rows[0]?.correction_snapshot as { correction?: { originalDocumentId?: string } })?.correction, { originalDocumentId: original.id, originalSnapshotVersion: 2 }, 'the new correction snapshot must preserve first-class original provenance');
     assert.equal(after.rows[0]?.payments, before.rows[0]?.payments, 'correction must not mutate payments'); assert.equal(after.rows[0]?.journals, before.rows[0]?.journals, 'correction creates no economic journal');
     assert.equal(after.rows[0]?.audit, 1); assert.equal(after.rows[0]?.outbox, 1);
+    const beforeUnsupported = await pool.query<{ next_sequence_number: string; count: number }>('SELECT (SELECT next_sequence_number::text FROM finance_financial_document_series WHERE id=$1) next_sequence_number,(SELECT count(*)::int FROM finance_financial_documents WHERE institution_id=$2) count', [seriesId, institutionId]);
+    await assert.rejects(() => repo.issueCorrection({ ...command, documentType: 'invoice', idempotencyKey: 'unsupported-correction' }), /DOCUMENT_TYPE_UNSUPPORTED/);
+    const afterUnsupported = await pool.query<{ next_sequence_number: string; count: number }>('SELECT (SELECT next_sequence_number::text FROM finance_financial_document_series WHERE id=$1) next_sequence_number,(SELECT count(*)::int FROM finance_financial_documents WHERE institution_id=$2) count', [seriesId, institutionId]);
+    assert.deepEqual(afterUnsupported.rows[0], beforeUnsupported.rows[0], 'an unsupported corrective type must fail before definitive numbering');
     await assert.rejects(() => repo.issueCorrection({ ...command, idempotencyKey: 'rollback', seriesId: randomUUID() }), /SERIES_NOT_EFFECTIVE/);
     const corrections = await pool.query('SELECT count(*)::int count FROM finance_financial_documents WHERE institution_id=$1 AND corrects_document_id=$2', [institutionId, original.id]);
     assert.equal(corrections.rows[0].count, 1, 'failed correction rolls back without a partial fact');

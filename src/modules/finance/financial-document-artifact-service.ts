@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { createHash } from 'node:crypto';
 import { renderFinancialDocumentPdf } from './financial-document-artifact-renderer.ts';
 import { buildFinancialDocumentPresentation } from './financial-document-presentation.ts';
-import type { DocumentarySnapshotV1 } from './documentary-snapshot.ts';
+import type { DocumentarySnapshot } from './documentary-snapshot.ts';
 
 export interface FinancialDocumentArtifactStorage {
   put(storageReference: string, bytes: Buffer): Promise<void>;
@@ -50,7 +50,7 @@ export class FinancialDocumentArtifactService {
     if (!row.documentary_snapshot) throw new Error('FINANCIAL_DOCUMENT_DOCUMENTARY_SNAPSHOT_REQUIRED');
     const existing = await this.pool.query<any>('SELECT id,document_id,render_version,template_version,generated_at,content_hash,media_type,byte_size,storage_reference FROM finance_financial_document_artifacts WHERE institution_id=$1 AND document_id=$2 AND render_version=$3 AND template_version=$4', [input.institutionId, input.documentId, input.renderVersion, input.templateVersion]);
     if (existing.rows[0]) return this.map(existing.rows[0]);
-    const presentation = buildFinancialDocumentPresentation({ document: { documentType: row.document_type, seriesCode: row.series_code, sequenceNumber: Number(row.sequence_number), issuedAt: row.issued_at, status: 'issued' }, snapshot: row.documentary_snapshot as DocumentarySnapshotV1 });
+    const presentation = buildFinancialDocumentPresentation({ document: { documentType: row.document_type, seriesCode: row.series_code, sequenceNumber: Number(row.sequence_number), issuedAt: row.issued_at, status: 'issued' }, snapshot: row.documentary_snapshot as DocumentarySnapshot });
     const bytes = renderFinancialDocumentPdf({ presentation });
     const contentHash = createHash('sha256').update(bytes).digest('hex');
     const storageReference = `financial-document-artifacts/${input.institutionId}/${input.documentId}/${input.renderVersion}/${input.templateVersion}/${contentHash}.pdf`;

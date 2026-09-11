@@ -1,5 +1,5 @@
 import { productTerm, type ProductTermKey } from '../../lib/product-terminology.ts';
-import type { DocumentarySnapshotV1 } from './documentary-snapshot.ts';
+import type { DocumentarySnapshot } from './documentary-snapshot.ts';
 
 export type CanonicalFinancialDocumentPresentation = Readonly<{
   document: Readonly<{ typeLabel: string; officialNumber: string; issueDate: string; currency: string; statusLabel: string }>;
@@ -21,7 +21,7 @@ const documentTermKey = (documentType: string): ProductTermKey => {
 };
 
 /** Pure presentation adapter: it receives immutable issued evidence and never queries or recalculates Finance. */
-export function buildFinancialDocumentPresentation(input: { document: IssuedDocumentRecord; snapshot: DocumentarySnapshotV1; terminology?: typeof productTerm }): CanonicalFinancialDocumentPresentation {
+export function buildFinancialDocumentPresentation(input: { document: IssuedDocumentRecord; snapshot: DocumentarySnapshot; terminology?: typeof productTerm }): CanonicalFinancialDocumentPresentation {
   const term = input.terminology ?? productTerm;
   const documentLabel = term(documentTermKey(input.document.documentType)).label;
   return Object.freeze({
@@ -30,9 +30,9 @@ export function buildFinancialDocumentPresentation(input: { document: IssuedDocu
     recipient: Object.freeze({ name: input.snapshot.recipient.name, taxIdentifier: null, addressLines: Object.freeze([]), operationalReference: input.snapshot.operation.reference }),
     operation: Object.freeze({ reference: input.snapshot.operation.reference, lines: Object.freeze([]) }),
     totals: Object.freeze({ documentTotal: input.snapshot.totals.documentTotal, currency: input.snapshot.totals.currency }),
-    payment: input.snapshot.payment ? Object.freeze({ ...input.snapshot.payment }) : null,
+    payment: input.snapshot.payment ? Object.freeze({ reference: input.snapshot.payment.reference, amount: input.snapshot.payment.amount, currency: input.snapshot.payment.currency }) : null,
     correction: null,
-    legalMentions: Object.freeze([]),
+    legalMentions: Object.freeze(input.snapshot.snapshotVersion === 2 ? [...input.snapshot.legalMentions] : []),
     verification: Object.freeze([]),
   });
 }

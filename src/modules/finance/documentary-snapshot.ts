@@ -71,6 +71,7 @@ export function createDocumentarySnapshotV2(input: Omit<DocumentarySnapshotV2, '
   required(input.document.type, 'DOCUMENT_TYPE'); required(input.document.issuedAt, 'ISSUED_AT'); required(input.document.currency, 'DOCUMENT_CURRENCY');
   required(input.issuer.legalName, 'ISSUER_LEGAL_NAME'); required(input.recipient.name, 'RECIPIENT_NAME'); required(input.recipient.authorityId, 'RECIPIENT_AUTHORITY');
   required(input.totals.documentTotal, 'TOTAL_AMOUNT'); required(input.totals.currency, 'TOTAL_CURRENCY'); required(input.jurisdiction.code, 'JURISDICTION_CODE'); required(input.jurisdiction.policyVersion, 'POLICY_VERSION');
+  required(input.tax.treatment, 'TAX_TREATMENT');
   required(input.policyProvenance.adapterKey, 'POLICY_ADAPTER'); required(input.policyProvenance.policyVersion, 'POLICY_VERSION'); required(input.policyProvenance.seriesId, 'SERIES_ID');
   if (input.document.currency !== input.totals.currency) throw new Error('DOCUMENTARY_SNAPSHOT_CURRENCY_MISMATCH');
   return deepFreeze({ snapshotVersion: 2 as const, ...input }) as DocumentarySnapshotV2;
@@ -80,13 +81,17 @@ export function composeReceiptDocumentarySnapshotV2(input: {
   documentType: string; issuedAt: Date; issuer: DocumentarySnapshotV1['issuer']; recipient: DocumentaryPartySnapshot; billingParty: DocumentaryPartySnapshot; payer?: DocumentaryPartySnapshot;
   paymentAuthorityId: string; paymentReference: string; paymentConfirmedAt: Date; paymentMethod: string; amount: string; currency: string; jurisdictionCode: string; policyVersion: string;
   financialProfileVersion: number; fiscalConfigurationVersion: number; seriesId: string; adapterKey: string;
+  taxTreatment: string; legalMentions: readonly string[];
+  obligations: DocumentarySnapshotV2['obligations']; allocations: DocumentarySnapshotV2['allocations']; unallocated?: DocumentaryMoney;
 }): DocumentarySnapshotV2 {
+  required(input.taxTreatment, 'POLICY_TAX_TREATMENT');
+  if (!Array.isArray(input.legalMentions)) throw new Error('DOCUMENTARY_POLICY_LEGAL_MENTIONS_REQUIRED');
   return createDocumentarySnapshotV2({
     document: { type: input.documentType, issuedAt: input.issuedAt.toISOString(), currency: input.currency }, issuer: input.issuer, recipient: input.recipient,
-    billingParty: input.billingParty, ...(input.payer ? { payer: input.payer } : {}), operation: { reference: input.paymentReference }, obligations: [],
+    billingParty: input.billingParty, ...(input.payer ? { payer: input.payer } : {}), operation: { reference: input.paymentReference }, obligations: input.obligations,
     payment: { authorityId: input.paymentAuthorityId, reference: input.paymentReference, confirmedAt: input.paymentConfirmedAt.toISOString(), method: input.paymentMethod, amount: input.amount, currency: input.currency },
-    allocations: [], unallocated: { amount: input.amount, currency: input.currency }, totals: { documentTotal: input.amount, currency: input.currency }, tax: { treatment: 'not_applicable' },
-    jurisdiction: { code: input.jurisdictionCode, policyVersion: input.policyVersion }, legalMentions: [],
+    allocations: input.allocations, ...(input.unallocated ? { unallocated: input.unallocated } : {}), totals: { documentTotal: input.amount, currency: input.currency }, tax: { treatment: input.taxTreatment },
+    jurisdiction: { code: input.jurisdictionCode, policyVersion: input.policyVersion }, legalMentions: [...input.legalMentions],
     policyProvenance: { financialProfileVersion: input.financialProfileVersion, fiscalConfigurationVersion: input.fiscalConfigurationVersion, seriesId: input.seriesId, adapterKey: input.adapterKey, policyVersion: input.policyVersion },
   });
 }
