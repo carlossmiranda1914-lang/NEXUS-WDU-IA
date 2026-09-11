@@ -50,7 +50,7 @@ export class PostgresFinancialDocumentRepository {
       const parties = await resolveDocumentParties(client, {
         institutionId: command.institutionId,
         financialAccountId: sourceRow.financialAccountId,
-        payerPersonId: sourceRow.payerPersonId,
+        paymentId: sourceRow.id,
       });
       const recipient = await resolveDocumentaryPartySnapshot(client, parties.recipient);
       const documentarySnapshot = composeReceiptDocumentarySnapshot({
