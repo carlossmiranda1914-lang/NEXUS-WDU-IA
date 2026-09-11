@@ -81,6 +81,13 @@ test('F7-01 PostgreSQL issuance replays idempotently and allocates a series numb
     assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.issuer.legalName, 'Document Institution');
     assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.recipient.name, 'Document recipient');
     assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.payment.reference, `PAY-${paymentId!.slice(0, 8)}`);
+    await pool.query("UPDATE people SET name='Renamed live recipient' WHERE name='Document recipient'");
+    await pool.query("UPDATE institution_legal_profiles SET legal_name='Renamed live institution' WHERE institution_id=$1", [institutionId]);
+    const replayAfterLiveChange = await repo.issue(command);
+    assert.equal(replayAfterLiveChange.id, first.id, 'idempotency replay must load the original issued fact');
+    const immutableSnapshot = await pool.query<{ documentary_snapshot: { issuer: { legalName: string }; recipient: { name: string } } }>('SELECT documentary_snapshot FROM finance_financial_documents WHERE id=$1', [first.id]);
+    assert.equal(immutableSnapshot.rows[0]?.documentary_snapshot.issuer.legalName, 'Document Institution');
+    assert.equal(immutableSnapshot.rows[0]?.documentary_snapshot.recipient.name, 'Document recipient');
     const provenance = await pool.query<{ source_snapshot: { sourceId: string; sourceType: string }; source_id: string; source_type: string }>('SELECT d.source_snapshot,s.source_id,s.source_type FROM finance_financial_documents d JOIN finance_financial_document_sources s ON s.document_id=d.id AND s.institution_id=d.institution_id WHERE d.institution_id=$1', [institutionId]);
     assert.equal(provenance.rows[0]?.source_snapshot.sourceType, 'payment');
     assert.equal(provenance.rows[0]?.source_snapshot.sourceId, paymentId!, 'issuance provenance must reference the server-locked payment');
