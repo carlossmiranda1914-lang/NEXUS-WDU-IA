@@ -8,10 +8,13 @@ import { FinancialDocumentArtifactService, type FinancialDocumentArtifact } from
 import { createCanonicalFinanceFingerprint, executeIdempotentFinanceCommand } from './finance-command.ts';
 import { FiscalAdapterRegistry, productionFiscalAdapterRegistry } from './fiscal-adapter-registry.ts';
 import { buildFinancialDocumentPresentation } from './financial-document-presentation.ts';
-import type { DocumentarySnapshot } from './documentary-snapshot.ts';
+import { decodeDocumentarySnapshot, type DocumentarySnapshot } from './documentary-snapshot.ts';
 
 type DocumentRow = { id: string; document_type: string; status: string; sequence_number: string; issued_at: Date; documentary_snapshot: DocumentarySnapshot | null; corrects_document_id: string | null; series_code: string };
-const view = (row: DocumentRow) => ({ id: row.id, type: row.document_type, status: row.status, seriesCode: row.series_code, sequenceNumber: Number(row.sequence_number), issuedAt: row.issued_at.toISOString(), correctsDocumentId: row.corrects_document_id, presentation: row.documentary_snapshot ? buildFinancialDocumentPresentation({ document: { documentType: row.document_type, seriesCode: row.series_code, sequenceNumber: Number(row.sequence_number), issuedAt: row.issued_at, status: 'issued' }, snapshot: row.documentary_snapshot }) : null });
+const view = (row: DocumentRow) => {
+  const decoded = row.documentary_snapshot ? decodeDocumentarySnapshot(row.documentary_snapshot) : null;
+  return { id: row.id, type: row.document_type, status: row.status, seriesCode: row.series_code, sequenceNumber: Number(row.sequence_number), issuedAt: row.issued_at.toISOString(), correctsDocumentId: row.corrects_document_id, snapshotVersion: decoded?.snapshotVersion ?? null, presentation: decoded ? buildFinancialDocumentPresentation({ document: { documentType: row.document_type, seriesCode: row.series_code, sequenceNumber: Number(row.sequence_number), issuedAt: row.issued_at, status: 'issued' }, snapshot: decoded.snapshot }) : null };
+};
 const artifactView = (artifact: FinancialDocumentArtifact) => ({ id: artifact.id, documentId: artifact.documentId, renderVersion: artifact.renderVersion, templateVersion: artifact.templateVersion, generatedAt: artifact.generatedAt.toISOString(), contentHash: artifact.contentHash, mediaType: artifact.mediaType, byteSize: artifact.byteSize });
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const decodeCursor = (value: unknown) => {

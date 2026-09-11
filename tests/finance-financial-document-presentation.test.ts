@@ -26,3 +26,9 @@ test('dispatches a V2 read model without downgrading it to V1', () => {
   assert.equal(presentation.payment?.reference, 'PAG-V2');
   assert.deepEqual(presentation.legalMentions, ['Policy mention']);
 });
+
+test('renderer entrypoint receives only immutable presentation, never a live Finance authority', async () => {
+  const source = await (await import('node:fs/promises')).readFile(new URL('../src/modules/finance/financial-document-artifact-service.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /finance_(payments|obligations|allocations|profile_versions|fiscal_configuration_versions)/);
+  assert.match(source, /documentary_snapshot/);
+});
