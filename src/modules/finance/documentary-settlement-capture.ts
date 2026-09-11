@@ -2,8 +2,8 @@ import type { PoolClient } from 'pg';
 import { Money } from './money.ts';
 
 export type DocumentarySettlementCapture = Readonly<{
-  obligations: readonly Readonly<{ authorityId: string; reference: string | null; components: readonly Readonly<{ kind: string; amount: string; currency: string; provenance: Readonly<{ sourceType: string; sourceId: string; versionId?: string }> }>[] }>;
-  allocations: readonly Readonly<{ authorityId: string; obligationAuthorityId: string; before: Readonly<{ amount: string; currency: string }>; movement: Readonly<{ amount: string; currency: string }>; after: Readonly<{ amount: string; currency: string }> }>;
+  obligations: readonly Readonly<{ authorityId: string; reference: string | null; components: readonly Readonly<{ kind: string; amount: string; currency: string; provenance: Readonly<{ sourceType: string; sourceId: string; versionId?: string }> }>[] }>[];
+  allocations: readonly Readonly<{ authorityId: string; obligationAuthorityId: string; before: Readonly<{ amount: string; currency: string }>; movement: Readonly<{ amount: string; currency: string }>; after: Readonly<{ amount: string; currency: string }> }>[];
   unallocated?: Readonly<{ amount: string; currency: string }>;
 }>;
 
@@ -31,7 +31,7 @@ export async function captureReceiptSettlement(client: Pick<PoolClient, 'query'>
   );
   const active = allocations.rows.filter(row => money(row.amount, row.currency).compare(money(row.reversed, row.currency)) > 0);
   const obligationIds = [...new Set(active.map(row => row.obligation_id))];
-  const obligations: DocumentarySettlementCapture['obligations'] = [];
+  const obligations: Array<DocumentarySettlementCapture['obligations'][number]> = [];
   for (const obligationId of obligationIds) {
     const row = active.find(candidate => candidate.obligation_id === obligationId)!;
     const adjustments = await client.query<AdjustmentRow>(`SELECT id,direction,amount::text,currency FROM finance_obligation_adjustments WHERE institution_id=$1 AND obligation_id=$2 AND effective_at <= $3 ORDER BY effective_at,recorded_at,id`, [input.institutionId, obligationId, input.asOf]);
@@ -42,7 +42,7 @@ export async function captureReceiptSettlement(client: Pick<PoolClient, 'query'>
       ...discounts.rows.map(discount => Object.freeze({ kind: 'obligation_discount', amount: money(discount.amount, discount.currency).canonicalAmount(), currency: discount.currency, provenance: Object.freeze({ sourceType: 'obligation_discount', sourceId: discount.id }) })),
     ]) }));
   }
-  const allocationSnapshots: DocumentarySettlementCapture['allocations'] = [];
+  const allocationSnapshots: Array<DocumentarySettlementCapture['allocations'][number]> = [];
   for (const allocation of active) {
     const effectiveDue = await effectiveDueAt(client, input.institutionId, allocation.obligation_id, allocation.effective_at, allocation.obligation_amount, allocation.obligation_currency);
     const priorCovered = await coveredBefore(client, input.institutionId, allocation.obligation_id, allocation.effective_at, allocation.recorded_at, allocation.id, allocation.currency);

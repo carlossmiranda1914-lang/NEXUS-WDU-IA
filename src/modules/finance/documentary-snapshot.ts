@@ -8,7 +8,7 @@ export type DocumentarySnapshotV2 = Readonly<{
   issuer: DocumentarySnapshotV1['issuer']; recipient: DocumentaryPartySnapshot;
   beneficiary?: DocumentaryPartySnapshot; billingParty?: DocumentaryPartySnapshot; payer?: DocumentaryPartySnapshot;
   operation: Readonly<{ reference: string | null }>;
-  obligations: readonly Readonly<{ authorityId: string; reference: string | null; components: readonly Readonly<{ kind: string; amount: string; currency: string; provenance: Readonly<{ sourceType: string; sourceId: string; versionId?: string }> }>[] }> [];
+  obligations: readonly Readonly<{ authorityId: string; reference: string | null; components: readonly Readonly<{ kind: string; amount: string; currency: string; provenance: Readonly<{ sourceType: string; sourceId: string; versionId?: string }> }>[] }>[];
   payment: Readonly<{ authorityId: string; reference: string; confirmedAt: string; method: string; amount: string; currency: string }> | null;
   allocations: readonly Readonly<{ authorityId: string; obligationAuthorityId: string; before: DocumentaryMoney; movement: DocumentaryMoney; after: DocumentaryMoney }>[];
   unallocated?: DocumentaryMoney;

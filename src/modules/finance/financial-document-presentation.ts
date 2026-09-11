@@ -32,7 +32,7 @@ export function buildFinancialDocumentPresentation(input: { document: IssuedDocu
     totals: Object.freeze({ documentTotal: input.snapshot.totals.documentTotal, currency: input.snapshot.totals.currency }),
     payment: input.snapshot.payment ? Object.freeze({ reference: input.snapshot.payment.reference, amount: input.snapshot.payment.amount, currency: input.snapshot.payment.currency }) : null,
     correction: null,
-    legalMentions: Object.freeze(input.snapshot.snapshotVersion === 2 ? [...input.snapshot.legalMentions] : []),
+    legalMentions: Object.freeze('snapshotVersion' in input.snapshot && input.snapshot.snapshotVersion === 2 ? [...input.snapshot.legalMentions] : []),
     verification: Object.freeze([]),
   });
 }
