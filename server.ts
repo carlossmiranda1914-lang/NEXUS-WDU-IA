@@ -167,7 +167,7 @@ async function generateContentWithRetry(
   }
 }
 
-async function startServer() {
+export async function startServer() {
   const app = express();
   const PORT = 3000;
 
@@ -6280,4 +6280,4 @@ Gerado em tempo real com base no balanço ativo das tabelas financeiras integrad
   });
 }
 
-startServer();
+if (process.env.NEXUS_SERVER_MANAGED_STARTUP !== 'true') void startServer();

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readApprovedTestTarget } from './nexus-test-db-safety.mjs';
 
-dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env.test.local'), override: false, quiet: true });
+dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env.test.local'), override: true, quiet: true });
 process.env.TEST_DATABASE_LOCAL_AUTHORIZED = 'true';
 
 const productionUrl = process.env.DATABASE_URL;
@@ -21,6 +21,8 @@ if (productionUrl && productionUrl === testUrl) {
 // receives an unambiguous hostname rather than interpreting credentials as one.
 process.env.DATABASE_URL = testUrl;
 process.env.NODE_ENV = 'development';
+process.env.NEXUS_SERVER_MANAGED_STARTUP = 'true';
 
 console.log('[TEST SERVER] Connected only to the dedicated test database.');
-await import('../server.ts');
+const { startServer } = await import('../server.ts');
+await startServer();
