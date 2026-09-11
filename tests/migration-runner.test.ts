@@ -123,7 +123,7 @@ test('combined Documents and reserved Finance migrations replay with a verified 
       await client.query(`CREATE SCHEMA ${quote(schema)}`);
       const migrations = await discoverMigrations(path.resolve(process.cwd(), 'src/db/migrations'));
       const firstRun = await runMigrations(client, migrations);
-      assert.equal(firstRun.length, 53);
+      assert.equal(firstRun.length, migrations.length);
       assert.deepEqual(await runMigrations(client, migrations), []);
       const ledger = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM nexus_schema_migrations');
       assert.equal(ledger.rows[0].count, migrations.length);
