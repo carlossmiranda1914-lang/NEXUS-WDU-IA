@@ -21,6 +21,7 @@ import {
 import { PostgresDocumentRepository } from './document-repository.ts';
 import { PostgresDocumentVerificationRepository } from './document-verification-repository.ts';
 import { PostgresDocumentAuditRepository } from './document-audit.ts';
+import { PostgresDocumentOutboxRepository } from './document-event-repository.ts';
 import { executeIdempotentDocumentsCommand } from './document-command.ts';
 import { createCanonicalDocumentsFingerprint } from './document-model.ts';
 import type { ObjectStorageProvider } from './object-storage-provider.ts';
@@ -71,6 +72,7 @@ export interface PipelineExecutionResult {
 const docRepo = new PostgresDocumentRepository();
 const verificationRepo = new PostgresDocumentVerificationRepository();
 const auditRepo = new PostgresDocumentAuditRepository();
+const outboxRepo = new PostgresDocumentOutboxRepository();
 
 export async function startTechnicalVerificationCommand(params: {
   pool: Pool;
@@ -228,6 +230,24 @@ export async function recordTechnicalAssessmentCommand(params: {
             version.status,
             'quarantined',
           );
+
+          await outboxRepo.insertEvent(client, {
+            institutionId: context.institutionId,
+            eventType: 'document.quarantined',
+            aggregateType: 'document',
+            aggregateId: input.documentId,
+            actorPersonId: context.personId,
+            actorKind: 'system',
+            correlationId: null,
+            causationId: assessment.id,
+            payload: {
+              documentId: input.documentId,
+              versionId: input.versionId,
+              verificationId: input.verificationId,
+              reason: quarantineReason,
+              assessmentType: input.assessmentType,
+            },
+          });
         }
       }
 
@@ -394,9 +414,28 @@ export async function finalizeTechnicalVerificationCommand(params: {
             assessmentsCount: assessments.length,
           },
         });
+
+        await outboxRepo.insertEvent(client, {
+          institutionId: context.institutionId,
+          eventType: 'document.verification_passed',
+          aggregateType: 'document',
+          aggregateId: input.documentId,
+          actorPersonId: context.personId,
+          actorKind: 'system',
+          correlationId: null,
+          causationId: input.verificationId,
+          payload: {
+            documentId: input.documentId,
+            versionId: input.versionId,
+            verificationId: input.verificationId,
+            assessmentsCount: assessments.length,
+          },
+        });
       } else if (evaluation.overallStatus === 'quarantined') {
         // Transition version status: content_received -> quarantined
+        let wasNewlyQuarantined = false;
         if (version.status !== 'quarantined') {
+          wasNewlyQuarantined = true;
           await verificationRepo.transitionVersionStatus(
             client,
             context.institutionId,
@@ -427,6 +466,25 @@ export async function finalizeTechnicalVerificationCommand(params: {
             reason: evaluation.quarantineReason,
           },
         });
+
+        if (wasNewlyQuarantined) {
+          await outboxRepo.insertEvent(client, {
+            institutionId: context.institutionId,
+            eventType: 'document.quarantined',
+            aggregateType: 'document',
+            aggregateId: input.documentId,
+            actorPersonId: context.personId,
+            actorKind: 'system',
+            correlationId: null,
+            causationId: input.verificationId,
+            payload: {
+              documentId: input.documentId,
+              versionId: input.versionId,
+              verificationId: input.verificationId,
+              reason: evaluation.quarantineReason,
+            },
+          });
+        }
       } else if (evaluation.overallStatus === 'inconclusive') {
         let nextRetry: Date | null = null;
         if (input.retryPolicy) {

@@ -10,6 +10,7 @@ import type {
 import { createCanonicalDocumentsFingerprint } from './document-model.ts';
 import { PostgresDocumentRepository } from './document-repository.ts';
 import { PostgresDocumentAuditRepository } from './document-audit.ts';
+import { PostgresDocumentOutboxRepository } from './document-event-repository.ts';
 import type {
   DocumentUploadSessionRecord,
   DocumentSizePolicyConfig,
@@ -638,6 +639,7 @@ export async function completeUploadSessionCommand(input: {
   const docRepo = new PostgresDocumentRepository();
   const uploadRepo = new PostgresDocumentUploadRepository();
   const auditRepo = new PostgresDocumentAuditRepository();
+  const outboxRepo = new PostgresDocumentOutboxRepository();
 
   return executeIdempotentDocumentsCommand({
     pool,
@@ -812,6 +814,30 @@ export async function completeUploadSessionCommand(input: {
           versionStatus: version.status,
           byteSize: version.byteSize,
           sha256Hash: version.sha256Hash,
+          storageProvider: completedSession.storageProvider,
+          storageBucket: completedSession.storageBucket,
+          storageKey: completedSession.storageKey,
+        },
+      });
+
+      // 9. Record outbox event intent inside same transaction
+      await outboxRepo.insertEvent(client, {
+        institutionId: context.institutionId,
+        eventType: 'document.upload_completed',
+        aggregateType: 'document',
+        aggregateId: row.document_id,
+        actorPersonId: context.personId,
+        actorKind: 'user',
+        correlationId: completeInput.provenance.correlationId ?? null,
+        causationId: completedSession.id,
+        payload: {
+          documentId: row.document_id,
+          versionId: version.id,
+          versionNumber: version.versionNumber,
+          mimeType: version.mimeType,
+          byteSize: version.byteSize,
+          sha256Hash: version.sha256Hash,
+          sessionId: completedSession.id,
           storageProvider: completedSession.storageProvider,
           storageBucket: completedSession.storageBucket,
           storageKey: completedSession.storageKey,

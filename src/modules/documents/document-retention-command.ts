@@ -28,6 +28,7 @@ import {
 } from './document-retention-repository.ts';
 import { PostgresDocumentRepository } from './document-repository.ts';
 import { PostgresDocumentAuditRepository } from './document-audit.ts';
+import { PostgresDocumentOutboxRepository } from './document-event-repository.ts';
 import { executeIdempotentDocumentsCommand } from './document-command.ts';
 
 const retentionAssignmentRepo = new PostgresRetentionAssignmentRepository();
@@ -35,6 +36,7 @@ const holdRepo = new PostgresRetentionHoldRepository();
 const deletionAuthRepo = new PostgresDeletionAuthorizationRepository();
 const docRepo = new PostgresDocumentRepository();
 const auditRepo = new PostgresDocumentAuditRepository();
+const outboxRepo = new PostgresDocumentOutboxRepository();
 
 // ─── AssignRetention ──────────────────────────────────────────────────────────
 
@@ -130,6 +132,25 @@ export async function assignRetentionCommand(params: {
         correlationId: input.correlationId ?? null,
         details: {
           assignmentId: assignment.id,
+          policyId: policy.policyId,
+          retainUntil: retainUntil.toISOString(),
+          clockTriggerType: policy.clockTriggerType,
+        },
+      });
+
+      await outboxRepo.insertEvent(client, {
+        institutionId: context.institutionId,
+        eventType: 'document.retention_assigned',
+        aggregateType: 'document',
+        aggregateId: input.documentId,
+        actorPersonId: context.personId,
+        actorKind: 'user',
+        correlationId: input.correlationId ?? null,
+        causationId: assignment.id,
+        payload: {
+          assignmentId: assignment.id,
+          documentId: input.documentId,
+          versionId: input.versionId,
           policyId: policy.policyId,
           retainUntil: retainUntil.toISOString(),
           clockTriggerType: policy.clockTriggerType,
@@ -303,6 +324,24 @@ export async function authorizeDeletionCommand(params: {
         },
       });
 
+      await outboxRepo.insertEvent(client, {
+        institutionId: context.institutionId,
+        eventType: 'document.deletion_authorized',
+        aggregateType: 'document',
+        aggregateId: input.documentId,
+        actorPersonId: context.personId,
+        actorKind: 'user',
+        correlationId: input.correlationId ?? null,
+        causationId: auth.id,
+        payload: {
+          authorizationId: auth.id,
+          documentId: input.documentId,
+          versionId: input.versionId,
+          retentionAssignmentId: assignment.id,
+          policyBasis: assignment.policyId,
+        },
+      });
+
       return { resultRef: auth.id, result: auth };
     },
     loadResult: async (client: PoolClient, resultRef: string) => {
@@ -423,6 +462,25 @@ export async function placeHoldCommand(params: {
         },
       });
 
+      await outboxRepo.insertEvent(client, {
+        institutionId: context.institutionId,
+        eventType: 'document.hold_placed',
+        aggregateType: 'document',
+        aggregateId: input.documentId,
+        actorPersonId: context.personId,
+        actorKind: 'user',
+        correlationId: input.correlationId ?? null,
+        causationId: hold.id,
+        payload: {
+          holdId: hold.id,
+          documentId: input.documentId,
+          versionId: input.versionId,
+          holdType: input.holdType,
+          authority: input.authority,
+          reason: input.reason,
+        },
+      });
+
       return { resultRef: hold.id, result: hold };
     },
     loadResult: async (client: PoolClient, resultRef: string) => {
@@ -523,6 +581,23 @@ export async function releaseHoldCommand(params: {
         correlationId: input.correlationId ?? null,
         details: {
           holdId: input.holdId,
+          releaseReason: input.releaseReason,
+        },
+      });
+
+      await outboxRepo.insertEvent(client, {
+        institutionId: context.institutionId,
+        eventType: 'document.hold_released',
+        aggregateType: 'document',
+        aggregateId: input.documentId,
+        actorPersonId: context.personId,
+        actorKind: 'user',
+        correlationId: input.correlationId ?? null,
+        causationId: released.id,
+        payload: {
+          holdId: input.holdId,
+          documentId: input.documentId,
+          versionId: input.versionId,
           releaseReason: input.releaseReason,
         },
       });

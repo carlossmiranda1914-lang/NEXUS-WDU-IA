@@ -32,6 +32,7 @@ import {
 import { PostgresDocumentAccessRepository } from './document-access-repository.ts';
 import { PostgresDocumentRepository } from './document-repository.ts';
 import { PostgresDocumentAuditRepository } from './document-audit.ts';
+import { PostgresDocumentOutboxRepository } from './document-event-repository.ts';
 import { ObjectStorageProvider } from './object-storage-provider.ts';
 import { createCanonicalDocumentsFingerprint } from './document-model.ts';
 import { executeIdempotentDocumentsCommand } from './document-command.ts';
@@ -84,6 +85,7 @@ export interface RevokeGrantCommandInput {
 const docRepo = new PostgresDocumentRepository();
 const accessRepo = new PostgresDocumentAccessRepository();
 const auditRepo = new PostgresDocumentAuditRepository();
+const outboxRepo = new PostgresDocumentOutboxRepository();
 
 export function createAuthorizeContentAccessFingerprint(
   institutionId: string,
@@ -261,6 +263,26 @@ export async function authorizeContentAccessCommand(params: {
           action: grant.action,
           expiresAt: grant.expiresAt.toISOString(),
           granteePersonId: grant.granteePersonId,
+        },
+      });
+
+      // 5. Emit document.access_granted outbox event (NEVER include raw access token)
+      await outboxRepo.insertEvent(client, {
+        institutionId: context.institutionId,
+        eventType: 'document.access_granted',
+        aggregateType: 'document',
+        aggregateId: doc.id,
+        actorPersonId: context.personId,
+        actorKind: 'user',
+        correlationId: input.correlationId ?? null,
+        causationId: grant.id,
+        payload: {
+          grantId: grant.id,
+          documentId: doc.id,
+          versionId: version.id,
+          granteePersonId: grant.granteePersonId,
+          action: grant.action,
+          expiresAt: grant.expiresAt.toISOString(),
         },
       });
 
@@ -556,6 +578,25 @@ export async function revokeContentAccessGrantCommand(params: {
         correlationId: input.correlationId || null,
         details: {
           grantId: grant.id,
+          reason: input.reason,
+          revokedByPersonId: context.personId,
+        },
+      });
+
+      // Emit document.access_revoked outbox event
+      await outboxRepo.insertEvent(client, {
+        institutionId: context.institutionId,
+        eventType: 'document.access_revoked',
+        aggregateType: 'document',
+        aggregateId: grant.documentId,
+        actorPersonId: context.personId,
+        actorKind: 'user',
+        correlationId: input.correlationId ?? null,
+        causationId: revokedGrant.id,
+        payload: {
+          grantId: revokedGrant.id,
+          documentId: grant.documentId,
+          versionId: grant.versionId,
           reason: input.reason,
           revokedByPersonId: context.personId,
         },

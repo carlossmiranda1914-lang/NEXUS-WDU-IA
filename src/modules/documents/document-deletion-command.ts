@@ -40,12 +40,14 @@ import {
   PostgresDeletionRecordRepository,
 } from './document-retention-repository.ts';
 import { PostgresDocumentAuditRepository } from './document-audit.ts';
+import { PostgresDocumentOutboxRepository } from './document-event-repository.ts';
 
 const retentionAssignmentRepo = new PostgresRetentionAssignmentRepository();
 const holdRepo = new PostgresRetentionHoldRepository();
 const deletionAuthRepo = new PostgresDeletionAuthorizationRepository();
 const deletionRecordRepo = new PostgresDeletionRecordRepository();
 const auditRepo = new PostgresDocumentAuditRepository();
+const outboxRepo = new PostgresDocumentOutboxRepository();
 
 // ─── ExecuteDeletion ──────────────────────────────────────────────────────────
 
@@ -222,6 +224,22 @@ export async function executeDeletionCommand(params: {
     }
 
     // Commit Phase 1 — durable deletion intent is now persisted in DB
+    await outboxRepo.insertEvent(client1, {
+      institutionId: context.institutionId,
+      eventType: 'document.deletion_started',
+      aggregateType: 'document',
+      aggregateId: auth.documentId,
+      actorPersonId: context.personId,
+      actorKind: 'user',
+      correlationId: input.correlationId ?? null,
+      causationId: auth.id,
+      payload: {
+        deletionAuthorizationId: auth.id,
+        documentId: auth.documentId,
+        versionId: auth.versionId,
+      },
+    });
+
     await client1.query('COMMIT');
   } catch (p1Err) {
     await client1.query('ROLLBACK').catch(() => undefined);
@@ -349,6 +367,25 @@ export async function executeDeletionCommand(params: {
         },
       });
 
+      await outboxRepo.insertEvent(client2, {
+        institutionId: context.institutionId,
+        eventType: 'document.deleted',
+        aggregateType: 'document',
+        aggregateId: auth.documentId,
+        actorPersonId: context.personId,
+        actorKind: 'user',
+        correlationId: input.correlationId ?? null,
+        causationId: auth.id,
+        payload: {
+          deletionAuthorizationId: auth.id,
+          deletionRecordId: deletionRecord.id,
+          deletionOperationId: deletionRecord.deletionOperationId,
+          documentId: auth.documentId,
+          versionId: auth.versionId,
+          policyBasis: auth.policyBasis,
+        },
+      });
+
       // 4. Record in document_idempotency_records
       await client2.query(
         `INSERT INTO document_idempotency_records (
@@ -380,6 +417,23 @@ export async function executeDeletionCommand(params: {
         outcome: 'failed',
         correlationId: input.correlationId ?? null,
         details: { failReason },
+      });
+
+      await outboxRepo.insertEvent(client2, {
+        institutionId: context.institutionId,
+        eventType: 'document.deletion_reconciliation_required',
+        aggregateType: 'document',
+        aggregateId: auth.documentId,
+        actorPersonId: context.personId,
+        actorKind: 'user',
+        correlationId: input.correlationId ?? null,
+        causationId: auth.id,
+        payload: {
+          deletionAuthorizationId: auth.id,
+          documentId: auth.documentId,
+          versionId: auth.versionId,
+          failReason,
+        },
       });
 
       await client2.query('COMMIT');
@@ -553,6 +607,25 @@ export async function reconcileDeletionCommand(params: {
         outcome: 'success',
         correlationId: input.correlationId ?? null,
         details: { storageDeletionConfirmed: true },
+      });
+
+      await outboxRepo.insertEvent(client2, {
+        institutionId: context.institutionId,
+        eventType: 'document.deleted',
+        aggregateType: 'document',
+        aggregateId: auth.documentId,
+        actorPersonId: context.personId,
+        actorKind: 'user',
+        correlationId: input.correlationId ?? null,
+        causationId: auth.id,
+        payload: {
+          deletionAuthorizationId: auth.id,
+          deletionRecordId: deletionRecord.id,
+          deletionOperationId: deletionRecord.deletionOperationId,
+          documentId: auth.documentId,
+          versionId: auth.versionId,
+          policyBasis: auth.policyBasis,
+        },
       });
 
       await client2.query('COMMIT');
