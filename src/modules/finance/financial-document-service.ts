@@ -4,7 +4,7 @@ import type { Pool } from 'pg';
 import { createCanonicalFinanceFingerprint, executeIdempotentFinanceCommand } from './finance-command.ts';
 import { resolveReceiptEligibility } from './financial-document-eligibility.ts';
 import { FiscalAdapterRegistry, productionFiscalAdapterRegistry } from './fiscal-adapter-registry.ts';
-import { InstitutionLegalProfileRepository } from '../institution/institution-legal-profile.ts';
+import { resolveEffectiveInstitutionLegalProfile } from '../institution/institution-legal-profile.ts';
 import { resolveDocumentParties, resolveDocumentaryPartySnapshot } from './document-party-resolution.ts';
 import { composeReceiptDocumentarySnapshot } from './documentary-snapshot.ts';
 
@@ -45,7 +45,7 @@ export class PostgresFinancialDocumentRepository {
       const sourceRow = eligibility.payment;
       const fiscalAdapter = eligibility.adapter;
       if (!sourceRow.financialAccountId) throw new Error('DOCUMENT_RECIPIENT_REQUIRED');
-      const issuerProfile = await new InstitutionLegalProfileRepository(client).resolveEffective(command.institutionId, sourceRow.effectiveAt);
+      const issuerProfile = await resolveEffectiveInstitutionLegalProfile(client, command.institutionId, sourceRow.effectiveAt);
       if (!issuerProfile) throw new Error('INSTITUTION_LEGAL_PROFILE_REQUIRED');
       const parties = await resolveDocumentParties(client, {
         institutionId: command.institutionId,

@@ -1,4 +1,4 @@
-import type { Pool, PoolClient } from 'pg';
+import type { Pool } from 'pg';
 
 export type InstitutionLegalProfile = Readonly<{
   id: string; institutionId: string; version: number; legalName: string; taxIdentifier: string | null;
@@ -7,22 +7,18 @@ export type InstitutionLegalProfile = Readonly<{
 }>;
 
 type Queryable = { query<T = Record<string, unknown>>(sql: string, values?: unknown[]): Promise<{ rows: T[] }> };
-type TransactionSource = Pool | PoolClient;
 type CreateInput = Omit<InstitutionLegalProfile, 'id' | 'version' | 'effectiveTo' | 'legalEmail' | 'legalPhone' | 'logoAssetReference'> & Partial<Pick<InstitutionLegalProfile, 'legalEmail' | 'legalPhone' | 'logoAssetReference'>>;
 type Row = { id: string; institution_id: string; version: number; legal_name: string; tax_identifier: string | null; registered_address: InstitutionLegalProfile['registeredAddress']; legal_email: string | null; legal_phone: string | null; logo_asset_reference: string | null; effective_from: Date; effective_to: Date | null };
 
 const map = (row: Row): InstitutionLegalProfile => ({ id: row.id, institutionId: row.institution_id, version: row.version, legalName: row.legal_name, taxIdentifier: row.tax_identifier, registeredAddress: row.registered_address, legalEmail: row.legal_email, legalPhone: row.legal_phone, logoAssetReference: row.logo_asset_reference, effectiveFrom: row.effective_from, effectiveTo: row.effective_to });
 
 export class InstitutionLegalProfileRepository {
-  constructor(private readonly db: TransactionSource) {}
+  constructor(private readonly db: Pool) {}
   async resolveEffective(institutionId: string, at: Date): Promise<InstitutionLegalProfile | null> {
-    const result = await this.db.query<Row>('SELECT * FROM institution_legal_profiles WHERE institution_id=$1 AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2) ORDER BY version DESC LIMIT 1', [institutionId, at]);
-    return result.rows[0] ? map(result.rows[0]) : null;
+    return resolveEffectiveInstitutionLegalProfile(this.db, institutionId, at);
   }
   async createVersion(input: CreateInput): Promise<InstitutionLegalProfile> {
-    const source = this.db as Pool & Partial<PoolClient>;
-    const ownsClient = typeof source.release !== 'function';
-    const client = ownsClient ? await source.connect() : source as PoolClient;
+    const client = await this.db.connect();
     try {
       await client.query('BEGIN');
       await client.query('SELECT id FROM institutions WHERE id=$1 FOR UPDATE', [input.institutionId]);
@@ -31,6 +27,11 @@ export class InstitutionLegalProfileRepository {
       await client.query('COMMIT');
       return map(result.rows[0]!);
     } catch (error) { await client.query('ROLLBACK').catch(() => undefined); throw error; }
-    finally { if (ownsClient) client.release(); }
+    finally { client.release(); }
   }
+}
+
+export async function resolveEffectiveInstitutionLegalProfile(db: Queryable, institutionId: string, at: Date): Promise<InstitutionLegalProfile | null> {
+  const result = await db.query<Row>('SELECT * FROM institution_legal_profiles WHERE institution_id=$1 AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2) ORDER BY version DESC LIMIT 1', [institutionId, at]);
+  return result.rows[0] ? map(result.rows[0]) : null;
 }

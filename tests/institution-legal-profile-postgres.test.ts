@@ -20,7 +20,7 @@ test('legal profiles are institution-scoped, effective-dated, and historically v
       const firstInstitution = randomUUID();
       const secondInstitution = randomUUID();
       await client.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'A','legal-a','active'),($2,'B','legal-b','active')", [firstInstitution, secondInstitution]);
-      const repository = new InstitutionLegalProfileRepository(client);
+      const repository = new InstitutionLegalProfileRepository(pool);
       const first = await repository.createVersion({ institutionId: firstInstitution, legalName: 'Nexus Escola A', taxIdentifier: 'A-1', registeredAddress: { countryCode: 'PT', line1: 'Rua A' }, effectiveFrom: new Date('2026-01-01T00:00:00Z') });
       const second = await repository.createVersion({ institutionId: firstInstitution, legalName: 'Nexus Escola A Nova', taxIdentifier: 'A-2', registeredAddress: { countryCode: 'PT', line1: 'Rua B' }, effectiveFrom: new Date('2026-02-01T00:00:00Z') });
       assert.equal(first.version, 1);
@@ -47,7 +47,7 @@ test('serializes same-institution allocation while independent institutions rema
   } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(()=>undefined); await pool.end(); }
 });
 
-test('characterizes that concurrent first legal-profile versions currently race on allocation', async () => {
+test('preserves the pre-0120 unlocked allocation race as a historical characterization', async () => {
   await verifyApprovedTestConnection();
   const schema = `institution_legal_race_${randomUUID().replaceAll('-', '')}`;
   const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
