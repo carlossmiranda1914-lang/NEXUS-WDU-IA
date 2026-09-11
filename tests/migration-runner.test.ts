@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import pg from 'pg';
 import { discoverMigrations, migrationChecksum, runMigrations, type MigrationFile, type MigrationQueryClient } from '../src/db/migration-runner.ts';
+import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
 
 class FakeMigrationClient implements MigrationQueryClient {
   readonly calls: string[] = [];
@@ -107,4 +110,28 @@ test('rolls back and fails when migration SQL fails before ledger insertion', as
   await assert.rejects(runMigrations(client, [broken]), /Migration 0001_broken\.sql failed: simulated SQL failure/);
   assert.deepEqual(client.calls.slice(-2), [broken.sql, 'ROLLBACK']);
   assert.equal(client.ledger.size, 0);
+});
+
+test('combined Documents and reserved Finance migrations replay with a verified PostgreSQL ledger', async () => {
+  await verifyApprovedTestConnection();
+  const schema = `migration_ledger_${randomUUID().replaceAll('-', '')}`;
+  const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
+  const pool = new pg.Pool({ connectionString: process.env.TEST_DATABASE_URL, options: `-c search_path=${quote(schema)},public` });
+  try {
+    const client = await pool.connect();
+    try {
+      await client.query(`CREATE SCHEMA ${quote(schema)}`);
+      const migrations = await discoverMigrations(path.resolve(process.cwd(), 'src/db/migrations'));
+      const firstRun = await runMigrations(client, migrations);
+      assert.equal(firstRun.length, 53);
+      assert.deepEqual(await runMigrations(client, migrations), []);
+      const ledger = await client.query<{ count: number }>('SELECT count(*)::int AS count FROM nexus_schema_migrations');
+      assert.equal(ledger.rows[0].count, migrations.length);
+    } finally {
+      await client.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`);
+      client.release();
+    }
+  } finally {
+    await pool.end();
+  }
 });
