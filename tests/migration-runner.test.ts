@@ -45,6 +45,37 @@ test('discovers only valid migration filenames in lexical order', async () => {
   }
 });
 
+test('permits a reserved non-contiguous forward range in deterministic order', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'nexus-migration-runner-reserved-range-'));
+  try {
+    await Promise.all([
+      writeFile(path.join(directory, '0100_finance_fee_catalogue.sql'), 'SELECT 100'),
+      writeFile(path.join(directory, '0035_documents_secure_content_access.sql'), 'SELECT 35'),
+    ]);
+
+    assert.deepEqual((await discoverMigrations(directory)).map((entry) => entry.filename), [
+      '0035_documents_secure_content_access.sql',
+      '0100_finance_fee_catalogue.sql',
+    ]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('rejects duplicate numeric migration authority even when names differ', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'nexus-migration-runner-duplicate-order-'));
+  try {
+    await Promise.all([
+      writeFile(path.join(directory, '0100_documents.sql'), 'SELECT 100'),
+      writeFile(path.join(directory, '0100_finance.sql'), 'SELECT 101'),
+    ]);
+
+    await assert.rejects(discoverMigrations(directory), /Migration order 0100 is ambiguous/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('applies only pending migrations in deterministic order and records checksums', async () => {
   const client = new FakeMigrationClient();
   const first = migration('0001_first.sql', 'SELECT 1');
