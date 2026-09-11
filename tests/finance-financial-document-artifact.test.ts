@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { FinancialDocumentArtifactService, InMemoryFinancialDocumentArtifactStorage, PostgresFinancialDocumentArtifactStorage } from '../src/modules/finance/financial-document-artifact-service.ts';
 import { renderFinancialDocumentPdf } from '../src/modules/finance/financial-document-artifact-renderer.ts';
+import { buildFinancialDocumentPresentation } from '../src/modules/finance/financial-document-presentation.ts';
+import { createDocumentarySnapshot } from '../src/modules/finance/documentary-snapshot.ts';
+
+const snapshot = () => createDocumentarySnapshot({ issuer: { legalName: 'Escola Nexus', taxIdentifier: null, address: { countryCode: 'PT', line1: 'Rua 1' } }, recipient: { name: 'Maria', authorityId: 'person-1' }, operation: { reference: 'PAY-IMMUTABLE' }, payment: { reference: 'PAY-IMMUTABLE', amount: '10.00', currency: 'EUR' }, totals: { documentTotal: '10.00', currency: 'EUR' }, jurisdiction: { code: 'core', policyVersion: 'core-1' } });
+const presentation = () => buildFinancialDocumentPresentation({ document: { documentType: 'receipt', seriesCode: 'REC', sequenceNumber: 7, issuedAt: new Date('2026-09-09T10:00:00.000Z'), status: 'issued' }, snapshot: snapshot() });
 
 test('F7-05 defines a versioned, non-destructive Financial Document artifact authority', () => {
   assert.equal(typeof FinancialDocumentArtifactService, 'function');
@@ -10,10 +15,12 @@ test('F7-05 defines a versioned, non-destructive Financial Document artifact aut
 });
 
 test('F7-05 renders a real PDF only from immutable documentary input', () => {
-  const bytes = renderFinancialDocumentPdf({ documentId: 'doc-1', documentType: 'receipt', seriesCode: 'REC', sequenceNumber: 7, issuedAt: new Date('2026-09-09T10:00:00.000Z'), sourceSnapshot: { paymentReference: 'PAY-IMMUTABLE', amount: '10.00', currency: 'EUR' }, sources: [{ type: 'payment', id: 'payment-1', snapshot: { paymentReference: 'PAY-IMMUTABLE' } }], correctsDocumentId: null, renderVersion: '1', templateVersion: '1' });
+  const bytes = renderFinancialDocumentPdf({ presentation: presentation() });
   assert.ok(bytes.byteLength > 200);
   assert.equal(bytes.subarray(0, 5).toString('ascii'), '%PDF-');
   assert.match(bytes.toString('latin1'), /PAY-IMMUTABLE/);
+  assert.match(bytes.toString('latin1'), /Escola Nexus/);
+  assert.doesNotMatch(bytes.toString('latin1'), /Document id:|Provenance:|Policy provenance:|Renderer:|template:|person-1/i);
 });
 
 test('F7-05 keeps artifact bytes behind a provider-neutral storage boundary', async () => {
@@ -30,8 +37,7 @@ test('F7-05 exposes a durable PostgreSQL storage adapter without provider-specif
 test('F7-05 persists a hash-verified PDF artifact from an issued immutable document', async () => {
   const storage = new InMemoryFinancialDocumentArtifactStorage(); const artifactId = 'artifact-1'; let inserted: any;
   const pool: any = { query: async (sql: string, values: unknown[]) => {
-    if (sql.includes('FROM finance_financial_documents d')) return { rows: [{ id: 'document-1', document_type: 'receipt', sequence_number: '7', issued_at: new Date('2026-09-09T10:00:00.000Z'), source_snapshot: { paymentReference: 'PAY-IMMUTABLE', amount: '10.00', currency: 'EUR' }, corrects_document_id: null, series_code: 'REC' }] };
-    if (sql.includes('FROM finance_financial_document_sources')) return { rows: [{ source_type: 'payment', source_id: 'payment-1', snapshot: { paymentReference: 'PAY-IMMUTABLE' } }] };
+    if (sql.includes('FROM finance_financial_documents d')) return { rows: [{ id: 'document-1', document_type: 'receipt', sequence_number: '7', issued_at: new Date('2026-09-09T10:00:00.000Z'), documentary_snapshot: snapshot(), series_code: 'REC' }] };
     if (sql.includes('FROM finance_financial_document_artifacts')) return { rows: inserted ? [inserted] : [] };
     if (sql.includes('INSERT INTO finance_financial_document_artifacts')) { inserted = { id: artifactId, document_id: 'document-1', render_version: values[2], template_version: values[3], generated_at: new Date(), content_hash: values[4], media_type: values[5], byte_size: values[6], storage_reference: values[7] }; return { rows: [inserted] }; }
     if (sql.includes('finance_audit_records') || sql.includes('finance_outbox')) return { rows: [] };
