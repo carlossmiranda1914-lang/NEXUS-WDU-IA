@@ -26,10 +26,25 @@ test('legal profiles are institution-scoped, effective-dated, and historically v
       assert.equal(first.version, 1);
       assert.equal(second.version, 2);
       assert.equal((await repository.resolveEffective(firstInstitution, new Date('2026-01-15T00:00:00Z')))?.legalName, 'Nexus Escola A');
+      assert.equal((await repository.resolveEffective(firstInstitution, new Date('2026-02-01T00:00:00Z')))?.legalName, 'Nexus Escola A Nova');
       assert.equal((await repository.resolveEffective(firstInstitution, new Date('2026-02-15T00:00:00Z')))?.legalName, 'Nexus Escola A Nova');
       assert.equal(await repository.resolveEffective(secondInstitution, new Date('2026-02-15T00:00:00Z')), null);
+      await assert.rejects(() => client.query("UPDATE institution_legal_profiles SET legal_name='rewritten' WHERE institution_id=$1 AND version=1", [firstInstitution]));
+      await assert.rejects(() => client.query('DELETE FROM institution_legal_profiles WHERE institution_id=$1 AND version=1', [firstInstitution]));
+      await assert.rejects(() => repository.createVersion({ institutionId: firstInstitution, legalName: 'Overlap', taxIdentifier: null, registeredAddress: { countryCode: 'PT', line1: 'Rua C' }, effectiveFrom: new Date('2026-01-15T00:00:00Z') }));
+      assert.equal((await repository.resolveEffective(firstInstitution, new Date('2026-02-15T00:00:00Z')))?.legalName, 'Nexus Escola A Nova');
     } finally { client.release(); }
   } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(() => undefined); await pool.end(); }
+});
+
+test('serializes same-institution allocation while independent institutions remain concurrent', async () => {
+  await verifyApprovedTestConnection(); const schema=`institution_legal_serial_${randomUUID().replaceAll('-', '')}`; const quote=(value:string)=>`"${value.replaceAll('"','""')}"`; const pool=new pg.Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${quote(schema)},public`});
+  try { const client=await pool.connect(); const a=randomUUID(),b=randomUUID(),c=randomUUID(); try { await client.query(`CREATE SCHEMA ${quote(schema)}`); await runMigrations(client,await discoverMigrations(path.resolve(process.cwd(),'src/db/migrations'))); await client.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'A','serial-a','active'),($2,'B','serial-b','active'),($3,'C','serial-c','active')",[a,b,c]); } finally { client.release(); }
+    const repo=new InstitutionLegalProfileRepository(pool);
+    const input=(institutionId:string,name:string,at:string)=>({institutionId,legalName:name,taxIdentifier:null,registeredAddress:{countryCode:'PT',line1:'Rua'},effectiveFrom:new Date(at)});
+    const same=await Promise.all([repo.createVersion(input(a,'A1','2026-01-01T00:00:00Z')),repo.createVersion(input(a,'A2','2026-02-01T00:00:00Z'))]); assert.deepEqual(same.map(row=>row.version).sort(),[1,2]);
+    const different=await Promise.all([repo.createVersion(input(b,'B1','2026-01-01T00:00:00Z')),repo.createVersion(input(c,'C1','2026-01-01T00:00:00Z'))]); assert.deepEqual(different.map(row=>row.version),[1,1]);
+  } finally { await pool.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`).catch(()=>undefined); await pool.end(); }
 });
 
 test('characterizes that concurrent first legal-profile versions currently race on allocation', async () => {

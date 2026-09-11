@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
 import { verifyApprovedTestConnection } from '../scripts/nexus-test-db-safety.mjs';
+import { InstitutionLegalProfileRepository } from '../src/modules/institution/institution-legal-profile.ts';
 
 async function seedConfirmedPayment(client: pg.PoolClient, institutionId: string) {
   const personId = randomUUID(); const billingPersonId = randomUUID(); const accountId = randomUUID(); const journalId = randomUUID(); const paymentId = randomUUID();
@@ -82,7 +83,7 @@ test('F7-01 PostgreSQL issuance replays idempotently and allocates a series numb
     assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.recipient.name, 'Document recipient');
     assert.equal(documentarySnapshot.rows[0]?.documentary_snapshot.payment.reference, `PAY-${paymentId!.slice(0, 8)}`);
     await pool.query("UPDATE people SET name='Renamed live recipient' WHERE name='Document recipient'");
-    await pool.query("UPDATE institution_legal_profiles SET legal_name='Renamed live institution' WHERE institution_id=$1", [institutionId]);
+    await new InstitutionLegalProfileRepository(pool).createVersion({ institutionId, legalName: 'Renamed live institution', taxIdentifier: 'PT999999990', registeredAddress: { countryCode: 'PT', line1: 'Rua do Nexus, 2' }, effectiveFrom: new Date() });
     const replayAfterLiveChange = await repo.issue(command);
     assert.equal(replayAfterLiveChange.id, first.id, 'idempotency replay must load the original issued fact');
     const immutableSnapshot = await pool.query<{ documentary_snapshot: { issuer: { legalName: string }; recipient: { name: string } } }>('SELECT documentary_snapshot FROM finance_financial_documents WHERE id=$1', [first.id]);
@@ -127,11 +128,11 @@ test('F7 document issuance fails closed without legal profile or billing recipie
       await client.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'Snapshot guard','snapshot-guard','active')", [institutionId]);
       await client.query("INSERT INTO finance_financial_document_series(id,institution_id,code,next_sequence_number) VALUES($1,$2,'GUARD',1)", [seriesId, institutionId]);
       paymentId = await seedConfirmedPayment(client, institutionId);
-      await client.query('DELETE FROM institution_legal_profiles WHERE institution_id=$1', [institutionId]);
+      await client.query("UPDATE institution_legal_profiles SET effective_to=now()-interval '1 hour' WHERE institution_id=$1", [institutionId]);
     } finally { client.release(); }
     const repo = new PostgresFinancialDocumentRepository(pool, createSyntheticUatFiscalAdapterRegistry());
     await assert.rejects(() => repo.issue({ institutionId, sourceInstitutionId: institutionId, sourceType: 'payment', sourceId: paymentId!, seriesId, idempotencyKey: 'missing-legal-profile', documentType: 'receipt' }), /INSTITUTION_LEGAL_PROFILE_REQUIRED/);
-    await pool.query("INSERT INTO institution_legal_profiles(institution_id,version,legal_name,registered_address,effective_from) VALUES($1,1,'Restored legal profile',$2,now()-interval '1 day')", [institutionId, { countryCode: 'PT', line1: 'Rua do Nexus, 2' }]);
+    await pool.query("INSERT INTO institution_legal_profiles(institution_id,version,legal_name,registered_address,effective_from) VALUES($1,2,'Restored legal profile',$2,now()-interval '30 minutes')", [institutionId, { countryCode: 'PT', line1: 'Rua do Nexus, 2' }]);
     await pool.query('DELETE FROM finance_financial_account_parties WHERE institution_id=$1', [institutionId]);
     await assert.rejects(() => repo.issue({ institutionId, sourceInstitutionId: institutionId, sourceType: 'payment', sourceId: paymentId!, seriesId, idempotencyKey: 'missing-document-recipient', documentType: 'receipt' }), /DOCUMENT_RECIPIENT_REQUIRED/);
     const state = await pool.query<{ next_sequence_number: string; count: number }>('SELECT (SELECT next_sequence_number::text FROM finance_financial_document_series WHERE id=$1) next_sequence_number,(SELECT count(*)::int FROM finance_financial_documents WHERE institution_id=$2) count', [seriesId, institutionId]);
