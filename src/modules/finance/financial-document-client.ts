@@ -1,8 +1,9 @@
 import { auth } from '../../lib/firebase.ts';
 
-export type FinancialDocumentProjection = { id: string; type: string; status: string; seriesCode: string; sequenceNumber: number; issuedAt: string; correctsDocumentId: string | null };
+export type FinancialDocumentPresentation = { document: { typeLabel: string; officialNumber: string; issueDate: string; currency: string; statusLabel: string }; issuer: { legalName: string; taxIdentifier: string | null; addressLines: string[] }; recipient: { name: string; operationalReference: string | null }; operation: { reference: string | null }; totals: { documentTotal: string; currency: string }; payment: { reference: string; amount: string; currency: string } | null };
+export type FinancialDocumentProjection = { id: string; type: string; status: string; seriesCode: string; sequenceNumber: number; issuedAt: string; correctsDocumentId: string | null; presentation: FinancialDocumentPresentation | null };
 export type FinancialDocumentCapabilities = { issue: boolean; correct: boolean };
-export type FinancialDocumentDetail = FinancialDocumentProjection & { sources: Array<{ type: string; id: string; snapshot: Record<string, unknown> }>; corrections: FinancialDocumentProjection[] };
+export type FinancialDocumentDetail = FinancialDocumentProjection & { sources: Array<{ type: string; paymentReference: string | null }>; corrections: FinancialDocumentProjection[] };
 export type FinancialDocumentArtifactProjection = { id: string; document_id: string; render_version: string; template_version: string; generated_at: string; content_hash: string; media_type: string; byte_size: number };
 type FinancialDocumentSeriesProjection = { id: string; document_type: string; status: string };
 export type ReceiptEligibilityProjection = { status: 'ELIGIBLE' } | { status: 'BLOCKED'; reasonCode: string };
