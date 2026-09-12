@@ -51,8 +51,18 @@ export class FiscalAdapterRegistry {
   }
 }
 
-/** No jurisdiction has been approved for production fiscal operation yet. */
-export const productionFiscalAdapterRegistry = new FiscalAdapterRegistry([]);
+/**
+ * AO is a recognised production jurisdiction boundary. Its empty issuable
+ * document set preserves fail-closed issuance until the Angola policy's
+ * external institution, onboarding, signing and series gates are satisfied.
+ */
+const angolaProductionAdapter: FiscalAdapter = Object.freeze({
+  key: 'angola-production',
+  supportedJurisdictions: Object.freeze(['AO']),
+  policy: Object.freeze({ version: ANGOLA_POLICY_VERSION, supportedDocumentTypes: Object.freeze([]) }),
+});
+
+export const productionFiscalAdapterRegistry = new FiscalAdapterRegistry([angolaProductionAdapter]);
 
 const syntheticUatAdapter: FiscalAdapter = {
   key: 'core',
@@ -76,3 +86,4 @@ export const runtimeFiscalAdapterRegistry = () =>
   process.env.NEXUS_UAT_SYNTHETIC_FISCAL_ADAPTERS === 'true'
     ? createSyntheticUatFiscalAdapterRegistry()
     : productionFiscalAdapterRegistry;
+import { ANGOLA_POLICY_VERSION } from './jurisdictions/angola/angola-evidence-manifest.ts';
