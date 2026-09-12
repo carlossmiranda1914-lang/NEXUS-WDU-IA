@@ -688,6 +688,12 @@ export function registerDocumentRoutes(
         inputStream = Readable.from(bodyBuf);
       }
 
+      const requestContentType = req.header('content-type');
+      const effectiveMimeType =
+        requestContentType && requestContentType !== 'application/octet-stream'
+          ? requestContentType
+          : row.declared_mime_type;
+
       let transferResult: { byteSize: number; sha256Hash: string; mimeType: string };
       if (typeof storageProvider.writeObjectStream === 'function') {
         transferResult = await storageProvider.writeObjectStream({
@@ -696,7 +702,7 @@ export function registerDocumentRoutes(
           storageKey: row.storage_key,
           stream: inputStream,
           declaredByteSize: declaredSize,
-          mimeType: req.header('content-type') || row.declared_mime_type,
+          mimeType: effectiveMimeType,
         });
         if (transferResult.byteSize > effectiveLimit) {
           return reject(res, 422, `DECLARED_SIZE_EXCEEDS_POLICY: Tamanho do ficheiro excede o limite efetivo de ${effectiveLimit} bytes.`);

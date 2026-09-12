@@ -13,6 +13,9 @@ import { registerDocumentRoutes } from '../src/modules/documents/document.contro
 import { GoogleCloudStorageObjectProvider } from '../src/modules/documents/google-cloud-storage-provider.ts';
 import { ConfigurableDocumentAccessPolicyEngine } from '../src/modules/documents/document-access-policy.ts';
 import { ConfigurableRetentionPolicyEngine } from '../src/modules/documents/document-retention-policy.ts';
+import { executeTechnicalVerificationPipelineCommand } from '../src/modules/documents/document-verification-command.ts';
+import { DeterministicTestMalwareScanner } from './support/deterministic-test-malware-scanner.ts';
+import { ContentTypeDetector } from '../src/modules/documents/content-type-detector.ts';
 
 const BUCKET = 'nexus-staging-documents-eu';
 const PROJECT_ID = 'nexus-wdu-staging';
@@ -154,8 +157,9 @@ async function runRealDocumentsApplicationE2E() {
       'Content-Type': 'application/json',
     };
 
-    // 5. Create synthetic document payload
+    // 5. Create synthetic document payload (valid PDF format for technical verification)
     const syntheticPayload = Buffer.from(
+      '%PDF-1.4\n%Nexus Staging True Application E2E Test Report\n' +
       JSON.stringify({
         report: 'Nexus Staging True Application E2E Test Report',
         version: '1.0',
@@ -164,7 +168,8 @@ async function runRealDocumentsApplicationE2E() {
         classification: 'confidential',
         timestamp: new Date().toISOString(),
         content: 'Este documento comprova a execução ponta-a-ponta do pipeline real de documentos via HTTP e GCS.',
-      }, null, 2),
+      }, null, 2) +
+      '\n%%EOF',
     );
     const sourceSha256 = createHash('sha256').update(syntheticPayload).digest('hex');
 
@@ -179,8 +184,8 @@ async function runRealDocumentsApplicationE2E() {
       body: JSON.stringify({
         category: 'general',
         classification: 'confidential',
-        declaredFilename: 'staging_report_e2e.json',
-        declaredMimeType: 'application/json',
+        declaredFilename: 'staging_report_e2e.pdf',
+        declaredMimeType: 'application/pdf',
         declaredByteSize: syntheticPayload.length,
       }),
     });
@@ -273,13 +278,46 @@ async function runRealDocumentsApplicationE2E() {
     const gcsMetadataSha256 = headGcs.sha256Hash;
     console.log(`Real GCS Object Confirmed: exists=${headGcs.exists}, GCS_METADATA_SHA256=${gcsMetadataSha256}`);
 
-    // Transition version status to 'available' upon verification pass
-    await pool.query(
-      `UPDATE document_versions SET status = 'available' WHERE id = $1`,
-      [completeData.versionId],
-    );
-    const technicalVerificationState = 'passed';
+    // 10. Execute Canonical I4 Technical Verification Pipeline Command (NO direct DB UPDATE)
+    console.log('\n[APP-E2E 9B] Executing Canonical I4 Technical Verification Pipeline Command...');
+    const malwareScanner = new DeterministicTestMalwareScanner();
+    const contentTypeDetector = new ContentTypeDetector({
+      maxPrefixInspectionBytes: 4096,
+      zipMetadataInspectionLimit: 65536,
+      maxContainerEntryCount: 100,
+      maxContainerMetadataBytes: 1048576,
+    });
+
+    const pipelineRes = await executeTechnicalVerificationPipelineCommand({
+      pool,
+      context: {
+        personId: adminPersonAId,
+        personName: 'Admin User Tenant A',
+        identityEmail: 'staging-admin-a@nexus.local',
+        membershipId: membershipAId,
+        institutionId: instAId,
+        institutionName: 'Synthetic Institution A (Staging)',
+        institutionSlug: 'inst-a-staging',
+        role: 'institution_admin',
+      },
+      idempotencyKey: `idemp-verify-${randomUUID()}`,
+      input: {
+        documentId: sessionData.documentId,
+        versionId: completeData.versionId,
+        storageProvider,
+        malwareScanner,
+        contentTypeDetector,
+        retryPolicy: { maxAttempts: 3, baseBackoffMs: 1000, maxBackoffMs: 10000 },
+      },
+    });
+
+    const technicalVerificationState = pipelineRes.result.versionStatus;
+    console.log('Pipeline Assessments:', JSON.stringify(pipelineRes.result.assessments, null, 2));
+    console.log('Pipeline Evaluation:', JSON.stringify(pipelineRes.result.evaluation, null, 2));
     console.log(`TECHNICAL_VERIFICATION_STATE=${technicalVerificationState}`);
+    assert.equal(technicalVerificationState, 'available', 'Pipeline must promote version to available');
+    assert.equal(pipelineRes.result.evaluation.overallStatus, 'available');
+    assert.equal(pipelineRes.result.evaluation.allMandatoryPassed, true);
 
     // 11. Secure Access Stage 1: POST /api/documents/:id/access
     console.log('\n[APP-E2E 10] Real Secure Access Stage 1: POST /api/documents/:id/access...');
