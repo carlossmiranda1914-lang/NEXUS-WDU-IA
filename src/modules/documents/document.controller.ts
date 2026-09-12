@@ -1,5 +1,4 @@
 import type { Application, RequestHandler, Response } from 'express';
-import crypto from 'node:crypto';
 import { pool } from '../../db/index.ts';
 import { requireAuth, type AuthRequest } from '../../middleware/auth.ts';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
@@ -55,7 +54,22 @@ function validUuid(value: unknown): value is string {
   );
 }
 
-function resolveIdempotencyKey(req: AuthRequest, bodyKey?: unknown): string {
+/**
+ * Require a caller-supplied idempotency key.
+ * Returns the key string on success, or writes a 428 Precondition Required
+ * response and returns null so the caller can short-circuit.
+ *
+ * A key must be:
+ *  - supplied via Idempotency-Key header, X-Idempotency-Key header, or body.idempotencyKey
+ *  - a string of at least 8 characters
+ *
+ * Server-generated random keys are PROHIBITED: they defeat retry safety.
+ */
+function requireIdempotencyKey(
+  req: AuthRequest,
+  res: Response,
+  bodyKey?: unknown,
+): string | null {
   const headerKey = req.header('idempotency-key') || req.header('x-idempotency-key');
   if (typeof headerKey === 'string' && headerKey.trim().length >= 8) {
     return headerKey.trim();
@@ -63,7 +77,13 @@ function resolveIdempotencyKey(req: AuthRequest, bodyKey?: unknown): string {
   if (typeof bodyKey === 'string' && bodyKey.trim().length >= 8) {
     return bodyKey.trim();
   }
-  return `idem-${crypto.randomUUID()}`;
+  reject(
+    res,
+    428,
+    'Idempotency-Key é obrigatório para esta operação. Forneça um identificador único via cabeçalho Idempotency-Key ou campo idempotencyKey no corpo (mínimo 8 caracteres).',
+    'IDEMPOTENCY_KEY_REQUIRED',
+  );
+  return null;
 }
 
 function sanitizeUploadSession(session: DocumentUploadSessionRecord): FrontendSafeUploadSessionDto {
@@ -140,6 +160,7 @@ export function rejectDomainError(res: Response, error: unknown): Response {
       msg.includes('ACTIVE_HOLD_PREVENTS_DELETION') ||
       msg.includes('ACTIVE_HOLD') ||
       msg.includes('IDEMPOTENCY_FINGERPRINT_MISMATCH') ||
+      msg.includes('IDEMPOTENCY_CONFLICT') ||
       msg.includes('RESUME_CANCELLED_DENIED') ||
       msg.includes('RESUME_COMPLETED_DENIED') ||
       msg.includes('RESUME_FAILED_DENIED') ||
@@ -340,7 +361,8 @@ export function registerDocumentRoutes(
 
     try {
       let documentId = rawDocId;
-      const idempotencyKey = resolveIdempotencyKey(req, req.body?.idempotencyKey);
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
 
       if (!documentId) {
         // Canonical I1/I7 document creation command: domain fact, audit, outbox event intent, idempotency
@@ -437,7 +459,8 @@ export function registerDocumentRoutes(
     }
 
     try {
-      const idempotencyKey = resolveIdempotencyKey(req, req.body?.idempotencyKey);
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
       const sessionResult = await createUploadSessionCommand({
         pool: docPool,
         context,
@@ -496,7 +519,8 @@ export function registerDocumentRoutes(
     }
 
     try {
-      const idempotencyKey = resolveIdempotencyKey(req, req.body?.idempotencyKey);
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
       const completeRes = await completeUploadSessionCommand({
         pool: docPool,
         context,
@@ -555,7 +579,8 @@ export function registerDocumentRoutes(
     }
 
     try {
-      const idempotencyKey = resolveIdempotencyKey(req, req.body?.idempotencyKey);
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
       const resumeRes = await resumeUploadSessionCommand({
         pool: docPool,
         context,
@@ -591,7 +616,8 @@ export function registerDocumentRoutes(
     if (!validUuid(sessionId)) return reject(res, 400, 'sessionId inválido.');
 
     try {
-      const idempotencyKey = resolveIdempotencyKey(req, req.body?.idempotencyKey);
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
       const cancelRes = await cancelUploadSessionCommand({
         pool: docPool,
         context,
@@ -656,7 +682,8 @@ export function registerDocumentRoutes(
         return reject(res, 400, 'versionId inválido.');
       }
 
-      const idempotencyKey = resolveIdempotencyKey(req, req.body?.idempotencyKey);
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
       const authRes = await authorizeContentAccessCommand({
         pool: docPool,
         context,
@@ -741,7 +768,8 @@ export function registerDocumentRoutes(
     }
 
     try {
-      const idempotencyKey = resolveIdempotencyKey(req, req.body?.idempotencyKey);
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
       const revokeRes = await revokeContentAccessGrantCommand({
         pool: docPool,
         context,
@@ -802,7 +830,8 @@ export function registerDocumentRoutes(
         return reject(res, 400, 'versionId inválido.');
       }
 
-      const idempotencyKey = resolveIdempotencyKey(req, req.body?.idempotencyKey);
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
       const holdRes = await placeHoldCommand({
         pool: docPool,
         context,
@@ -877,7 +906,8 @@ export function registerDocumentRoutes(
         return reject(res, 400, 'versionId inválido.');
       }
 
-      const idempotencyKey = resolveIdempotencyKey(req, req.body?.idempotencyKey);
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
       const releaseRes = await releaseHoldCommand({
         pool: docPool,
         context,
@@ -944,7 +974,8 @@ export function registerDocumentRoutes(
         return reject(res, 400, 'versionId inválido.');
       }
 
-      const idempotencyKey = resolveIdempotencyKey(req, req.body?.idempotencyKey);
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
       const authRes = await authorizeDeletionCommand({
         pool: docPool,
         context,
@@ -990,7 +1021,8 @@ export function registerDocumentRoutes(
     }
 
     try {
-      const idempotencyKey = resolveIdempotencyKey(req, req.body?.idempotencyKey);
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
       const execRes = await executeDeletionCommand({
         pool: docPool,
         context,

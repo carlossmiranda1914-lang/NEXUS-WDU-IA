@@ -238,7 +238,7 @@ try {
   // 2. Complete upload session
   const completeRes = await request(`/api/documents/upload-sessions/${sessionId}/complete`, {
     method: 'POST',
-    body: { rawToken: rawUploadToken },
+    body: { rawToken: rawUploadToken, idempotencyKey: 'idem-complete-session-1' },
   });
 
   assert.equal(completeRes.status, 200, 'Complete upload session must succeed with 200');
@@ -298,6 +298,7 @@ try {
     body: {
       versionId,
       action: 'open',
+      idempotencyKey: 'idem-access-auth-1',
     },
   });
 
@@ -329,7 +330,7 @@ try {
   // Revoke access grant: POST /api/documents/access/:grantId/revoke
   const revokeRes = await request(`/api/documents/access/${grantId}/revoke`, {
     method: 'POST',
-    body: { reason: 'User session closed' },
+    body: { reason: 'User session closed', idempotencyKey: 'idem-revoke-grant-1' },
   });
   assert.equal(revokeRes.status, 200);
   const revokeBody = (await revokeRes.json()) as any;
@@ -375,6 +376,7 @@ try {
       holdType: 'legal',
       authority: 'Court Order AO-2026',
       reason: 'Audit investigation hold',
+      idempotencyKey: 'idem-place-hold-1',
     },
   });
 
@@ -388,7 +390,7 @@ try {
   // Deletion Authorization while hold is active MUST FAIL WITH 409
   const authDelBlockedRes = await request(`/api/documents/${documentId}/deletion/authorize`, {
     method: 'POST',
-    body: { versionId },
+    body: { versionId, idempotencyKey: 'idem-del-auth-blocked-1' },
   });
   assert.equal(authDelBlockedRes.status, 409, 'Deletion authorization must be blocked when hold is active');
 
@@ -398,6 +400,7 @@ try {
     body: {
       versionId,
       releaseReason: 'Investigation concluded with clear outcome',
+      idempotencyKey: 'idem-release-hold-1',
     },
   });
   assert.equal(releaseHoldRes.status, 200);
@@ -408,7 +411,7 @@ try {
   // Authorize Deletion: POST /api/documents/:id/deletion/authorize
   const authDelRes = await request(`/api/documents/${documentId}/deletion/authorize`, {
     method: 'POST',
-    body: { versionId },
+    body: { versionId, idempotencyKey: 'idem-del-auth-1' },
   });
   assert.equal(authDelRes.status, 201);
   const authDelBody = (await authDelRes.json()) as any;
@@ -420,7 +423,7 @@ try {
   // Execute Deletion: POST /api/documents/:id/deletion/execute
   const execDelRes = await request(`/api/documents/${documentId}/deletion/execute`, {
     method: 'POST',
-    body: { deletionAuthorizationId },
+    body: { deletionAuthorizationId, idempotencyKey: 'idem-del-execute-1' },
   });
   assert.equal(execDelRes.status, 200);
   const execDelBody = (await execDelRes.json()) as any;
@@ -442,7 +445,7 @@ try {
   // Content access to deleted version MUST be denied (422 technical state rejection)
   const accessDeletedRes = await request(`/api/documents/${documentId}/access`, {
     method: 'POST',
-    body: { versionId, action: 'open' },
+    body: { versionId, action: 'open', idempotencyKey: 'idem-access-deleted-1' },
   });
   assert.equal(accessDeletedRes.status, 422, 'Access to deleted version must be denied with 422');
 
@@ -520,6 +523,7 @@ try {
       declaredByteSize: 500,
       storageBucket: 'malicious-injected-bucket',
       storageProvider: 'rogue-storage-provider',
+      idempotencyKey: 'idem-rogue-coords-test-1',
     },
   });
   assert.equal(rogueCoordsRes.status, 201);

@@ -252,6 +252,7 @@ try {
       declaredFilename: 'injected.pdf',
       declaredMimeType: 'application/pdf',
       declaredByteSize: 1024,
+      idempotencyKey: 'idem-mt-upload-sess-b-1',
     },
   });
   assert.equal(uploadSessBRes.status, 404, 'Creating upload session for cross-tenant document must be denied');
@@ -264,6 +265,7 @@ try {
     body: {
       versionId: versionAId,
       action: 'open',
+      idempotencyKey: 'idem-mt-access-b-1',
     },
   });
   assert.equal(authAccessBRes.status, 404, 'Authorizing access for cross-tenant document must return 404');
@@ -274,7 +276,7 @@ try {
   const authAccessARes = await request(`/api/documents/${docAId}/access`, {
     method: 'POST',
     token: 'uid-admin-a',
-    body: { versionId: versionAId, action: 'open' },
+    body: { versionId: versionAId, action: 'open', idempotencyKey: 'idem-mt-access-a-1' },
   });
   assert.equal(authAccessARes.status, 201);
   const rawTokenA = ((await authAccessARes.json()) as any).rawAccessToken;
@@ -301,6 +303,7 @@ try {
       holdType: 'legal',
       authority: 'Attacker Authority',
       reason: 'Cross-tenant interference',
+      idempotencyKey: 'idem-mt-hold-b-1',
     },
   });
   assert.equal(placeHoldBRes.status, 404, 'Placing hold across tenants must return 404');
@@ -313,6 +316,7 @@ try {
     body: {
       versionId: versionAId,
       releaseReason: 'Unauthorized cross-tenant release',
+      idempotencyKey: 'idem-mt-release-hold-b-1',
     },
   });
   assert.equal(releaseHoldBRes.status, 404, 'Releasing cross-tenant hold must return 404');
@@ -322,7 +326,7 @@ try {
   const authDelBRes = await request(`/api/documents/${docAId}/deletion/authorize`, {
     method: 'POST',
     token: 'uid-admin-b',
-    body: { versionId: versionAId },
+    body: { versionId: versionAId, idempotencyKey: 'idem-mt-del-auth-b-1' },
   });
   assert.equal(authDelBRes.status, 404, 'Authorizing deletion across tenants must return 404');
 
