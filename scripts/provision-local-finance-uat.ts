@@ -23,6 +23,10 @@ if (target.host !== '127.0.0.1' || target.port !== '54329' || target.database !=
 }
 
 const pool = new pg.Pool({ connectionString, connectionTimeoutMillis: 5000 });
+const uatFirebaseUid = process.env.NEXUS_UAT_FIREBASE_UID?.trim();
+if (!uatFirebaseUid || !/^[A-Za-z0-9_-]{1,128}$/.test(uatFirebaseUid)) {
+  throw new Error('NEXUS_UAT_FIREBASE_UID is required to resolve the active local UAT institution.');
+}
 const angolaPreviewMode = process.argv.includes('--angola-preview');
 const fixture = {
   accountName: angolaPreviewMode ? 'UAT AO — Finance Adjustment 100-40-60' : 'UAT — Finance Adjustment 100-40-60',
@@ -43,13 +47,16 @@ async function resolveActor(): Promise<InstitutionalContext> {
     institution_id: string; institution_name: string; institution_slug: string; membership_id: string; person_id: string; person_name: string;
   }>(`SELECT i.id AS institution_id, i.name AS institution_name, i.slug AS institution_slug,
              m.id AS membership_id, p.id AS person_id, p.name AS person_name
-        FROM institutions i
-        JOIN memberships m ON m.institution_id = i.id AND m.status = 'active' AND m.role = 'institution_admin'
-        JOIN people p ON p.id = m.person_id
-       WHERE i.slug = 'nexus-local-iam-uat' AND i.status = 'active'
-       ORDER BY m.created_at ASC LIMIT 1`);
+        FROM identities identity
+        JOIN people p ON p.id = identity.person_id
+        JOIN memberships m ON m.person_id = p.id AND m.status = 'active' AND m.role = 'institution_admin'
+        JOIN institutions i ON i.id = m.institution_id AND i.status = 'active'
+       WHERE identity.provider = 'firebase' AND identity.provider_subject = $1
+       ORDER BY i.slug`, [uatFirebaseUid]);
+  if (result.rows.length !== 1) {
+    throw new Error('The configured local UAT identity must have exactly one active institution_admin context.');
+  }
   const row = result.rows[0];
-  if (!row) throw new Error('Canonical local IAM UAT administrator is missing; run the authorized IAM UAT bootstrap first.');
   return { institutionId: row.institution_id, institutionName: row.institution_name, institutionSlug: row.institution_slug,
     membershipId: row.membership_id, personId: row.person_id, personName: row.person_name, identityEmail: null, role: 'institution_admin' };
 }
