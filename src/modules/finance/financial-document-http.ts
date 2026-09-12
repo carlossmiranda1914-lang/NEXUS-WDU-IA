@@ -12,6 +12,7 @@ import { decodeDocumentarySnapshot, type DocumentarySnapshot } from './documenta
 import { resolveFinanceDocumentReadiness } from './finance-readiness.ts';
 import { PostgresFinancialProfileStore } from './financial-context.ts';
 import { InstitutionLegalProfileRepository } from '../institution/institution-legal-profile.ts';
+import { resolveDocumentParties, resolveDocumentaryPartySnapshot } from './document-party-resolution.ts';
 
 type DocumentRow = { id: string; document_type: string; status: string; sequence_number: string; issued_at: Date; documentary_snapshot: DocumentarySnapshot | null; corrects_document_id: string | null; series_code: string };
 const view = (row: DocumentRow) => {
@@ -74,8 +75,8 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
   });
   app.get('/api/finance/payments/:id/receipt-preview', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'read'); if (!context) return;
-    const payment = await pool.query<{ payment_reference: string; effective_at: Date; amount: string; currency: string; status: string }>(
-      `SELECT payment_reference,effective_at,amount::text,currency,status FROM finance_payments WHERE institution_id=$1 AND id=$2`,
+    const payment = await pool.query<{ payment_reference: string; effective_at: Date; amount: string; currency: string; status: string; financial_account_id: string | null; id: string }>(
+      `SELECT id,payment_reference,effective_at,amount::text,currency,status,financial_account_id FROM finance_payments WHERE institution_id=$1 AND id=$2`,
       [context.institutionId, req.params.id],
     );
     const row = payment.rows[0];
@@ -86,7 +87,10 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
       : { eligible: false as const, reasonCode: 'RECEIPT_SERIES_NOT_EFFECTIVE' };
     const at = new Date(); const profile = await new PostgresFinancialProfileStore(pool).resolveEffective(context.institutionId, at); const legal = await new InstitutionLegalProfileRepository(pool).resolveEffective(context.institutionId, at);
     const readiness = resolveFinanceDocumentReadiness({ documentType: 'receipt', primaryJurisdiction: profile?.primaryJurisdiction ?? null, legalProfilePresent: Boolean(legal), financialProfilePresent: Boolean(profile), institutionFactsPresent: Boolean(legal?.legalName && legal.taxIdentifier && legal.registeredAddress.line1), agtOnboardingPresent: false, signingMaterialPresent: false, fiscalConfigurationPresent: eligibility.eligible, productionSeriesDocumentTypes: [], sourceEligible: eligibility.eligible, documentPartiesResolved: false, documentaryDataComplete: false });
-    res.json({ documentType: 'receipt', officialDocumentCreated: false, definitiveNumberAllocated: false, payment: { reference: row.payment_reference, date: row.effective_at.toISOString(), amount: row.amount, currency: row.currency, confirmationState: row.status === 'confirmed' ? 'CONFIRMED' : 'BLOCKED' }, sourceEligibility: eligibility.eligible ? 'ELIGIBLE' : 'BLOCKED', readiness, blockingReason: eligibility.eligible ? readiness.reasonCode ?? null : eligibility.reasonCode, series: activeSeries.rows[0] ? { available: true, reference: activeSeries.rows[0].code } : { available: false, reference: null }, issuer: legal ? { legalName: legal.legalName, taxIdentifier: legal.taxIdentifier } : null, parties: { payer: null, beneficiary: null, recipient: null }, documentaryPrerequisites: { partiesResolved: false, documentaryDataComplete: false } });
+    let parties = { payer: null as string | null, beneficiary: null as string | null, recipient: null as string | null }; let partiesResolved = false;
+    if (row.financial_account_id) try { const resolved = await resolveDocumentParties(pool, { institutionId: context.institutionId, financialAccountId: row.financial_account_id, paymentId: row.id }); const [recipient, payer] = await Promise.all([resolveDocumentaryPartySnapshot(pool, resolved.recipient), resolved.payer ? resolveDocumentaryPartySnapshot(pool, resolved.payer) : Promise.resolve(null)]); parties = { payer: payer?.name ?? null, beneficiary: null, recipient: recipient.name }; partiesResolved = true; } catch { /* missing parties are an explicit pre-issuance prerequisite */ }
+    const blockingReason = eligibility.eligible ? readiness.reasonCode ?? null : eligibility.reasonCode;
+    res.json({ documentType: 'receipt', officialDocumentCreated: false, definitiveNumberAllocated: false, payment: { reference: row.payment_reference, date: row.effective_at.toISOString(), amount: row.amount, currency: row.currency, confirmationState: row.status === 'confirmed' ? 'CONFIRMED' : 'BLOCKED' }, sourceEligibility: eligibility.eligible ? 'ELIGIBLE' : 'BLOCKED', readiness, blockingReason, series: activeSeries.rows[0] ? { available: true, reference: activeSeries.rows[0].code } : { available: false, reference: null }, issuer: legal ? { legalName: legal.legalName, taxIdentifier: legal.taxIdentifier } : null, parties, documentaryPrerequisites: { partiesResolved, documentaryDataComplete: partiesResolved } });
   });
   app.post('/api/finance/documents/issue', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'issue'); const idempotencyKey = key(req, res); if (!context || !idempotencyKey) return;

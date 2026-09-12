@@ -3,7 +3,7 @@ export type FinanceReadinessRequirementCode = 'FINANCIAL_PROFILE' | 'FISCAL_CONF
 export type FinanceReadinessRequirement = Readonly<{ code: FinanceReadinessRequirementCode; state: 'COMPLETE' | 'MISSING' | 'BLOCKED' }>;
 export type DocumentIssuanceReadiness = Readonly<{ status: 'READY'; documentType: string; requirements: readonly FinanceReadinessRequirement[] } | { status: 'BLOCKED'; documentType: string; reasonCode: string; requirements: readonly FinanceReadinessRequirement[] }>;
 export type FinanceDocumentReadinessReason =
-  | 'INSTITUTION_DATA_REQUIRED' | 'AGT_ONBOARDING_REQUIRED' | 'AGT_SIGNING_MATERIAL_REQUIRED' | 'AGT_PRODUCTION_SERIES_REQUIRED'
+  | 'ANGOLA_POLICY_NOT_EFFECTIVE' | 'INSTITUTION_DATA_REQUIRED' | 'AGT_ONBOARDING_REQUIRED' | 'AGT_SIGNING_MATERIAL_REQUIRED' | 'AGT_PRODUCTION_SERIES_REQUIRED'
   | 'FISCAL_CONFIGURATION_REQUIRED' | 'LEGAL_PROFILE_REQUIRED' | 'FINANCIAL_PROFILE_REQUIRED' | 'SOURCE_NOT_ELIGIBLE'
   | 'DOCUMENT_PARTY_REQUIRED' | 'DOCUMENTARY_DATA_REQUIRED' | 'JURISDICTION_POLICY_UNAVAILABLE' | 'DOCUMENT_TYPE_UNSUPPORTED';
 export type FinanceDocumentReadiness = Readonly<{
