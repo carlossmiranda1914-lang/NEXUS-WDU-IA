@@ -69,6 +69,8 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const selectedDocumentIdRef = useRef<string | null>(null);
+  selectedDocumentIdRef.current = selectedDocument?.id ?? null;
 
   const loadData = useCallback(async () => {
     abortControllerRef.current?.abort();
@@ -83,11 +85,12 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
       setDocuments(response.items);
       setTotalCount(response.total);
 
-      // Re-sync selected document if open
-      if (selectedDocument) {
-        const updatedSelected = response.items.find((d) => d.id === selectedDocument.id);
+      // Re-sync selected document if open, without retriggering loadData
+      const currentSelectedId = selectedDocumentIdRef.current;
+      if (currentSelectedId) {
+        const updatedSelected = response.items.find((d) => d.id === currentSelectedId);
         if (updatedSelected) {
-          setSelectedDocument(updatedSelected);
+          setSelectedDocument((prev) => (prev?.id === currentSelectedId ? updatedSelected : prev));
         }
       }
     } catch (err) {
@@ -98,7 +101,7 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
         setLoading(false);
       }
     }
-  }, [filters, selectedDocument]);
+  }, [filters]);
 
   useEffect(() => {
     void loadData();

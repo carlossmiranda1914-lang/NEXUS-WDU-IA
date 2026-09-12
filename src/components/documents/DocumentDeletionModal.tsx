@@ -106,13 +106,23 @@ export default function DocumentDeletionModal({
     if (!authorizationId) return;
 
     setLoading(true);
+    setErrorMessage(null);
     try {
-      await reconcileDeletion(document.id, authorizationId);
-      setStage('completed');
-      setTimeout(() => {
-        onSuccess();
-        onClose();
-      }, 1200);
+      const res = await reconcileDeletion(document.id, authorizationId);
+      if (res.reconciliationRequired) {
+        setReconciliationRequired(true);
+        setStage('reconcile');
+        setErrorMessage(
+          'A reconciliação ainda é necessária: a confirmação física de expurgo no armazenamento permanece pendente.',
+        );
+      } else {
+        setReconciliationRequired(false);
+        setStage('completed');
+        setTimeout(() => {
+          onSuccess();
+          onClose();
+        }, 1200);
+      }
     } catch (err) {
       setStage('error');
       setErrorMessage(err instanceof Error ? err.message : 'Falha na reconciliação de eliminação.');
@@ -293,7 +303,7 @@ export default function DocumentDeletionModal({
           {stage === 'error' && (
             <button
               type="button"
-              onClick={authorizationId ? handleExecute : handleAuthorize}
+              onClick={reconciliationRequired ? handleReconcile : authorizationId ? handleExecute : handleAuthorize}
               className="px-5 py-2.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-all cursor-pointer flex items-center gap-1.5"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Tentar Novamente

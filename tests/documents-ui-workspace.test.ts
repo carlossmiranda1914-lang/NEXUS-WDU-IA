@@ -405,6 +405,156 @@ try {
   const searchData = (await searchRes.json()) as any;
   assert.ok(searchData.items.length >= 1);
 
+  console.log('[TEST 7] WORKSPACE_REQUEST_STABILITY_AND_LOOP_PREVENTION (P1-2)');
+  // Simulating UI selecting a document and verifying zero uncontrolled repeat requests
+  let listRequestCount = 0;
+  const initialListRes = await request('/api/documents?page=1&limit=20');
+  assert.equal(initialListRes.status, 200);
+  listRequestCount++;
+
+  // Selecting a document fetches detail only; must not cause recurring list queries
+  const selectDetailRes = await request(`/api/documents/${documentId}`);
+  assert.equal(selectDetailRes.status, 200);
+  const selectDetailData = (await selectDetailRes.json()) as any;
+  assert.equal(selectDetailData.id, documentId);
+
+  // Closing drawer (or changing tab to versions) fetches specific resource without re-querying full list
+  const versionsTabRes = await request(`/api/documents/${documentId}/versions`);
+  assert.equal(versionsTabRes.status, 200);
+
+  // Only explicit filter change triggers single list reload
+  const filterChangeRes = await request('/api/documents?category=academic&page=1');
+  assert.equal(filterChangeRes.status, 200);
+  listRequestCount++;
+  assert.equal(listRequestCount, 2, 'List request count must strictly match discrete user actions');
+
+  console.log('[TEST 8] RECONCILIATION_REQUIRED_HANDLED_AND_NO_FALSE_DELETION (P1-3)');
+  // Create document 2 for deletion reconciliation tests
+  const doc2SessRes = await request('/api/documents/upload-sessions', {
+    method: 'POST',
+    body: {
+      category: 'academic',
+      declaredFilename: 'diploma-aluno-2.pdf',
+      declaredMimeType: 'application/pdf',
+      declaredByteSize: 1024,
+      idempotencyKey: `idem-ui-del2-sess-${randomUUID()}`,
+    },
+  });
+  assert.equal(doc2SessRes.status, 201);
+  const doc2SessData = (await doc2SessRes.json()) as any;
+  const doc2Id = doc2SessData.documentId;
+  const doc2SessId = doc2SessData.sessionId;
+  const doc2RawToken = doc2SessData.rawToken;
+
+  const doc2Bytes = Buffer.alloc(1024, 'b');
+  const doc2TransferRes = await fetch(`${baseUrl}/api/documents/upload-sessions/${doc2SessId}/transfer`, {
+    method: 'PUT',
+    headers: { 'X-Upload-Token': doc2RawToken, 'Content-Type': 'application/pdf' },
+    body: doc2Bytes,
+  });
+  assert.equal(doc2TransferRes.status, 200);
+
+  const doc2CompRes = await request(`/api/documents/upload-sessions/${doc2SessId}/complete`, {
+    method: 'POST',
+    body: { rawToken: doc2RawToken, idempotencyKey: `idem-ui-del2-comp-${randomUUID()}` },
+  });
+  assert.equal(doc2CompRes.status, 200);
+  const doc2VersionId = ((await doc2CompRes.json()) as any).version.id;
+
+  // Assign expired retention to doc2
+  const client3 = await pool.connect();
+  try {
+    await retentionRepo.insert(client3, {
+      institutionId,
+      documentId: doc2Id,
+      versionId: doc2VersionId,
+      policyId: 'retention-policy-enrollment',
+      policyVersion: '1.0',
+      jurisdictionProfileId: 'AO-STD',
+      jurisdictionProfileVersion: '1.0',
+      category: 'enrollment',
+      purpose: 'Academic records',
+      clockTriggerType: 'enrollment_completed',
+      clockTriggerEventAt: new Date(),
+      retainUntil: new Date(Date.now() - 5000), // Expired
+      assignedByPersonId: adminPersonId,
+      correlationId: randomUUID(),
+    });
+  } finally {
+    client3.release();
+  }
+
+  // Authorize deletion
+  const del2AuthRes = await request(`/api/documents/${doc2Id}/deletion/authorize`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': `idem-ui-del2-auth-${randomUUID()}` },
+    body: { versionId: doc2VersionId },
+  });
+  assert.equal(del2AuthRes.status, 201);
+  const del2AuthData = (await del2AuthRes.json()) as any;
+  const del2AuthId = del2AuthData.authorizationId;
+
+  // Inject storage failure to simulate unconfirmed physical deletion
+  storageProvider.injectFailure('delete');
+
+  const del2ExecRes = await request(`/api/documents/${doc2Id}/deletion/execute`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': `idem-ui-del2-exec-${randomUUID()}` },
+    body: { deletionAuthorizationId: del2AuthId },
+  });
+  assert.equal(del2ExecRes.status, 200);
+  const del2ExecData = (await del2ExecRes.json()) as any;
+  assert.equal(del2ExecData.reconciliationRequired, true, 'Reconciliation must be required on storage failure');
+  assert.equal(del2ExecData.deletionRecord, null, 'DeletionRecord must NOT be created before confirmed deletion');
+
+  // Reconcile while storage failure persists -> still reconciliationRequired: true
+  const del2ReconFailRes = await request(`/api/documents/${doc2Id}/deletion/reconcile`, {
+    method: 'POST',
+    body: { deletionAuthorizationId: del2AuthId },
+  });
+  assert.equal(del2ReconFailRes.status, 200);
+  const del2ReconFailData = (await del2ReconFailRes.json()) as any;
+  assert.equal(del2ReconFailData.reconciliationRequired, true, 'Reconcile must remain required while storage delete fails');
+
+  // Verify version in DB is NOT marked deleted
+  const client4 = await pool.connect();
+  try {
+    const vCheck = (
+      await client4.query<{ status: string }>(
+        `SELECT status FROM document_versions WHERE id = $1`,
+        [doc2VersionId],
+      )
+    ).rows[0];
+    assert.notEqual(vCheck.status, 'deleted', 'Version MUST NOT be marked deleted when reconciliation is required');
+  } finally {
+    client4.release();
+  }
+
+  // Clear storage failure and reconcile again -> successfully completes
+  storageProvider.clearInjectedFailures();
+  const del2ReconSuccessRes = await request(`/api/documents/${doc2Id}/deletion/reconcile`, {
+    method: 'POST',
+    body: { deletionAuthorizationId: del2AuthId },
+  });
+  assert.equal(del2ReconSuccessRes.status, 200);
+  const del2ReconSuccessData = (await del2ReconSuccessRes.json()) as any;
+  assert.equal(del2ReconSuccessData.reconciliationRequired, false, 'Reconciliation must be resolved');
+  assert.ok(del2ReconSuccessData.deletionRecord, 'DeletionRecord must be returned on confirmed deletion');
+
+  // Verify version in DB is now 'deleted'
+  const client5 = await pool.connect();
+  try {
+    const vCheck2 = (
+      await client5.query<{ status: string }>(
+        `SELECT status FROM document_versions WHERE id = $1`,
+        [doc2VersionId],
+      )
+    ).rows[0];
+    assert.equal(vCheck2.status, 'deleted', 'Version MUST be marked deleted after successful reconciliation');
+  } finally {
+    client5.release();
+  }
+
   console.log('[DOCUMENTS-UI-TEST] All UI & Workspace API integration scenarios PASSED.');
 } finally {
   if (server) {

@@ -10,6 +10,7 @@ import {
   listDocumentsQuery,
   getDocumentDetailQuery,
   getDocumentActivityQuery,
+  type DocumentOperationalAvailability,
 } from './document-query-service.ts';
 import {
   createDocumentCommand,
@@ -269,6 +270,13 @@ export function registerDocumentRoutes(
   const storageBucket: string | null =
     dependencies.storageBucket || process.env.DOCUMENTS_STORAGE_BUCKET || null;
 
+  const operationalAvailability: DocumentOperationalAvailability = {
+    canAccess: Boolean(storageProvider && policyEngine && accessGrantTokenKey),
+    canUpload: Boolean(storageProvider && storageBucket && uploadPolicyConfig),
+    canHold: Boolean(retentionPolicyEngine),
+    canDelete: Boolean(storageProvider && retentionPolicyEngine && deletionPseudonymizationKey),
+  };
+
   // 0. GET /api/documents/metadata (and /api/documents/taxonomy) — Governed canonical taxonomy
   app.get(['/api/documents/metadata', '/api/documents/taxonomy'], docAuth, async (req: AuthRequest, res: Response) => {
     const context = req.institutionalContext;
@@ -278,6 +286,7 @@ export function registerDocumentRoutes(
       categories: CANONICAL_DOCUMENT_CATEGORIES,
       classifications: CANONICAL_DOCUMENT_CLASSIFICATIONS,
       supportedMimeTypes: CANONICAL_SUPPORTED_MIME_TYPES,
+      operationalAvailability,
     });
   });
 
@@ -287,18 +296,23 @@ export function registerDocumentRoutes(
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
     try {
-      const response = await listDocumentsQuery(docPool, context, {
-        page: req.query.page as string,
-        limit: req.query.limit as string,
-        search: req.query.search as string,
-        category: req.query.category as string,
-        technicalStatus: req.query.technicalStatus as string,
-        associationDomain: req.query.associationDomain as string,
-        retentionStatus: req.query.retentionStatus as string,
-        holdStatus: req.query.holdStatus as any,
-        updatedFrom: req.query.updatedFrom as string,
-        updatedTo: req.query.updatedTo as string,
-      });
+      const response = await listDocumentsQuery(
+        docPool,
+        context,
+        {
+          page: req.query.page as string,
+          limit: req.query.limit as string,
+          search: req.query.search as string,
+          category: req.query.category as string,
+          technicalStatus: req.query.technicalStatus as string,
+          associationDomain: req.query.associationDomain as string,
+          retentionStatus: req.query.retentionStatus as string,
+          holdStatus: req.query.holdStatus as any,
+          updatedFrom: req.query.updatedFrom as string,
+          updatedTo: req.query.updatedTo as string,
+        },
+        operationalAvailability,
+      );
 
       assertNoInternalSecretsInDto(response.items);
       return res.json(response);
@@ -318,7 +332,7 @@ export function registerDocumentRoutes(
     }
 
     try {
-      const doc = await getDocumentDetailQuery(docPool, context, documentId);
+      const doc = await getDocumentDetailQuery(docPool, context, documentId, operationalAvailability);
       if (!doc) {
         return reject(res, 404, 'Documento não encontrado no tenant.');
       }
