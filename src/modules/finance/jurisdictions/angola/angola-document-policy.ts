@@ -15,6 +15,10 @@ export type AngolaExternalInputs = Readonly<{
   productionSeries?: boolean;
 }>;
 
+export const isAngolaProductionJurisdiction = (jurisdiction: string | null): boolean => jurisdiction === 'AO';
+export const isAngolaDocumentType = (documentType: string): documentType is AngolaDocumentType =>
+  (angolaEvidenceManifest.documentTypes as readonly string[]).includes(documentType);
+
 const blocked = (documentType: AngolaDocumentType, reasonCode: NonNullable<AngolaDocumentCapability['reasonCode']>): AngolaDocumentCapability =>
   Object.freeze({ documentType, status: 'BLOCKED', reasonCode, policyVersion: ANGOLA_POLICY_VERSION });
 

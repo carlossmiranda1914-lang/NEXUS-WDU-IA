@@ -39,3 +39,29 @@ test('Finance readiness HTTP derives only the resolved tenant and existing capab
     assert.ok(calls.every(values => values.includes('tenant-a')), 'readiness must use only the server-derived institution');
   } finally { server.close(); }
 });
+
+test('per-document Angola readiness derives tenant facts and ignores browser readiness claims', async () => {
+  const calls: unknown[][] = [];
+  const pool: any = { query: async (sql: string, values: unknown[]) => {
+    calls.push(values);
+    if (values[0] !== 'tenant-a') return { rows: [] };
+    if (sql.includes('institution_legal_profiles')) return { rows: [{ id: 'legal-a', institution_id: 'tenant-a', version: 1, legal_name: 'Tenant A', tax_identifier: 'AO-123', registered_address: { countryCode: 'AO', line1: 'Rua' }, legal_email: null, legal_phone: null, logo_asset_reference: null, effective_from: new Date('2026-01-01'), effective_to: null }] };
+    if (sql.includes('finance_profile_versions')) return { rows: [{ institution_id: 'tenant-a', version: 1, effective_from: new Date('2026-01-01'), effective_to: null, primary_jurisdiction: 'AO', functional_currency: 'AOA', financial_timezone: 'Africa/Luanda', monetary_policy_version: 'v1', enabled_currencies: ['AOA'] }] };
+    if (sql.includes('finance_fiscal_configuration_versions')) return { rows: [{ id: 'fiscal-a', institution_id: 'tenant-a', version: 1, adapter_key: 'angola-production', operational_configuration: { agtOnboarding: true }, effective_from: new Date('2026-01-01'), effective_to: null }] };
+    if (sql.includes('finance_financial_document_series')) return { rows: [{ id: 'series-a', institution_id: 'tenant-a', code: 'FT', document_type: 'invoice', fiscal_configuration_id: 'fiscal-a' }] };
+    return { rows: [] };
+  } };
+  const app = express();
+  const auth: any = (req: any, _res: any, next: any) => { if (req.header('Authorization') === 'Bearer admin') req.institutionalContext = { institutionId: 'tenant-a', role: 'institution_admin' }; next(); };
+  registerFinanceReadinessRoutes(app, pool, auth);
+  const server = http.createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  try {
+    const base = `http://127.0.0.1:${(server.address() as any).port}/api/finance/readiness/documents/invoice`;
+    const response = await fetch(`${base}?institutionId=foreign&agtOnboarding=true&signingMaterial=true`, { headers: { Authorization: 'Bearer admin' } });
+    assert.equal(response.status, 200);
+    const readiness: any = await response.json();
+    assert.deepEqual([readiness.status, readiness.reasonCode], ['BLOCKED', 'AGT_ONBOARDING_REQUIRED']);
+    assert.equal(readiness.prerequisites.agtOnboarding, false, 'client parameters and browser-writable config cannot grant AGT authority');
+    assert.ok(calls.every(values => values.includes('tenant-a')), 'per-document readiness must query only the server-derived tenant');
+  } finally { server.close(); }
+});
