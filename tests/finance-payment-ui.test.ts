@@ -118,6 +118,8 @@ test('FinancePaymentCreateView allows validating input and reviewing before subm
       renderer = create(
         React.createElement(FinancePaymentCreateView, {
           theme: 'light',
+          defaultCurrency: 'AOA',
+          currencyOptions: ['AOA', 'USD'],
           onSuccess: (p) => { createdPayment = p; },
           onCancel: () => {},
         })
@@ -126,6 +128,7 @@ test('FinancePaymentCreateView allows validating input and reviewing before subm
 
     const root = renderer.root;
     const amountInput = root.findByProps({ 'data-testid': 'finance-payment-amount-input' });
+    assert.equal(root.findByProps({ 'data-testid': 'finance-payment-currency-select' }).props.value, 'AOA');
     await act(async () => {
       amountInput.props.onChange({ target: { value: '250.00' } });
     });
@@ -148,6 +151,30 @@ test('FinancePaymentCreateView allows validating input and reviewing before subm
   } finally {
     paymentClient.confirmManualPayment = origConfirm;
   }
+});
+
+test('FinancePaymentsListView shows the current authoritative allocation position and localized exact money', async () => {
+  let component: any;
+  await act(async () => {
+    component = create(React.createElement(FinancePaymentsListView, {
+      payments: [{ ...samplePayments[0], amount: '40000', currency: 'AOA', allocationStatus: 'fully_allocated' }],
+      loading: false, error: null, onRefresh: () => {}, onOpenCreate: () => {}, onOpenProviders: () => {},
+    }));
+  });
+  const text = JSON.stringify(component.toJSON());
+  assert.match(text, /40.000,00 AOA/);
+  assert.match(text, /Aplicado/);
+  assert.doesNotMatch(text, /Não aplicado/);
+});
+
+test('FinancePaymentCreateView does not silently choose EUR when no institutional financial authority is available', async () => {
+  let renderer: any;
+  await act(async () => {
+    renderer = create(React.createElement(FinancePaymentCreateView, { onSuccess: () => {}, onCancel: () => {} }));
+  });
+  const currency = renderer.root.findByProps({ 'data-testid': 'finance-payment-currency-select' });
+  assert.equal(currency.props.value, '');
+  assert.match(JSON.stringify(renderer.toJSON()), /Selecione a moeda configurada/);
 });
 
 test('FinancePaymentProvidersView displays Adyen and EMIS with contract status badges without exposing secrets', async () => {

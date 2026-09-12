@@ -1,4 +1,5 @@
 import type { CanonicalFinancialDocumentPresentation } from './financial-document-presentation.ts';
+import { formatFinanceMoney } from './money-presentation.ts';
 
 export type FinancialDocumentRenderInput = Readonly<{ presentation: CanonicalFinancialDocumentPresentation }>;
 const pdfText = (value: unknown) => String(value ?? '').replace(/[\\()]/g, '\\$&').replace(/[^\x20-\x7e]/g, '?');
@@ -6,7 +7,7 @@ const pdfText = (value: unknown) => String(value ?? '').replace(/[\\()]/g, '\\$&
 /** Renders customer-facing canonical presentation, never source/provenance or storage metadata. */
 export function renderFinancialDocumentPdf(input: FinancialDocumentRenderInput): Buffer {
   const view = input.presentation;
-  const lines = [view.issuer.legalName, view.document.typeLabel, `Numero: ${view.document.officialNumber}`, `Emitido: ${view.document.issueDate}`, `Destinatario: ${view.recipient.name}`, ...view.issuer.addressLines, ...(view.operation.reference ? [`Referencia: ${view.operation.reference}`] : []), ...(view.payment ? [`Pagamento: ${view.payment.reference} - ${view.payment.amount} ${view.payment.currency}`] : []), `Total: ${view.totals.documentTotal} ${view.totals.currency}`, ...view.legalMentions];
+  const lines = [view.issuer.legalName, view.document.typeLabel, `Numero: ${view.document.officialNumber}`, `Emitido: ${view.document.issueDate}`, `Destinatario: ${view.recipient.name}`, ...view.issuer.addressLines, ...(view.operation.reference ? [`Referencia: ${view.operation.reference}`] : []), ...(view.payment ? [`Pagamento: ${view.payment.reference} - ${formatFinanceMoney(view.payment)}`] : []), `Total: ${formatFinanceMoney({ amount: view.totals.documentTotal, currency: view.totals.currency })}`, ...view.legalMentions];
   const content = ['BT', '/F1 12 Tf', '54 780 Td', ...lines.flatMap((line, index) => [index === 0 ? `(${pdfText(line)}) Tj` : `0 -22 Td (${pdfText(line)}) Tj`]), 'ET'].join('\n');
   const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${Buffer.byteLength(content, 'ascii')} >>\nstream\n${content}\nendstream`];
   let pdf = '%PDF-1.4\n'; const offsets = [0];

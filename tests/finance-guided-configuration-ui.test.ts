@@ -30,6 +30,6 @@ assert.match(finance, /Operação/, 'Finance navigation must visibly group opera
 assert.match(finance, /Configuração/, 'Finance navigation must visibly group configuration destinations');
 assert.doesNotMatch(finance, /overflow-x-auto/, 'primary Finance navigation must not depend on horizontal scrolling');
 assert.match(payments, /readiness\?\.status === 'READY'/, 'receipt issuance must be hidden while authoritative module readiness is incomplete');
-assert.match(payments, /readiness\?\.receiptIssuance\.status === 'READY'/, 'configured module state must not expose issuance without canonical adapter authorization');
-assert.match(payments, /adaptador jurisdicional aprovado/, 'blocked official issuance must explain the approved-adapter prerequisite');
+assert.match(payments, /receiptDocumentReadiness\?\.status === 'READY'/, 'configured module state must not expose issuance without per-document server readiness');
+assert.match(payments, /AGT_ONBOARDING_REQUIRED/, 'blocked official issuance must explain the factual external prerequisite');
 console.log('FINANCE_GUIDED_CONFIGURATION_UI=PASS');

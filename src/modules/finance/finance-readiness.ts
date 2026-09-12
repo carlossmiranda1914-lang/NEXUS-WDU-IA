@@ -22,6 +22,7 @@ export type FinanceReadinessProjection = Readonly<{
   jurisdictionPolicyAvailable: boolean;
   fiscalConfigurationAvailable: boolean;
   seriesConfigurationAvailable: boolean;
+  paymentCurrency?: Readonly<{ functionalCurrency: string; enabledCurrencies: readonly string[] }>;
 }>;
 
 type Resolver = () => Promise<unknown>;
@@ -38,6 +39,14 @@ const resolveRequirement = async (resolver: Resolver): Promise<ResolverResult> =
   } catch (error) {
     return isKnownMissingAuthority(error) ? 'MISSING' : 'BLOCKED';
   }
+};
+
+const paymentCurrencyContext = (profile: unknown): FinanceReadinessProjection['paymentCurrency'] => {
+  if (typeof profile !== 'object' || profile === null) return undefined;
+  const candidate = profile as { functionalCurrency?: unknown; enabledCurrencies?: unknown };
+  if (typeof candidate.functionalCurrency !== 'string' || !Array.isArray(candidate.enabledCurrencies)
+    || !candidate.enabledCurrencies.every(currency => typeof currency === 'string')) return undefined;
+  return Object.freeze({ functionalCurrency: candidate.functionalCurrency, enabledCurrencies: Object.freeze([...candidate.enabledCurrencies]) });
 };
 
 /**
@@ -128,6 +137,6 @@ export async function resolveFinanceReadiness(input: {
     try { await input.resolveReceiptIssuance(); }
     catch (error) { receiptIssuance = { status: 'BLOCKED', documentType: 'receipt', reasonCode: error instanceof Error ? error.message : 'RECEIPT_ISSUANCE_UNAVAILABLE', requirements: Object.freeze(documentaryRequirements) }; }
   }
-  return Object.freeze({ module: 'FINANCE', status, requirements: Object.freeze(requirements), receiptIssuance: Object.freeze(receiptIssuance), canManageConfiguration: input.canManageConfiguration, localPrerequisitesComplete, jurisdictionPolicyAvailable, fiscalConfigurationAvailable: jurisdictionPolicyAvailable, seriesConfigurationAvailable: jurisdictionPolicyAvailable });
+  return Object.freeze({ module: 'FINANCE', status, requirements: Object.freeze(requirements), receiptIssuance: Object.freeze(receiptIssuance), canManageConfiguration: input.canManageConfiguration, localPrerequisitesComplete, jurisdictionPolicyAvailable, fiscalConfigurationAvailable: jurisdictionPolicyAvailable, seriesConfigurationAvailable: jurisdictionPolicyAvailable, paymentCurrency: paymentCurrencyContext(resolvedProfile) });
 }
 import { isAngolaDocumentType, isAngolaProductionJurisdiction, resolveAngolaDocumentCapability } from './jurisdictions/angola/angola-document-policy.ts';

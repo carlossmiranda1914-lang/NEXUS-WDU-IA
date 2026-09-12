@@ -4,9 +4,10 @@ import { paymentClient } from '../../../modules/finance/payment-client.ts';
 import { FinancePaymentsListView } from './FinancePaymentsListView.tsx';
 import { FinancePaymentCreateView } from './FinancePaymentCreateView.tsx';
 import { FinancePaymentProvidersView } from './FinancePaymentProvidersView.tsx';
-import { financialDocumentClient, type ReceiptPreissuePreview } from '../../../modules/finance/financial-document-client.ts';
+import { financialDocumentClient, type FinancialDocumentReadinessProjection, type ReceiptPreissuePreview } from '../../../modules/finance/financial-document-client.ts';
 import { browserDocumentIntentStorage, resolvePersistentDocumentIntentKey } from '../../../modules/finance/financial-document-intent.ts';
 import { financeReadinessClient, type FinanceReadinessDto } from '../../../modules/finance/finance-readiness-client.ts';
+import { formatFinanceMoney } from '../../../modules/finance/money-presentation.ts';
 
 export type PaymentSubView = 'list' | 'create' | 'providers';
 
@@ -24,7 +25,10 @@ const receiptEligibilityMessage = (reason?: string, canIssueDocument = false) =>
     RECEIPT_SERIES_NOT_EFFECTIVE: 'Não existe uma série de recibos ativa e efetiva para este pagamento.',
     FISCAL_CONFIGURATION_NOT_EFFECTIVE: 'A instituição não possui configuração fiscal efetiva para emissão oficial.',
     FINANCIAL_PROFILE_NOT_FOUND: 'O perfil financeiro associado a este pagamento não está disponível.',
-    FISCAL_ADAPTER_UNSUPPORTED_JURISDICTION: 'A política documental da instituição não tem um adaptador jurisdicional aprovado.',
+    AGT_ONBOARDING_REQUIRED: 'A emissão oficial depende da adesão da instituição à AGT.',
+    AGT_SIGNING_MATERIAL_REQUIRED: 'A emissão oficial depende do material de assinatura autorizado pela AGT.',
+    AGT_PRODUCTION_SERIES_REQUIRED: 'A emissão oficial depende de uma série de recibos atribuída pela AGT.',
+    FISCAL_ADAPTER_UNSUPPORTED_JURISDICTION: 'A política documental da instituição não tem uma política aprovada para emissão oficial.',
     FISCAL_CONFIGURATION_ADAPTER_MISMATCH: 'A configuração fiscal ativa não corresponde à política documental da instituição.',
     DOCUMENT_TYPE_UNSUPPORTED: 'A política documental ativa não suporta a emissão deste recibo.',
   };
@@ -49,6 +53,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   const [issuanceNotice, setIssuanceNotice] = useState<string | null>(null);
   const [canIssueDocument, setCanIssueDocument] = useState(false);
   const [readiness, setReadiness] = useState<FinanceReadinessDto | null>(null);
+  const [receiptDocumentReadiness, setReceiptDocumentReadiness] = useState<FinancialDocumentReadinessProjection | null>(null);
   const [receiptEligibility, setReceiptEligibility] = useState<Record<string, { eligible: boolean; reason?: string }>>({});
   const [previewPayment, setPreviewPayment] = useState<Payment | null>(null);
   const [issuedDocumentId, setIssuedDocumentId] = useState<string | null>(null);
@@ -77,8 +82,9 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   }, [initialPaymentReference, payments]);
   useEffect(() => { financialDocumentClient.capabilities().then(capabilities => setCanIssueDocument(capabilities.issue)).catch(() => setCanIssueDocument(false)); }, []);
   useEffect(() => { financeReadinessClient.get().then(setReadiness).catch(() => setReadiness(null)); }, []);
+  useEffect(() => { financialDocumentClient.documentReadiness('receipt').then(setReceiptDocumentReadiness).catch(() => setReceiptDocumentReadiness(null)); }, []);
   useEffect(() => { if (!previewPayment) return void setPreviewReadiness(null); financialDocumentClient.receiptPreview(previewPayment.id).then(setPreviewReadiness).catch(() => setPreviewReadiness(null)); }, [previewPayment]);
-  useEffect(() => { if (readiness?.status !== 'READY' || readiness?.receiptIssuance.status !== 'READY' || !canIssueDocument || payments.length === 0) return; financialDocumentClient.listActiveReceiptSeries().then(async series => { const selected = series[0]; if (!selected) return; const entries = await Promise.all(payments.map(async payment => { const result = await financialDocumentClient.receiptEligibility({ paymentId: payment.id, seriesId: selected.id }); return [payment.id, result.status === 'ELIGIBLE' ? { eligible: true } : { eligible: false, reason: result.reasonCode }] as const; })); setReceiptEligibility(Object.fromEntries(entries)); }).catch(() => setReceiptEligibility({})); }, [readiness?.status, readiness?.receiptIssuance.status, canIssueDocument, payments]);
+  useEffect(() => { if (readiness?.status !== 'READY' || receiptDocumentReadiness?.status !== 'READY' || !canIssueDocument || payments.length === 0) return; financialDocumentClient.listActiveReceiptSeries().then(async series => { const selected = series[0]; if (!selected) return; const entries = await Promise.all(payments.map(async payment => { const result = await financialDocumentClient.receiptEligibility({ paymentId: payment.id, seriesId: selected.id }); return [payment.id, result.status === 'ELIGIBLE' ? { eligible: true } : { eligible: false, reason: result.reasonCode }] as const; })); setReceiptEligibility(Object.fromEntries(entries)); }).catch(() => setReceiptEligibility({})); }, [readiness?.status, receiptDocumentReadiness?.status, canIssueDocument, payments]);
 
   const handleCreated = (newPayment: Payment) => {
     setPayments((prev) => [newPayment, ...prev]);
@@ -102,7 +108,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   return (
     <div className="w-full">
       {readiness?.status === 'INCOMPLETE' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Configuração necessária</strong><p>Os recebimentos estão disponíveis, mas ainda não é possível emitir recibos oficiais.</p>{readiness.canManageConfiguration && <button type="button" onClick={onOpenFinanceConfiguration} className="mt-2 rounded-md border px-3 py-1">Concluir configuração</button>}</section>}
-      {readiness?.receiptIssuance.status === 'BLOCKED' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Emissão oficial indisponível</strong><p>A política documental da instituição não tem um adaptador jurisdicional aprovado. Não será atribuído qualquer número de recibo.</p></section>}
+      {receiptDocumentReadiness?.status === 'BLOCKED' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Emissão oficial indisponível</strong><p>{receiptPreviewBlockMessage(receiptDocumentReadiness.reasonCode)}</p><p className="mt-1">Não será atribuído qualquer número de recibo enquanto este requisito não estiver concluído.</p></section>}
       {view === 'list' && <>
         <FinancePaymentsListView
           payments={payments}
@@ -112,12 +118,12 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
           onRefresh={loadPayments}
           onOpenCreate={() => setView('create')}
           onOpenProviders={() => setView('providers')}
-          onIssueReceipt={readiness?.status === 'READY' && readiness?.receiptIssuance.status === 'READY' && canIssueDocument ? issueReceipt : undefined}
+          onIssueReceipt={readiness?.status === 'READY' && receiptDocumentReadiness?.status === 'READY' && canIssueDocument ? issueReceipt : undefined}
           onPreviewReceipt={setPreviewPayment}
           canIssueReceipt={payment => receiptEligibility[payment.id]?.eligible === true}
           receiptBlockReason={payment => receiptEligibilityMessage(receiptEligibility[payment.id]?.reason, canIssueDocument)}
       />
-      {previewPayment && <section data-testid="receipt-pre-issue-preview" className="mt-4 rounded-lg border p-4 text-sm"><h3 className="font-semibold">Pré-visualização — ainda não emitido</h3><p>Recibo · Pagamento: {previewReadiness?.payment.reference ?? previewPayment.paymentReference}</p><p>Data do pagamento: {new Date(previewReadiness?.payment.date ?? previewPayment.effectiveAt).toLocaleDateString('pt-PT')}</p><p>Valor: {previewReadiness?.payment.amount ?? previewPayment.amount} {previewReadiness?.payment.currency ?? previewPayment.currency}</p><p>Estado do pagamento: {previewReadiness?.payment.confirmationState === 'CONFIRMED' ? 'Confirmado' : 'Não confirmado'}</p><p>Emitente: {previewReadiness?.issuer?.legalName ?? 'Ainda não configurado'}</p><p>Pagador: {previewReadiness?.parties.payer ?? 'Ainda não identificado'}</p><p>Destinatário: {previewReadiness?.parties.recipient ?? 'Ainda não identificado'}</p><p>Fonte elegível: {previewReadiness?.sourceEligibility === 'ELIGIBLE' ? 'Sim' : 'Não'}</p><p>Número oficial: ainda não atribuído</p><p>Código QR oficial: ainda não disponível</p>{previewReadiness?.settlement && <div className="mt-2"><p className="font-medium">Liquidação:</p>{previewReadiness.settlement.allocations.map((allocation, index) => <p key={index}>Antes {allocation.before.amount} {allocation.before.currency} · Regularizado {allocation.movement.amount} {allocation.movement.currency} · Após {allocation.after.amount} {allocation.after.currency}</p>)}{previewReadiness.settlement.unallocated && <p>Valor não aplicado: {previewReadiness.settlement.unallocated.amount} {previewReadiness.settlement.unallocated.currency}</p>}</div>}<p className="mt-2 text-zinc-600">{previewReadiness?.readiness.status === 'READY' && previewReadiness.sourceEligibility === 'ELIGIBLE' ? 'A emissão oficial pode ser confirmada.' : receiptPreviewBlockMessage(previewReadiness?.blockingReason ?? previewReadiness?.readiness.reasonCode)}</p></section>}
+      {previewPayment && <section data-testid="receipt-pre-issue-preview" className="mt-4 rounded-lg border p-4 text-sm"><h3 className="font-semibold">Pré-visualização — ainda não emitido</h3><p>Recibo · Pagamento: {previewReadiness?.payment.reference ?? previewPayment.paymentReference}</p><p>Data do pagamento: {new Date(previewReadiness?.payment.date ?? previewPayment.effectiveAt).toLocaleDateString('pt-PT')}</p><p>Valor: {formatFinanceMoney({ amount: previewReadiness?.payment.amount ?? previewPayment.amount, currency: previewReadiness?.payment.currency ?? previewPayment.currency })}</p><p>Estado do pagamento: {previewReadiness?.payment.confirmationState === 'CONFIRMED' ? 'Confirmado' : 'Não confirmado'}</p><p>Emitente: {previewReadiness?.issuer?.legalName ?? 'Ainda não configurado'}</p><p>Pagador: {previewReadiness?.parties.payer ?? 'Ainda não identificado'}</p><p>Destinatário: {previewReadiness?.parties.recipient ?? 'Ainda não identificado'}</p><p>Fonte elegível: {previewReadiness?.sourceEligibility === 'ELIGIBLE' ? 'Sim' : 'Não'}</p><p>Número oficial: ainda não atribuído</p><p>Código QR oficial: ainda não disponível</p>{previewReadiness?.settlement && <div className="mt-2"><p className="font-medium">Liquidação:</p>{previewReadiness.settlement.allocations.map((allocation, index) => <p key={index}>Antes {formatFinanceMoney(allocation.before)} · Regularizado {formatFinanceMoney(allocation.movement)} · Após {formatFinanceMoney(allocation.after)}</p>)}{previewReadiness.settlement.unallocated && <p>Valor não aplicado: {formatFinanceMoney(previewReadiness.settlement.unallocated)}</p>}</div>}<p className="mt-2 text-zinc-600">{previewReadiness?.readiness.status === 'READY' && previewReadiness.sourceEligibility === 'ELIGIBLE' ? 'A emissão oficial pode ser confirmada.' : receiptPreviewBlockMessage(previewReadiness?.blockingReason ?? previewReadiness?.readiness.reasonCode)}</p></section>}
       </>}
 
       {issuanceNotice && <div data-testid="financial-document-issuance-notice" className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><p>{issuanceNotice}</p>{onOpenFinancialDocuments && issuedDocumentId && <button type="button" onClick={() => onOpenFinancialDocuments(issuedDocumentId)} className="rounded-md border border-emerald-300 bg-white px-3 py-1 font-semibold text-emerald-800">Abrir documento financeiro</button>}</div>}
@@ -125,6 +131,8 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
       {view === 'create' && (
         <FinancePaymentCreateView
           theme={theme}
+          defaultCurrency={readiness?.paymentCurrency?.functionalCurrency}
+          currencyOptions={readiness?.paymentCurrency?.enabledCurrencies}
           onSuccess={handleCreated}
           onCancel={() => setView('list')}
         />

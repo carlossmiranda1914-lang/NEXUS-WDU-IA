@@ -35,6 +35,13 @@ test('Finance readiness is ready only when every effective authority exists', as
   assert.ok(result.requirements.every(item => item.state === 'COMPLETE'));
 });
 
+test('Finance readiness exposes only the resolved institutional payment currency context', async () => {
+  const result = await resolveFinanceReadiness(input({
+    resolveFinancialProfile: async () => ({ id: 'profile', functionalCurrency: 'AOA', enabledCurrencies: ['AOA', 'USD'] }),
+  }));
+  assert.deepEqual(result.paymentCurrency, { functionalCurrency: 'AOA', enabledCurrencies: ['AOA', 'USD'] });
+});
+
 test('Finance readiness separates configured module state from blocked official receipt issuance', async () => {
   const result = await resolveFinanceReadiness(input({
     resolveReceiptIssuance: async () => { throw new Error('FISCAL_ADAPTER_UNSUPPORTED_JURISDICTION'); },

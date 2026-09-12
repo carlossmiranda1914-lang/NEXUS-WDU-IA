@@ -10,6 +10,7 @@ export type FinanceReadinessDto = {
   jurisdictionPolicyAvailable: boolean;
   fiscalConfigurationAvailable: boolean;
   seriesConfigurationAvailable: boolean;
+  paymentCurrency?: { functionalCurrency: string; enabledCurrencies: string[] };
 };
 
 export class FinanceConfigurationError extends Error {

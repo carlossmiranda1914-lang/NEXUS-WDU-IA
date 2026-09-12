@@ -15,6 +15,7 @@ import { FinancialProfileStore, requireFinancialContext, PostgresFinancialProfil
 import { PostgresJournalRepository } from './journal-repository.ts';
 import { executeIdempotentFinanceCommand } from './finance-command.ts';
 import { createPaymentConfirmationFingerprint } from './payment-service.ts';
+import { derivePaymentAllocationPosition } from './allocation-model.ts';
 
 export class PaymentNotFoundError extends Error {
   readonly code = 'PAYMENT_NOT_FOUND';
@@ -45,6 +46,7 @@ interface PaymentRow {
   currency: string;
   status: string;
   allocation_status: string;
+  allocated_amount?: string | number;
   financial_account_id?: string | null;
   payer_person_id?: string | null;
   provider_key?: string | null;
@@ -72,7 +74,9 @@ export function mapPayment(row: PaymentRow): Payment {
     amount: Money.parse(String(row.amount), String(row.currency)).canonicalAmount(),
     currency: String(row.currency),
     status: row.status as PaymentStatus,
-    allocationStatus: row.allocation_status as PaymentAllocationStatus,
+    allocationStatus: row.allocated_amount === undefined
+      ? row.allocation_status as PaymentAllocationStatus
+      : derivePaymentAllocationPosition(String(row.amount), String(row.allocated_amount), String(row.currency)).state,
     financialAccountId: row.financial_account_id ? String(row.financial_account_id) : undefined,
     payerPersonId: row.payer_person_id ? String(row.payer_person_id) : undefined,
     providerKey: row.provider_key ? String(row.provider_key) : undefined,
@@ -210,7 +214,7 @@ export class PostgresPaymentRepository {
   }
 
   async getById(actor: { institutionId: string }, id: string, client: Pool | PoolClient = this.pool): Promise<Payment> {
-    const sql = `SELECT * FROM finance_payments WHERE institution_id = $1 AND id = $2`;
+    const sql = `${paymentProjectionSql()} WHERE p.institution_id = $1 AND p.id = $2`;
     const res = await client.query<PaymentRow>(sql, [actor.institutionId, id]);
     if (!res.rows[0]) {
       throw new PaymentNotFoundError();
@@ -239,7 +243,7 @@ export class PostgresPaymentRepository {
       conditions.push(`source_type = $${params.length}`);
     }
 
-    const sql = `SELECT * FROM finance_payments WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC`;
+    const sql = `${paymentProjectionSql()} WHERE ${conditions.map(condition => condition.replaceAll('institution_id', 'p.institution_id').replaceAll('financial_account_id', 'p.financial_account_id').replaceAll('source_type', 'p.source_type').replaceAll('status', 'p.status')).join(' AND ')} ORDER BY p.created_at DESC`;
     const res = await client.query<PaymentRow>(sql, params);
     return res.rows.map(mapPayment);
   }
@@ -310,4 +314,16 @@ export class PostgresPaymentRepository {
       throw new Error(`Injected payment failure: ${point}`);
     }
   }
+}
+
+function paymentProjectionSql(): string {
+  return `SELECT p.*, COALESCE((
+    SELECT SUM(a.amount - COALESCE((
+      SELECT SUM(r.amount)
+      FROM finance_allocation_reversals r
+      WHERE r.institution_id = a.institution_id AND r.original_allocation_id = a.id
+    ), 0))
+    FROM finance_allocations a
+    WHERE a.institution_id = p.institution_id AND a.payment_id = p.id
+  ), 0)::text AS allocated_amount FROM finance_payments p`;
 }

@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import type { ManualPaymentMethod, Payment } from '../../../modules/finance/payment-model.ts';
 import { paymentClient } from '../../../modules/finance/payment-client.ts';
+import { Money } from '../../../modules/finance/money.ts';
 
 export interface FinancePaymentCreateViewProps {
   theme?: string;
   financialAccount?: { id: string; accountNumber: string; name: string };
   payerPerson?: { personId: string; displayName: string } | null;
+  defaultCurrency?: string;
+  currencyOptions?: readonly string[];
   onSuccess: (payment: Payment) => void;
   onCancel: () => void;
 }
@@ -14,6 +17,8 @@ export function FinancePaymentCreateView({
   theme = 'light',
   financialAccount,
   payerPerson,
+  defaultCurrency,
+  currencyOptions,
   onSuccess,
   onCancel,
 }: FinancePaymentCreateViewProps) {
@@ -21,7 +26,8 @@ export function FinancePaymentCreateView({
 
   const [method, setMethod] = useState<ManualPaymentMethod>('cash');
   const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState('EUR');
+  const supportedCurrencies = currencyOptions ? [...new Set(currencyOptions)] : [];
+  const [currency, setCurrency] = useState(defaultCurrency && supportedCurrencies.includes(defaultCurrency) ? defaultCurrency : '');
   const [manualEvidenceRef, setManualEvidenceRef] = useState('');
   const [notes, setNotes] = useState('');
   const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().split('T')[0]);
@@ -34,8 +40,13 @@ export function FinancePaymentCreateView({
     e.preventDefault();
     setError(null);
 
-    const num = Number.parseFloat(amount);
-    if (Number.isNaN(num) || num <= 0) {
+    if (!currency) {
+      setError('Selecione a moeda configurada para esta instituição.');
+      return;
+    }
+    try {
+      if (Money.parse(amount.trim(), currency).compare(Money.parse('0', currency)) <= 0) throw new Error('non-positive');
+    } catch {
       setError('Introduza um montante positivo válido.');
       return;
     }
@@ -191,9 +202,8 @@ export function FinancePaymentCreateView({
                   isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-800 border-zinc-700 text-zinc-100'
                 }`}
               >
-                <option value="EUR">EUR (€)</option>
-                <option value="AOA">AOA (Kz)</option>
-                <option value="USD">USD ($)</option>
+                <option value="">Selecione a moeda configurada</option>
+                {supportedCurrencies.map(option => <option key={option} value={option}>{option}</option>)}
               </select>
             </div>
           </div>

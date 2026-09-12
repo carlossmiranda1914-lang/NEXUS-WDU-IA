@@ -8,6 +8,6 @@ assert.match(workspace, /receiptEligibilityMessage/, 'safe eligibility codes mus
 assert.match(workspace, /SOURCE_NOT_ELIGIBLE/, 'payment-specific ineligibility needs an institutional explanation');
 assert.match(workspace, /RECEIPT_SERIES_NOT_EFFECTIVE/, 'missing effective series needs an institutional explanation');
 assert.doesNotMatch(workspace, /bloqueada pela validação do servidor/, 'the browser must not expose generic server-validation language');
-assert.match(workspace, /receiptIssuance\.status === 'BLOCKED'/, 'institution-level readiness remains a single contextual blocker');
+assert.match(workspace, /receiptDocumentReadiness\?\.status === 'BLOCKED'/, 'institution-level receipt messaging must use the factual per-document readiness blocker');
 
 console.log('FINANCE_AURORA_RECEIPT_STATES=PASS');

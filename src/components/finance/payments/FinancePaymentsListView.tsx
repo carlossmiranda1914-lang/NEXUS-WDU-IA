@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Payment } from '../../../modules/finance/payment-model.ts';
+import { formatFinanceMoney } from '../../../modules/finance/money-presentation.ts';
 
 export interface FinancePaymentsListViewProps {
   payments: Payment[];
@@ -41,6 +42,11 @@ export function FinancePaymentsListView({
     }
     return `${method.toUpperCase()} (${sourceType})`;
   };
+  const allocation = (status: Payment['allocationStatus']) => ({
+    unapplied: { label: 'Não aplicado', title: 'O valor está confirmado no caixa/banco mas ainda não foi associado a obrigações específicas.', className: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300' },
+    partially_allocated: { label: 'Parcialmente aplicado', title: 'Parte do valor confirmado já foi associada a obrigações específicas.', className: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300' },
+    fully_allocated: { label: 'Aplicado', title: 'Todo o valor confirmado já foi associado a obrigações específicas.', className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' },
+  })[status];
 
   return (
     <div className="space-y-6">
@@ -51,7 +57,7 @@ export function FinancePaymentsListView({
             Recebimentos e Pagamentos
           </h2>
           <p className={`text-sm ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-            Registo canónico de valores recebidos. Pagamentos confirmados permanecem como "Não aplicado".
+            Registo canónico de valores recebidos e respetivo estado atual de aplicação.
           </p>
         </div>
 
@@ -138,7 +144,7 @@ export function FinancePaymentsListView({
                       )}
                     </td>
                     <td className="px-6 py-4 font-semibold text-zinc-900 dark:text-zinc-100">
-                      {p.amount} {p.currency}
+                      {formatFinanceMoney(p)}
                     </td>
                     <td className="px-6 py-4 text-zinc-600 dark:text-zinc-400">
                       {new Date(p.effectiveAt).toLocaleDateString('pt-PT')}
@@ -150,10 +156,10 @@ export function FinancePaymentsListView({
                     </td>
                     <td className="px-6 py-4">
                       <span
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-                        title="O valor está confirmado no caixa/banco mas ainda não foi alocado a obrigações específicas."
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${allocation(p.allocationStatus).className}`}
+                        title={allocation(p.allocationStatus).title}
                       >
-                        Não aplicado
+                        {allocation(p.allocationStatus).label}
                       </span>
                     </td>
                     <td className="px-6 py-4 space-y-2">{p.status === 'confirmed' && <button type="button" data-testid={`preview-receipt-${p.id}`} onClick={() => onPreviewReceipt?.(p)} className="block rounded-md border px-2 py-1 text-xs font-semibold">Pré-visualizar recibo</button>}{p.status === 'confirmed' && onIssueReceipt && (canIssueReceipt?.(p) ?? true) ? <button type="button" data-testid={`issue-receipt-${p.id}`} onClick={() => onIssueReceipt(p)} className="block rounded-md border px-2 py-1 text-xs font-semibold">Emitir recibo oficial</button> : <span className="block text-xs text-zinc-500">{receiptBlockReason?.(p) ?? 'Emissão não autorizada'}</span>}</td>

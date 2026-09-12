@@ -20,6 +20,7 @@ test('F7-05 renders a real PDF only from immutable documentary input', () => {
   assert.equal(bytes.subarray(0, 5).toString('ascii'), '%PDF-');
   assert.match(bytes.toString('latin1'), /PAY-IMMUTABLE/);
   assert.match(bytes.toString('latin1'), /Escola Nexus/);
+  assert.match(bytes.toString('latin1'), /10,00 EUR/, 'artifact presentation formats the immutable exact amount for people without changing the snapshot');
   assert.doesNotMatch(bytes.toString('latin1'), /Document id:|Provenance:|Policy provenance:|Renderer:|template:|person-1/i);
 });
 

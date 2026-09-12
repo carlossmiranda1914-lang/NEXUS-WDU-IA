@@ -5,6 +5,7 @@ import path from 'node:path';
 import pg from 'pg';
 import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
 import { PostgresAllocationRepository } from '../src/modules/finance/allocation-repository.ts';
+import { PostgresPaymentRepository } from '../src/modules/finance/payment-repository.ts';
 import { AllocationCommandValidationError, createConfirmAllocationFingerprint, normalizeConfirmAllocationCommand } from '../src/modules/finance/allocation-service.ts';
 import { Money } from '../src/modules/finance/money.ts';
 import { PostgresObligationAdjustmentRepository } from '../src/modules/finance/obligation-adjustment-repository.ts';
@@ -58,6 +59,7 @@ try {
   const first = await confirm(paymentId, [{ obligationId: obligationA, amount: '100.00' }, { obligationId: obligationB, amount: '20.00' }], 'allocation-main');
   assert.equal(first.allocations.length, 2);
   const position = await repository.getPaymentPosition(actor, paymentId); assert.equal(position.allocated.canonicalAmount(), '120'); assert.equal(position.unapplied.canonicalAmount(), '30');
+  assert.equal((await new PostgresPaymentRepository(pool).getById(actor, paymentId)).allocationStatus, 'partially_allocated', 'payment reads must project effective allocations rather than confirmation-time state');
   const posA = await repository.getObligationPosition(actor, obligationA); const posB = await repository.getObligationPosition(actor, obligationB);
   assert.equal(posA.covered.canonicalAmount(), '100'); assert.equal(posA.uncovered.canonicalAmount(), '0'); assert.equal(posB.covered.canonicalAmount(), '20'); assert.equal(posB.uncovered.canonicalAmount(), '10');
   const originals = await pool.query<{ payment: string; a: string; b: string }>(`SELECT (SELECT amount::text FROM finance_payments WHERE id=$1) payment,(SELECT amount::text FROM finance_obligations WHERE id=$2) a,(SELECT amount::text FROM finance_obligations WHERE id=$3) b`, [paymentId, obligationA, obligationB]);
@@ -71,6 +73,7 @@ try {
   const rollbackPayment = await payment('50'); const rollbackObligation = await obligation('50'); const failing = new PostgresAllocationRepository(pool, 'after_journal');
   await assert.rejects(() => confirm(rollbackPayment, [{ obligationId: rollbackObligation, amount: '50' }], 'allocation-rollback', failing), /Injected allocation failure/);
   assert.equal((await pool.query(`SELECT count(*)::int AS count FROM finance_allocations WHERE institution_id=$1 AND payment_id=$2`, [institutionId, rollbackPayment])).rows[0].count, 0);
+  assert.equal((await new PostgresPaymentRepository(pool).getById(actor, rollbackPayment)).allocationStatus, 'unapplied', 'a rolled-back allocation must not make a payment appear applied');
   assert.equal((await pool.query(`SELECT count(*)::int AS count FROM finance_journal_transactions WHERE institution_id=$1 AND command_id='allocation-rollback'`, [institutionId])).rows[0].count, 0);
   const adjustmentPayment=await payment('100'); const adjustmentObligation=await obligation('100'); const adjustments=new PostgresObligationAdjustmentRepository(pool);
   await adjustments.recordAdjustment(actor,{obligationId:adjustmentObligation,direction:'decrease',amount:'20',currency:'EUR',reason:'Authoritative correction'},'adjustment-allocation');

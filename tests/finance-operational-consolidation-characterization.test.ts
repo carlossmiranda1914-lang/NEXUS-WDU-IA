@@ -24,10 +24,11 @@ assert.match(paymentRepoSource, /financialAccountId\?: string/, 'Payment list fi
 assert.match(paymentRepoSource, /financial_account_id/, 'Payment query must filter by financial_account_id');
 assert.match(paymentModelSource, /financialAccountId\?: string/, 'Payment model must support financialAccountId');
 
-// 3. Payment Allocation Status is frozen at 'unapplied' (No Allocation)
-assert.match(paymentModelSource, /export type PaymentAllocationStatus = 'unapplied';/, 'PaymentAllocationStatus must strictly be unapplied');
-assert.doesNotMatch(paymentModelSource, /partially_applied|fully_applied/, 'Payment model must not contain partially_applied or fully_applied');
-assert.match(paymentRepoSource, /'unapplied'/, 'Payment repository maps allocationStatus to unapplied');
+// 3. Payment allocation is an up-to-date projection of append-only allocation facts.
+assert.match(paymentModelSource, /'unapplied' \| 'partially_allocated' \| 'fully_allocated'/, 'PaymentAllocationStatus must represent the current allocation position');
+assert.match(paymentRepoSource, /finance_allocations/, 'Payment repository must read the allocation authority');
+assert.match(paymentRepoSource, /finance_allocation_reversals/, 'Payment repository must subtract reversal authority');
+assert.match(paymentRepoSource, /derivePaymentAllocationPosition/, 'Payment repository must derive the current status instead of reusing confirmation-time state');
 
 // 4. Financial Account exposes canonical account number, name, and party identity
 assert.match(accountModelSource, /accountNumber: string/, 'FinancialAccount model must expose accountNumber');
