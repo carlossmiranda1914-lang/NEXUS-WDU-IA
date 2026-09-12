@@ -155,7 +155,7 @@ async function generateContentWithRetry(
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Vite injects a small inline module to enable React Refresh in local
   // development. The production CSP remains enabled; only the development
@@ -6211,15 +6211,16 @@ Gerado em tempo real com base no balanço ativo das tabelas financeiras integrad
     });
   });
 
-  // Vite Middleware Setup
-  if (process.env.NODE_ENV !== 'production') {
+  // Static / Vite Middleware Setup
+  const distPath = path.join(process.cwd(), 'dist');
+  const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
+  if (process.env.NODE_ENV !== 'production' && !hasDist) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
