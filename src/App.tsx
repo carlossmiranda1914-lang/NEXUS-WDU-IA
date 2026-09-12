@@ -81,7 +81,7 @@ function FactualUnavailablePanel({ title, detail }: { title: string; detail: str
   );
 }
 const TeacherAI = lazy(() => import('./components/TeacherAI'));
-const SchoolDocuments = lazy(() => import('./components/SchoolDocuments'));
+const DocumentsWorkspace = lazy(() => import('./components/documents/DocumentsWorkspace.tsx'));
 const WorkflowsCentral = lazy(() => import('./components/WorkflowsCentral'));
 const ParentPortal = lazy(() => import('./components/ParentPortal'));
 const InstitutionalApprovals = lazy(() => import('./components/InstitutionalApprovals'));
@@ -2681,10 +2681,7 @@ export default function App() {
                   )}
 
                   {activeTab === 'documents' && (
-                    <FactualUnavailablePanel
-                      title="Arquivo documental genérico indisponível"
-                      detail="Este arquivo não possui uma autoridade institucional conjunta para metadata e armazenamento. Nenhum documento foi criado, alterado, descarregado ou eliminado. Os Documentos de Matrícula canónicos permanecem no fluxo de Matrículas."
-                    />
+                    <DocumentsWorkspace theme={theme} />
                   )}
 
                   {activeTab === 'workflows' && (

@@ -85,6 +85,7 @@
     "test:documents:api:integration": "tsx tests/documents-api-integration.test.ts",
     "test:documents:api:tenant": "tsx tests/documents-api-multi-tenant-negative.test.ts",
     "test:documents:api:idempotency": "tsx tests/documents-api-idempotency-http.test.ts",
+    "test:documents:ui": "tsx tests/documents-ui-workspace.test.ts",
     "test:artifacts": "node scripts/check-artifacts.mjs",
     "test:postgres-foundation": "node scripts/run-postgres-foundation.mjs",
     "quality-gate": "node scripts/run-quality-gate.mjs",
