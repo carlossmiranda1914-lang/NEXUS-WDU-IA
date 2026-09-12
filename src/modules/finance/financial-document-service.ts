@@ -137,6 +137,7 @@ export class PostgresFinancialDocumentRepository {
         const recipient = await resolveDocumentaryPartySnapshot(client, parties.recipient);
         const payer = parties.payer ? await resolveDocumentaryPartySnapshot(client, parties.payer) : undefined;
         const originalSnapshotVersion = original.rows[0].documentary_snapshot ? decodeDocumentarySnapshot(original.rows[0].documentary_snapshot).snapshotVersion : 1;
+        if (originalSnapshotVersion === 3) throw new Error('FINANCIAL_DOCUMENT_CORRECTION_SOURCE_UNSUPPORTED');
         const issuedAt = (await client.query<{ issued_at: Date }>('SELECT clock_timestamp() issued_at')).rows[0]!.issued_at;
         const settlement = await captureReceiptSettlement(client, { institutionId: command.institutionId, paymentId: sourceRow.id, paymentAmount: sourceRow.amount, currency: sourceRow.currency, asOf: issuedAt });
         const documentarySnapshot = {

@@ -32,15 +32,18 @@ const documentTermKey = (documentType: string): ProductTermKey => {
 export function buildFinancialDocumentPresentation(input: { document: IssuedDocumentRecord; snapshot: DocumentarySnapshot; terminology?: typeof productTerm }): CanonicalFinancialDocumentPresentation {
   const term = input.terminology ?? productTerm;
   const documentLabel = term(documentTermKey(input.document.documentType)).label;
+  const operationReference = 'snapshotVersion' in input.snapshot && input.snapshot.snapshotVersion === 3
+    ? input.snapshot.obligation.reference
+    : input.snapshot.operation.reference;
   return Object.freeze({
     document: Object.freeze({ typeLabel: documentLabel, officialNumber: `${input.document.seriesCode}/${input.document.sequenceNumber}`, issueDate: input.document.issuedAt.toISOString(), currency: input.snapshot.totals.currency, statusLabel: term('financial_document.status.issued').label }),
     issuer: Object.freeze({ legalName: input.snapshot.issuer.legalName, taxIdentifier: input.snapshot.issuer.taxIdentifier, addressLines: Object.freeze([input.snapshot.issuer.address.line1]), logoAssetReference: null }),
-    recipient: Object.freeze({ name: input.snapshot.recipient.name, taxIdentifier: null, addressLines: Object.freeze([]), operationalReference: input.snapshot.operation.reference }),
-    operation: Object.freeze({ reference: input.snapshot.operation.reference, lines: Object.freeze([]) }),
+    recipient: Object.freeze({ name: input.snapshot.recipient.name, taxIdentifier: null, addressLines: Object.freeze([]), operationalReference: operationReference }),
+    operation: Object.freeze({ reference: operationReference, lines: Object.freeze([]) }),
     totals: Object.freeze({ documentTotal: input.snapshot.totals.documentTotal, currency: input.snapshot.totals.currency }),
     payment: input.snapshot.payment ? Object.freeze({ reference: input.snapshot.payment.reference, amount: input.snapshot.payment.amount, currency: input.snapshot.payment.currency }) : null,
     correction: null,
-    legalMentions: Object.freeze('snapshotVersion' in input.snapshot && input.snapshot.snapshotVersion === 2 ? [...input.snapshot.legalMentions] : []),
+    legalMentions: Object.freeze('snapshotVersion' in input.snapshot && (input.snapshot.snapshotVersion === 2 || input.snapshot.snapshotVersion === 3) ? [...input.snapshot.legalMentions] : []),
     verification: Object.freeze([]),
   });
 }

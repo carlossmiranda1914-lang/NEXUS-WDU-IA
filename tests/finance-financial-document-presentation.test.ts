@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createDocumentarySnapshot, createDocumentarySnapshotV2 } from '../src/modules/finance/documentary-snapshot.ts';
+import { composeInvoiceDocumentarySnapshotV3, createDocumentarySnapshot, createDocumentarySnapshotV2 } from '../src/modules/finance/documentary-snapshot.ts';
 import { buildFinancialDocumentPresentation } from '../src/modules/finance/financial-document-presentation.ts';
 
 const snapshot = createDocumentarySnapshot({ issuer: { legalName: 'Escola Aurora', taxIdentifier: 'PT999', address: { countryCode: 'PT', line1: 'Rua da Escola, 1' } }, recipient: { name: 'Maria Silva', authorityId: 'person-1' }, operation: { reference: 'PAG-42' }, payment: { reference: 'PAG-42', amount: '10.00', currency: 'EUR' }, totals: { documentTotal: '10.00', currency: 'EUR' }, jurisdiction: { code: 'core', policyVersion: 'core-1' } });
@@ -25,6 +25,21 @@ test('dispatches a V2 read model without downgrading it to V1', () => {
   const presentation = buildFinancialDocumentPresentation({ document: { documentType: 'receipt', seriesCode: 'REC', sequenceNumber: 9, issuedAt: new Date('2026-09-11T10:00:00.000Z'), status: 'issued' }, snapshot: v2 });
   assert.equal(presentation.payment?.reference, 'PAG-V2');
   assert.deepEqual(presentation.legalMentions, ['Policy mention']);
+});
+
+test('dispatches a V3 invoice from its frozen obligation reference without live Finance lookup', () => {
+  const v3 = composeInvoiceDocumentarySnapshotV3({
+    issuedAt: new Date('2026-09-12T10:00:00.000Z'), dueAt: new Date('2026-10-12T00:00:00.000Z'),
+    issuer: snapshot.issuer, recipient: snapshot.recipient,
+    obligation: { authorityId: 'obligation-1', reference: 'OBR-42', amount: '100.00', currency: 'AOA', dueAt: '2026-10-12T00:00:00.000Z' },
+    line: { description: 'Propina', quantity: '1', unitPrice: '100', discount: '0', tax: '0' },
+    taxTreatment: 'not_applicable', legalMentions: ['Menção de teste'], jurisdictionCode: 'NEXUS_TEST', policyVersion: 'core-1', financialProfileVersion: 1, fiscalConfigurationVersion: 1, seriesId: 'invoice-series', adapterKey: 'core',
+  });
+  const presentation = buildFinancialDocumentPresentation({ document: { documentType: 'invoice', seriesCode: 'FT', sequenceNumber: 1, issuedAt: new Date('2026-09-12T10:00:00.000Z'), status: 'issued' }, snapshot: v3 });
+  assert.equal(presentation.operation.reference, 'OBR-42');
+  assert.equal(presentation.payment, null);
+  assert.equal(presentation.totals.documentTotal, '100');
+  assert.deepEqual(presentation.legalMentions, ['Menção de teste']);
 });
 
 test('renderer entrypoint receives only immutable presentation, never a live Finance authority', async () => {

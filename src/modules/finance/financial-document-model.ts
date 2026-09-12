@@ -8,4 +8,9 @@ export function createFinancialDocumentDraft(input: Input): FinancialDocument { 
 export function issueFinancialDocument(document: FinancialDocument, input: { seriesId: string; sequenceNumber: number; issuedAt: Date }): FinancialDocument { if (document.status !== 'draft') throw new Error('ISSUED_DOCUMENT_IMMUTABLE'); return Object.freeze({ ...document, status: 'issued', seriesId: input.seriesId, sequenceNumber: input.sequenceNumber, issuedAt: input.issuedAt.toISOString() }); }
 export function createCorrectionDocument(original: FinancialDocument, input: Input): FinancialDocument { validateCorrectionInstitution(input.institutionId, original.institutionId); if (original.status !== 'issued') throw new Error('CORRECTION_REQUIRES_ISSUED_DOCUMENT'); return Object.freeze({ ...createFinancialDocumentDraft(input), correctsDocumentId: original.id }); }
 export function validateDocumentSourceInstitution(documentInstitutionId: string, sourceInstitutionId: string): void { if (documentInstitutionId !== sourceInstitutionId) throw new Error('FOREIGN_FINANCIAL_DOCUMENT_SOURCE'); }
+/** Only source/document pairs with an explicit authority contract may be issued. */
+export function validateDocumentSourceType(sourceType: 'payment' | 'obligation', documentType: 'receipt' | 'invoice'): void {
+  if ((sourceType === 'payment' && documentType === 'receipt') || (sourceType === 'obligation' && documentType === 'invoice')) return;
+  throw new Error('FINANCIAL_DOCUMENT_SOURCE_TYPE_INVALID');
+}
 export function validateCorrectionInstitution(documentInstitutionId: string, originalInstitutionId: string): void { if (documentInstitutionId !== originalInstitutionId) throw new Error('FOREIGN_FINANCIAL_DOCUMENT_CORRECTION'); }
