@@ -12,11 +12,12 @@ const payments = fs.readFileSync(path.join(root, 'src/components/finance/payment
 assert.match(workspace, /Configuração necessária/, 'guided Finance setup must explain incomplete readiness');
 assert.match(workspace, /Perfil jurídico institucional/, 'guided Finance setup must name the legal-profile prerequisite');
 assert.match(workspace, /Perfil financeiro institucional/, 'guided Finance setup must name the financial-profile prerequisite');
-assert.match(workspace, /Concluir configuração/, 'only the canonical setup surface may offer remediation');
+assert.match(workspace, /Configurar perfil jurídico/, 'the canonical setup surface must name the legal-profile remediation');
+assert.match(workspace, /Configurar perfil financeiro/, 'the canonical setup surface must name the financial-profile remediation');
 assert.match(workspace, /canManageConfiguration/, 'mutation presentation must come from server-derived capabilities');
 assert.match(workspace, /readinessClient\.get\(\)/, 'the workspace must refresh readiness from the backend after mutation');
 assert.doesNotMatch(workspace, /institutionId|nextSequenceNumber/, 'guided UX must not expose browser tenant or sequence authority');
-assert.match(workspace, /firstIncomplete/, 'guided setup must resolve exactly one authoritative prerequisite at a time');
+assert.match(workspace, /actionableRequirement/, 'guided setup must resolve one actionable local prerequisite at a time');
 assert.match(workspace, /JURISDICTION_POLICY_UNAVAILABLE/, 'unsupported jurisdiction must be an explicit blocked state');
 assert.doesNotMatch(workspace, /adapterKey|NEXUS_TEST|core/, 'normal configuration must not expose synthetic adapter internals');
 assert.match(client, /\/api\/institution\/legal-profile/, 'guided configuration must reuse the canonical legal-profile route');
