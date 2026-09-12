@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { Readable, PassThrough } from 'node:stream';
+import { PassThrough } from 'node:stream';
+import { Storage } from '@google-cloud/storage';
 import type {
   ObjectStorageProvider,
   CreateUploadAuthParams,
@@ -27,7 +28,7 @@ export interface GcsFileLike {
   createWriteStream(options?: {
     metadata?: {
       contentType?: string;
-      metadata?: Record<string, string>;
+      metadata?: Record<string, any>;
     };
     resumable?: boolean;
   }): NodeJS.WritableStream;
@@ -37,9 +38,13 @@ export interface GcsFileLike {
     contentType?: string;
     updated?: string;
     md5Hash?: string;
-    metadata?: Record<string, string>;
-  }]>;
-  exists(): Promise<[boolean]>;
+    metadata?: Record<string, any>;
+  }, ...unknown[]]>;
+  setMetadata(metadata: {
+    contentType?: string;
+    metadata?: Record<string, any>;
+  }): Promise<unknown>;
+  exists(): Promise<[boolean, ...unknown[]]>;
   delete(options?: { ignoreNotFound?: boolean }): Promise<unknown>;
 }
 
@@ -65,27 +70,31 @@ export interface GoogleCloudStorageProviderOptions {
 }
 
 /**
- * Production-ready Google Cloud Storage adapter for Documents Foundation.
- * Operates on server-mediated streaming by default.
- * Zero browser storage credentials exposure.
+ * Production Google Cloud Storage adapter for Documents Foundation.
+ * Uses official @google-cloud/storage SDK with Application Default Credentials (ADC) by default.
+ * Operates on server-mediated streaming by default with zero browser credentials exposure.
  */
 export class GoogleCloudStorageObjectProvider implements ObjectStorageProvider {
   public readonly providerName = 'google_cloud_storage';
-  private readonly client?: GcsStorageClientLike;
+  private readonly client: GcsStorageClientLike;
   private readonly defaultBucket?: string;
 
   constructor(options: GoogleCloudStorageProviderOptions = {}) {
-    this.client = options.client;
     this.defaultBucket = options.defaultBucket;
+    if (options.client) {
+      this.client = options.client;
+    } else {
+      // Production instantiation using Application Default Credentials (ADC) / Cloud Run attached identity
+      this.client = new Storage({
+        projectId: options.projectId,
+      });
+    }
   }
 
   private resolveBucket(bucketName?: string): GcsBucketLike {
     const targetBucket = bucketName || this.defaultBucket;
     if (!targetBucket || typeof targetBucket !== 'string' || targetBucket.trim() === '') {
       throw new Error('GCS_BUCKET_REQUIRED: A valid storage bucket name must be configured.');
-    }
-    if (!this.client) {
-      throw new Error('GCS_CLIENT_UNAVAILABLE: GCS Storage client is not configured in this environment.');
     }
     return this.client.bucket(targetBucket.trim());
   }
@@ -110,6 +119,7 @@ export class GoogleCloudStorageObjectProvider implements ObjectStorageProvider {
 
   /**
    * Stream incoming upload bytes directly into GCS target file while calculating SHA-256 hash and byte size.
+   * Persists canonical SHA-256 hash in GCS custom metadata so it survives storage round-trip.
    */
   public async writeObjectStream(
     params: WriteObjectStreamParams,
@@ -154,11 +164,29 @@ export class GoogleCloudStorageObjectProvider implements ObjectStorageProvider {
           );
         }
 
-        resolve({
-          byteSize: totalBytes,
-          sha256Hash,
-          mimeType: params.mimeType || 'application/octet-stream',
-        });
+        try {
+          // Persist canonical SHA-256 in GCS object custom metadata
+          await file.setMetadata({
+            contentType: params.mimeType || 'application/octet-stream',
+            metadata: {
+              sha256Hash,
+              mimeType: params.mimeType || 'application/octet-stream',
+            },
+          });
+
+          resolve({
+            byteSize: totalBytes,
+            sha256Hash,
+            mimeType: params.mimeType || 'application/octet-stream',
+          });
+        } catch (metaErr: any) {
+          try {
+            await file.delete({ ignoreNotFound: true });
+          } catch {
+            // Ignore cleanup failure
+          }
+          reject(new Error(`GCS_METADATA_PERSIST_ERROR: ${metaErr.message}`));
+        }
       };
 
       passThrough.on('data', (chunk: Buffer) => {

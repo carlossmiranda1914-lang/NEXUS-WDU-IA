@@ -21,6 +21,25 @@ async function run() {
     projectId: 'nexus-wdu-prod',
   });
 
+  // TEST 0: Real SDK instantiated when no custom storageClient is injected
+  console.log('[TEST 0] PRODUCTION_CONFIG_WITH_BUCKET -> Real SDK-backed client object instantiated...');
+  const realSdkProvider = new GoogleCloudStorageObjectProvider({
+    projectId: 'nexus-wdu-prod',
+    defaultBucket: BUCKET,
+  });
+  assert.equal(realSdkProvider.providerName, 'google_cloud_storage');
+  assert.ok((realSdkProvider as any).client, 'Real client instance must be created inside provider');
+  assert.equal(typeof (realSdkProvider as any).client.bucket, 'function', 'client must implement GcsStorageClientLike');
+
+  const autoRuntimeConfig = resolveDocumentsOperationalConfig({
+    env: {
+      GOOGLE_CLOUD_PROJECT: 'nexus-wdu-prod',
+      DOCUMENTS_STORAGE_BUCKET: BUCKET,
+    },
+  });
+  assert.ok(autoRuntimeConfig.storageProvider, 'storageProvider must be instantiated in runtime without injected fake client');
+  assert.equal(autoRuntimeConfig.storageProvider?.providerName, 'google_cloud_storage');
+
   // TEST 1: WRITE_STREAM & SHA-256 verification
   console.log('[TEST 1] WRITE_STREAM...');
   const testPayload = Buffer.from('Hello, Google Cloud Storage Documents Foundation!');
@@ -39,13 +58,14 @@ async function run() {
   assert.equal(writeResult.sha256Hash, expectedHash, 'SHA-256 hash must be accurately computed');
   assert.equal(writeResult.mimeType, 'text/plain');
 
-  // TEST 1B: WRITE_STREAM size mismatch fail-closed
-  console.log('[TEST 1B] WRITE_STREAM size mismatch rejection...');
+  // TEST 1B: WRITE_STREAM size mismatch fail-closed & cleanup
+  console.log('[TEST 1B] WRITE_STREAM size mismatch rejection & cleanup...');
+  const mismatchKey = 'inst_123/doc_456/session_789/mismatch-obj';
   await assert.rejects(
     async () => {
       await provider.writeObjectStream({
         storageBucket: BUCKET,
-        storageKey: 'inst_123/doc_456/session_789/mismatch-obj',
+        storageKey: mismatchKey,
         stream: Readable.from(testPayload),
         declaredByteSize: testPayload.length + 50, // Intentional mismatch
         mimeType: 'text/plain',
@@ -55,8 +75,14 @@ async function run() {
     'Must fail closed and throw SIZE_MISMATCH when declared size does not match stream payload',
   );
 
-  // TEST 2: HEAD_OBJECT
-  console.log('[TEST 2] HEAD_OBJECT...');
+  const mismatchHead = await provider.headObject({
+    storageBucket: BUCKET,
+    storageKey: mismatchKey,
+  });
+  assert.equal(mismatchHead.exists, false, 'No committed object may remain after size mismatch');
+
+  // TEST 2: HEAD_OBJECT & COMPLETE_UPLOAD SHA-256 Roundtrip
+  console.log('[TEST 2] HEAD_OBJECT & COMPLETE_UPLOAD SHA-256 Roundtrip...');
   const headResult = await provider.headObject({
     storageBucket: BUCKET,
     storageKey: storageKey1,
@@ -65,7 +91,32 @@ async function run() {
   assert.equal(headResult.exists, true, 'Object must exist');
   assert.equal(headResult.storageProvider, 'google_cloud_storage');
   assert.equal(headResult.byteSize, testPayload.length);
+  assert.equal(headResult.sha256Hash, expectedHash, 'SHA-256 hash must survive storage round-trip into headObject');
   assert.equal(headResult.mimeType, 'text/plain');
+
+  const completeResult = await provider.completeUpload({
+    storageBucket: BUCKET,
+    storageKey: storageKey1,
+  });
+  assert.equal(completeResult.sha256Hash, expectedHash, 'SHA-256 hash must survive into completeUpload metadata');
+
+  // Explicit GCS_SHA256_ROUNDTRIP invariant verification
+  assert.equal(
+    expectedHash,
+    writeResult.sha256Hash,
+    'source payload hash == writeResult.sha256Hash',
+  );
+  assert.equal(
+    writeResult.sha256Hash,
+    headResult.sha256Hash,
+    'writeResult.sha256Hash == headObject.sha256Hash',
+  );
+  assert.equal(
+    headResult.sha256Hash,
+    completeResult.sha256Hash,
+    'headObject.sha256Hash == completeUpload.sha256Hash',
+  );
+  console.log('GCS_SHA256_ROUNDTRIP=PASS');
 
   const headNonExistent = await provider.headObject({
     storageBucket: BUCKET,

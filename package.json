@@ -135,6 +135,7 @@
     "nexus:migrate:s03": "node --import \"data:text/javascript,process.geteuid%3D()%3D%3E0\" --import tsx scripts/apply-s03-process-migration.ts"
   },
   "dependencies": {
+    "@google-cloud/storage": "^8.1.0",
     "@google/genai": "^2.4.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.1",

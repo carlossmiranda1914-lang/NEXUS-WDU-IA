@@ -79,6 +79,22 @@ export class FakeGcsFile implements GcsFileLike {
     }];
   }
 
+  async setMetadata(metadata: {
+    contentType?: string;
+    metadata?: Record<string, string>;
+  }): Promise<unknown> {
+    if (metadata.contentType) {
+      this.contentType = metadata.contentType;
+    }
+    if (metadata.metadata) {
+      this.customMetadata = {
+        ...this.customMetadata,
+        ...metadata.metadata,
+      };
+    }
+    return [{}];
+  }
+
   async exists(): Promise<[boolean]> {
     return [this.existsOnStorage];
   }
