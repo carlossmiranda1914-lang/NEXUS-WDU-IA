@@ -21,6 +21,14 @@ test('F7-06 only presents active receipt and credit-note series returned by the 
   assert.deepEqual((await client.listActiveCorrectionSeries()).map(item => item.id), ['credit']);
 });
 
+test('receipt preview reads per-document readiness exclusively from the server', async () => {
+  const calls: string[] = [];
+  const client = new FinancialDocumentClient(async (path) => { calls.push(String(path)); return response({ documentType: 'receipt', status: 'BLOCKED', reasonCode: 'AGT_ONBOARDING_REQUIRED', prerequisites: {} }); }, async () => 'token');
+  const readiness = await client.documentReadiness('receipt');
+  assert.equal(readiness.reasonCode, 'AGT_ONBOARDING_REQUIRED');
+  assert.deepEqual(calls, ['/api/finance/readiness/documents/receipt']);
+});
+
 test('F7-06 turns unavailable issuance into an actionable configuration result', async () => {
   const client = new FinancialDocumentClient(async () => unavailable(), async () => null);
   await assert.rejects(() => client.issueReceipt({ sourceId: 'pay-1', seriesId: 'series-1', idempotencyKey: 'receipt-stable-key' }), /configuração fiscal e a série efetiva/);

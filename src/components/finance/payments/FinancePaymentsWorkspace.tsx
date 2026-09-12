@@ -4,7 +4,7 @@ import { paymentClient } from '../../../modules/finance/payment-client.ts';
 import { FinancePaymentsListView } from './FinancePaymentsListView.tsx';
 import { FinancePaymentCreateView } from './FinancePaymentCreateView.tsx';
 import { FinancePaymentProvidersView } from './FinancePaymentProvidersView.tsx';
-import { financialDocumentClient } from '../../../modules/finance/financial-document-client.ts';
+import { financialDocumentClient, type FinancialDocumentReadinessProjection } from '../../../modules/finance/financial-document-client.ts';
 import { browserDocumentIntentStorage, resolvePersistentDocumentIntentKey } from '../../../modules/finance/financial-document-intent.ts';
 import { financeReadinessClient, type FinanceReadinessDto } from '../../../modules/finance/finance-readiness-client.ts';
 
@@ -40,6 +40,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   const [readiness, setReadiness] = useState<FinanceReadinessDto | null>(null);
   const [receiptEligibility, setReceiptEligibility] = useState<Record<string, { eligible: boolean; reason?: string }>>({});
   const [previewPayment, setPreviewPayment] = useState<Payment | null>(null);
+  const [previewReadiness, setPreviewReadiness] = useState<FinancialDocumentReadinessProjection | null>(null);
 
   const loadPayments = useCallback(async () => {
     setLoading(true);
@@ -59,6 +60,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   }, [loadPayments]);
   useEffect(() => { financialDocumentClient.capabilities().then(capabilities => setCanIssueDocument(capabilities.issue)).catch(() => setCanIssueDocument(false)); }, []);
   useEffect(() => { financeReadinessClient.get().then(setReadiness).catch(() => setReadiness(null)); }, []);
+  useEffect(() => { if (!previewPayment) return void setPreviewReadiness(null); financialDocumentClient.documentReadiness('receipt').then(setPreviewReadiness).catch(() => setPreviewReadiness(null)); }, [previewPayment]);
   useEffect(() => { if (readiness?.status !== 'READY' || readiness?.receiptIssuance.status !== 'READY' || !canIssueDocument || payments.length === 0) return; financialDocumentClient.listActiveReceiptSeries().then(async series => { const selected = series[0]; if (!selected) return; const entries = await Promise.all(payments.map(async payment => { const result = await financialDocumentClient.receiptEligibility({ paymentId: payment.id, seriesId: selected.id }); return [payment.id, result.status === 'ELIGIBLE' ? { eligible: true } : { eligible: false, reason: result.reasonCode }] as const; })); setReceiptEligibility(Object.fromEntries(entries)); }).catch(() => setReceiptEligibility({})); }, [readiness?.status, readiness?.receiptIssuance.status, canIssueDocument, payments]);
 
   const handleCreated = (newPayment: Payment) => {
@@ -98,7 +100,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
           canIssueReceipt={payment => receiptEligibility[payment.id]?.eligible === true}
           receiptBlockReason={payment => receiptEligibilityMessage(receiptEligibility[payment.id]?.reason, canIssueDocument)}
       />
-      {previewPayment && <section data-testid="receipt-pre-issue-preview" className="mt-4 rounded-lg border p-4 text-sm"><h3 className="font-semibold">Pré-visualização do recibo</h3><p>Pagamento: {previewPayment.paymentReference}</p><p>Valor: {previewPayment.amount} {previewPayment.currency}</p><p>Estado do pagamento: Confirmado</p><p className="mt-2 text-zinc-600">A emissão oficial só ficará disponível após confirmação server-side de todos os requisitos fiscais aplicáveis.</p></section>}
+      {previewPayment && <section data-testid="receipt-pre-issue-preview" className="mt-4 rounded-lg border p-4 text-sm"><h3 className="font-semibold">Pré-visualização do recibo</h3><p>Pagamento: {previewPayment.paymentReference}</p><p>Valor: {previewPayment.amount} {previewPayment.currency}</p><p>Estado do pagamento: Confirmado</p><p className="mt-2 text-zinc-600">{previewReadiness?.status === 'READY' ? 'A emissão oficial pode ser confirmada.' : 'A emissão oficial permanece bloqueada até a instituição concluir a configuração fiscal junto da autoridade competente.'}</p></section>}
       </>}
 
       {issuanceNotice && <div data-testid="financial-document-issuance-notice" className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><p>{issuanceNotice}</p>{onOpenFinancialDocuments && <button type="button" onClick={onOpenFinancialDocuments} className="rounded-md border border-emerald-300 bg-white px-3 py-1 font-semibold text-emerald-800">Abrir documento financeiro</button>}</div>}

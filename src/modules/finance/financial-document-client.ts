@@ -7,6 +7,7 @@ export type FinancialDocumentDetail = FinancialDocumentProjection & { sources: A
 export type FinancialDocumentArtifactProjection = { id: string; document_id: string; render_version: string; template_version: string; generated_at: string; content_hash: string; media_type: string; byte_size: number };
 type FinancialDocumentSeriesProjection = { id: string; document_type: string; status: string };
 export type ReceiptEligibilityProjection = { status: 'ELIGIBLE' } | { status: 'BLOCKED'; reasonCode: string };
+export type FinancialDocumentReadinessProjection = { documentType: string; status: 'READY' | 'BLOCKED'; reasonCode?: string; prerequisites: Record<string, boolean> };
 
 export class FinancialDocumentApiError extends Error {
   constructor(readonly code: string, message: string) {
@@ -46,6 +47,7 @@ export class FinancialDocumentClient {
   async receiptEligibility(input: { paymentId: string; seriesId: string }): Promise<ReceiptEligibilityProjection> {
     return this.request(`/api/finance/payments/${encodeURIComponent(input.paymentId)}/receipt-eligibility?seriesId=${encodeURIComponent(input.seriesId)}`);
   }
+  async documentReadiness(documentType: string): Promise<FinancialDocumentReadinessProjection> { return this.request(`/api/finance/readiness/documents/${encodeURIComponent(documentType)}`); }
   async listActiveReceiptSeries(): Promise<FinancialDocumentSeriesProjection[]> { return (await this.request<{ items: FinancialDocumentSeriesProjection[] }>('/api/finance/document-series')).items.filter(series => series.document_type === 'receipt' && series.status === 'active'); }
   async listActiveCorrectionSeries(): Promise<FinancialDocumentSeriesProjection[]> { return (await this.request<{ items: FinancialDocumentSeriesProjection[] }>('/api/finance/document-series')).items.filter(series => series.document_type === 'credit_note' && series.status === 'active'); }
   async issueCorrection(input: { originalDocumentId: string; seriesId: string; idempotencyKey: string }): Promise<{ id: string; sequenceNumber: number; originalDocumentId: string; replayed: boolean }> {
