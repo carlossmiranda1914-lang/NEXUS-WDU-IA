@@ -25,6 +25,8 @@ assert.match(clientSource, /issueCorrection\(/, 'correction must be delegated to
 assert.match(workspaceSource, /Criar correção autorizada/, 'the document preview must expose the bounded correction action');
 const paymentsListSource = fs.readFileSync(path.join(root, 'src/components/finance/payments/FinancePaymentsListView.tsx'), 'utf8');
 assert.match(paymentsListSource, /Emitir recibo oficial/, 'a confirmed payment must expose the bounded source-context action');
+assert.match(paymentsListSource, /Pré-visualizar recibo/, 'a confirmed payment must expose a truthful pre-issuance receipt preview');
+assert.match(paymentsListSource, /onPreviewReceipt/, 'the preview must be selected from the real payment context, not browser-entered facts');
 assert.match(workspaceSource, /Visualizar|View/, 'the workspace must offer a read-only document preview');
 assert.match(workspaceSource, /PDF/, 'the workspace must offer the private official artifact action');
 assert.match(workspaceSource, /Imprimir/, 'the workspace must offer print only for private artifact bytes');

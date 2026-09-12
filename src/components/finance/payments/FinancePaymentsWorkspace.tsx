@@ -39,6 +39,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   const [canIssueDocument, setCanIssueDocument] = useState(false);
   const [readiness, setReadiness] = useState<FinanceReadinessDto | null>(null);
   const [receiptEligibility, setReceiptEligibility] = useState<Record<string, { eligible: boolean; reason?: string }>>({});
+  const [previewPayment, setPreviewPayment] = useState<Payment | null>(null);
 
   const loadPayments = useCallback(async () => {
     setLoading(true);
@@ -83,7 +84,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
     <div className="w-full">
       {readiness?.status === 'INCOMPLETE' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Configuração necessária</strong><p>Os recebimentos estão disponíveis, mas ainda não é possível emitir recibos oficiais.</p>{readiness.canManageConfiguration && <button type="button" onClick={onOpenFinanceConfiguration} className="mt-2 rounded-md border px-3 py-1">Concluir configuração</button>}</section>}
       {readiness?.receiptIssuance.status === 'BLOCKED' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Emissão oficial indisponível</strong><p>A política documental da instituição não tem um adaptador jurisdicional aprovado. Não será atribuído qualquer número de recibo.</p></section>}
-      {view === 'list' && (
+      {view === 'list' && <>
         <FinancePaymentsListView
           payments={payments}
           loading={loading}
@@ -93,10 +94,12 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
           onOpenCreate={() => setView('create')}
           onOpenProviders={() => setView('providers')}
           onIssueReceipt={readiness?.status === 'READY' && readiness?.receiptIssuance.status === 'READY' && canIssueDocument ? issueReceipt : undefined}
+          onPreviewReceipt={setPreviewPayment}
           canIssueReceipt={payment => receiptEligibility[payment.id]?.eligible === true}
           receiptBlockReason={payment => receiptEligibilityMessage(receiptEligibility[payment.id]?.reason, canIssueDocument)}
-        />
-      )}
+      />
+      {previewPayment && <section data-testid="receipt-pre-issue-preview" className="mt-4 rounded-lg border p-4 text-sm"><h3 className="font-semibold">Pré-visualização do recibo</h3><p>Pagamento: {previewPayment.paymentReference}</p><p>Valor: {previewPayment.amount} {previewPayment.currency}</p><p>Estado do pagamento: Confirmado</p><p className="mt-2 text-zinc-600">A emissão oficial só ficará disponível após confirmação server-side de todos os requisitos fiscais aplicáveis.</p></section>}
+      </>}
 
       {issuanceNotice && <div data-testid="financial-document-issuance-notice" className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><p>{issuanceNotice}</p>{onOpenFinancialDocuments && <button type="button" onClick={onOpenFinancialDocuments} className="rounded-md border border-emerald-300 bg-white px-3 py-1 font-semibold text-emerald-800">Abrir documento financeiro</button>}</div>}
 
