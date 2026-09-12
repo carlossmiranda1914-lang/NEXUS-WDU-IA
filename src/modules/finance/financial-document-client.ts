@@ -8,6 +8,7 @@ export type FinancialDocumentArtifactProjection = { id: string; document_id: str
 type FinancialDocumentSeriesProjection = { id: string; document_type: string; status: string };
 export type ReceiptEligibilityProjection = { status: 'ELIGIBLE' } | { status: 'BLOCKED'; reasonCode: string };
 export type FinancialDocumentReadinessProjection = { documentType: string; status: 'READY' | 'BLOCKED'; reasonCode?: string; prerequisites: Record<string, boolean> };
+export type ReceiptPreissuePreview = { documentType: 'receipt'; officialDocumentCreated: false; definitiveNumberAllocated: false; payment: { reference: string; date: string; amount: string; currency: string; confirmationState: string }; sourceEligibility: 'ELIGIBLE' | 'BLOCKED'; readiness: FinancialDocumentReadinessProjection; blockingReason: string | null; series: { available: boolean; reference: string | null }; issuer: { legalName: string; taxIdentifier: string | null } | null; parties: { payer: null; beneficiary: null; recipient: null }; documentaryPrerequisites: { partiesResolved: boolean; documentaryDataComplete: boolean } };
 
 export class FinancialDocumentApiError extends Error {
   constructor(readonly code: string, message: string) {
@@ -48,6 +49,7 @@ export class FinancialDocumentClient {
     return this.request(`/api/finance/payments/${encodeURIComponent(input.paymentId)}/receipt-eligibility?seriesId=${encodeURIComponent(input.seriesId)}`);
   }
   async documentReadiness(documentType: string): Promise<FinancialDocumentReadinessProjection> { return this.request(`/api/finance/readiness/documents/${encodeURIComponent(documentType)}`); }
+  async receiptPreview(paymentId: string): Promise<ReceiptPreissuePreview> { return this.request(`/api/finance/payments/${encodeURIComponent(paymentId)}/receipt-preview`); }
   async listActiveReceiptSeries(): Promise<FinancialDocumentSeriesProjection[]> { return (await this.request<{ items: FinancialDocumentSeriesProjection[] }>('/api/finance/document-series')).items.filter(series => series.document_type === 'receipt' && series.status === 'active'); }
   async listActiveCorrectionSeries(): Promise<FinancialDocumentSeriesProjection[]> { return (await this.request<{ items: FinancialDocumentSeriesProjection[] }>('/api/finance/document-series')).items.filter(series => series.document_type === 'credit_note' && series.status === 'active'); }
   async issueCorrection(input: { originalDocumentId: string; seriesId: string; idempotencyKey: string }): Promise<{ id: string; sequenceNumber: number; originalDocumentId: string; replayed: boolean }> {
