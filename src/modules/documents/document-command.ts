@@ -474,3 +474,105 @@ export async function appendDocumentVersionCommand(input: {
     },
   });
 }
+
+export interface CreateDocumentCommandInput {
+  category: string;
+  classification?: string | null;
+  provenance?: {
+    sourceDomain?: string;
+    method?: string;
+    correlationId?: string | null;
+  };
+}
+
+export function createDocumentFingerprint(
+  institutionId: string,
+  input: CreateDocumentCommandInput,
+  actorPersonId: string,
+): string {
+  return createCanonicalDocumentsFingerprint({
+    institutionId,
+    category: input.category,
+    classification: input.classification ?? null,
+    actorPersonId,
+    provenance: {
+      sourceDomain: input.provenance?.sourceDomain ?? 'documents',
+      method: input.provenance?.method ?? 'create_document',
+      correlationId: input.provenance?.correlationId ?? null,
+    },
+  });
+}
+
+export async function createDocumentCommand(input: {
+  pool: Pool;
+  context: InstitutionalContext;
+  idempotencyKey: string;
+  input: CreateDocumentCommandInput;
+}): Promise<{ replayed: boolean; result: DocumentRecord }> {
+  const { pool, context, idempotencyKey, input: creationInput } = input;
+  const canonicalFingerprint = createDocumentFingerprint(
+    context.institutionId,
+    creationInput,
+    context.personId,
+  );
+
+  const repo = new PostgresDocumentRepository();
+  const auditRepo = new PostgresDocumentAuditRepository();
+
+  return executeIdempotentDocumentsCommand({
+    pool,
+    context,
+    identity: {
+      institutionId: context.institutionId,
+      commandScope: 'documents.create',
+      idempotencyKey,
+      canonicalFingerprint,
+    },
+    execute: async (client) => {
+      const doc = await repo.createDocument(client, {
+        institutionId: context.institutionId,
+        category: creationInput.category,
+        classification: creationInput.classification ?? null,
+        createdByPersonId: context.personId,
+      });
+
+      await auditRepo.recordAuditEvent(client, {
+        institutionId: context.institutionId,
+        documentId: doc.id,
+        actorPersonId: context.personId,
+        action: 'document.created',
+        outcome: 'success',
+        correlationId: creationInput.provenance?.correlationId ?? null,
+        details: {
+          category: doc.category,
+          classification: doc.classification,
+        },
+      });
+
+      const outboxRepo = new PostgresDocumentOutboxRepository();
+      await outboxRepo.insertEventIntent(client, {
+        institutionId: context.institutionId,
+        eventType: 'document.created',
+        aggregateType: 'document',
+        aggregateId: doc.id,
+        actorPersonId: context.personId,
+        correlationId: creationInput.provenance?.correlationId ?? null,
+        payload: {
+          category: doc.category,
+          classification: doc.classification,
+        },
+      });
+
+      return {
+        resultRef: doc.id,
+        result: doc,
+      };
+    },
+    loadResult: async (client, resultRef) => {
+      const doc = await repo.getDocumentById(client, context.institutionId, resultRef);
+      if (!doc) throw new Error('Persisted document missing on replay');
+      return doc;
+    },
+  });
+}
+
