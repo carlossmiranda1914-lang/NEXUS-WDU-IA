@@ -81,7 +81,7 @@ function FactualUnavailablePanel({ title, detail }: { title: string; detail: str
   );
 }
 const TeacherAI = lazy(() => import('./components/TeacherAI'));
-const SchoolDocuments = lazy(() => import('./components/SchoolDocuments'));
+const DocumentsWorkspace = lazy(() => import('./components/documents/DocumentsWorkspace.tsx'));
 const WorkflowsCentral = lazy(() => import('./components/WorkflowsCentral'));
 const ParentPortal = lazy(() => import('./components/ParentPortal'));
 const InstitutionalApprovals = lazy(() => import('./components/InstitutionalApprovals'));
@@ -109,7 +109,7 @@ const TAB_NAMES: Record<string, string> = {
   students: 'Alunos & Matrículas',
   teachers: 'Corpo Docente',
   financials: 'Finanças & Contas',
-  documents: 'Dossier & Processos Automáticos',
+  documents: 'Documentos',
   communications: 'Comunicação',
   config: 'Definições do Sistema',
   workflows: 'Central de Processos',
@@ -180,8 +180,8 @@ export const TABS_LAYOUT_CONFIG: Record<string, {
   },
   documents: {
     type: 'Arquivo Documental Digital',
-    containerClass: "space-y-6 w-full max-w-6xl mx-auto",
-    description: "Pasta organizacional de atas, regulamentos, manuais e circulares administrativas."
+    containerClass: "space-y-6 w-full max-w-7xl mx-auto",
+    description: "Gerencie, consulte e compartilhe documentos institucionais com segurança."
   },
   automations: {
     type: 'Gestor de Processos Frequentes',
@@ -1709,7 +1709,7 @@ export default function App() {
       title: "Administrativo",
       items: [
         { id: 'financials', name: 'Finanças & Contas', icon: DollarSign },
-        { id: 'documents', name: 'Dossier & Processos Automáticos', icon: FolderOpen },
+        { id: 'documents', name: 'Documentos', icon: FolderOpen },
         { id: 'sheets', name: 'Google Sheets', icon: FileSpreadsheet },
         { id: 'communications', name: 'Comunicação', icon: Megaphone }
       ]
@@ -2681,10 +2681,7 @@ export default function App() {
                   )}
 
                   {activeTab === 'documents' && (
-                    <FactualUnavailablePanel
-                      title="Arquivo documental genérico indisponível"
-                      detail="Este arquivo não possui uma autoridade institucional conjunta para metadata e armazenamento. Nenhum documento foi criado, alterado, descarregado ou eliminado. Os Documentos de Matrícula canónicos permanecem no fluxo de Matrículas."
-                    />
+                    <DocumentsWorkspace theme={theme} />
                   )}
 
                   {activeTab === 'workflows' && (

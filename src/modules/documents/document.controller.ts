@@ -10,6 +10,7 @@ import {
   listDocumentsQuery,
   getDocumentDetailQuery,
   getDocumentActivityQuery,
+  type DocumentOperationalAvailability,
 } from './document-query-service.ts';
 import {
   createDocumentCommand,
@@ -37,10 +38,20 @@ import {
 import {
   assertNoInternalSecretsInDto,
   type FrontendSafeUploadSessionDto,
+  type FrontendSafeDocumentVersionDto,
 } from './document-dto.ts';
-import type {
-  DocumentUploadSessionRecord,
-  DocumentSizePolicyConfig,
+import {
+  CANONICAL_DOCUMENT_CATEGORIES,
+  CANONICAL_DOCUMENT_CLASSIFICATIONS,
+  CANONICAL_SUPPORTED_MIME_TYPES,
+  isCanonicalCategory,
+  normalizeDocumentCategory,
+} from './document-model.ts';
+import {
+  type DocumentUploadSessionRecord,
+  type DocumentSizePolicyConfig,
+  calculateEffectiveSizeLimit,
+  verifyUploadToken,
 } from './document-upload-model.ts';
 
 function reject(res: Response, status: number, error: string, code?: string) {
@@ -259,24 +270,49 @@ export function registerDocumentRoutes(
   const storageBucket: string | null =
     dependencies.storageBucket || process.env.DOCUMENTS_STORAGE_BUCKET || null;
 
+  const operationalAvailability: DocumentOperationalAvailability = {
+    canAccess: Boolean(storageProvider && policyEngine && accessGrantTokenKey),
+    canUpload: Boolean(storageProvider && storageBucket && uploadPolicyConfig),
+    canHold: Boolean(retentionPolicyEngine),
+    canDelete: Boolean(storageProvider && retentionPolicyEngine && deletionPseudonymizationKey),
+  };
+
+  // 0. GET /api/documents/metadata (and /api/documents/taxonomy) — Governed canonical taxonomy
+  app.get(['/api/documents/metadata', '/api/documents/taxonomy'], docAuth, async (req: AuthRequest, res: Response) => {
+    const context = req.institutionalContext;
+    if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    return res.json({
+      categories: CANONICAL_DOCUMENT_CATEGORIES,
+      classifications: CANONICAL_DOCUMENT_CLASSIFICATIONS,
+      supportedMimeTypes: CANONICAL_SUPPORTED_MIME_TYPES,
+      operationalAvailability,
+    });
+  });
+
   // 1. GET /api/documents — List documents with bounded pagination and filters
   app.get('/api/documents', docAuth, async (req: AuthRequest, res: Response) => {
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
     try {
-      const response = await listDocumentsQuery(docPool, context, {
-        page: req.query.page as string,
-        limit: req.query.limit as string,
-        search: req.query.search as string,
-        category: req.query.category as string,
-        technicalStatus: req.query.technicalStatus as string,
-        associationDomain: req.query.associationDomain as string,
-        retentionStatus: req.query.retentionStatus as string,
-        holdStatus: req.query.holdStatus as any,
-        updatedFrom: req.query.updatedFrom as string,
-        updatedTo: req.query.updatedTo as string,
-      });
+      const response = await listDocumentsQuery(
+        docPool,
+        context,
+        {
+          page: req.query.page as string,
+          limit: req.query.limit as string,
+          search: req.query.search as string,
+          category: req.query.category as string,
+          technicalStatus: req.query.technicalStatus as string,
+          associationDomain: req.query.associationDomain as string,
+          retentionStatus: req.query.retentionStatus as string,
+          holdStatus: req.query.holdStatus as any,
+          updatedFrom: req.query.updatedFrom as string,
+          updatedTo: req.query.updatedTo as string,
+        },
+        operationalAvailability,
+      );
 
       assertNoInternalSecretsInDto(response.items);
       return res.json(response);
@@ -296,13 +332,63 @@ export function registerDocumentRoutes(
     }
 
     try {
-      const doc = await getDocumentDetailQuery(docPool, context, documentId);
+      const doc = await getDocumentDetailQuery(docPool, context, documentId, operationalAvailability);
       if (!doc) {
         return reject(res, 404, 'Documento não encontrado no tenant.');
       }
 
       assertNoInternalSecretsInDto(doc);
       return res.json(doc);
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
+  // 2.1. GET /api/documents/:id/versions — Real tenant-scoped version history
+  app.get('/api/documents/:id/versions', docAuth, async (req: AuthRequest, res: Response) => {
+    const context = req.institutionalContext;
+    if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    const documentId = req.params.id;
+    if (!validUuid(documentId)) {
+      return reject(res, 400, 'Identificador de documento inválido.');
+    }
+
+    try {
+      const doc = await getDocumentDetailQuery(docPool, context, documentId);
+      if (!doc) {
+        return reject(res, 404, 'Documento não encontrado no tenant.');
+      }
+
+      const rows = await docPool.query<{
+        id: string;
+        document_id: string;
+        version_number: number;
+        mime_type: string;
+        byte_size: string;
+        sha256_hash: string;
+        status: string;
+        created_at: Date;
+      }>(
+        `SELECT id, document_id, version_number, mime_type, byte_size, sha256_hash, status, created_at
+           FROM document_versions
+          WHERE institution_id = $1 AND document_id = $2
+          ORDER BY version_number DESC`,
+        [context.institutionId, documentId],
+      );
+
+      const items: FrontendSafeDocumentVersionDto[] = rows.rows.map((r) => ({
+        id: r.id,
+        versionNumber: r.version_number,
+        mimeType: r.mime_type,
+        byteSize: Number(r.byte_size),
+        sha256Hash: r.sha256_hash,
+        status: r.status as any,
+        createdAt: r.created_at.toISOString(),
+      }));
+
+      assertNoInternalSecretsInDto(items);
+      return res.json({ items });
     } catch (error) {
       return rejectDomainError(res, error);
     }
@@ -365,13 +451,22 @@ export function registerDocumentRoutes(
       if (idempotencyKey === null) return res;
 
       if (!documentId) {
+        if (category && typeof category === 'string' && !isCanonicalCategory(category.trim())) {
+          return reject(
+            res,
+            400,
+            `Invalid document category: "${category}". Category is not governed in canonical taxonomy.`,
+            'INVALID_CATEGORY',
+          );
+        }
+
         // Canonical I1/I7 document creation command: domain fact, audit, outbox event intent, idempotency
         const docCreationRes = await createDocumentCommand({
           pool: docPool,
           context,
           idempotencyKey: `doc-${idempotencyKey}`,
           input: {
-            category: category && typeof category === 'string' ? category.trim() : 'general',
+            category: category && typeof category === 'string' ? normalizeDocumentCategory(category) : 'general',
             classification:
               classification && typeof classification === 'string' ? classification.trim() : null,
             provenance: {
@@ -494,6 +589,154 @@ export function registerDocumentRoutes(
 
       assertNoInternalSecretsInDto(safeSession);
       return res.status(201).json(responseData);
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
+  // 5.1. PUT /api/documents/upload-sessions/:sessionId/transfer — Real streaming byte transport
+  app.put('/api/documents/upload-sessions/:sessionId/transfer', docAuth, async (req: AuthRequest, res: Response) => {
+    const context = req.institutionalContext;
+    if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    if (!uploadPolicyConfig) {
+      return rejectDomainError(res, new Error('UPLOAD_POLICY_MISSING'));
+    }
+    if (!storageProvider) {
+      return rejectDomainError(res, new Error('STORAGE_PROVIDER_MISSING'));
+    }
+
+    const sessionId = req.params.sessionId;
+    if (!validUuid(sessionId)) {
+      return reject(res, 400, 'sessionId inválido.');
+    }
+
+    const rawToken = req.header('x-upload-token');
+    if (!rawToken || typeof rawToken !== 'string') {
+      return reject(res, 400, 'X-Upload-Token header é obrigatório.', 'TOKEN_REQUIRED');
+    }
+
+    try {
+      // 1. Resolve session in institution
+      const sessionResult = await docPool.query<{
+        id: string;
+        institution_id: string;
+        document_id: string;
+        target_version_number: number | null;
+        declared_filename: string;
+        declared_mime_type: string;
+        declared_byte_size: string;
+        storage_provider: string;
+        storage_bucket: string;
+        storage_key: string;
+        status: string;
+        upload_token_hash: string;
+        authorized_until: Date;
+        expires_at: Date;
+      }>(
+        `SELECT id, institution_id, document_id, target_version_number, declared_filename, declared_mime_type, declared_byte_size,
+                storage_provider, storage_bucket, storage_key, status, upload_token_hash, authorized_until, expires_at
+           FROM document_upload_sessions
+          WHERE institution_id = $1 AND id = $2`,
+        [context.institutionId, sessionId],
+      );
+
+      if (sessionResult.rows.length === 0) {
+        return reject(res, 404, 'Sessão de upload não encontrada no tenant.');
+      }
+
+      const row = sessionResult.rows[0];
+      const now = new Date();
+
+      // 2. Lifecycle checks
+      if (row.status === 'cancelled') {
+        return reject(res, 409, 'UPLOAD_SESSION_CANCELLED: Não é possível transferir ficheiro para uma sessão cancelada.');
+      }
+      if (row.status === 'completed') {
+        return reject(res, 409, 'RESUME_COMPLETED_DENIED: Sessão de upload já se encontra concluída.');
+      }
+      if (row.status === 'failed') {
+        return reject(res, 409, 'UPLOAD_SESSION_FAILED: Sessão de upload em estado de falha.');
+      }
+      if (row.status === 'expired' || now > new Date(row.expires_at)) {
+        return reject(res, 409, 'UPLOAD_SESSION_EXPIRED: Sessão de upload expirada.');
+      }
+      if (now > new Date(row.authorized_until)) {
+        return reject(res, 422, 'UPLOAD_AUTHORIZATION_EXPIRED: Janela de autorização de upload expirada.');
+      }
+
+      // 3. Token verification
+      const isTokenValid = verifyUploadToken(rawToken, row.upload_token_hash);
+      if (!isTokenValid) {
+        return reject(res, 400, 'INVALID_UPLOAD_TOKEN: O token de upload fornecido é inválido.');
+      }
+
+      // 4. Validate policy limit
+      const effectiveLimit = calculateEffectiveSizeLimit(uploadPolicyConfig);
+      const declaredSize = Number(row.declared_byte_size);
+
+      // 5. Stream transfer through storageProvider
+      let transferResult: { byteSize: number; sha256Hash: string; mimeType: string };
+      if (typeof storageProvider.writeObjectStream === 'function') {
+        transferResult = await storageProvider.writeObjectStream({
+          institutionId: context.institutionId,
+          storageBucket: row.storage_bucket,
+          storageKey: row.storage_key,
+          stream: req,
+          declaredByteSize: declaredSize,
+          mimeType: req.header('content-type') || row.declared_mime_type,
+        });
+        if (transferResult.byteSize > effectiveLimit) {
+          return reject(res, 422, `DECLARED_SIZE_EXCEEDS_POLICY: Tamanho do ficheiro excede o limite efetivo de ${effectiveLimit} bytes.`);
+        }
+      } else {
+        const chunks: Buffer[] = [];
+        let totalBytes = 0;
+        for await (const chunk of req) {
+          const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          totalBytes += buf.length;
+          if (totalBytes > effectiveLimit) {
+            return reject(res, 422, `DECLARED_SIZE_EXCEEDS_POLICY: Tamanho do ficheiro excede o limite efetivo de ${effectiveLimit} bytes.`);
+          }
+          chunks.push(buf);
+        }
+        const fullBuffer = Buffer.concat(chunks);
+        if (fullBuffer.length > effectiveLimit) {
+          return reject(res, 422, `DECLARED_SIZE_EXCEEDS_POLICY: Tamanho do ficheiro excede o limite efetivo.`);
+        }
+        if (typeof (storageProvider as any).simulateDirectUpload === 'function') {
+          const simulated = await (storageProvider as any).simulateDirectUpload({
+            storageBucket: row.storage_bucket,
+            storageKey: row.storage_key,
+            content: fullBuffer,
+            mimeType: req.header('content-type') || row.declared_mime_type,
+          });
+          transferResult = {
+            byteSize: simulated.byteSize,
+            sha256Hash: simulated.sha256Hash,
+            mimeType: simulated.mimeType,
+          };
+        } else {
+          throw new Error('STORAGE_PROVIDER_STREAM_NOT_SUPPORTED');
+        }
+      }
+
+      // 6. Confirm object presence in storage
+      const head = await storageProvider.headObject({
+        storageBucket: row.storage_bucket,
+        storageKey: row.storage_key,
+      });
+
+      if (!head.exists) {
+        return reject(res, 500, 'Falha ao confirmar persistência física do objeto transferido.');
+      }
+
+      return res.json({
+        success: true,
+        sessionId: row.id,
+        byteSize: transferResult.byteSize,
+        sha256Hash: transferResult.sha256Hash,
+      });
     } catch (error) {
       return rejectDomainError(res, error);
     }

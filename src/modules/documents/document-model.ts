@@ -93,6 +93,63 @@ export interface DocumentIdempotencyRecord {
   createdAt: Date;
 }
 
+export interface CanonicalCategoryItem {
+  id: string;
+  code: string;
+  label: string;
+}
+
+export interface CanonicalClassificationItem {
+  id: string;
+  code: string;
+  label: string;
+}
+
+export const CANONICAL_DOCUMENT_CATEGORIES: readonly CanonicalCategoryItem[] = [
+  { id: 'academic', code: 'ACADEMIC', label: 'Académicos' },
+  { id: 'administrative_financial', code: 'ADMINISTRATIVE_FINANCIAL', label: 'Administrativo / Financeiro' },
+  { id: 'identity_enrollment', code: 'IDENTITY_ENROLLMENT', label: 'Identidade / Matrícula' },
+  { id: 'absence_justification', code: 'ABSENCE_JUSTIFICATION', label: 'Justificação de Faltas' },
+  { id: 'general', code: 'GENERAL', label: 'Geral' },
+  { id: 'enrollment', code: 'ENROLLMENT', label: 'Matrículas' },
+  { id: 'identification', code: 'IDENTIFICATION', label: 'Identificação' },
+  { id: 'financial', code: 'FINANCIAL', label: 'Financeiros' },
+  { id: 'administrative', code: 'ADMINISTRATIVE', label: 'Administrativos' },
+] as const;
+
+export const CANONICAL_DOCUMENT_CLASSIFICATIONS: readonly CanonicalClassificationItem[] = [
+  { id: 'internal', code: 'INTERNAL', label: 'Uso Interno' },
+  { id: 'standard', code: 'STANDARD', label: 'Padrão Institucional' },
+  { id: 'confidential', code: 'CONFIDENTIAL', label: 'Confidencial' },
+  { id: 'restricted', code: 'RESTRICTED', label: 'Restrito' },
+  { id: 'public', code: 'PUBLIC', label: 'Público' },
+] as const;
+
+export const CANONICAL_SUPPORTED_MIME_TYPES: readonly string[] = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'application/octet-stream',
+] as const;
+
+export function normalizeDocumentCategory(category: string): string {
+  const trimmed = category?.trim().toLowerCase();
+  const match = CANONICAL_DOCUMENT_CATEGORIES.find(
+    (c) => c.id === trimmed || c.code.toLowerCase() === trimmed,
+  );
+  if (match) return match.id;
+  return trimmed;
+}
+
+export function isCanonicalCategory(category: string): boolean {
+  const trimmed = category?.trim().toLowerCase();
+  return CANONICAL_DOCUMENT_CATEGORIES.some(
+    (c) => c.id === trimmed || c.code.toLowerCase() === trimmed,
+  );
+}
+
 export function validateDocumentCategory(category: string): void {
   const trimmed = category?.trim();
   if (!trimmed || trimmed.length < 2 || trimmed.length > 64) {

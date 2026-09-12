@@ -257,6 +257,40 @@ try {
   });
   assert.equal(uploadSessBRes.status, 404, 'Creating upload session for cross-tenant document must be denied');
 
+  // 4.1 INSTITUTION_B_TRANSFERS_TO_TENANT_A_UPLOAD_SESSION -> 404
+  console.log('[MULTI-TENANT 4.1] Institution B attempts byte transfer to Tenant A upload session');
+  const uploadSessARes = await request('/api/documents/upload-sessions', {
+    method: 'POST',
+    token: 'uid-admin-a',
+    body: {
+      category: 'academic',
+      declaredFilename: 'session-a.pdf',
+      declaredMimeType: 'application/pdf',
+      declaredByteSize: 512,
+      idempotencyKey: 'idem-mt-upload-sess-a-1',
+    },
+  });
+  assert.equal(uploadSessARes.status, 201);
+  const sessionABody = (await uploadSessARes.json()) as any;
+  const sessionAId = sessionABody.sessionId;
+  const sessionARawToken = sessionABody.rawToken;
+
+  const crossTenantTransferRes = await fetch(`${baseUrl}/api/documents/upload-sessions/${sessionAId}/transfer`, {
+    method: 'PUT',
+    headers: {
+      Authorization: 'Bearer uid-admin-b',
+      'X-Upload-Token': sessionARawToken,
+      'Content-Type': 'application/pdf',
+    },
+    body: Buffer.from('cross-tenant-unauthorized-payload'),
+  });
+  assert.equal(crossTenantTransferRes.status, 404, 'Cross-tenant byte transfer MUST fail with 404');
+
+  // 4.2 INSTITUTION_B_FETCHES_A_VERSIONS -> 404 (tenant-hidden)
+  console.log('[MULTI-TENANT 4.2] Institution B fetches Tenant A versions');
+  const getVersionsBRes = await request(`/api/documents/${docAId}/versions`, { token: 'uid-admin-b' });
+  assert.equal(getVersionsBRes.status, 404, 'Fetching cross-tenant versions must return 404');
+
   // 5. INSTITUTION_B_AUTHORIZES_A_ACCESS -> 404
   console.log('[MULTI-TENANT 5] Institution B authorizes access to Tenant A document');
   const authAccessBRes = await request(`/api/documents/${docAId}/access`, {

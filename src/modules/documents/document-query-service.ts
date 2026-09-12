@@ -32,17 +32,26 @@ export interface DocumentListResponse {
   hasMore: boolean;
 }
 
+export interface DocumentOperationalAvailability {
+  canAccess?: boolean;
+  canUpload?: boolean;
+  canHold?: boolean;
+  canDelete?: boolean;
+}
+
 function computeCapabilities(
   docStatus: DocumentStatus,
   currentVersionStatus: DocumentVersionStatus | null,
   activeHoldsCount: number,
+  operationalAvailability?: DocumentOperationalAvailability,
 ): FrontendSafeDocumentCapabilities {
   const isArchived = docStatus === 'archived';
   const isVersionAvailable = currentVersionStatus === 'available';
 
-  // Read actions are safe advisory flags based strictly on factual availability; backend remains authoritative.
-  const canOpen = !isArchived && isVersionAvailable;
-  const canDownload = !isArchived && isVersionAvailable;
+  // Read actions are safe advisory flags based strictly on factual availability and operational dependencies; backend remains authoritative.
+  const isAccessAvailable = operationalAvailability?.canAccess !== false;
+  const canOpen = !isArchived && isVersionAvailable && isAccessAvailable;
+  const canDownload = !isArchived && isVersionAvailable && isAccessAvailable;
 
   // Management actions: return conservative false. No API-local role matrix is used.
   // Backend command endpoints enforce authoritative policy and role authorization.
@@ -61,6 +70,7 @@ export async function listDocumentsQuery(
   pool: Pool,
   context: InstitutionalContext,
   params: DocumentListQueryParams,
+  operationalAvailability?: DocumentOperationalAvailability,
 ): Promise<DocumentListResponse> {
   const rawPage = Number(params.page);
   const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
@@ -376,6 +386,7 @@ export async function listDocumentsQuery(
       docRow.status,
       currentVersion?.status ?? null,
       activeHolds.length,
+      operationalAvailability,
     );
 
     return {
@@ -408,6 +419,7 @@ export async function getDocumentDetailQuery(
   pool: Pool,
   context: InstitutionalContext,
   documentId: string,
+  operationalAvailability?: DocumentOperationalAvailability,
 ): Promise<FrontendSafeDocumentDto | null> {
   const docResult = await pool.query<{
     id: string;
@@ -560,6 +572,7 @@ export async function getDocumentDetailQuery(
     docRow.status,
     currentVersion?.status ?? null,
     activeHolds.length,
+    operationalAvailability,
   );
 
   return {
