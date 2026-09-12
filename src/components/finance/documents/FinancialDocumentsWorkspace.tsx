@@ -3,7 +3,7 @@ import { financialDocumentClient, type FinancialDocumentCapabilities, type Finan
 import { browserDocumentIntentStorage, resolvePersistentDocumentIntentKey } from '../../../modules/finance/financial-document-intent.ts';
 import { AuroraStateNotice } from '../../aurora/AuroraStateNotice.tsx';
 
-export function FinancialDocumentsWorkspace({ theme = 'light', onOpenPayment }: { theme?: string; onOpenPayment?: (paymentReference: string) => void }) {
+export function FinancialDocumentsWorkspace({ theme = 'light', onOpenPayment, initialDocumentId }: { theme?: string; onOpenPayment?: (paymentReference: string) => void; initialDocumentId?: string | null }) {
   const [items, setItems] = useState<FinancialDocumentProjection[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -21,6 +21,7 @@ export function FinancialDocumentsWorkspace({ theme = 'light', onOpenPayment }: 
           ? 'A sua associação institucional não possui autorização para consultar documentos financeiros.'
           : 'Não foi possível carregar documentos financeiros autorizados.');
   }).finally(() => setLoaded(true)); }, []);
+  useEffect(() => { if (!initialDocumentId) return; financialDocumentClient.detail(initialDocumentId).then(document => { setSelected(document); setDetail(document); return financialDocumentClient.listArtifacts(initialDocumentId); }).then(setArtifacts).catch(() => setError('Não foi possível abrir o documento financeiro emitido.')); }, [initialDocumentId]);
   const light = theme === 'light';
   const documentTypeLabel = (type: string) => ({ receipt: 'Recibo', credit_note: 'Nota de crédito' }[type] ?? 'Documento financeiro');
   const documentStatusLabel = (status: string) => ({ issued: 'Emitido' }[status] ?? 'Estado registado');

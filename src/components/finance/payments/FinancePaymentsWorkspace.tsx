@@ -13,7 +13,7 @@ export type PaymentSubView = 'list' | 'create' | 'providers';
 export interface FinancePaymentsWorkspaceProps {
   theme?: string;
   onOpenFinanceConfiguration?: () => void;
-  onOpenFinancialDocuments?: () => void;
+  onOpenFinancialDocuments?: (documentId: string) => void;
 }
 
 const receiptEligibilityMessage = (reason?: string, canIssueDocument = false) => {
@@ -40,6 +40,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   const [readiness, setReadiness] = useState<FinanceReadinessDto | null>(null);
   const [receiptEligibility, setReceiptEligibility] = useState<Record<string, { eligible: boolean; reason?: string }>>({});
   const [previewPayment, setPreviewPayment] = useState<Payment | null>(null);
+  const [issuedDocumentId, setIssuedDocumentId] = useState<string | null>(null);
   const [previewReadiness, setPreviewReadiness] = useState<ReceiptPreissuePreview | null>(null);
 
   const loadPayments = useCallback(async () => {
@@ -78,7 +79,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
         () => `document-receipt-${crypto.randomUUID()}`,
       );
       const result = await financialDocumentClient.issueReceipt({ sourceId: payment.id, seriesId: selected.id, idempotencyKey: key });
-      setIssuanceNotice(`Recibo oficial ${result.replayed ? 'recuperado' : 'emitido'}: n.º ${result.sequenceNumber}.`);
+      setIssuedDocumentId(result.id); setIssuanceNotice(`Recibo oficial ${result.replayed ? 'recuperado' : 'emitido'}: n.º ${result.sequenceNumber}.`);
     } catch (err: any) { setError(err?.message || 'Não foi possível emitir o recibo oficial. Tente novamente para recuperar a operação.'); }
   };
 
@@ -103,7 +104,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
       {previewPayment && <section data-testid="receipt-pre-issue-preview" className="mt-4 rounded-lg border p-4 text-sm"><h3 className="font-semibold">Pré-visualização — ainda não emitido</h3><p>Recibo · Pagamento: {previewReadiness?.payment.reference ?? previewPayment.paymentReference}</p><p>Valor: {previewReadiness?.payment.amount ?? previewPayment.amount} {previewReadiness?.payment.currency ?? previewPayment.currency}</p><p>Estado do pagamento: Confirmado</p><p className="mt-2 text-zinc-600">{previewReadiness?.readiness.status === 'READY' && previewReadiness.sourceEligibility === 'ELIGIBLE' ? 'A emissão oficial pode ser confirmada.' : 'A emissão oficial permanece bloqueada até a instituição concluir a configuração fiscal junto da autoridade competente.'}</p></section>}
       </>}
 
-      {issuanceNotice && <div data-testid="financial-document-issuance-notice" className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><p>{issuanceNotice}</p>{onOpenFinancialDocuments && <button type="button" onClick={onOpenFinancialDocuments} className="rounded-md border border-emerald-300 bg-white px-3 py-1 font-semibold text-emerald-800">Abrir documento financeiro</button>}</div>}
+      {issuanceNotice && <div data-testid="financial-document-issuance-notice" className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><p>{issuanceNotice}</p>{onOpenFinancialDocuments && issuedDocumentId && <button type="button" onClick={() => onOpenFinancialDocuments(issuedDocumentId)} className="rounded-md border border-emerald-300 bg-white px-3 py-1 font-semibold text-emerald-800">Abrir documento financeiro</button>}</div>}
 
       {view === 'create' && (
         <FinancePaymentCreateView
