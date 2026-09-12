@@ -35,8 +35,11 @@ export function formatDateTime(dateString: string | null | undefined): string {
   }).format(d);
 }
 
-export function getCategoryLabel(category: string): string {
-  switch (category.toLowerCase()) {
+export function getCategoryLabel(category: string | null | undefined): string {
+  if (!category) return '—';
+  const trimmed = category.trim();
+  const lower = trimmed.toLowerCase();
+  switch (lower) {
     case 'academic':
     case 'academico':
     case 'académico':
@@ -45,18 +48,20 @@ export function getCategoryLabel(category: string): string {
     case 'administrativo':
     case 'administrativos':
       return 'Administrativos';
+    case 'administrative_financial':
+      return 'Administrativo / Financeiro';
     case 'financial':
     case 'financeiro':
     case 'financeiros':
       return 'Financeiros';
+    case 'identity_enrollment':
+      return 'Identidade / Matrícula';
+    case 'absence_justification':
+      return 'Justificação de Faltas';
     case 'identification':
     case 'identificacao':
     case 'identificação':
       return 'Identificação';
-    case 'other':
-    case 'outro':
-    case 'outros':
-      return 'Outros';
     case 'general':
     case 'geral':
       return 'Geral';
@@ -65,7 +70,7 @@ export function getCategoryLabel(category: string): string {
     case 'matrícula':
       return 'Matrículas';
     default:
-      return category.charAt(0).toUpperCase() + category.slice(1);
+      return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).replace(/_/g, ' ');
   }
 }
 

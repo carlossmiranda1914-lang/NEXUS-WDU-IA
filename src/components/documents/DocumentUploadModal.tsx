@@ -97,14 +97,19 @@ export default function DocumentUploadModal({
       return;
     }
 
+    if (!targetDocument && (!category || category.trim().length < 2 || category.trim().length > 64)) {
+      setErrorMessage('A categoria documental é obrigatória (entre 2 e 64 caracteres).');
+      return;
+    }
+
     try {
       setErrorMessage(null);
       setStep('authorizing');
 
       const sessionInput: CreateUploadSessionInput = {
         documentId: targetDocument ? targetDocument.id : undefined,
-        category: targetDocument ? undefined : category,
-        classification: targetDocument ? undefined : classification,
+        category: targetDocument ? undefined : category.trim(),
+        classification: targetDocument ? undefined : (classification?.trim() || null),
         declaredFilename: selectedFile.name,
         declaredMimeType: selectedFile.type || 'application/octet-stream',
         declaredByteSize: selectedFile.size,
@@ -118,31 +123,21 @@ export default function DocumentUploadModal({
 
       setUploadedDocId(sessionResult.documentId);
 
-      // 2. Transfer payload
+      // 2. Transfer payload — Fail-closed invariant: NO completion if byte transfer fails
       setStep('uploading');
       setUploadProgress(null);
 
-      try {
-        await transferSessionBytes(
-          sessionResult.sessionId,
-          sessionResult.rawToken,
-          selectedFile,
-          undefined,
-          (loaded, total) => {
-            if (total > 0) {
-              setUploadProgress(Math.round((loaded / total) * 100));
-            }
-          },
-        );
-      } catch (transferErr: any) {
-        // If transfer endpoint is not present on backend, check if gap or real failure
-        if (transferErr.message?.includes('UPLOAD_TRANSPORT_API_GAP')) {
-          // Direct transport bridge is missing on backend; do not fake transfer
-          console.warn('[UPLOAD] Transport bridge API gap:', transferErr.message);
-        } else {
-          throw transferErr;
-        }
-      }
+      await transferSessionBytes(
+        sessionResult.sessionId,
+        sessionResult.rawToken,
+        selectedFile,
+        undefined,
+        (loaded, total) => {
+          if (total > 0) {
+            setUploadProgress(Math.round((loaded / total) * 100));
+          }
+        },
+      );
 
       // 3. Complete session (backend handles verification and storage finalization)
       setStep('completing');
@@ -267,43 +262,56 @@ export default function DocumentUploadModal({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={`block text-xs font-semibold mb-1.5 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
-                      Categoria Documental
+                      Categoria Documental *
                     </label>
-                    <select
+                    <input
+                      type="text"
+                      list="category-suggestions"
                       value={category}
                       onChange={(e) => setCategory(e.target.value)}
-                      className={`w-full h-11 px-3 rounded-lg border text-sm outline-none cursor-pointer ${
+                      placeholder="Ex: academic, enrollment, administrative..."
+                      className={`w-full h-11 px-3 rounded-lg border text-sm outline-none ${
                         isLight
-                          ? 'bg-white border-zinc-200 text-zinc-900'
-                          : 'bg-zinc-800 border-white/10 text-zinc-100'
+                          ? 'bg-white border-zinc-200 text-zinc-900 focus:border-emerald-600'
+                          : 'bg-zinc-800 border-white/10 text-zinc-100 focus:border-emerald-500'
                       }`}
-                    >
-                      <option value="academic">Académicos</option>
-                      <option value="administrative">Administrativos</option>
-                      <option value="financial">Financeiros</option>
-                      <option value="identification">Identificação</option>
-                      <option value="other">Outros</option>
-                    </select>
+                    />
+                    <datalist id="category-suggestions">
+                      <option value="academic" />
+                      <option value="enrollment" />
+                      <option value="identity_enrollment" />
+                      <option value="administrative" />
+                      <option value="administrative_financial" />
+                      <option value="financial" />
+                      <option value="identification" />
+                      <option value="absence_justification" />
+                      <option value="general" />
+                    </datalist>
                   </div>
 
                   <div>
                     <label className={`block text-xs font-semibold mb-1.5 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
-                      Classificação
+                      Classificação (Opcional)
                     </label>
-                    <select
+                    <input
+                      type="text"
+                      list="classification-suggestions"
                       value={classification}
                       onChange={(e) => setClassification(e.target.value)}
-                      className={`w-full h-11 px-3 rounded-lg border text-sm outline-none cursor-pointer ${
+                      placeholder="Ex: internal, confidential, restricted..."
+                      className={`w-full h-11 px-3 rounded-lg border text-sm outline-none ${
                         isLight
-                          ? 'bg-white border-zinc-200 text-zinc-900'
-                          : 'bg-zinc-800 border-white/10 text-zinc-100'
+                          ? 'bg-white border-zinc-200 text-zinc-900 focus:border-emerald-600'
+                          : 'bg-zinc-800 border-white/10 text-zinc-100 focus:border-emerald-500'
                       }`}
-                    >
-                      <option value="internal">Uso Interno</option>
-                      <option value="confidential">Confidencial</option>
-                      <option value="restricted">Restrito</option>
-                      <option value="public">Público</option>
-                    </select>
+                    />
+                    <datalist id="classification-suggestions">
+                      <option value="internal" />
+                      <option value="confidential" />
+                      <option value="restricted" />
+                      <option value="standard" />
+                      <option value="public" />
+                    </datalist>
                   </div>
                 </div>
               )}

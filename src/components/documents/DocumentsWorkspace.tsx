@@ -22,19 +22,11 @@ import DocumentUploadModal from './DocumentUploadModal.tsx';
 import DocumentHoldModal from './DocumentHoldModal.tsx';
 import DocumentDeletionModal from './DocumentDeletionModal.tsx';
 import DocumentAccessViewer from './DocumentAccessViewer.tsx';
+import { getCategoryLabel } from './utils.ts';
 
 interface DocumentsWorkspaceProps {
   theme?: Theme;
 }
-
-const CATEGORY_TABS = [
-  { id: 'all', label: 'Todos' },
-  { id: 'academic', label: 'Académicos' },
-  { id: 'administrative', label: 'Administrativos' },
-  { id: 'financial', label: 'Financeiros' },
-  { id: 'identification', label: 'Identificação' },
-  { id: 'other', label: 'Outros' },
-];
 
 export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspaceProps) {
   const isLight = theme === 'light';
@@ -182,6 +174,23 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
     setIsDeletionModalOpen(true);
   };
 
+  const dynamicCategoryTabs = useMemo(() => {
+    const set = new Set<string>();
+    for (const doc of documents) {
+      if (doc.category) {
+        set.add(doc.category);
+      }
+    }
+    if (filters.category && filters.category !== 'all') {
+      set.add(filters.category);
+    }
+    const list = Array.from(set).map((cat) => ({
+      id: cat,
+      label: getCategoryLabel(cat),
+    }));
+    return [{ id: 'all', label: 'Todos os Documentos' }, ...list];
+  }, [documents, filters.category]);
+
   const totalPages = Math.max(1, Math.ceil(totalCount / filters.limit));
 
   return (
@@ -241,14 +250,14 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
         </div>
       </header>
 
-      {/* 2. CATEGORY TABS */}
+      {/* 2. CATEGORY TABS (DYNAMICALLY DISCOVERED) */}
       <nav
         className={`flex max-w-full gap-1 overflow-x-auto border-b pb-2.5 ${
           isLight ? 'border-zinc-200' : 'border-white/10'
         }`}
         aria-label="Categorias de documentos"
       >
-        {CATEGORY_TABS.map((tab) => {
+        {dynamicCategoryTabs.map((tab) => {
           const isActive = filters.category === tab.id;
           return (
             <button
