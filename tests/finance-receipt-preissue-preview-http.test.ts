@@ -24,7 +24,8 @@ test('receipt preview is tenant-derived, blocked, and has no issuance side effec
     assert.equal(response.status, 200); const preview: any = await response.json();
     assert.equal(preview.documentType, 'receipt'); assert.equal(preview.sourceEligibility, 'BLOCKED');
     assert.equal(preview.readiness.status, 'BLOCKED'); assert.equal(preview.officialDocumentCreated, false); assert.equal(preview.definitiveNumberAllocated, false);
-    assert.equal('officialDocumentNumber' in preview, false); assert.equal('qr' in preview, false);
+    assert.equal(preview.officialNumber, 'NOT_ALLOCATED'); assert.equal(preview.officialQrAvailable, false);
+    assert.equal('documentId' in preview, false); assert.equal('snapshot' in preview, false); assert.equal('artifact' in preview, false);
     assert.deepEqual(writes, []);
   } finally { server.close(); }
 });
