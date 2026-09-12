@@ -14,6 +14,7 @@ export interface FinancePaymentsWorkspaceProps {
   theme?: string;
   onOpenFinanceConfiguration?: () => void;
   onOpenFinancialDocuments?: (documentId: string) => void;
+  initialPaymentReference?: string | null;
 }
 
 const receiptEligibilityMessage = (reason?: string, canIssueDocument = false) => {
@@ -30,7 +31,7 @@ const receiptEligibilityMessage = (reason?: string, canIssueDocument = false) =>
   return reason ? messages[reason] ?? 'Este pagamento não reúne os requisitos para emissão oficial.' : 'A emissão deste recibo ainda não está disponível.';
 };
 
-export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfiguration, onOpenFinancialDocuments }: FinancePaymentsWorkspaceProps) {
+export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfiguration, onOpenFinancialDocuments, initialPaymentReference }: FinancePaymentsWorkspaceProps) {
   const [view, setView] = useState<PaymentSubView>('list');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +60,11 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   useEffect(() => {
     loadPayments();
   }, [loadPayments]);
+  useEffect(() => {
+    if (!initialPaymentReference) return;
+    const payment = payments.find(candidate => candidate.paymentReference === initialPaymentReference);
+    if (payment) setPreviewPayment(payment);
+  }, [initialPaymentReference, payments]);
   useEffect(() => { financialDocumentClient.capabilities().then(capabilities => setCanIssueDocument(capabilities.issue)).catch(() => setCanIssueDocument(false)); }, []);
   useEffect(() => { financeReadinessClient.get().then(setReadiness).catch(() => setReadiness(null)); }, []);
   useEffect(() => { if (!previewPayment) return void setPreviewReadiness(null); financialDocumentClient.receiptPreview(previewPayment.id).then(setPreviewReadiness).catch(() => setPreviewReadiness(null)); }, [previewPayment]);

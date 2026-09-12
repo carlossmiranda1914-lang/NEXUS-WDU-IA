@@ -39,6 +39,8 @@ assert.match(workspaceSource, /Não existem documentos financeiros emitidos para
 assert.match(workspaceSource, /Nota de crédito/, 'the workspace must translate the authoritative corrective document type for operators');
 assert.match(workspaceSource, /Pagamento .*paymentReference/, 'the workspace must prefer an authoritative payment reference over raw source UUIDs');
 assert.match(workspaceSource, /Abrir pagamento/, 'an issued document must navigate back to its authoritative payment reference');
+assert.match(financeWorkspaceSource, /selectedPaymentReference/, 'returning from a document must preserve the persisted payment reference');
+assert.match(financeWorkspaceSource, /initialPaymentReference/, 'the Payments workspace must receive the authoritative source reference');
 assert.doesNotMatch(workspaceSource, /Visualizar PDF · \{artifact\.render_version\}/, 'renderer versions must not be promoted into the primary user action label');
 assert.doesNotMatch(workspaceSource, /Word|Excel|PowerPoint/, 'the Finance UX must not expose office editing');
 assert.match(financeWorkspaceSource, /finance-tab-documents/, 'the Finance workspace must expose the authorized document history entrypoint');
