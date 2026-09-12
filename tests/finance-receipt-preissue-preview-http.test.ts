@@ -5,7 +5,7 @@ import test from 'node:test';
 import express from 'express';
 import { registerFinancialDocumentRoutes } from '../src/modules/finance/financial-document-http.ts';
 
-test('receipt preview is tenant-derived, blocked, and has no issuance side effects', async () => {
+test('receipt preview preserves confirmed source eligibility when official readiness is blocked', async () => {
   const writes: string[] = [];
   const pool: any = { query: async (sql: string, values: unknown[]) => {
     if (/insert|update|delete/i.test(sql)) writes.push(sql);
@@ -22,7 +22,10 @@ test('receipt preview is tenant-derived, blocked, and has no issuance side effec
     const base = `http://127.0.0.1:${(server.address() as any).port}`;
     const response = await fetch(`${base}/api/finance/payments/payment-a/receipt-preview?institutionId=foreign&seriesId=forged`, { headers: { Authorization: 'Bearer admin' } });
     assert.equal(response.status, 200); const preview: any = await response.json();
-    assert.equal(preview.documentType, 'receipt'); assert.equal(preview.sourceEligibility, 'BLOCKED');
+    assert.equal(preview.documentType, 'receipt');
+    // A confirmed payment is an eligible *source* even when this institution
+    // cannot issue officially because fiscal/AGT prerequisites are absent.
+    assert.equal(preview.sourceEligibility, 'ELIGIBLE');
     assert.equal(preview.readiness.status, 'BLOCKED'); assert.equal(preview.officialDocumentCreated, false); assert.equal(preview.definitiveNumberAllocated, false);
     assert.equal(preview.officialNumber, 'NOT_ALLOCATED'); assert.equal(preview.officialQrAvailable, false);
     assert.equal('documentId' in preview, false); assert.equal('snapshot' in preview, false); assert.equal('artifact' in preview, false);
