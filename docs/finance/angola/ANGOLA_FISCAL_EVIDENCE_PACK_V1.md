@@ -99,6 +99,34 @@ retrieval_date=2026-09-12
 source_type=PRIMARY_TECHNICAL
 ```
 
+### AO-RJF-DEFINITIONS-2025
+
+```text
+official_title=Decreto Presidencial n.º 71/25 — artigos 3.º, 4.º, 6.º e 8.º
+issuing_authority=Presidente da República de Angola / Diário da República
+publication_date=2025-03-20
+effective_date_if_known=UNVERIFIED_IN_THIS_PACK
+official_location=https://www.ucm.minfin.gov.ao/cs/groups/public/documents/document/aw40/otu2/~edisp/minfin4956210.pdf
+scope=definições e emissão de Factura, Factura-Recibo, Recibo, Nota de Crédito e Nota de Débito; rectificação/anulação
+supersedes_or_amends=as revogações constam do diploma AO-RJF-2025-71
+retrieval_date=2026-09-12
+source_type=PRIMARY
+```
+
+### AO-CIVA-EDUCATION-EXEMPTION
+
+```text
+official_title=Anexo técnico do Decreto Executivo n.º 683/25 — código M21
+issuing_authority=Ministério das Finanças / Diário da República
+publication_date=2025-08-22
+effective_date_if_known=UNVERIFIED_IN_THIS_PACK
+official_location=https://www.ucm.minfin.gov.ao/cs/groups/public/documents/document/aw40/otuy/~edisp/minfin4952361.pdf
+scope=menção de isenção do artigo 12.º, n.º 1, alínea l), CIVA para ensino por estabelecimentos legalmente enquadrados/reconhecidos
+supersedes_or_amends=UNVERIFIED_IN_THIS_PACK
+retrieval_date=2026-09-12
+source_type=PRIMARY
+```
+
 ## Evidence rules
 
 | Rule ID | Source and exact basis | Nexus interpretation | Status |
@@ -114,6 +142,11 @@ source_type=PRIMARY_TECHNICAL
 | AO-AGT-TECH-061 | AO-AGT-FE-REGISTAR | Public electronic document codes include FT, FR, RC/RG, NC and ND; each submission requires an official request format and JWS signature. | PUBLICLY_PROVEN |
 | AO-AGT-TECH-062 | AO-AGT-FE-SERVICES | The public catalogue defines registration, status/retrieval, series, validation and annulment operations. A Nexus command is not successful merely because registration accepted it. | PUBLICLY_PROVEN |
 | AO-AGT-ONBOARD-070 | AO-AGT-FE-REGISTAR; AO-AGT-FE-KEYS | Production submission requires a certified software identity and registered/issued cryptographic material; neither is available from public documentation alone. | REQUIRES_AGT_ONBOARDING |
+| AO-RJF-DOC-080 | AO-RJF-DEFINITIONS-2025, art. 3(f),(k)–(o), art. 4 | The five requested document families are legally defined or explicitly recognised as fiscal documents; Nexus source facts must still satisfy the defined event. | PUBLICLY_PROVEN |
+| AO-RJF-RECEIPT-081 | AO-RJF-DEFINITIONS-2025, art. 6 | Receipt issuance is required on total or partial payment of an invoiced good/service; factura-recibo and named combined documents are exceptions to a separate receipt. | PUBLICLY_PROVEN |
+| AO-RJF-CORRECTION-082 | AO-RJF-DEFINITIONS-2025, art. 8(4)–(9) | Invoice annulment/rectification uses a credit note stating the reason, original reference and acquirer knowledge; narrow identity-field cases may use validated-software cancellation. | PUBLICLY_PROVEN |
+| AO-RJF-DEBIT-083 | AO-RJF-DEFINITIONS-2025, art. 3(m), art. 4(3) | A debit note supports debit where no invoice is required and must not liquidate tax; it is not a generic credit-note inverse. | PUBLICLY_PROVEN |
+| AO-CIVA-EDU-090 | AO-CIVA-EDUCATION-EXEMPTION, M21 | Teaching services have the stated Article 12(1)(l) exemption only where the institution satisfies the statutory education-recognition condition. | REQUIRES_INSTITUTION_DATA |
 
 ## Non-enablement ruling
 
@@ -142,5 +175,26 @@ PRODUCTION_ADAPTER_ENABLEMENT=NO
 PUBLICLY_PROVEN=API_PROTOCOL_AND_DOCUMENT_CODES
 REQUIRES_AGT_ONBOARDING=credentials, certification, keys, series issuance
 REQUIRES_INSTITUTION_DATA=NIF, taxpayer regime, legal identity, tax treatment, authorised establishment data
-STILL_LEGALLY_AMBIGUOUS=per-document applicability, correction basis, target-school tax treatment and complete legal mentions
+STILL_LEGALLY_AMBIGUOUS=SUPERSEDED_BY_FINAL_PUBLIC_EVIDENCE_ADJUDICATION
+```
+
+## Final public-evidence adjudication
+
+The official primary sources now prove the public legal definitions, payment
+semantics for receipts, credit-note correction requirements, debit-note limit,
+electronic protocol and the education exemption boundary. Remaining blockers
+are not defaults: each needs a specific AGT or institution input.
+
+| Remaining blocked category | Exact classification | Required input |
+| --- | --- | --- |
+| Production API authentication and software certification | REQUIRES_AGT_ONBOARDING | approved producer registration/certification and software validation number |
+| Production request and document signing | REQUIRES_AGT_CREDENTIALS_OR_KEYS | issued/registered credentials and active signing-key material |
+| Production electronic series | REQUIRES_AGT_PRODUCTION_SERIES | successful `solicitarSerie`/AGT series issuance for the taxpayer and type |
+| Taxpayer applicability, identity and education exemption | REQUIRES_INSTITUTION_DATA | NIF, legal profile, recognised/enrolled education status, establishment and taxpayer regime |
+| Actual tax outcome/mentions | REQUIRES_INSTITUTION_DATA | selected factual service, tax regime and statutory basis; M21 only when its condition is true |
+| Original-document relationship for NC/ND in an individual command | REQUIRES_INSTITUTION_DATA | authoritative original document and factual correction/debit event |
+
+```text
+STILL_MISSING_PUBLIC_PRIMARY_EVIDENCE=NONE_IDENTIFIED_FOR_THE_LISTED_TASK_2_CATEGORIES
+MATERIAL_LEGAL_AMBIGUITY=NONE_FOR_THE_LISTED_GENERAL_RULES; individual applicability remains institution-dependent
 ```

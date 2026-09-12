@@ -139,3 +139,26 @@ behavior; it does not claim taxpayer applicability or production onboarding.
 | Nota de Débito | legal mentions/validation elements | BLOCKED | STILL_LEGALLY_AMBIGUOUS | AO-RJF-FIELDS-010 | deny incomplete legal set |
 | Nota de Débito | electronic/technical requirements | PROVEN | PUBLICLY_PROVEN | AO-AGT-TECH-060/061/062 | persist requestID and final validation state |
 | Nota de Débito | exceptions/regime applicability | BLOCKED | REQUIRES_INSTITUTION_DATA | AO-RJF-SCOPE-001 | deny until taxpayer regime known |
+
+## Final adjudication of every remaining block
+
+The classifications below supersede the generic `STILL_LEGALLY_AMBIGUOUS`
+labels in the preceding update. No remaining block is left unclassified.
+
+| Document type | Public legal/technical evidence | Remaining blocked items and exact classification |
+| --- | --- | --- |
+| Factura | COMPLETE — AO-RJF-DEFINITIONS-2025 art. 3(f), art. 4(1)–(2), art. 10; AO-AGT technical protocol FT | `REQUIRES_INSTITUTION_DATA`: localised taxable operation, issuer/customer data, taxpayer regime and tax result. `REQUIRES_AGT_ONBOARDING`: certified software. `REQUIRES_AGT_CREDENTIALS_OR_KEYS`: production authentication/JWS material. `REQUIRES_AGT_PRODUCTION_SERIES`: AGT-issued FT series. |
+| Factura-Recibo | COMPLETE — AO-RJF-DEFINITIONS-2025 art. 3(k); AO-AGT technical protocol FR | `REQUIRES_INSTITUTION_DATA`: factual total payment and taxable operation. `REQUIRES_AGT_ONBOARDING`: certified software. `REQUIRES_AGT_CREDENTIALS_OR_KEYS`: production authentication/JWS material. `REQUIRES_AGT_PRODUCTION_SERIES`: AGT-issued FR series. |
+| Recibo | COMPLETE — AO-RJF-DEFINITIONS-2025 art. 3(o), art. 6; AO-AGT technical protocol RC/RG | `REQUIRES_INSTITUTION_DATA`: authoritative partial/total payment and original invoiced service. `REQUIRES_AGT_ONBOARDING`: certified software. `REQUIRES_AGT_CREDENTIALS_OR_KEYS`: production authentication/JWS material. `REQUIRES_AGT_PRODUCTION_SERIES`: AGT-issued RC/RG series. |
+| Nota de Crédito | COMPLETE — AO-RJF-DEFINITIONS-2025 art. 3(l), art. 8(4)–(9); AO-AGT technical protocol NC | `REQUIRES_INSTITUTION_DATA`: original issued document, factual reduction/annulment reason and acquirer-knowledge evidence. `REQUIRES_AGT_ONBOARDING`: certified software. `REQUIRES_AGT_CREDENTIALS_OR_KEYS`: production authentication/JWS material. `REQUIRES_AGT_PRODUCTION_SERIES`: AGT-issued NC series. |
+| Nota de Débito | COMPLETE — AO-RJF-DEFINITIONS-2025 art. 3(m), art. 4(3); AO-AGT technical protocol ND | `REQUIRES_INSTITUTION_DATA`: factual debit event where invoice is not required and zero tax liquidation. `REQUIRES_AGT_ONBOARDING`: certified software. `REQUIRES_AGT_CREDENTIALS_OR_KEYS`: production authentication/JWS material. `REQUIRES_AGT_PRODUCTION_SERIES`: AGT-issued ND series. |
+
+### Narrow policy rules now publicly proven
+
+| Rule ID | Official source | Exact basis | Nexus interpretation | Testable policy behavior |
+| --- | --- | --- | --- | --- |
+| AO-RJF-DOC-080 | AO-RJF-DEFINITIONS-2025 | Art. 3(f),(k)–(o), art. 4 | Document type cannot be chosen merely by browser label; it must satisfy its statutory meaning. | Reject mismatched source/economic event. |
+| AO-RJF-RECEIPT-081 | AO-RJF-DEFINITIONS-2025 | Art. 6(1)–(4) | Receipt follows partial/total payment of invoiced good/service; bank evidence alone is not a receipt. | Require authoritative payment and invoice relationship. |
+| AO-RJF-CORRECTION-082 | AO-RJF-DEFINITIONS-2025 | Art. 8(4)–(9) | Credit note carries reason, original reference and acquirer-knowledge evidence. | Reject correction missing original/reason/knowledge proof. |
+| AO-RJF-DEBIT-083 | AO-RJF-DEFINITIONS-2025 | Art. 3(m), art. 4(3) | Debit note is not sign-inverted credit note and has no tax liquidation. | Reject ND with tax or ordinary-invoice basis. |
+| AO-CIVA-EDU-090 | AO-CIVA-EDUCATION-EXEMPTION | M21 / CIVA art. 12(1)(l) | The M21 mention is lawful only if the institution meets the defined education condition. | Reject M21 absent proved qualifying institution data. |
