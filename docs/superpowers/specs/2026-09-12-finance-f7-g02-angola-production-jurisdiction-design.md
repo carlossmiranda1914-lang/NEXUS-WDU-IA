@@ -1,9 +1,9 @@
 # Nexus Edu IA — F7-G02 Angola Production Jurisdiction Completion
 
-**Status:** PRODUCT OWNER APPROVED DESIGN — READY FOR HUMAN SPEC REVIEW  
-**Date:** 2026-09-12  
-**Risk:** FINANCE / FISCAL / HIGH  
-**Primary priority:** close the real end-to-end Finance F7 corridor before UX/visual redesign  
+**Status:** PRODUCT OWNER APPROVED DESIGN — READY FOR HUMAN SPEC REVIEW
+**Date:** 2026-09-12
+**Risk:** FINANCE / FISCAL / HIGH
+**Primary priority:** close the real end-to-end Finance F7 corridor before UX/visual redesign
 **Baseline:** `b0cf0ba553be19c2414c7fb675d489621fe02e92`
 
 ## 1. Purpose
