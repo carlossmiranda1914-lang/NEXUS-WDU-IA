@@ -216,22 +216,24 @@ try {
   assert.equal(retryData.sessionId, sessionData.sessionId);
   assert.equal(retryData.replayed, true);
 
-  const fileBytes = Buffer.alloc(2048, 'a');
-  const sessionRow = (
-    await pool.query<{ storage_bucket: string; storage_key: string }>(
-      `SELECT storage_bucket, storage_key FROM document_upload_sessions WHERE id = $1`,
-      [sessionData.sessionId],
-    )
-  ).rows[0];
-
-  await storageProvider.simulateDirectUpload({
-    storageBucket: sessionRow.storage_bucket,
-    storageKey: sessionRow.storage_key,
-    content: fileBytes,
-    mimeType: 'application/pdf',
-  });
-
   const rawToken = retryData.rawToken || sessionData.rawToken;
+
+  const fileBytes = Buffer.alloc(2048, 'a');
+  const fileHash = createHash('sha256').update(fileBytes).digest('hex');
+
+  const transferRes = await fetch(`${baseUrl}/api/documents/upload-sessions/${sessionData.sessionId}/transfer`, {
+    method: 'PUT',
+    headers: {
+      'X-Upload-Token': rawToken,
+      'Content-Type': 'application/pdf',
+    },
+    body: fileBytes,
+  });
+  assert.equal(transferRes.status, 200, 'HTTP PUT byte transfer must succeed with 200');
+  const transferResult = (await transferRes.json()) as any;
+  assert.equal(transferResult.success, true);
+  assert.equal(transferResult.byteSize, 2048);
+  assert.equal(transferResult.sha256Hash, fileHash);
 
   // Complete upload
   const completeIdemKey = `idem-ui-complete-${randomUUID()}`;
@@ -270,6 +272,23 @@ try {
   assert.equal(docDetail.capabilities.canOpen, true);
   assert.equal(docDetail.capabilities.canDownload, true);
   assertNoInternalSecretsInDto(docDetail);
+
+  const versionsRes = await request(`/api/documents/${documentId}/versions`);
+  assert.equal(versionsRes.status, 200);
+  const versionsData = (await versionsRes.json()) as any;
+  assert.ok(Array.isArray(versionsData.items));
+  assert.equal(versionsData.items.length, 1);
+  assert.equal(versionsData.items[0].id, versionId);
+  assert.equal(versionsData.items[0].versionNumber, 1);
+  assert.equal(versionsData.items[0].byteSize, 2048);
+  assert.equal(versionsData.items[0].sha256Hash, fileHash);
+  assertNoInternalSecretsInDto(versionsData);
+
+  const metaRes = await request('/api/documents/metadata');
+  assert.equal(metaRes.status, 200);
+  const metaData = (await metaRes.json()) as any;
+  assert.ok(Array.isArray(metaData.categories));
+  assert.ok(metaData.categories.length > 0);
 
   const activityRes = await request(`/api/documents/${documentId}/activity`);
   assert.equal(activityRes.status, 200);

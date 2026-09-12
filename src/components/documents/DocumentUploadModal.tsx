@@ -16,7 +16,9 @@ import {
   transferSessionBytes,
   completeUploadSession,
   generateIdempotencyKey,
+  fetchDocumentTaxonomy,
   type CreateUploadSessionInput,
+  type DocumentTaxonomyDto,
 } from './api.ts';
 import { formatByteSize, getCategoryLabel } from './utils.ts';
 
@@ -51,6 +53,7 @@ export default function DocumentUploadModal({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [category, setCategory] = useState<string>(targetDocument?.category || 'academic');
   const [classification, setClassification] = useState<string>('internal');
+  const [taxonomy, setTaxonomy] = useState<DocumentTaxonomyDto | null>(null);
   const [step, setStep] = useState<UploadStep>('select');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -69,6 +72,15 @@ export default function DocumentUploadModal({
       setErrorMessage(null);
       setUploadedDocId(null);
       idempotencyKeyRef.current = generateIdempotencyKey('upload');
+
+      void fetchDocumentTaxonomy().then((tax) => {
+        setTaxonomy(tax);
+        if (!targetDocument && tax.categories.length > 0) {
+          setCategory((prev) => prev || tax.categories[0].id);
+        }
+      }).catch(() => {
+        // Fallback gracefully
+      });
     }
   }, [isOpen, targetDocument]);
 
@@ -264,54 +276,70 @@ export default function DocumentUploadModal({
                     <label className={`block text-xs font-semibold mb-1.5 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
                       Categoria Documental *
                     </label>
-                    <input
-                      type="text"
-                      list="category-suggestions"
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      placeholder="Ex: academic, enrollment, administrative..."
-                      className={`w-full h-11 px-3 rounded-lg border text-sm outline-none ${
-                        isLight
-                          ? 'bg-white border-zinc-200 text-zinc-900 focus:border-emerald-600'
-                          : 'bg-zinc-800 border-white/10 text-zinc-100 focus:border-emerald-500'
-                      }`}
-                    />
-                    <datalist id="category-suggestions">
-                      <option value="academic" />
-                      <option value="enrollment" />
-                      <option value="identity_enrollment" />
-                      <option value="administrative" />
-                      <option value="administrative_financial" />
-                      <option value="financial" />
-                      <option value="identification" />
-                      <option value="absence_justification" />
-                      <option value="general" />
-                    </datalist>
+                    {taxonomy && taxonomy.categories.length > 0 ? (
+                      <select
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                        className={`w-full h-11 px-3 rounded-lg border text-sm outline-none cursor-pointer ${
+                          isLight
+                            ? 'bg-white border-zinc-200 text-zinc-900 focus:border-emerald-600'
+                            : 'bg-zinc-800 border-white/10 text-zinc-100 focus:border-emerald-500'
+                        }`}
+                      >
+                        {taxonomy.categories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.label} ({cat.code})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                        placeholder="Ex: academic, administrative, enrollment..."
+                        className={`w-full h-11 px-3 rounded-lg border text-sm outline-none ${
+                          isLight
+                            ? 'bg-white border-zinc-200 text-zinc-900 focus:border-emerald-600'
+                            : 'bg-zinc-800 border-white/10 text-zinc-100 focus:border-emerald-500'
+                        }`}
+                      />
+                    )}
                   </div>
 
                   <div>
                     <label className={`block text-xs font-semibold mb-1.5 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
                       Classificação (Opcional)
                     </label>
-                    <input
-                      type="text"
-                      list="classification-suggestions"
-                      value={classification}
-                      onChange={(e) => setClassification(e.target.value)}
-                      placeholder="Ex: internal, confidential, restricted..."
-                      className={`w-full h-11 px-3 rounded-lg border text-sm outline-none ${
-                        isLight
-                          ? 'bg-white border-zinc-200 text-zinc-900 focus:border-emerald-600'
-                          : 'bg-zinc-800 border-white/10 text-zinc-100 focus:border-emerald-500'
-                      }`}
-                    />
-                    <datalist id="classification-suggestions">
-                      <option value="internal" />
-                      <option value="confidential" />
-                      <option value="restricted" />
-                      <option value="standard" />
-                      <option value="public" />
-                    </datalist>
+                    {taxonomy && taxonomy.classifications.length > 0 ? (
+                      <select
+                        value={classification}
+                        onChange={(e) => setClassification(e.target.value)}
+                        className={`w-full h-11 px-3 rounded-lg border text-sm outline-none cursor-pointer ${
+                          isLight
+                            ? 'bg-white border-zinc-200 text-zinc-900 focus:border-emerald-600'
+                            : 'bg-zinc-800 border-white/10 text-zinc-100 focus:border-emerald-500'
+                        }`}
+                      >
+                        {taxonomy.classifications.map((cls) => (
+                          <option key={cls.id} value={cls.id}>
+                            {cls.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={classification}
+                        onChange={(e) => setClassification(e.target.value)}
+                        placeholder="Ex: internal, confidential, public..."
+                        className={`w-full h-11 px-3 rounded-lg border text-sm outline-none ${
+                          isLight
+                            ? 'bg-white border-zinc-200 text-zinc-900 focus:border-emerald-600'
+                            : 'bg-zinc-800 border-white/10 text-zinc-100 focus:border-emerald-500'
+                        }`}
+                      />
+                    )}
                   </div>
                 </div>
               )}

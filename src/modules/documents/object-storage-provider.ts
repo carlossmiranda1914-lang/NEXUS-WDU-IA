@@ -109,6 +109,21 @@ export interface ReadAuthResult {
   contentDisposition?: string;
 }
 
+export interface WriteObjectStreamParams {
+  institutionId?: string;
+  storageBucket: string;
+  storageKey: string;
+  stream: NodeJS.ReadableStream;
+  declaredByteSize?: number;
+  mimeType?: string;
+}
+
+export interface WriteObjectResult {
+  byteSize: number;
+  sha256Hash: string;
+  mimeType: string;
+}
+
 /**
  * Provider-neutral object storage abstraction interface.
  * Production concrete provider is NONE in I3/I4/I5.
@@ -131,6 +146,12 @@ export interface ObjectStorageProvider {
   readRange(params: ReadRangeParams): Promise<Buffer>;
 
   createReadAuthorization?(params: CreateReadAuthParams): Promise<ReadAuthResult>;
+
+  /**
+   * I8B: Stream upload payload directly into the storage target.
+   * Computes byte size, SHA-256 hash, and verifies integrity against declared byte size.
+   */
+  writeObjectStream?(params: WriteObjectStreamParams): Promise<WriteObjectResult>;
 
   /**
    * I6: Definitively delete a committed storage object.

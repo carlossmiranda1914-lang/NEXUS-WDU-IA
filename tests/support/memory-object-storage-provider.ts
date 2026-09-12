@@ -14,6 +14,8 @@ import type {
   DeleteObjectParams,
   OpenReadStreamParams,
   ReadRangeParams,
+  WriteObjectStreamParams,
+  WriteObjectResult,
 } from '../../src/modules/documents/object-storage-provider.ts';
 
 export interface SimulateDirectUploadParams {
@@ -93,6 +95,33 @@ export class MemoryObjectStorageProvider implements ObjectStorageProvider {
       sha256Hash,
       mimeType: mime,
       uploadedAt,
+    };
+  }
+
+  async writeObjectStream(params: WriteObjectStreamParams): Promise<WriteObjectResult> {
+    if (this.failureInjections.has('writeStream')) {
+      throw new Error('Injected writeObjectStream failure in MemoryObjectStorageProvider');
+    }
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of params.stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    const buffer = Buffer.concat(chunks);
+    const mimeType = params.mimeType || 'application/octet-stream';
+    const uploadedAt = new Date();
+
+    this.objects.set(`${params.storageBucket}/${params.storageKey}`, {
+      buffer,
+      mimeType,
+      uploadedAt,
+    });
+
+    const sha256Hash = createHash('sha256').update(buffer).digest('hex');
+    return {
+      byteSize: buffer.length,
+      sha256Hash,
+      mimeType,
     };
   }
 

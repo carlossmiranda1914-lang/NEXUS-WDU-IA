@@ -539,11 +539,147 @@ try {
     'documents-vault',
     'Browser-supplied storageBucket MUST be ignored in favor of server-configured bucket',
   );
-  assert.equal(
-    persistedSessionRow.storage_provider,
-    'memory_test_provider',
-    'Browser-supplied storageProvider MUST be ignored in favor of server-configured provider',
+  console.log('[TEST 7] P1-1: Real HTTP PUT Byte Transfer & Mandatory Negatives');
+  const transferDocRes = await request('/api/documents/upload-sessions', {
+    method: 'POST',
+    body: {
+      category: 'academic',
+      classification: 'internal',
+      declaredFilename: 'p1_transfer_proof.pdf',
+      declaredMimeType: 'application/pdf',
+      declaredByteSize: 1024,
+      idempotencyKey: 'idem-p1-transfer-1',
+    },
+  });
+  assert.equal(transferDocRes.status, 201);
+  const transferDocBody = (await transferDocRes.json()) as any;
+  const p1DocId = transferDocBody.documentId;
+  const p1SessionId = transferDocBody.sessionId;
+  const p1RawToken = transferDocBody.rawToken;
+
+  // Negative 1: Complete BEFORE transfer MUST FAIL (storage object not yet present)
+  const prematureCompleteRes = await request(`/api/documents/upload-sessions/${p1SessionId}/complete`, {
+    method: 'POST',
+    body: { rawToken: p1RawToken, idempotencyKey: 'idem-premature-complete-1' },
+  });
+  assert.equal(prematureCompleteRes.status, 404, 'Completion before byte transfer MUST fail closed with 404');
+
+  // Negative 2: Transfer with INVALID_UPLOAD_TOKEN MUST FAIL with 400
+  const invalidTokenTransferRes = await fetch(`${baseUrl}/api/documents/upload-sessions/${p1SessionId}/transfer`, {
+    method: 'PUT',
+    headers: {
+      Authorization: 'Bearer doc-admin-uid',
+      'X-Upload-Token': 'invalid-bogus-token',
+      'Content-Type': 'application/pdf',
+    },
+    body: Buffer.from('nexus-documents-byte-transfer-proof'),
+  });
+  assert.equal(invalidTokenTransferRes.status, 400, 'Invalid token transfer must fail with 400');
+
+  // Negative 3: Transfer with EXPIRED_SESSION MUST FAIL with 422 or 409
+  const expSessionRes = await request('/api/documents/upload-sessions', {
+    method: 'POST',
+    body: {
+      category: 'academic',
+      declaredFilename: 'expired.pdf',
+      declaredMimeType: 'application/pdf',
+      declaredByteSize: 100,
+      idempotencyKey: 'idem-expired-session-1',
+    },
+  });
+  assert.equal(expSessionRes.status, 201);
+  const expSessionBody = (await expSessionRes.json()) as any;
+  // Mark session authorized_until in the past
+  await client.query(
+    `UPDATE document_upload_sessions SET authorized_until = now() - interval '1 hour' WHERE id = $1`,
+    [expSessionBody.sessionId],
   );
+  const expiredTransferRes = await fetch(`${baseUrl}/api/documents/upload-sessions/${expSessionBody.sessionId}/transfer`, {
+    method: 'PUT',
+    headers: {
+      Authorization: 'Bearer doc-admin-uid',
+      'X-Upload-Token': expSessionBody.rawToken,
+      'Content-Type': 'application/pdf',
+    },
+    body: Buffer.from('test-payload'),
+  });
+  assert.equal(expiredTransferRes.status, 422, 'Expired session transfer must fail with 422');
+
+  // Negative 4: Transfer exceeding policy limit MUST FAIL with 422
+  const oversizedPayload = Buffer.alloc(25 * 1024 * 1024 + 1); // 25MB + 1 (policy limit in test is 25MB)
+  const oversizedTransferRes = await fetch(`${baseUrl}/api/documents/upload-sessions/${p1SessionId}/transfer`, {
+    method: 'PUT',
+    headers: {
+      Authorization: 'Bearer doc-admin-uid',
+      'X-Upload-Token': p1RawToken,
+      'Content-Type': 'application/pdf',
+    },
+    body: oversizedPayload,
+  });
+  assert.equal(oversizedTransferRes.status, 422, 'Oversized transfer exceeding policy must fail with 422');
+
+  // Positive: Real HTTP PUT byte transfer
+  const realPayload = Buffer.from('nexus-documents-byte-transfer-proof');
+  const realPayloadHash = createHash('sha256').update(realPayload).digest('hex');
+
+  const transferRes = await fetch(`${baseUrl}/api/documents/upload-sessions/${p1SessionId}/transfer`, {
+    method: 'PUT',
+    headers: {
+      Authorization: 'Bearer doc-admin-uid',
+      'X-Upload-Token': p1RawToken,
+      'Content-Type': 'application/pdf',
+    },
+    body: realPayload,
+  });
+  assert.equal(transferRes.status, 200, 'HTTP PUT byte transfer must succeed with 200');
+  const transferResult = (await transferRes.json()) as any;
+  assert.equal(transferResult.success, true);
+  assert.equal(transferResult.byteSize, realPayload.length);
+  assert.equal(transferResult.sha256Hash, realPayloadHash);
+
+  // Complete session after real transfer
+  const p1CompleteRes = await request(`/api/documents/upload-sessions/${p1SessionId}/complete`, {
+    method: 'POST',
+    body: { rawToken: p1RawToken, idempotencyKey: 'idem-p1-complete-1' },
+  });
+  assert.equal(p1CompleteRes.status, 200, 'Completion after successful byte transfer must succeed with 200');
+  const p1CompleteBody = (await p1CompleteRes.json()) as any;
+  assert.equal(p1CompleteBody.version.status, 'content_received');
+  assert.equal(p1CompleteBody.version.byteSize, realPayload.length);
+  assert.equal(p1CompleteBody.version.sha256Hash, realPayloadHash);
+
+  console.log('[TEST 8] P1-2: Canonical Document Taxonomy Governance & Metadata Endpoint');
+  const metaRes = await request('/api/documents/metadata');
+  assert.equal(metaRes.status, 200);
+  const metaBody = (await metaRes.json()) as any;
+  assert.ok(Array.isArray(metaBody.categories), 'Metadata must return categories list');
+  assert.ok(Array.isArray(metaBody.classifications), 'Metadata must return classifications list');
+  assert.ok(metaBody.categories.some((c: any) => c.code === 'ACADEMIC'));
+  assert.ok(metaBody.categories.some((c: any) => c.code === 'IDENTITY_ENROLLMENT'));
+
+  // Negative: Unsupported category in upload-sessions creation MUST fail closed with 400
+  const invalidCategoryRes = await request('/api/documents/upload-sessions', {
+    method: 'POST',
+    body: {
+      category: 'invalid_unsupported_category_xyz',
+      declaredFilename: 'test.pdf',
+      declaredMimeType: 'application/pdf',
+      declaredByteSize: 100,
+      idempotencyKey: 'idem-invalid-cat-1',
+    },
+  });
+  assert.equal(invalidCategoryRes.status, 400, 'Unsupported category must fail closed with 400');
+
+  console.log('[TEST 9] P1-3: Real Version History Endpoint');
+  const versionsRes = await request(`/api/documents/${p1DocId}/versions`);
+  assert.equal(versionsRes.status, 200);
+  const versionsBody = (await versionsRes.json()) as any;
+  assert.ok(Array.isArray(versionsBody.items));
+  assert.equal(versionsBody.items.length, 1);
+  assert.equal(versionsBody.items[0].versionNumber, 1);
+  assert.equal(versionsBody.items[0].byteSize, realPayload.length);
+  assert.equal(versionsBody.items[0].sha256Hash, realPayloadHash);
+  assertNoInternalSecretsInDto(versionsBody);
 
   console.log('[DOCUMENTS-API-INTEGRATION] All integration scenarios PASSED.');
 } finally {

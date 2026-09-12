@@ -94,6 +94,45 @@ export async function fetchDocumentActivity(
   return Array.isArray(data.items) ? data.items : [];
 }
 
+export interface DocumentTaxonomyDto {
+  categories: Array<{ id: string; code: string; label: string }>;
+  classifications: Array<{ id: string; code: string; label: string }>;
+  supportedMimeTypes: string[];
+}
+
+export async function fetchDocumentTaxonomy(signal?: AbortSignal): Promise<DocumentTaxonomyDto> {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/documents/metadata', {
+    method: 'GET',
+    headers,
+    signal,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Não foi possível obter a taxonomia documental.');
+  }
+  return data as DocumentTaxonomyDto;
+}
+
+export async function fetchDocumentVersions(
+  documentId: string,
+  signal?: AbortSignal,
+): Promise<DocumentVersionDto[]> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/documents/${documentId}/versions`, {
+    method: 'GET',
+    headers,
+    signal,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Não foi possível obter o histórico de versões.');
+  }
+  return Array.isArray(data.items) ? data.items : [];
+}
+
 export interface CreateUploadSessionInput {
   documentId?: string;
   category?: string;

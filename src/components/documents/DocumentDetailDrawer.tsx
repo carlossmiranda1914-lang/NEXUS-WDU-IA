@@ -23,8 +23,8 @@ import {
   Check,
   RefreshCw,
 } from 'lucide-react';
-import type { Theme, DocumentDto, ActivityDto, DetailDrawerTab } from './types.ts';
-import { fetchDocumentActivity, fetchDocumentDetail } from './api.ts';
+import type { Theme, DocumentDto, ActivityDto, DetailDrawerTab, DocumentVersionDto } from './types.ts';
+import { fetchDocumentActivity, fetchDocumentDetail, fetchDocumentVersions } from './api.ts';
 import {
   formatByteSize,
   formatDate,
@@ -65,12 +65,15 @@ export default function DocumentDetailDrawer({
   const [activities, setActivities] = useState<ActivityDto[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(false);
   const [activityError, setActivityError] = useState<string | null>(null);
-  const [copiedHash, setCopiedHash] = useState(false);
+  const [versions, setVersions] = useState<DocumentVersionDto[]>([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [copiedHash, setCopiedHash] = useState<string | null>(null);
 
   useEffect(() => {
     setDocDetail(initialDoc);
     if (initialDoc && isOpen) {
       void loadActivity(initialDoc.id);
+      void loadVersions(initialDoc.id);
     }
   }, [initialDoc, isOpen]);
 
@@ -87,10 +90,25 @@ export default function DocumentDetailDrawer({
     }
   };
 
+  const loadVersions = async (docId: string) => {
+    setLoadingVersions(true);
+    try {
+      const items = await fetchDocumentVersions(docId);
+      setVersions(items);
+    } catch (err) {
+      // Fallback to currentVersion if standalone endpoint is unavailable
+      if (initialDoc?.currentVersion) {
+        setVersions([initialDoc.currentVersion]);
+      }
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
   const handleCopyHash = (hash: string) => {
     navigator.clipboard.writeText(hash);
-    setCopiedHash(true);
-    setTimeout(() => setCopiedHash(false), 2000);
+    setCopiedHash(hash);
+    setTimeout(() => setCopiedHash(null), 2000);
   };
 
   if (!isOpen || !docDetail) return null;
@@ -470,39 +488,75 @@ export default function DocumentDetailDrawer({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                Histórico de Versões
+                Histórico de Versões ({versions.length || docDetail.versionCount})
               </span>
               <button
                 type="button"
                 disabled={!docDetail.capabilities.canUploadVersion || isDeleted || isQuarantined}
                 onClick={() => onOpenUploadVersion(docDetail)}
-                className="text-xs font-bold text-emerald-600 hover:underline flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline"
+                className="text-xs font-bold text-emerald-600 hover:underline flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline cursor-pointer"
                 title={!docDetail.capabilities.canUploadVersion ? 'Sem autorização para carregar nova versão' : 'Carregar Nova Versão'}
               >
                 <Upload className="w-3.5 h-3.5" /> Carregar Nova Versão
               </button>
             </div>
 
-            {docDetail.currentVersion ? (
+            {loadingVersions && versions.length === 0 ? (
+              <div className="py-8 text-center text-xs text-zinc-500 space-y-2">
+                <RefreshCw className="w-5 h-5 mx-auto animate-spin text-emerald-600" />
+                <p>A carregar versões...</p>
+              </div>
+            ) : versions.length > 0 ? (
               <div className="space-y-3">
-                <div className={`p-4 rounded-xl border ${
-                  isLight ? 'bg-slate-50 border-zinc-200' : 'bg-zinc-950 border-white/5'
-                } space-y-2`}>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm">Versão v{docDetail.currentVersion.versionNumber} (Mais recente)</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getBadgeClasses(
-                      techStatus.tone,
-                      theme,
-                    )}`}>
-                      {techStatus.label}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-zinc-500">
-                    <p>Tamanho: <strong className="text-zinc-800 dark:text-zinc-200">{formatByteSize(docDetail.currentVersion.byteSize)}</strong></p>
-                    <p>Tipo: <strong className="text-zinc-800 dark:text-zinc-200">{docDetail.currentVersion.mimeType}</strong></p>
-                    <p className="col-span-2">Criado em: {formatDateTime(docDetail.currentVersion.createdAt)}</p>
-                  </div>
-                </div>
+                {versions.map((v) => {
+                  const vTechStatus = getTechnicalStatusPresentation(v.status);
+                  const isLatest = v.versionNumber === docDetail.currentVersion?.versionNumber;
+                  return (
+                    <div
+                      key={v.id}
+                      className={`p-4 rounded-xl border ${
+                        isLight ? 'bg-slate-50 border-zinc-200' : 'bg-zinc-950 border-white/5'
+                      } space-y-2`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm">Versão v{v.versionNumber}</span>
+                          {isLatest && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                              Mais recente
+                            </span>
+                          )}
+                        </div>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getBadgeClasses(
+                          vTechStatus.tone,
+                          theme,
+                        )}`}>
+                          {vTechStatus.label}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs text-zinc-500">
+                        <p>Tamanho: <strong className="text-zinc-800 dark:text-zinc-200">{formatByteSize(v.byteSize)}</strong></p>
+                        <p>Tipo: <strong className="text-zinc-800 dark:text-zinc-200">{v.mimeType}</strong></p>
+                        <p className="col-span-2">Criado em: {formatDateTime(v.createdAt)}</p>
+                      </div>
+
+                      <div className="pt-2 border-t border-zinc-200/50 dark:border-white/5 flex items-center justify-between gap-2">
+                        <code className="text-[10px] font-mono text-zinc-400 truncate flex-1">
+                          SHA: {v.sha256Hash}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyHash(v.sha256Hash)}
+                          className="p-1 rounded border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-all cursor-pointer shrink-0"
+                          title="Copiar Hash"
+                        >
+                          {copiedHash === v.sha256Hash ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <p className="text-xs text-zinc-500 py-6 text-center">Nenhuma versão registada.</p>
