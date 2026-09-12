@@ -28,13 +28,12 @@ interface DocumentsWorkspaceProps {
 }
 
 const CATEGORY_TABS = [
-  { id: 'all', label: 'Todos os Documentos' },
-  { id: 'enrollment', label: 'Matrículas' },
-  { id: 'identity', label: 'Identificação' },
-  { id: 'academic', label: 'Académico' },
-  { id: 'financial', label: 'Financeiro' },
-  { id: 'legal', label: 'Jurídico & Legal' },
-  { id: 'health', label: 'Saúde Escolar' },
+  { id: 'all', label: 'Todos' },
+  { id: 'academic', label: 'Académicos' },
+  { id: 'administrative', label: 'Administrativos' },
+  { id: 'financial', label: 'Financeiros' },
+  { id: 'identification', label: 'Identificação' },
+  { id: 'other', label: 'Outros' },
 ];
 
 export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspaceProps) {
@@ -194,21 +193,23 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-1.5 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-400">
-              Arquivo Digital Institucional
+            <span className={`text-[11px] font-semibold ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+              Início &gt; <strong className={isLight ? 'text-zinc-800' : 'text-zinc-200'}>Documentos</strong>
             </span>
             <span className="text-zinc-400">•</span>
-            <span className="text-[11px] font-mono text-zinc-500">NEXUS EDU IA</span>
+            <span className="text-[11px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
+              NEXUS EDU IA
+            </span>
           </div>
           <h1
             className={`text-2xl lg:text-3xl font-bold tracking-tight ${
               isLight ? 'text-zinc-900' : 'text-zinc-100'
             }`}
           >
-            Dossier & Processos Automáticos
+            Documentos
           </h1>
           <p className={`max-w-3xl text-xs sm:text-sm leading-relaxed ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-            Repositório institucional seguro para guarda, validação de integridade criptográfica, retenção legal e expurgo governado.
+            Gerencie, consulte e compartilhe documentos institucionais com segurança.
           </p>
         </div>
 
@@ -232,7 +233,7 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
           <button
             type="button"
             onClick={handleOpenUploadNew}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-md shadow-emerald-700/10 cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-700/20 active:scale-[0.98] cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Carregar Documento</span>
@@ -307,10 +308,10 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
               }`}
             >
               <option value="all">Estado: Todos</option>
-              <option value="available">Disponível (available)</option>
-              <option value="pending_verification">Aguardando Verificação</option>
-              <option value="quarantined">Em Quarentena (quarantined)</option>
-              <option value="deleted">Eliminado (deleted)</option>
+              <option value="available">Disponível</option>
+              <option value="pending_verification">Verificação pendente</option>
+              <option value="quarantined">Em quarentena</option>
+              <option value="deleted">Eliminado</option>
             </select>
 
             {/* Retention Status Filter */}

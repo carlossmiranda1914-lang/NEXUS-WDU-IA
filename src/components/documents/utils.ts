@@ -37,32 +37,33 @@ export function formatDateTime(dateString: string | null | undefined): string {
 
 export function getCategoryLabel(category: string): string {
   switch (category.toLowerCase()) {
-    case 'identity':
-    case 'identificacao':
-    case 'identificação':
-      return 'Identificação';
-    case 'enrollment':
-    case 'matricula':
-    case 'matrícula':
-      return 'Matrícula';
     case 'academic':
     case 'academico':
     case 'académico':
-      return 'Académico';
+      return 'Académicos';
+    case 'administrative':
+    case 'administrativo':
+    case 'administrativos':
+      return 'Administrativos';
     case 'financial':
     case 'financeiro':
-      return 'Financeiro';
-    case 'legal':
-    case 'juridico':
-    case 'jurídico':
-      return 'Jurídico';
-    case 'health':
-    case 'saude':
-    case 'saúde':
-      return 'Saúde Escolar';
+    case 'financeiros':
+      return 'Financeiros';
+    case 'identification':
+    case 'identificacao':
+    case 'identificação':
+      return 'Identificação';
+    case 'other':
+    case 'outro':
+    case 'outros':
+      return 'Outros';
     case 'general':
     case 'geral':
       return 'Geral';
+    case 'enrollment':
+    case 'matricula':
+    case 'matrícula':
+      return 'Matrículas';
     default:
       return category.charAt(0).toUpperCase() + category.slice(1);
   }
@@ -87,19 +88,19 @@ export function getTechnicalStatusPresentation(
     case 'content_received':
     case 'pending_verification':
       return {
-        label: 'Aguardando Verificação',
+        label: 'Verificação pendente',
         tone: 'amber',
         description: 'Conteúdo recebido e em processo de validação técnica.',
       };
     case 'quarantined':
       return {
-        label: 'Em Quarentena',
+        label: 'Em quarentena',
         tone: 'rose',
         description: 'Documento retido para verificação de segurança adicional.',
       };
     case 'deletion_in_progress':
       return {
-        label: 'Eliminação em Curso',
+        label: 'Eliminação em curso',
         tone: 'amber',
         description: 'Processo de expurgo governado em execução.',
       };
@@ -141,7 +142,7 @@ export function getTechnicalStatusPresentation(
       };
     case 'deprecating':
       return {
-        label: 'Em Descontinuação',
+        label: 'Em descontinuação',
         tone: 'amber',
         description: 'Documento em fase de expiração ou descontinuação.',
       };

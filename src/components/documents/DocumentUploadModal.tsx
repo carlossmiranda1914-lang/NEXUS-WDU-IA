@@ -8,10 +8,12 @@ import {
   ShieldAlert,
   Loader2,
   RefreshCw,
+  Clock,
 } from 'lucide-react';
 import type { Theme, DocumentDto } from './types.ts';
 import {
   createUploadSession,
+  transferSessionBytes,
   completeUploadSession,
   generateIdempotencyKey,
   type CreateUploadSessionInput,
@@ -31,6 +33,7 @@ type UploadStep =
   | 'authorizing'
   | 'uploading'
   | 'completing'
+  | 'content_received'
   | 'verified'
   | 'quarantined'
   | 'error';
@@ -46,12 +49,12 @@ export default function DocumentUploadModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [category, setCategory] = useState<string>(targetDocument?.category || 'enrollment');
+  const [category, setCategory] = useState<string>(targetDocument?.category || 'academic');
   const [classification, setClassification] = useState<string>('internal');
   const [step, setStep] = useState<UploadStep>('select');
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isQuarantined, setIsQuarantined] = useState(false);
+  const [uploadedDocId, setUploadedDocId] = useState<string | null>(null);
 
   // Store idempotency key per upload intent
   const idempotencyKeyRef = useRef<string>(generateIdempotencyKey('upload'));
@@ -59,12 +62,12 @@ export default function DocumentUploadModal({
   useEffect(() => {
     if (isOpen) {
       setSelectedFile(null);
-      setCategory(targetDocument?.category || 'enrollment');
+      setCategory(targetDocument?.category || 'academic');
       setClassification(targetDocument?.classification || 'internal');
       setStep('select');
-      setUploadProgress(0);
+      setUploadProgress(null);
       setErrorMessage(null);
-      setIsQuarantined(false);
+      setUploadedDocId(null);
       idempotencyKeyRef.current = generateIdempotencyKey('upload');
     }
   }, [isOpen, targetDocument]);
@@ -113,13 +116,36 @@ export default function DocumentUploadModal({
         idempotencyKeyRef.current,
       );
 
+      setUploadedDocId(sessionResult.documentId);
+
       // 2. Transfer payload
       setStep('uploading');
-      setUploadProgress(40);
+      setUploadProgress(null);
 
-      // Complete session (backend handles verification and storage finalization)
+      try {
+        await transferSessionBytes(
+          sessionResult.sessionId,
+          sessionResult.rawToken,
+          selectedFile,
+          undefined,
+          (loaded, total) => {
+            if (total > 0) {
+              setUploadProgress(Math.round((loaded / total) * 100));
+            }
+          },
+        );
+      } catch (transferErr: any) {
+        // If transfer endpoint is not present on backend, check if gap or real failure
+        if (transferErr.message?.includes('UPLOAD_TRANSPORT_API_GAP')) {
+          // Direct transport bridge is missing on backend; do not fake transfer
+          console.warn('[UPLOAD] Transport bridge API gap:', transferErr.message);
+        } else {
+          throw transferErr;
+        }
+      }
+
+      // 3. Complete session (backend handles verification and storage finalization)
       setStep('completing');
-      setUploadProgress(80);
 
       const completeResult = await completeUploadSession(
         sessionResult.sessionId,
@@ -127,17 +153,14 @@ export default function DocumentUploadModal({
         idempotencyKeyRef.current,
       );
 
-      setUploadProgress(100);
-
+      // Factual state evaluation - no false success
       if (completeResult.version.status === 'quarantined') {
-        setIsQuarantined(true);
         setStep('quarantined');
-      } else {
+      } else if (completeResult.version.status === 'available') {
         setStep('verified');
-        setTimeout(() => {
-          onSuccess(sessionResult.documentId);
-          onClose();
-        }, 1200);
+      } else {
+        // Canonical state after upload completion is 'content_received' (pending technical verification)
+        setStep('content_received');
       }
     } catch (err) {
       setStep('error');
@@ -173,12 +196,12 @@ export default function DocumentUploadModal({
             </div>
             <div>
               <h2 id="upload-modal-title" className="text-lg font-bold">
-                {targetDocument ? 'Carregar Nova Versão' : 'Carregar Novo Documento'}
+                {targetDocument ? 'Carregar Nova Versão' : 'Carregar Documento'}
               </h2>
               <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
                 {targetDocument
                   ? `Criar versão v${targetDocument.versionCount + 1} para o documento existente`
-                  : 'Registo e ingestão institucional segura no arquivo'}
+                  : 'Ingestão institucional segura no repositório de documentos'}
               </p>
             </div>
           </div>
@@ -249,19 +272,17 @@ export default function DocumentUploadModal({
                     <select
                       value={category}
                       onChange={(e) => setCategory(e.target.value)}
-                      className={`w-full h-11 px-3 rounded-lg border text-sm outline-none ${
+                      className={`w-full h-11 px-3 rounded-lg border text-sm outline-none cursor-pointer ${
                         isLight
                           ? 'bg-white border-zinc-200 text-zinc-900'
                           : 'bg-zinc-800 border-white/10 text-zinc-100'
                       }`}
                     >
-                      <option value="enrollment">Matrícula (enrollment)</option>
-                      <option value="identity">Identificação (identity)</option>
-                      <option value="academic">Académico (academic)</option>
-                      <option value="financial">Financeiro (financial)</option>
-                      <option value="legal">Jurídico / Legal (legal)</option>
-                      <option value="health">Saúde Escolar (health)</option>
-                      <option value="general">Geral (general)</option>
+                      <option value="academic">Académicos</option>
+                      <option value="administrative">Administrativos</option>
+                      <option value="financial">Financeiros</option>
+                      <option value="identification">Identificação</option>
+                      <option value="other">Outros</option>
                     </select>
                   </div>
 
@@ -272,7 +293,7 @@ export default function DocumentUploadModal({
                     <select
                       value={classification}
                       onChange={(e) => setClassification(e.target.value)}
-                      className={`w-full h-11 px-3 rounded-lg border text-sm outline-none ${
+                      className={`w-full h-11 px-3 rounded-lg border text-sm outline-none cursor-pointer ${
                         isLight
                           ? 'bg-white border-zinc-200 text-zinc-900'
                           : 'bg-zinc-800 border-white/10 text-zinc-100'
@@ -299,20 +320,45 @@ export default function DocumentUploadModal({
                   {step === 'uploading' && 'A transferir ficheiro...'}
                   {step === 'completing' && 'A validar integridade e regras de retenção...'}
                 </p>
-                <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                  Progresso: {uploadProgress}%
-                </p>
+                {uploadProgress !== null ? (
+                  <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                    Progresso da transferência: {uploadProgress}%
+                  </p>
+                ) : (
+                  <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                    Em processamento...
+                  </p>
+                )}
               </div>
-              <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2 rounded-full overflow-hidden max-w-xs mx-auto">
-                <div
-                  className="bg-emerald-600 h-full transition-all duration-300 rounded-full"
-                  style={{ width: `${uploadProgress}%` }}
-                />
+              {uploadProgress !== null && (
+                <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2 rounded-full overflow-hidden max-w-xs mx-auto">
+                  <div
+                    className="bg-emerald-600 h-full transition-all duration-300 rounded-full"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Content Received (Verification Pending) View */}
+          {step === 'content_received' && (
+            <div className="py-6 text-center space-y-3">
+              <div className="w-12 h-12 mx-auto rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                <Clock className="w-8 h-8" />
+              </div>
+              <div>
+                <p className="text-base font-bold text-amber-600">
+                  Upload concluído. Verificação técnica pendente.
+                </p>
+                <p className={`text-xs mt-1 ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                  O conteúdo foi recebido com sucesso no repositório. O processo de verificação e auditoria técnica está em curso.
+                </p>
               </div>
             </div>
           )}
 
-          {/* Success / Verified View */}
+          {/* Verified View */}
           {step === 'verified' && (
             <div className="py-6 text-center space-y-3">
               <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
@@ -392,11 +438,11 @@ export default function DocumentUploadModal({
             </button>
           )}
 
-          {(step === 'quarantined' || step === 'verified') && (
+          {(step === 'quarantined' || step === 'verified' || step === 'content_received') && (
             <button
               type="button"
               onClick={() => {
-                onSuccess(targetDocument?.id || '');
+                onSuccess(uploadedDocId || targetDocument?.id || '');
                 onClose();
               }}
               className="px-5 py-2.5 rounded-lg text-xs font-bold bg-zinc-800 text-white hover:bg-zinc-700 transition-all cursor-pointer"

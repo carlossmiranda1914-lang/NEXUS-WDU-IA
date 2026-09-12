@@ -109,7 +109,7 @@ const TAB_NAMES: Record<string, string> = {
   students: 'Alunos & Matrículas',
   teachers: 'Corpo Docente',
   financials: 'Finanças & Contas',
-  documents: 'Dossier & Processos Automáticos',
+  documents: 'Documentos',
   communications: 'Comunicação',
   config: 'Definições do Sistema',
   workflows: 'Central de Processos',
@@ -180,8 +180,8 @@ export const TABS_LAYOUT_CONFIG: Record<string, {
   },
   documents: {
     type: 'Arquivo Documental Digital',
-    containerClass: "space-y-6 w-full max-w-6xl mx-auto",
-    description: "Pasta organizacional de atas, regulamentos, manuais e circulares administrativas."
+    containerClass: "space-y-6 w-full max-w-7xl mx-auto",
+    description: "Gerencie, consulte e compartilhe documentos institucionais com segurança."
   },
   automations: {
     type: 'Gestor de Processos Frequentes',
@@ -1709,7 +1709,7 @@ export default function App() {
       title: "Administrativo",
       items: [
         { id: 'financials', name: 'Finanças & Contas', icon: DollarSign },
-        { id: 'documents', name: 'Dossier & Processos Automáticos', icon: FolderOpen },
+        { id: 'documents', name: 'Documentos', icon: FolderOpen },
         { id: 'sheets', name: 'Google Sheets', icon: FileSpreadsheet },
         { id: 'communications', name: 'Comunicação', icon: Megaphone }
       ]

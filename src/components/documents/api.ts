@@ -142,6 +142,73 @@ export async function createUploadSession(
   return data as CreateUploadSessionResponse;
 }
 
+/**
+ * Perform canonical byte transfer to the authorized storage provider or bridge.
+ * If transport bridge endpoint is missing, reports UPLOAD_TRANSPORT_API_GAP error.
+ */
+export async function transferSessionBytes(
+  sessionId: string,
+  rawToken: string,
+  file: File,
+  signal?: AbortSignal,
+  onProgress?: (bytesUploaded: number, totalBytes: number) => void,
+): Promise<void> {
+  const headers = await getAuthHeaders();
+
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', `/api/documents/upload-sessions/${sessionId}/transfer`, true);
+    xhr.setRequestHeader('Authorization', headers.Authorization);
+    xhr.setRequestHeader('X-Upload-Token', rawToken);
+    xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        xhr.abort();
+        reject(new Error('Transferência cancelada.'));
+      });
+    }
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          onProgress(event.loaded, event.total);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else if (xhr.status === 404 || xhr.status === 405) {
+        // Transport bridge endpoint is not exposed on this server version
+        reject(
+          new Error(
+            'UPLOAD_TRANSPORT_API_GAP: O endpoint HTTP de transferência direta de bytes para a sessão de upload não está exposto na API I8A.',
+          ),
+        );
+      } else {
+        try {
+          const body = JSON.parse(xhr.responseText);
+          reject(new Error(body.error || `Falha na transferência de bytes (${xhr.status}).`));
+        } catch {
+          reject(new Error(`Falha na transferência de bytes (${xhr.status}).`));
+        }
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(
+        new Error(
+          'UPLOAD_TRANSPORT_API_GAP: Não foi possível estabelecer ligação ao endpoint de transporte de bytes.',
+        ),
+      );
+    };
+
+    xhr.send(file);
+  });
+}
+
 export interface CompleteUploadSessionResponse {
   success: boolean;
   versionId: string;
