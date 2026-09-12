@@ -38,7 +38,7 @@ export function FinanceWorkspace({ theme = 'light', initialTab = 'operations', i
       {activeTab === 'catalogue' && <FinanceFeeCatalogueWorkspace theme={theme} />}
       {activeTab === 'obligations' && <FinancialObligationsWorkspace theme={theme} />}
       {activeTab === 'recebimentos' && <FinancePaymentsWorkspace theme={theme} onOpenFinanceConfiguration={() => setActiveTab('configuration')} onOpenFinancialDocuments={() => setActiveTab('documents')} />}
-      {activeTab === 'documents' && <FinancialDocumentsWorkspace theme={theme} />}
+      {activeTab === 'documents' && <FinancialDocumentsWorkspace theme={theme} onOpenPayment={() => setActiveTab('recebimentos')} />}
       {activeTab === 'configuration' && <FinanceConfigurationWorkspace />}
     </main>
   </div>;
