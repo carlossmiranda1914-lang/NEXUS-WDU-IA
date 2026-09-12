@@ -1,10 +1,29 @@
 # NEXUS Project State
 
-Updated: 2026-09-04
+Updated: 2026-09-12
 
 ## Integrated baseline
 
-`main @ 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc` is the current integrated capability authority. Finance Foundation is integrated: Tasks 1–8 are DONE, P0 = 0 and P1 = 0. F1 implementation is NOT STARTED.
+`main @ 4dfaf8ef3a9d0deea681af89bdc29f5e7cf4b7b9` is the current integrated capability authority. Documents Foundation I1–I8 are integrated via PR #102: Tasks I1–I8 are DONE, P0 = 0, P1 = 0, and I8 status is CLOSED. Finance Foundation is integrated: Tasks 1–8 are DONE, P0 = 0, P1 = 0.
+
+## Documents Foundation — I1–I8 closed & integrated
+
+Documents Foundation Tasks I1–I8 are integrated in `main` through PR #102.
+
+- Integration merge commit: `4dfaf8ef3a9d0deea681af89bdc29f5e7cf4b7b9`
+- Scope completed: Core data model, multi-entity association, upload & verification engine, events & activity log, API layer, and UI Workspace.
+- Status: CLOSED
+
+## Current active mission — Documents Foundation I8C
+
+- Program: `DOCUMENTS`
+- Mission: `DOCUMENTS-FOUNDATION-I8C` (`DOCUMENTS_OPERATIONAL_INFRASTRUCTURE_ENABLEMENT`)
+- State: `IMPLEMENTATION_COMPLETE`
+- Active PR: `PR #103` (`feature/documents-foundation-i8c-gcp-operational`)
+- Baseline: `4dfaf8ef3a9d0deea681af89bdc29f5e7cf4b7b9`
+- Current I8C HEAD: `3ec6848777478a0933e819392975e5cb7d78b3ba`
+- Scope: Production GCP runtime integration using official `@google-cloud/storage` SDK (v8.1.0) with Application Default Credentials (ADC), server-mediated streaming, SHA-256 roundtrip persistence via GCS custom metadata, and fail-closed runtime configuration resolution.
+- Next Phase (I9): `NOT AUTHORIZED`
 
 ## Finance Foundation — closed
 
@@ -32,43 +51,30 @@ Accepted outcome:
 
 The former Integration Sync Gate is closed. Do not rerun it and do not treat `codex/finance-foundation-01` as active implementation authority.
 
-## Current stage — F1 preparation
+## Deferred / Planned stages
 
-- Program: `FINANCE`
-- Stage: `FINANCE-F1-PREPARATION`
-- State: `PLANNING`
-- Implementation: `NOT STARTED / NOT AUTHORIZED`
-- Active implementation branch: none
-- Active F1 Mission Pack: none yet
-- Owner: Product Owner
+- **Finance F1**: `PLANNING` / `NOT STARTED` — upper-Finance functional vertical from integrated Foundation awaiting approved contract.
+- **Documents I9**: `NOT AUTHORIZED` / `NOT STARTED`.
 
-F1 preparation is a bounded product/architecture step whose purpose is to define and approve the first upper-Finance functional vertical from the integrated Foundation. It is not an executable production-code mission until the Product Owner approves a concrete F1 design/mission contract.
+## Protected domain invariants
 
-## Authorized next action
+### Documents Invariants
+- Institutional multi-tenant isolation mandatory on all read and write paths.
+- Server-mediated streaming by default with zero browser storage credentials exposure.
+- Fail-closed runtime configuration on missing or invalid secrets/buckets.
+- SHA-256 digest preservation across write stream, storage metadata, and completion.
+- Fail-closed retention, hold, and deletion enforcement.
 
-Define the first F1 functional vertical from the integrated `main` baseline. The preparation must establish its user-visible outcome, domain boundary, authority model, persistence/API/UI slice, tenant/auth rules, behavioral and PostgreSQL proof, UAT target, and explicit out-of-scope boundary. After approval, create the F1 Mission Pack and implementation plan/branch. Only then may production implementation begin.
-
-## Protected Finance invariants
-
+### Finance Invariants
 - Journal remains canonical economic truth.
-- projection remains confirmed-only rebuildable read authority.
-- exact Money and currency separation remain enforced.
-- financial context remains server-authoritative and fail closed.
-- idempotency, concurrency, reversal, recovery, durable outbox and tenant isolation remain PostgreSQL-backed.
-- legacy `outstandingFees` remains non-canonical Finance authority.
-- migration history remains immutable.
+- Projection remains confirmed-only rebuildable read authority.
+- Exact Money and currency separation remain enforced.
+- Financial context remains server-authoritative and fail closed.
+- Idempotency, concurrency, reversal, recovery, durable outbox and tenant isolation remain PostgreSQL-backed.
+- Legacy `outstandingFees` remains non-canonical Finance authority.
+- Migration history remains immutable.
 - Finance Foundation Tasks 1–8 are not reopened without concrete regression evidence and explicit authorization.
 
 ## Engineering governance
 
 Operating standard remains: **priority clear, no useless cycles, no silent scope expansion, no false GREEN, advance immediately once sufficient evidence exists.**
-
-For F1, prefer one complete functional vertical per mission: domain authority -> persistence/API -> UI -> behavioral/negative proof -> UAT -> integration. Do not fragment normal completion steps into repeated Product Owner/Codex calls.
-
-## Deferred domains
-
-Until an F1 design is approved, Payment provider integration, Allocation/Reconciliation expansion, fiscal/statutory adapters, reporting/BI and later Finance verticals remain NOT STARTED / NOT AUTHORIZED except where explicitly selected as part of the approved first F1 vertical.
-
-## Canonical versus branch work
-
-Merged `main` is the integrated capability authority. The closeout branch exists only to make this canonical state explicit; it does not authorize F1 production code.

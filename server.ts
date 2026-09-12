@@ -28,6 +28,7 @@ import { registerEnrollmentRoutes } from './src/modules/enrollments/enrollment.c
 import { registerStudentContextRoutes } from './src/modules/student-context/student-context.controller.ts';
 import { registerIamRoutes } from './src/modules/iam/iam.controller.ts';
 import { registerDocumentRoutes } from './src/modules/documents/document.controller.ts';
+import { resolveDocumentsOperationalConfig } from './src/modules/documents/documents-runtime-config.ts';
 import { SchoolTaskWebSocketManager } from './src/modules/school-tasks/websocket-manager.ts';
 import { eventBus } from './src/modules/school-tasks/event-bus.ts';
 import { registerSchoolTaskRealtimeBridge } from './src/modules/school-tasks/realtime-bridge.ts';
@@ -3542,7 +3543,7 @@ async function startServer() {
   registerEnrollmentRoutes(app);
   registerStudentContextRoutes(app);
   registerIamRoutes(app);
-  registerDocumentRoutes(app);
+  registerDocumentRoutes(app, resolveDocumentsOperationalConfig());
 
   // FND-02 CP2: legacy mutation bodies are retained temporarily for forensic
   // rollback only, but are deliberately not mounted. The modular controller
