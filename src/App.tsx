@@ -2590,13 +2590,6 @@ export default function App() {
               } mt-4`}>
                 <p className="font-semibold">Tenant: lisboa_central_01</p>
                 <p className="text-emerald-500 font-mono">● Online via Edge CDN</p>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className={`mt-3 w-full rounded-md border px-3 py-2 text-xs font-semibold transition-colors ${theme === 'light' ? 'border-zinc-200 bg-white text-zinc-700 hover:bg-rose-50 hover:text-rose-600' : 'border-white/10 bg-zinc-900 text-zinc-300 hover:bg-rose-500/10 hover:text-rose-300'}`}
-                >
-                  Sair
-                </button>
               </div>
             </motion.div>
           )}
