@@ -23,16 +23,18 @@ if (target.host !== '127.0.0.1' || target.port !== '54329' || target.database !=
 }
 
 const pool = new pg.Pool({ connectionString, connectionTimeoutMillis: 5000 });
+const angolaPreviewMode = process.argv.includes('--angola-preview');
 const fixture = {
-  accountName: 'UAT — Finance Adjustment 100-40-60',
-  feeName: 'UAT — Correção Financeira 100 EUR',
-  obligationRef: 'UAT-F5-ADJUSTMENT-100-40-60',
+  accountName: angolaPreviewMode ? 'UAT AO — Finance Adjustment 100-40-60' : 'UAT — Finance Adjustment 100-40-60',
+  feeName: angolaPreviewMode ? 'UAT AO — Recibo pré-emissão 100 AOA' : 'UAT — Correção Financeira 100 EUR',
+  obligationRef: angolaPreviewMode ? 'UAT-G02-AO-100-40-60' : 'UAT-F5-ADJUSTMENT-100-40-60',
+  currency: angolaPreviewMode ? 'AOA' : 'EUR',
   effectiveAt: '2026-09-08T12:00:00.000Z',
   dueAt: '2026-10-08T12:00:00.000Z',
   keys: {
-    account: 'local-uat-finance-v1-account', fee: 'local-uat-finance-v1-fee',
-    obligation: 'local-uat-finance-v1-obligation', payment: 'local-uat-finance-v1-payment', allocation: 'local-uat-finance-v1-allocation',
-    receiptPayment: 'local-uat-finance-v2-receipt-payment',
+    account: angolaPreviewMode ? 'local-uat-g02-ao-account' : 'local-uat-finance-v1-account', fee: angolaPreviewMode ? 'local-uat-g02-ao-fee' : 'local-uat-finance-v1-fee',
+    obligation: angolaPreviewMode ? 'local-uat-g02-ao-obligation' : 'local-uat-finance-v1-obligation', payment: angolaPreviewMode ? 'local-uat-g02-ao-payment' : 'local-uat-finance-v1-payment', allocation: angolaPreviewMode ? 'local-uat-g02-ao-allocation' : 'local-uat-finance-v1-allocation',
+    receiptPayment: angolaPreviewMode ? 'local-uat-g02-ao-receipt-payment' : 'local-uat-finance-v2-receipt-payment',
   },
 };
 
@@ -59,6 +61,11 @@ async function ensureProfile(actor: InstitutionalContext): Promise<void> {
      ORDER BY version DESC LIMIT 1`,
     [actor.institutionId],
   );
+  if (angolaPreviewMode) {
+    if (existing.rows[0]?.primary_jurisdiction === 'AO') return;
+    await new PostgresFinancialProfileStore(pool).createVersion({ institutionId: actor.institutionId, effectiveFrom: new Date().toISOString(), primaryJurisdiction: 'AO', functionalCurrency: 'AOA', financialTimezone: 'Africa/Luanda', monetaryPolicyVersion: 'local-uat-g02-ao', enabledCurrencies: ['AOA'] });
+    return;
+  }
   if (existing.rows[0]?.primary_jurisdiction === 'NEXUS_TEST') return;
   // This synthetic jurisdiction is exclusively for the host-restricted disposable UAT database.
   // It is deliberately not a real-country policy or a production adapter configuration.
@@ -69,7 +76,13 @@ async function ensureProfile(actor: InstitutionalContext): Promise<void> {
 
 async function ensureLegalProfile(actor: InstitutionalContext): Promise<void> {
   const profiles = new InstitutionLegalProfileRepository(pool);
-  if (await profiles.resolveEffective(actor.institutionId, new Date())) return;
+  const existing = await profiles.resolveEffective(actor.institutionId, new Date());
+  if (angolaPreviewMode) {
+    if (existing?.registeredAddress.countryCode === 'AO' && existing.taxIdentifier) return;
+    await profiles.createVersion({ institutionId: actor.institutionId, legalName: `${actor.institutionName} — UAT AO`, taxIdentifier: 'AO-UAT-LOCAL-0001', registeredAddress: { countryCode: 'AO', line1: 'Ambiente local descartável — não produtivo' }, effectiveFrom: new Date() });
+    return;
+  }
+  if (existing) return;
   await profiles.createVersion({
     institutionId: actor.institutionId,
     legalName: `${actor.institutionName} — UAT`,
@@ -119,7 +132,7 @@ async function verifyFixture(actor: InstitutionalContext, accountId: string, obl
   if (!position || position.original.amount !== '100' || position.covered.amount !== '40' || position.remainingCoverable.amount !== '60' || adjustmentCount.rows[0]?.count !== '0') {
     throw new Error('Canonical Finance UAT fixture verification failed.');
   }
-  console.log(JSON.stringify({ fixture: 'FINANCE_UAT_100_40_60_READY', accountId, obligationId, paymentReference, original: position.original.amount, covered: position.covered.amount, remaining: position.remainingCoverable.amount }));
+  console.log(JSON.stringify({ fixture: angolaPreviewMode ? 'FINANCE_G02_AO_PREVIEW_100_40_60_READY' : 'FINANCE_UAT_100_40_60_READY', accountId, obligationId, paymentReference, original: position.original.amount, covered: position.covered.amount, remaining: position.remainingCoverable.amount, currency: fixture.currency }));
 }
 
 async function ensureReceiptEligiblePayment(actor: InstitutionalContext, accountId: string): Promise<{ id: string; reference: string }> {
@@ -130,16 +143,16 @@ async function ensureReceiptEligiblePayment(actor: InstitutionalContext, account
     [actor.institutionId],
   );
   if (existing.rows[0]) {
-    await new FinancialDocumentEligibilityService(pool, createSyntheticUatFiscalAdapterRegistry()).requireReceipt(actor.institutionId, existing.rows[0].id);
+    if (!angolaPreviewMode) await new FinancialDocumentEligibilityService(pool, createSyntheticUatFiscalAdapterRegistry()).requireReceipt(actor.institutionId, existing.rows[0].id);
     return { id: existing.rows[0].id, reference: existing.rows[0].payment_reference };
   }
   const profiles = new PostgresFinancialProfileStore(pool);
   const payments = new PostgresPaymentRepository(pool);
   const result = await payments.confirmPaymentInCommand(actor, {
-    sourceType: 'manual_offline', method: 'cash', amount: '10.00', currency: 'EUR',
+    sourceType: 'manual_offline', method: 'cash', amount: '10.00', currency: fixture.currency,
     financialAccountId: accountId, payerPersonId: actor.personId, notes: 'UAT-F7-RECEIPT-SOURCE', effectiveAt: new Date().toISOString(),
   }, fixture.keys.receiptPayment, profiles);
-  await new FinancialDocumentEligibilityService(pool, createSyntheticUatFiscalAdapterRegistry()).requireReceipt(actor.institutionId, result.payment.id);
+  if (!angolaPreviewMode) await new FinancialDocumentEligibilityService(pool, createSyntheticUatFiscalAdapterRegistry()).requireReceipt(actor.institutionId, result.payment.id);
   return { id: result.payment.id, reference: result.payment.paymentReference };
 }
 
@@ -147,7 +160,7 @@ async function provision(): Promise<void> {
   const actor = await resolveActor();
   await ensureProfile(actor);
   await ensureLegalProfile(actor);
-  await ensureDocumentaryUatConfiguration(actor);
+  if (!angolaPreviewMode) await ensureDocumentaryUatConfiguration(actor);
   const existing = await pool.query<{ account_id: string; obligation_id: string; payment_reference: string }>(
     `SELECT account.id AS account_id, obligation.id AS obligation_id, payment.payment_reference
        FROM finance_financial_accounts account
@@ -160,8 +173,10 @@ async function provision(): Promise<void> {
   );
   if (existing.rows[0]) {
     await verifyFixture(actor, existing.rows[0].account_id, existing.rows[0].obligation_id, existing.rows[0].payment_reference);
-    const receiptPayment = await ensureReceiptEligiblePayment(actor, existing.rows[0].account_id);
-    console.log(JSON.stringify({ fixture: 'FINANCE_UAT_RECEIPT_SOURCE_READY', paymentReference: receiptPayment.reference, receiptEligibility: true, jurisdiction: 'NEXUS_TEST' }));
+    const receiptPayment = angolaPreviewMode
+      ? { id: '', reference: existing.rows[0].payment_reference }
+      : await ensureReceiptEligiblePayment(actor, existing.rows[0].account_id);
+    console.log(JSON.stringify({ fixture: angolaPreviewMode ? 'FINANCE_G02_AO_PREVIEW_SOURCE_READY' : 'FINANCE_UAT_RECEIPT_SOURCE_READY', paymentReference: receiptPayment.reference, receiptEligibility: !angolaPreviewMode, jurisdiction: angolaPreviewMode ? 'AO' : 'NEXUS_TEST', externalIssuance: angolaPreviewMode ? 'BLOCKED' : undefined }));
     return;
   }
   const profiles = new PostgresFinancialProfileStore(pool);
@@ -175,14 +190,16 @@ async function provision(): Promise<void> {
   const account = await accounts.create(actor, { name: fixture.accountName, primaryPersonId: actor.personId }, fixture.keys.account);
   const type = (await feeTypes.list(actor, 'active')).find((item) => item.codePrefix === 'PROP');
   if (!type) throw new Error('The canonical tuition fee type is unavailable.');
-  const fee = (await catalogue.create(actor, { feeTypeId: type.id, name: fixture.feeName, amount: '100.00', currency: 'EUR', effectiveFrom: new Date().toISOString() }, fixture.keys.fee)).result;
+  const fee = (await catalogue.create(actor, { feeTypeId: type.id, name: fixture.feeName, amount: '100.00', currency: fixture.currency, effectiveFrom: new Date().toISOString() }, fixture.keys.fee)).result;
   const obligation = await obligations.issue(actor, { financialAccountId: account.id, beneficiaryPersonId: actor.personId, feeCatalogueItemId: fee.id, sourceType: 'manual_finance', sourceRef: fixture.obligationRef, dueAt: fixture.dueAt }, fixture.keys.obligation);
-  const payment = (await payments.confirmPaymentInCommand(actor, { sourceType: 'manual_offline', method: 'cash', amount: '40.00', currency: 'EUR', financialAccountId: account.id, payerPersonId: actor.personId, notes: fixture.obligationRef, effectiveAt: fixture.effectiveAt }, fixture.keys.payment, profiles)).payment;
-  await allocations.confirmAllocationInCommand(actor, { paymentId: payment.id, effectiveAt: fixture.effectiveAt, lines: [{ obligationId: obligation.id, amount: '40.00', currency: 'EUR' }] }, fixture.keys.allocation);
+  const payment = (await payments.confirmPaymentInCommand(actor, { sourceType: 'manual_offline', method: 'cash', amount: '40.00', currency: fixture.currency, financialAccountId: account.id, payerPersonId: actor.personId, notes: fixture.obligationRef, effectiveAt: fixture.effectiveAt }, fixture.keys.payment, profiles)).payment;
+  await allocations.confirmAllocationInCommand(actor, { paymentId: payment.id, effectiveAt: fixture.effectiveAt, lines: [{ obligationId: obligation.id, amount: '40.00', currency: fixture.currency }] }, fixture.keys.allocation);
 
   await verifyFixture(actor, account.id, obligation.id, payment.paymentReference);
-  const receiptPayment = await ensureReceiptEligiblePayment(actor, account.id);
-  console.log(JSON.stringify({ fixture: 'FINANCE_UAT_RECEIPT_SOURCE_READY', paymentReference: receiptPayment.reference, receiptEligibility: true, jurisdiction: 'NEXUS_TEST' }));
+  const receiptPayment = angolaPreviewMode
+    ? { id: payment.id, reference: payment.paymentReference }
+    : await ensureReceiptEligiblePayment(actor, account.id);
+  console.log(JSON.stringify({ fixture: angolaPreviewMode ? 'FINANCE_G02_AO_PREVIEW_SOURCE_READY' : 'FINANCE_UAT_RECEIPT_SOURCE_READY', paymentReference: receiptPayment.reference, receiptEligibility: !angolaPreviewMode, jurisdiction: angolaPreviewMode ? 'AO' : 'NEXUS_TEST', externalIssuance: angolaPreviewMode ? 'BLOCKED' : undefined }));
 }
 
 provision().finally(() => pool.end()).catch((error) => {

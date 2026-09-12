@@ -31,6 +31,16 @@ const receiptEligibilityMessage = (reason?: string, canIssueDocument = false) =>
   return reason ? messages[reason] ?? 'Este pagamento não reúne os requisitos para emissão oficial.' : 'A emissão deste recibo ainda não está disponível.';
 };
 
+const receiptPreviewBlockMessage = (reason?: string | null) => ({
+  AGT_ONBOARDING_REQUIRED: 'A emissão oficial depende da adesão da instituição à AGT.',
+  AGT_SIGNING_MATERIAL_REQUIRED: 'A emissão oficial depende do material de assinatura autorizado pela AGT.',
+  AGT_PRODUCTION_SERIES_REQUIRED: 'A emissão oficial depende de uma série de recibos atribuída pela AGT.',
+  FISCAL_CONFIGURATION_NOT_EFFECTIVE: 'A configuração fiscal oficial ainda não está disponível para este pagamento.',
+  DOCUMENT_PARTY_REQUIRED: 'Ainda falta confirmar as partes obrigatórias do documento.',
+  DOCUMENTARY_DATA_REQUIRED: 'Ainda faltam dados documentais obrigatórios para emissão oficial.',
+  SOURCE_NOT_ELIGIBLE: 'Este pagamento não está elegível para emissão de recibo oficial.',
+}[reason ?? ''] ?? 'A emissão oficial permanece bloqueada até a instituição concluir os requisitos aplicáveis.');
+
 export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfiguration, onOpenFinancialDocuments, initialPaymentReference }: FinancePaymentsWorkspaceProps) {
   const [view, setView] = useState<PaymentSubView>('list');
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -107,7 +117,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
           canIssueReceipt={payment => receiptEligibility[payment.id]?.eligible === true}
           receiptBlockReason={payment => receiptEligibilityMessage(receiptEligibility[payment.id]?.reason, canIssueDocument)}
       />
-      {previewPayment && <section data-testid="receipt-pre-issue-preview" className="mt-4 rounded-lg border p-4 text-sm"><h3 className="font-semibold">Pré-visualização — ainda não emitido</h3><p>Recibo · Pagamento: {previewReadiness?.payment.reference ?? previewPayment.paymentReference}</p><p>Valor: {previewReadiness?.payment.amount ?? previewPayment.amount} {previewReadiness?.payment.currency ?? previewPayment.currency}</p><p>Estado do pagamento: Confirmado</p><p className="mt-2 text-zinc-600">{previewReadiness?.readiness.status === 'READY' && previewReadiness.sourceEligibility === 'ELIGIBLE' ? 'A emissão oficial pode ser confirmada.' : 'A emissão oficial permanece bloqueada até a instituição concluir a configuração fiscal junto da autoridade competente.'}</p></section>}
+      {previewPayment && <section data-testid="receipt-pre-issue-preview" className="mt-4 rounded-lg border p-4 text-sm"><h3 className="font-semibold">Pré-visualização — ainda não emitido</h3><p>Recibo · Pagamento: {previewReadiness?.payment.reference ?? previewPayment.paymentReference}</p><p>Data do pagamento: {new Date(previewReadiness?.payment.date ?? previewPayment.effectiveAt).toLocaleDateString('pt-PT')}</p><p>Valor: {previewReadiness?.payment.amount ?? previewPayment.amount} {previewReadiness?.payment.currency ?? previewPayment.currency}</p><p>Estado do pagamento: {previewReadiness?.payment.confirmationState === 'CONFIRMED' ? 'Confirmado' : 'Não confirmado'}</p><p>Emitente: {previewReadiness?.issuer?.legalName ?? 'Ainda não configurado'}</p><p>Pagador: {previewReadiness?.parties.payer ?? 'Ainda não identificado'}</p><p>Destinatário: {previewReadiness?.parties.recipient ?? 'Ainda não identificado'}</p><p>Fonte elegível: {previewReadiness?.sourceEligibility === 'ELIGIBLE' ? 'Sim' : 'Não'}</p><p>Número oficial: ainda não atribuído</p><p>Código QR oficial: ainda não disponível</p>{previewReadiness?.settlement && <div className="mt-2"><p className="font-medium">Liquidação:</p>{previewReadiness.settlement.allocations.map((allocation, index) => <p key={index}>Antes {allocation.before.amount} {allocation.before.currency} · Regularizado {allocation.movement.amount} {allocation.movement.currency} · Após {allocation.after.amount} {allocation.after.currency}</p>)}{previewReadiness.settlement.unallocated && <p>Valor não aplicado: {previewReadiness.settlement.unallocated.amount} {previewReadiness.settlement.unallocated.currency}</p>}</div>}<p className="mt-2 text-zinc-600">{previewReadiness?.readiness.status === 'READY' && previewReadiness.sourceEligibility === 'ELIGIBLE' ? 'A emissão oficial pode ser confirmada.' : receiptPreviewBlockMessage(previewReadiness?.blockingReason ?? previewReadiness?.readiness.reasonCode)}</p></section>}
       </>}
 
       {issuanceNotice && <div data-testid="financial-document-issuance-notice" className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><p>{issuanceNotice}</p>{onOpenFinancialDocuments && issuedDocumentId && <button type="button" onClick={() => onOpenFinancialDocuments(issuedDocumentId)} className="rounded-md border border-emerald-300 bg-white px-3 py-1 font-semibold text-emerald-800">Abrir documento financeiro</button>}</div>}
