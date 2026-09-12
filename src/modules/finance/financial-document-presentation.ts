@@ -15,6 +15,14 @@ export type CanonicalFinancialDocumentPresentation = Readonly<{
 
 export type IssuedDocumentRecord = Readonly<{ documentType: string; seriesCode: string; sequenceNumber: number; issuedAt: Date; status: 'issued' }>;
 
+/** AGT QR rendering belongs to the issued artifact boundary, never to a preview. */
+export function requireIssuedAngolaQrInputs(input: { issued: boolean; issuerTaxIdentifier: string | null; officialDocumentNumber: string }) {
+  if (!input.issued) throw new Error('ISSUED_DOCUMENT_REQUIRED');
+  if (!input.issuerTaxIdentifier?.trim()) throw new Error('ISSUER_TAX_IDENTIFIER_REQUIRED');
+  if (!input.officialDocumentNumber.trim()) throw new Error('OFFICIAL_DOCUMENT_NUMBER_REQUIRED');
+  return Object.freeze({ issuerTaxIdentifier: input.issuerTaxIdentifier, officialDocumentNumber: input.officialDocumentNumber });
+}
+
 const documentTermKey = (documentType: string): ProductTermKey => {
   const key = `financial_document.${documentType}` as ProductTermKey;
   return productTerm(key) ? key : 'financial_document.receipt';
