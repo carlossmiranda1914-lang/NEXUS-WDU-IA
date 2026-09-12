@@ -29,6 +29,7 @@ import { registerStudentContextRoutes } from './src/modules/student-context/stud
 import { registerIamRoutes } from './src/modules/iam/iam.controller.ts';
 import { registerDocumentRoutes } from './src/modules/documents/document.controller.ts';
 import { resolveDocumentsOperationalConfig } from './src/modules/documents/documents-runtime-config.ts';
+import { ConfigurableDocumentAccessPolicyEngine } from './src/modules/documents/document-access-policy.ts';
 import { SchoolTaskWebSocketManager } from './src/modules/school-tasks/websocket-manager.ts';
 import { eventBus } from './src/modules/school-tasks/event-bus.ts';
 import { registerSchoolTaskRealtimeBridge } from './src/modules/school-tasks/realtime-bridge.ts';
@@ -3543,7 +3544,19 @@ async function startServer() {
   registerEnrollmentRoutes(app);
   registerStudentContextRoutes(app);
   registerIamRoutes(app);
-  registerDocumentRoutes(app, resolveDocumentsOperationalConfig());
+  registerDocumentRoutes(
+    app,
+    resolveDocumentsOperationalConfig({
+      customPolicyEngine: new ConfigurableDocumentAccessPolicyEngine([
+        { role: 'institution_admin', category: '*', allowedActions: ['open_content', 'download_content'] },
+        { role: 'teacher', category: '*', allowedActions: ['open_content', 'download_content'] },
+        { role: 'admin', category: '*', allowedActions: ['open_content', 'download_content'] },
+        { role: 'staff', category: '*', allowedActions: ['open_content', 'download_content'] },
+        { role: 'director', category: '*', allowedActions: ['open_content', 'download_content'] },
+        { role: 'secretariat', category: '*', allowedActions: ['open_content', 'download_content'] },
+      ]),
+    }),
+  );
 
   // FND-02 CP2: legacy mutation bodies are retained temporarily for forensic
   // rollback only, but are deliberately not mounted. The modular controller

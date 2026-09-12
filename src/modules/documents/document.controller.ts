@@ -1,4 +1,5 @@
 import type { Application, RequestHandler, Response } from 'express';
+import { Readable } from 'node:stream';
 import { pool } from '../../db/index.ts';
 import { requireAuth, type AuthRequest } from '../../middleware/auth.ts';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
@@ -676,13 +677,24 @@ export function registerDocumentRoutes(
       const declaredSize = Number(row.declared_byte_size);
 
       // 5. Stream transfer through storageProvider
+      let inputStream: Readable = req;
+      if (req.readableEnded && (req as any).body !== undefined) {
+        const body = (req as any).body;
+        const bodyBuf = Buffer.isBuffer(body)
+          ? body
+          : typeof body === 'string'
+            ? Buffer.from(body)
+            : Buffer.from(JSON.stringify(body));
+        inputStream = Readable.from(bodyBuf);
+      }
+
       let transferResult: { byteSize: number; sha256Hash: string; mimeType: string };
       if (typeof storageProvider.writeObjectStream === 'function') {
         transferResult = await storageProvider.writeObjectStream({
           institutionId: context.institutionId,
           storageBucket: row.storage_bucket,
           storageKey: row.storage_key,
-          stream: req,
+          stream: inputStream,
           declaredByteSize: declaredSize,
           mimeType: req.header('content-type') || row.declared_mime_type,
         });
