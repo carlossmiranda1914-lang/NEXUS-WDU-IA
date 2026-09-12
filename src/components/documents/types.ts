@@ -120,3 +120,17 @@ export interface DocumentListResponse {
 }
 
 export type DetailDrawerTab = 'info' | 'versions' | 'associations' | 'activity';
+
+export interface DocumentOperationalAvailability {
+  canAccess: boolean;
+  canUpload: boolean;
+  canHold: boolean;
+  canDelete: boolean;
+}
+
+export interface DocumentTaxonomyDto {
+  categories: Array<{ id: string; code: string; label: string }>;
+  classifications: Array<{ id: string; code: string; label: string }>;
+  supportedMimeTypes: string[];
+  operationalAvailability?: DocumentOperationalAvailability;
+}

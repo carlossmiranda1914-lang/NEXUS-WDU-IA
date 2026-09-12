@@ -14,8 +14,8 @@ import {
   X,
   SlidersHorizontal,
 } from 'lucide-react';
-import type { Theme, DocumentDto, DocumentListFilterState } from './types.ts';
-import { fetchDocuments, fetchDocumentDetail } from './api.ts';
+import type { Theme, DocumentDto, DocumentListFilterState, DocumentTaxonomyDto } from './types.ts';
+import { fetchDocuments, fetchDocumentDetail, fetchDocumentTaxonomy } from './api.ts';
 import DocumentTable from './DocumentTable.tsx';
 import DocumentDetailDrawer from './DocumentDetailDrawer.tsx';
 import DocumentUploadModal from './DocumentUploadModal.tsx';
@@ -30,6 +30,9 @@ interface DocumentsWorkspaceProps {
 
 export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspaceProps) {
   const isLight = theme === 'light';
+
+  // Governed Metadata & Operational Availability State
+  const [taxonomy, setTaxonomy] = useState<DocumentTaxonomyDto | null>(null);
 
   // Filters State
   const [filters, setFilters] = useState<DocumentListFilterState>({
@@ -71,6 +74,29 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
   const abortControllerRef = useRef<AbortController | null>(null);
   const selectedDocumentIdRef = useRef<string | null>(null);
   selectedDocumentIdRef.current = selectedDocument?.id ?? null;
+
+  // Load canonical metadata and operational availability once on workspace mount
+  useEffect(() => {
+    let isMounted = true;
+    const metaController = new AbortController();
+
+    fetchDocumentTaxonomy(metaController.signal)
+      .then((data) => {
+        if (isMounted) {
+          setTaxonomy(data);
+        }
+      })
+      .catch(() => {
+        // Fail closed safely if metadata endpoint fails
+      });
+
+    return () => {
+      isMounted = false;
+      metaController.abort();
+    };
+  }, []);
+
+  const operationalAvailability = taxonomy?.operationalAvailability;
 
   const loadData = useCallback(async () => {
     abortControllerRef.current?.abort();
@@ -245,13 +271,40 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
           <button
             type="button"
             onClick={handleOpenUploadNew}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-700/20 active:scale-[0.98] cursor-pointer"
+            disabled={operationalAvailability?.canUpload === false}
+            title={
+              operationalAvailability?.canUpload === false
+                ? 'Carregamento documental ainda não está configurado nesta instalação.'
+                : 'Carregar Documento'
+            }
+            className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md active:scale-[0.98] ${
+              operationalAvailability?.canUpload === false
+                ? 'bg-zinc-700/50 text-zinc-400 cursor-not-allowed opacity-50 shadow-none'
+                : 'bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-700/20 cursor-pointer'
+            }`}
           >
             <Plus className="w-4 h-4" />
             <span>Carregar Documento</span>
           </button>
         </div>
       </header>
+
+      {/* Informative Availability Banner when operational dependencies are unconfigured */}
+      {operationalAvailability && operationalAvailability.canUpload === false && (
+        <div
+          data-testid="operational-availability-banner"
+          className={`flex items-start gap-3 p-3.5 rounded-xl border text-xs leading-relaxed ${
+            isLight
+              ? 'bg-amber-50/80 border-amber-200 text-amber-900'
+              : 'bg-amber-950/20 border-amber-800/40 text-amber-300'
+          }`}
+        >
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+          <div>
+            <span className="font-bold">Modo de Consulta Ativo:</span> O carregamento documental ainda não está configurado nesta instalação. A consulta de documentos, metadados e histórico de versões permanece disponível.
+          </div>
+        </div>
+      )}
 
       {/* 2. CATEGORY TABS (DYNAMICALLY DISCOVERED) */}
       <nav
@@ -469,6 +522,7 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
         loading={loading}
         theme={theme}
         selectedDocumentId={selectedDocument?.id ?? null}
+        operationalAvailability={operationalAvailability}
         onSelectDocument={handleSelectDocument}
         onOpenAccessViewer={handleOpenAccessViewer}
         onOpenUploadVersion={handleOpenUploadVersion}
@@ -528,6 +582,7 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
         isOpen={isDrawerOpen}
         theme={theme}
         document={selectedDocument}
+        operationalAvailability={operationalAvailability}
         onClose={handleCloseDrawer}
         onOpenUploadVersion={handleOpenUploadVersion}
         onOpenAccessViewer={handleOpenAccessViewer}
@@ -541,6 +596,7 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
         isOpen={isUploadModalOpen}
         theme={theme}
         targetDocument={uploadTargetDoc}
+        operationalAvailability={operationalAvailability}
         onClose={() => setIsUploadModalOpen(false)}
         onSuccess={(docId) => {
           void loadData();
@@ -561,6 +617,7 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
           document={selectedDocument}
           mode={holdModalMode}
           targetHold={selectedDocument.activeHolds[0] || null}
+          operationalAvailability={operationalAvailability}
           onClose={() => setIsHoldModalOpen(false)}
           onSuccess={() => void loadData()}
         />
@@ -572,6 +629,7 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
           isOpen={isDeletionModalOpen}
           theme={theme}
           document={selectedDocument}
+          operationalAvailability={operationalAvailability}
           onClose={() => setIsDeletionModalOpen(false)}
           onSuccess={() => {
             handleCloseDrawer();

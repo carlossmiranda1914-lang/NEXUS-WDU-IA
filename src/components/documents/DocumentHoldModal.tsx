@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Shield, X, AlertCircle, CheckCircle2, Lock, Unlock, Loader2 } from 'lucide-react';
-import type { Theme, DocumentDto, HoldDto } from './types.ts';
+import type { Theme, DocumentDto, HoldDto, DocumentOperationalAvailability } from './types.ts';
 import { placeHold, releaseHold, generateIdempotencyKey } from './api.ts';
 
 interface DocumentHoldModalProps {
@@ -9,6 +9,7 @@ interface DocumentHoldModalProps {
   document: DocumentDto;
   mode: 'place' | 'release';
   targetHold?: HoldDto | null;
+  operationalAvailability?: DocumentOperationalAvailability;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -19,10 +20,12 @@ export default function DocumentHoldModal({
   document,
   mode,
   targetHold,
+  operationalAvailability,
   onClose,
   onSuccess,
 }: DocumentHoldModalProps) {
   const isLight = theme === 'light';
+  const isHoldUnavailable = operationalAvailability?.canHold === false;
 
   const [holdType, setHoldType] = useState<'legal' | 'administrative'>('legal');
   const [authority, setAuthority] = useState('');
@@ -49,6 +52,10 @@ export default function DocumentHoldModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isHoldUnavailable) {
+      setErrorMessage('A gestão de retenção e bloqueios ainda não está configurada nesta instalação.');
+      return;
+    }
     setErrorMessage(null);
     setLoading(true);
 
@@ -264,7 +271,14 @@ export default function DocumentHoldModal({
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || isHoldUnavailable}
+              title={
+                isHoldUnavailable
+                  ? 'A gestão de retenção e bloqueios ainda não está configurada nesta instalação.'
+                  : mode === 'place'
+                  ? 'Aplicar Bloqueio'
+                  : 'Libertar Bloqueio'
+              }
               className={`px-5 py-2.5 rounded-lg text-xs font-bold text-white transition-all cursor-pointer flex items-center gap-1.5 ${
                 mode === 'place'
                   ? 'bg-amber-600 hover:bg-amber-500'

@@ -7,7 +7,10 @@ import type {
   UploadSessionDto,
   DocumentVersionDto,
   HoldDto,
+  DocumentTaxonomyDto,
 } from './types.ts';
+
+export type { DocumentTaxonomyDto };
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const user = auth.currentUser;
@@ -94,11 +97,6 @@ export async function fetchDocumentActivity(
   return Array.isArray(data.items) ? data.items : [];
 }
 
-export interface DocumentTaxonomyDto {
-  categories: Array<{ id: string; code: string; label: string }>;
-  classifications: Array<{ id: string; code: string; label: string }>;
-  supportedMimeTypes: string[];
-}
 
 export async function fetchDocumentTaxonomy(signal?: AbortSignal): Promise<DocumentTaxonomyDto> {
   const headers = await getAuthHeaders();

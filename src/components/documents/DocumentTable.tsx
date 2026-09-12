@@ -13,7 +13,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import type { Theme, DocumentDto } from './types.ts';
+import type { Theme, DocumentDto, DocumentOperationalAvailability } from './types.ts';
 import {
   formatByteSize,
   formatDate,
@@ -29,6 +29,7 @@ interface DocumentTableProps {
   loading: boolean;
   theme: Theme;
   selectedDocumentId: string | null;
+  operationalAvailability?: DocumentOperationalAvailability;
   onSelectDocument: (doc: DocumentDto) => void;
   onOpenAccessViewer: (doc: DocumentDto, action: 'open' | 'download') => void;
   onOpenUploadVersion: (doc: DocumentDto) => void;
@@ -41,6 +42,7 @@ export default function DocumentTable({
   loading,
   theme,
   selectedDocumentId,
+  operationalAvailability,
   onSelectDocument,
   onOpenAccessViewer,
   onOpenUploadVersion,
@@ -237,14 +239,20 @@ export default function DocumentTable({
                     <div className="inline-flex items-center gap-1.5">
                       <button
                         type="button"
-                        disabled={!doc.capabilities.canOpen || isDeleted || isQuarantined}
+                        disabled={!doc.capabilities.canOpen || operationalAvailability?.canAccess === false || isDeleted || isQuarantined}
                         onClick={() => onOpenAccessViewer(doc, 'open')}
                         className={`p-2 rounded-lg border transition-all cursor-pointer ${
                           isLight
                             ? 'border-zinc-200 hover:bg-zinc-100 text-zinc-700'
                             : 'border-white/10 hover:bg-white/5 text-zinc-300'
                         } disabled:opacity-30 disabled:cursor-not-allowed`}
-                        title={!doc.capabilities.canOpen ? 'Acesso indisponível' : 'Visualizar Documento'}
+                        title={
+                          operationalAvailability?.canAccess === false
+                            ? 'Acesso/visualização ainda não configurado nesta instalação'
+                            : !doc.capabilities.canOpen
+                            ? 'Acesso não autorizado pela política'
+                            : 'Visualizar Documento'
+                        }
                         aria-label="Visualizar Documento"
                       >
                         <Eye className="w-4 h-4 text-emerald-600" />
@@ -252,14 +260,20 @@ export default function DocumentTable({
 
                       <button
                         type="button"
-                        disabled={!doc.capabilities.canDownload || isDeleted || isQuarantined}
+                        disabled={!doc.capabilities.canDownload || operationalAvailability?.canAccess === false || isDeleted || isQuarantined}
                         onClick={() => onOpenAccessViewer(doc, 'download')}
                         className={`p-2 rounded-lg border transition-all cursor-pointer ${
                           isLight
                             ? 'border-zinc-200 hover:bg-zinc-100 text-zinc-700'
                             : 'border-white/10 hover:bg-white/5 text-zinc-300'
                         } disabled:opacity-30 disabled:cursor-not-allowed`}
-                        title="Descarregar Documento"
+                        title={
+                          operationalAvailability?.canAccess === false
+                            ? 'Download ainda não configurado nesta instalação'
+                            : !doc.capabilities.canDownload
+                            ? 'Download não autorizado pela política'
+                            : 'Descarregar Documento'
+                        }
                         aria-label="Descarregar Documento"
                       >
                         <Download className="w-4 h-4 text-emerald-600" />

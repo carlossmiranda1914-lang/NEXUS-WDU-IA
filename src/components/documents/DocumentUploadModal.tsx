@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Clock,
 } from 'lucide-react';
-import type { Theme, DocumentDto } from './types.ts';
+import type { Theme, DocumentDto, DocumentOperationalAvailability, DocumentTaxonomyDto } from './types.ts';
 import {
   createUploadSession,
   transferSessionBytes,
@@ -18,7 +18,6 @@ import {
   generateIdempotencyKey,
   fetchDocumentTaxonomy,
   type CreateUploadSessionInput,
-  type DocumentTaxonomyDto,
 } from './api.ts';
 import { formatByteSize, getCategoryLabel } from './utils.ts';
 
@@ -26,6 +25,7 @@ interface DocumentUploadModalProps {
   isOpen: boolean;
   theme: Theme;
   targetDocument?: DocumentDto | null;
+  operationalAvailability?: DocumentOperationalAvailability;
   onClose: () => void;
   onSuccess: (documentId: string) => void;
 }
@@ -44,6 +44,7 @@ export default function DocumentUploadModal({
   isOpen,
   theme,
   targetDocument,
+  operationalAvailability,
   onClose,
   onSuccess,
 }: DocumentUploadModalProps) {
@@ -84,9 +85,12 @@ export default function DocumentUploadModal({
     }
   }, [isOpen, targetDocument]);
 
-  if (!isOpen) return null;
+  const isUploadUnavailable =
+    operationalAvailability?.canUpload === false ||
+    taxonomy?.operationalAvailability?.canUpload === false;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isUploadUnavailable) return;
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setSelectedFile(file);
@@ -96,6 +100,7 @@ export default function DocumentUploadModal({
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
+    if (isUploadUnavailable) return;
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       setSelectedFile(file);
@@ -104,6 +109,10 @@ export default function DocumentUploadModal({
   };
 
   const handleStartUpload = async () => {
+    if (isUploadUnavailable) {
+      setErrorMessage('Carregamento documental ainda não está configurado nesta instalação.');
+      return;
+    }
     if (!selectedFile) {
       setErrorMessage('Por favor selecione um ficheiro.');
       return;
@@ -228,22 +237,35 @@ export default function DocumentUploadModal({
         </div>
 
         <div className="mt-5 space-y-4">
+          {isUploadUnavailable && (
+            <div className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Aviso de Configuração:</p>
+                <p className="mt-0.5 leading-relaxed">Carregamento documental ainda não está configurado nesta instalação.</p>
+              </div>
+            </div>
+          )}
+
           {/* File Picker Area */}
           {step === 'select' && (
             <>
               <div
-                onDragOver={(e) => e.preventDefault()}
+                onDragOver={(e) => !isUploadUnavailable && e.preventDefault()}
                 onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
-                  isLight
-                    ? 'border-zinc-300 hover:border-emerald-600 bg-slate-50'
-                    : 'border-white/10 hover:border-emerald-500 bg-zinc-950/50'
+                onClick={() => !isUploadUnavailable && fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${
+                  isUploadUnavailable
+                    ? 'border-zinc-300/40 bg-zinc-100/40 dark:bg-zinc-900/40 opacity-60 cursor-not-allowed'
+                    : isLight
+                    ? 'border-zinc-300 hover:border-emerald-600 bg-slate-50 cursor-pointer'
+                    : 'border-white/10 hover:border-emerald-500 bg-zinc-950/50 cursor-pointer'
                 }`}
               >
                 <input
                   ref={fileInputRef}
                   type="file"
+                  disabled={isUploadUnavailable}
                   onChange={handleFileChange}
                   className="hidden"
                 />
@@ -457,7 +479,12 @@ export default function DocumentUploadModal({
             <button
               type="button"
               onClick={handleStartUpload}
-              disabled={!selectedFile}
+              disabled={!selectedFile || isUploadUnavailable}
+              title={
+                isUploadUnavailable
+                  ? 'Carregamento documental ainda não está configurado nesta instalação.'
+                  : 'Iniciar Upload'
+              }
               className="px-5 py-2.5 rounded-lg text-xs font-bold bg-emerald-700 hover:bg-emerald-600 text-white transition-all cursor-pointer disabled:opacity-40"
             >
               Iniciar Upload

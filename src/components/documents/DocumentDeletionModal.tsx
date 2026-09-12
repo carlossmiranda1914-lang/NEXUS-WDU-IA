@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Trash2, X, AlertCircle, AlertTriangle, ShieldCheck, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
-import type { Theme, DocumentDto } from './types.ts';
+import type { Theme, DocumentDto, DocumentOperationalAvailability } from './types.ts';
 import { authorizeDeletion, executeDeletion, reconcileDeletion, generateIdempotencyKey } from './api.ts';
 
 interface DocumentDeletionModalProps {
   isOpen: boolean;
   theme: Theme;
   document: DocumentDto;
+  operationalAvailability?: DocumentOperationalAvailability;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -17,10 +18,12 @@ export default function DocumentDeletionModal({
   isOpen,
   theme,
   document,
+  operationalAvailability,
   onClose,
   onSuccess,
 }: DocumentDeletionModalProps) {
   const isLight = theme === 'light';
+  const isDeleteUnavailable = operationalAvailability?.canDelete === false;
 
   const [stage, setStage] = useState<DeletionStage>('confirm');
   const [authorizationId, setAuthorizationId] = useState<string | null>(null);
@@ -49,6 +52,10 @@ export default function DocumentDeletionModal({
   if (!isOpen) return null;
 
   const handleAuthorize = async () => {
+    if (isDeleteUnavailable) {
+      setErrorMessage('Eliminação governada ainda não está configurada nesta instalação.');
+      return;
+    }
     setLoading(true);
     setErrorMessage(null);
     setStage('authorizing');
@@ -268,7 +275,12 @@ export default function DocumentDeletionModal({
             <button
               type="button"
               onClick={handleAuthorize}
-              disabled={loading}
+              disabled={loading || isDeleteUnavailable}
+              title={
+                isDeleteUnavailable
+                  ? 'Eliminação governada ainda não está configurada nesta instalação.'
+                  : 'Autorizar Eliminação'
+              }
               className="px-5 py-2.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

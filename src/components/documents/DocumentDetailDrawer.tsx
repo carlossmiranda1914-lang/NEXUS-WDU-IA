@@ -23,8 +23,11 @@ import {
   Check,
   RefreshCw,
 } from 'lucide-react';
-import type { Theme, DocumentDto, ActivityDto, DetailDrawerTab, DocumentVersionDto } from './types.ts';
-import { fetchDocumentActivity, fetchDocumentDetail, fetchDocumentVersions } from './api.ts';
+import type { Theme, DocumentDto, ActivityDto, DetailDrawerTab, DocumentVersionDto, DocumentOperationalAvailability } from './types.ts';
+import {
+  fetchDocumentActivity,
+  fetchDocumentVersions,
+} from './api.ts';
 import {
   formatByteSize,
   formatDate,
@@ -39,6 +42,7 @@ interface DocumentDetailDrawerProps {
   isOpen: boolean;
   theme: Theme;
   document: DocumentDto | null;
+  operationalAvailability?: DocumentOperationalAvailability;
   onClose: () => void;
   onOpenUploadVersion: (doc: DocumentDto) => void;
   onOpenAccessViewer: (doc: DocumentDto, action: 'open' | 'download') => void;
@@ -51,6 +55,7 @@ export default function DocumentDetailDrawer({
   isOpen,
   theme,
   document: initialDoc,
+  operationalAvailability,
   onClose,
   onOpenUploadVersion,
   onOpenAccessViewer,
@@ -176,49 +181,67 @@ export default function DocumentDetailDrawer({
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <button
             type="button"
-            disabled={!docDetail.capabilities.canOpen || isDeleted || isQuarantined}
+            disabled={!docDetail.capabilities.canOpen || operationalAvailability?.canAccess === false || isDeleted || isQuarantined}
             onClick={() => onOpenAccessViewer(docDetail, 'open')}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
               isLight
                 ? 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-800'
                 : 'border-white/10 bg-zinc-800 hover:bg-white/5 text-zinc-200'
             } disabled:opacity-40 disabled:cursor-not-allowed`}
-            title={!docDetail.capabilities.canOpen ? 'Visualização não autorizada pela política' : 'Visualizar documento'}
+            title={
+              operationalAvailability?.canAccess === false
+                ? 'Visualização ainda não está configurada nesta instalação.'
+                : !docDetail.capabilities.canOpen
+                ? 'Visualização não autorizada pela política'
+                : 'Visualizar documento'
+            }
           >
             <Eye className="w-3.5 h-3.5 text-emerald-600" /> Visualizar
           </button>
 
           <button
             type="button"
-            disabled={!docDetail.capabilities.canDownload || isDeleted || isQuarantined}
+            disabled={!docDetail.capabilities.canDownload || operationalAvailability?.canAccess === false || isDeleted || isQuarantined}
             onClick={() => onOpenAccessViewer(docDetail, 'download')}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
               isLight
                 ? 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-800'
                 : 'border-white/10 bg-zinc-800 hover:bg-white/5 text-zinc-200'
             } disabled:opacity-40 disabled:cursor-not-allowed`}
-            title={!docDetail.capabilities.canDownload ? 'Download não autorizado pela política' : 'Download seguro'}
+            title={
+              operationalAvailability?.canAccess === false
+                ? 'Download ainda não está configurado nesta instalação.'
+                : !docDetail.capabilities.canDownload
+                ? 'Download não autorizado pela política'
+                : 'Download seguro'
+            }
           >
             <Download className="w-3.5 h-3.5 text-emerald-600" /> Descarregar
           </button>
 
           <button
             type="button"
-            disabled={!docDetail.capabilities.canUploadVersion || isDeleted || isQuarantined}
+            disabled={!docDetail.capabilities.canUploadVersion || operationalAvailability?.canUpload === false || isDeleted || isQuarantined}
             onClick={() => onOpenUploadVersion(docDetail)}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
               isLight
                 ? 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-800'
                 : 'border-white/10 bg-zinc-800 hover:bg-white/5 text-zinc-200'
             } disabled:opacity-40 disabled:cursor-not-allowed`}
-            title={!docDetail.capabilities.canUploadVersion ? 'Sem autorização para carregar nova versão' : 'Carregar Nova Versão'}
+            title={
+              operationalAvailability?.canUpload === false
+                ? 'Carregamento documental ainda não está configurado nesta instalação.'
+                : !docDetail.capabilities.canUploadVersion
+                ? 'Sem autorização para carregar nova versão'
+                : 'Carregar Nova Versão'
+            }
           >
             <Upload className="w-3.5 h-3.5 text-blue-500" /> Nova Versão
           </button>
 
           <button
             type="button"
-            disabled={hasActiveHolds ? !docDetail.capabilities.canReleaseHold : !docDetail.capabilities.canPlaceHold || isDeleted}
+            disabled={(hasActiveHolds ? !docDetail.capabilities.canReleaseHold : !docDetail.capabilities.canPlaceHold) || operationalAvailability?.canHold === false || isDeleted}
             onClick={() => onOpenHoldModal(docDetail, hasActiveHolds ? 'release' : 'place')}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
               hasActiveHolds
@@ -228,7 +251,9 @@ export default function DocumentDetailDrawer({
                 : 'border-white/10 bg-zinc-800 hover:bg-white/5 text-zinc-200'
             } disabled:opacity-40 disabled:cursor-not-allowed`}
             title={
-              hasActiveHolds
+              operationalAvailability?.canHold === false
+                ? 'Gestão de retenção e bloqueios ainda não está configurada nesta instalação.'
+                : hasActiveHolds
                 ? !docDetail.capabilities.canReleaseHold
                   ? 'Sem autoridade para libertar bloqueio'
                   : 'Libertar Bloqueio de Retenção'
@@ -243,11 +268,13 @@ export default function DocumentDetailDrawer({
 
           <button
             type="button"
-            disabled={!(docDetail.capabilities.canAuthorizeDeletion || docDetail.capabilities.canExecuteDeletion) || hasActiveHolds || isDeleted}
+            disabled={!(docDetail.capabilities.canAuthorizeDeletion || docDetail.capabilities.canExecuteDeletion) || operationalAvailability?.canDelete === false || hasActiveHolds || isDeleted}
             onClick={() => onOpenDeletionModal(docDetail)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-rose-500/20 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             title={
-              hasActiveHolds
+              operationalAvailability?.canDelete === false
+                ? 'Eliminação governada ainda não está configurada nesta instalação.'
+                : hasActiveHolds
                 ? 'Eliminação bloqueada: documento possui bloqueio de retenção ativo'
                 : isDeleted
                 ? 'Documento já eliminado'
@@ -492,10 +519,16 @@ export default function DocumentDetailDrawer({
               </span>
               <button
                 type="button"
-                disabled={!docDetail.capabilities.canUploadVersion || isDeleted || isQuarantined}
+                disabled={!docDetail.capabilities.canUploadVersion || operationalAvailability?.canUpload === false || isDeleted || isQuarantined}
                 onClick={() => onOpenUploadVersion(docDetail)}
                 className="text-xs font-bold text-emerald-600 hover:underline flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline cursor-pointer"
-                title={!docDetail.capabilities.canUploadVersion ? 'Sem autorização para carregar nova versão' : 'Carregar Nova Versão'}
+                title={
+                  operationalAvailability?.canUpload === false
+                    ? 'Carregamento documental ainda não está configurado nesta instalação.'
+                    : !docDetail.capabilities.canUploadVersion
+                    ? 'Sem autorização para carregar nova versão'
+                    : 'Carregar Nova Versão'
+                }
               >
                 <Upload className="w-3.5 h-3.5" /> Carregar Nova Versão
               </button>

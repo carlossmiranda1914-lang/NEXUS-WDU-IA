@@ -555,6 +555,126 @@ try {
     client5.release();
   }
 
+  console.log('[TEST 9] METADATA_OPERATIONAL_AVAILABILITY_AND_FRONTEND_GATES (P1-1 & UI Contract)');
+  // 1. Configured app returns operationalAvailability = all true
+  const t9MetaRes = await request('/api/documents/metadata');
+  assert.equal(t9MetaRes.status, 200);
+  const t9MetaData = (await t9MetaRes.json()) as any;
+  assert.ok(Array.isArray(t9MetaData.categories));
+  assert.ok(Array.isArray(t9MetaData.classifications));
+  assert.ok(Array.isArray(t9MetaData.supportedMimeTypes));
+  assert.deepEqual(t9MetaData.operationalAvailability, {
+    canAccess: true,
+    canUpload: true,
+    canHold: true,
+    canDelete: true,
+  });
+
+  // 2. Spin unconfigured app instance without dependencies to verify fail-closed operational availability contract
+  const unconfiguredApp = express();
+  unconfiguredApp.use(express.json());
+  registerDocumentRoutes(unconfiguredApp, {
+    pool,
+    requireAuth: authMiddleware,
+    // No storageProvider, no policyEngine, no retentionPolicyEngine, no keys
+  });
+
+  const unconfiguredServer = http.createServer(unconfiguredApp);
+  await new Promise<void>((res) => unconfiguredServer.listen(0, '127.0.0.1', () => res()));
+  const unconfPort = (unconfiguredServer.address() as any).port;
+  const unconfBaseUrl = `http://127.0.0.1:${unconfPort}`;
+
+  const unconfRequest = async (path: string, options: { method?: string; headers?: Record<string, string>; body?: unknown } = {}) => {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer mock-token`,
+      ...(options.headers || {}),
+    };
+    if (options.body && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
+    const res = await fetch(`${unconfBaseUrl}${path}`, {
+      method: options.method || 'GET',
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+    return res;
+  };
+
+  try {
+    // 2.1 Metadata reflects all false for operational availability
+    const unconfMetaRes = await unconfRequest('/api/documents/metadata');
+    assert.equal(unconfMetaRes.status, 200);
+    const unconfMetaData = (await unconfMetaRes.json()) as any;
+    assert.deepEqual(unconfMetaData.operationalAvailability, {
+      canAccess: false,
+      canUpload: false,
+      canHold: false,
+      canDelete: false,
+    });
+
+    // 2.2 READ_ONLY_DOCUMENTS_WORKSPACE: list, detail, activity, versions queries remain 200 OK
+    const unconfListRes = await unconfRequest('/api/documents?page=1&limit=20');
+    assert.equal(unconfListRes.status, 200, 'List query must remain functional');
+    const unconfListData = (await unconfListRes.json()) as any;
+    assert.ok(unconfListData.items.length >= 1);
+    // Capabilities in list items evaluate canOpen/canDownload to false
+    assert.equal(unconfListData.items[0].capabilities.canOpen, false, 'canOpen must fail closed');
+    assert.equal(unconfListData.items[0].capabilities.canDownload, false, 'canDownload must fail closed');
+
+    const unconfDetailRes = await unconfRequest(`/api/documents/${documentId}`);
+    assert.equal(unconfDetailRes.status, 200, 'Detail query must remain functional');
+    const unconfDetailData = (await unconfDetailRes.json()) as any;
+    assert.equal(unconfDetailData.capabilities.canOpen, false);
+    assert.equal(unconfDetailData.capabilities.canDownload, false);
+
+    const unconfActRes = await unconfRequest(`/api/documents/${documentId}/activity`);
+    assert.equal(unconfActRes.status, 200, 'Activity query must remain functional');
+
+    const unconfVerRes = await unconfRequest(`/api/documents/${documentId}/versions`);
+    assert.equal(unconfVerRes.status, 200, 'Versions query must remain functional');
+
+    // 2.3 CAN_UPLOAD_FALSE: Upload mutation fails closed (503)
+    const unconfUploadRes = await unconfRequest('/api/documents/upload-sessions', {
+      method: 'POST',
+      body: {
+        category: 'academic',
+        declaredFilename: 'test.pdf',
+        declaredMimeType: 'application/pdf',
+        declaredByteSize: 1024,
+        idempotencyKey: `idem-unconf-upload-${randomUUID()}`,
+      },
+    });
+    assert.equal(unconfUploadRes.status, 503, 'Upload session must fail closed');
+
+    // 2.4 CAN_ACCESS_FALSE: Access authorization fails closed (503)
+    const unconfAccessRes = await unconfRequest(`/api/documents/${documentId}/access`, {
+      method: 'POST',
+      body: { action: 'open', idempotencyKey: `idem-unconf-acc-${randomUUID()}` },
+    });
+    assert.equal(unconfAccessRes.status, 503, 'Access authorization must fail closed');
+
+    // 2.5 CAN_HOLD_FALSE: Place hold fails closed (503)
+    const unconfHoldRes = await unconfRequest(`/api/documents/${documentId}/holds`, {
+      method: 'POST',
+      body: {
+        holdType: 'legal',
+        authority: 'Tribunal',
+        reason: 'Processo',
+        idempotencyKey: `idem-unconf-hold-${randomUUID()}`,
+      },
+    });
+    assert.equal(unconfHoldRes.status, 503, 'Hold placement must fail closed');
+
+    // 2.6 CAN_DELETE_FALSE: Deletion authorization fails closed (503)
+    const unconfDelRes = await unconfRequest(`/api/documents/${documentId}/deletion/authorize`, {
+      method: 'POST',
+      body: { idempotencyKey: `idem-unconf-del-${randomUUID()}` },
+    });
+    assert.equal(unconfDelRes.status, 503, 'Deletion authorization must fail closed');
+  } finally {
+    unconfiguredServer.close();
+  }
+
   console.log('[DOCUMENTS-UI-TEST] All UI & Workspace API integration scenarios PASSED.');
 } finally {
   if (server) {
