@@ -21,8 +21,40 @@ test('Finance readiness client dispatches through a receiver-safe default fetch 
 });
 
 test('Finance readiness client preserves safe authorization errors', async () => {
-  const client = new FinanceReadinessClient(async () => ({ ok: false, status: 403 }) as Response, async () => null);
+  const client = new FinanceReadinessClient(async () => ({ ok: false, status: 403 }) as Response, async () => 'token');
   await assert.rejects(() => client.get(), /FINANCE_READINESS_FORBIDDEN/);
+});
+
+test('Finance readiness client has finite, distinct authenticated token outcomes and never falls back to an anonymous request', async () => {
+  const calls: unknown[] = [];
+  const successful = new FinanceReadinessClient(async (...args) => {
+    calls.push(args);
+    return { ok: true, json: async () => ready } as Response;
+  }, async () => 'token', 20);
+  assert.deepEqual(await successful.get(), ready);
+  assert.equal(calls.length, 1);
+
+  const rejected = new FinanceReadinessClient(async () => ({ ok: true, json: async () => ready }) as Response, async () => { throw new Error('firebase unavailable'); }, 20);
+  await assert.rejects(() => rejected.get(), /TOKEN_ACQUISITION_FAILED/);
+
+  const pendingCalls: unknown[] = [];
+  const timedOut = new FinanceReadinessClient(async (...args) => {
+    pendingCalls.push(args);
+    return { ok: true, json: async () => ready } as Response;
+  }, async () => await new Promise<string>(() => {}), 20);
+  await assert.rejects(() => timedOut.get(), /TOKEN_ACQUISITION_TIMEOUT/);
+  assert.equal(pendingCalls.length, 0, 'a token timeout must not become an anonymous readiness request');
+
+  const missingCalls: unknown[] = [];
+  const missing = new FinanceReadinessClient(async (...args) => {
+    missingCalls.push(args);
+    return { ok: true, json: async () => ready } as Response;
+  }, async () => null, 20);
+  await assert.rejects(() => missing.get(), /AUTH_USER_MISSING/);
+  assert.equal(missingCalls.length, 0, 'a missing user must not become an anonymous readiness request');
+
+  const unauthorized = new FinanceReadinessClient(async () => ({ ok: false, status: 401 }) as Response, async () => 'token', 20);
+  await assert.rejects(() => unauthorized.get(), /FINANCE_READINESS_AUTH_REQUIRED/);
 });
 
 test('Finance readiness client creates only local institutional prerequisites without browser authority', async () => {

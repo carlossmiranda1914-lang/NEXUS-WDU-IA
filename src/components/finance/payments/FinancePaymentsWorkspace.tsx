@@ -58,6 +58,9 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   const [previewPayment, setPreviewPayment] = useState<Payment | null>(null);
   const [issuedDocumentId, setIssuedDocumentId] = useState<string | null>(null);
   const [previewReadiness, setPreviewReadiness] = useState<ReceiptPreissuePreview | null>(null);
+  const hasLocallyActionableConfiguration = readiness?.requirements.some(requirement =>
+    requirement.state === 'MISSING' && (requirement.code === 'INSTITUTION_LEGAL_PROFILE' || requirement.code === 'FINANCIAL_PROFILE'),
+  ) ?? false;
 
   const loadPayments = useCallback(async () => {
     setLoading(true);
@@ -107,7 +110,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
 
   return (
     <div className="w-full">
-      {readiness?.status === 'INCOMPLETE' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Configuração necessária</strong><p>Os recebimentos estão disponíveis, mas ainda não é possível emitir recibos oficiais.</p>{readiness.canManageConfiguration && <button type="button" onClick={onOpenFinanceConfiguration} className="mt-2 rounded-md border px-3 py-1">Concluir configuração</button>}</section>}
+      {readiness?.status === 'INCOMPLETE' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Configuração necessária</strong><p>Os recebimentos estão disponíveis, mas ainda não é possível emitir recibos oficiais.</p>{readiness.canManageConfiguration && hasLocallyActionableConfiguration ? <button type="button" onClick={onOpenFinanceConfiguration} className="mt-2 rounded-md border px-3 py-1">Concluir configuração</button> : <p className="mt-2 text-zinc-700">A emissão permanece bloqueada até os requisitos aplicáveis estarem disponíveis.</p>}</section>}
       {receiptDocumentReadiness?.status === 'BLOCKED' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Emissão oficial indisponível</strong><p>{receiptPreviewBlockMessage(receiptDocumentReadiness.reasonCode)}</p><p className="mt-1">Não será atribuído qualquer número de recibo enquanto este requisito não estiver concluído.</p></section>}
       {view === 'list' && <>
         <FinancePaymentsListView

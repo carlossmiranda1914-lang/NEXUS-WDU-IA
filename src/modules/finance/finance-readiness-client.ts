@@ -17,6 +17,16 @@ export class FinanceConfigurationError extends Error {
   constructor(readonly code: string, message: string) { super(message); this.name = 'FinanceConfigurationError'; }
 }
 
+export class FinanceReadinessError extends Error {
+  constructor(readonly code: 'AUTH_USER_MISSING' | 'TOKEN_ACQUISITION_FAILED' | 'TOKEN_ACQUISITION_TIMEOUT' | 'FINANCE_READINESS_AUTH_REQUIRED' | 'FINANCE_READINESS_FORBIDDEN' | 'FINANCE_READINESS_UNAVAILABLE') {
+    super(code);
+    this.name = 'FinanceReadinessError';
+  }
+}
+
+// Matches the existing local PostgreSQL connection timeout convention.
+export const FINANCE_READINESS_TOKEN_TIMEOUT_MS = 5_000;
+
 const defaultFetch: typeof fetch = (input, init) => {
   if (typeof window !== 'undefined' && typeof window.fetch === 'function') return window.fetch(input, init);
   return globalThis.fetch(input, init);
@@ -26,12 +36,30 @@ export class FinanceReadinessClient {
   constructor(
     private readonly fetcher: typeof fetch = defaultFetch,
     private readonly getToken = async () => auth.currentUser?.getIdToken(),
+    private readonly tokenTimeoutMs = FINANCE_READINESS_TOKEN_TIMEOUT_MS,
   ) {}
 
+  private async acquireToken(): Promise<string> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new FinanceReadinessError('TOKEN_ACQUISITION_TIMEOUT')), this.tokenTimeoutMs);
+      });
+      const token = await Promise.race([this.getToken(), timeout]);
+      if (!token) throw new FinanceReadinessError('AUTH_USER_MISSING');
+      return token;
+    } catch (error) {
+      if (error instanceof FinanceReadinessError) throw error;
+      throw new FinanceReadinessError('TOKEN_ACQUISITION_FAILED');
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   async get(): Promise<FinanceReadinessDto> {
-    const token = await this.getToken().catch(() => null);
-    const response = await this.fetcher('/api/finance/readiness', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-    if (!response.ok) throw new Error(response.status === 401 ? 'FINANCE_READINESS_AUTH_REQUIRED' : response.status === 403 ? 'FINANCE_READINESS_FORBIDDEN' : 'FINANCE_READINESS_UNAVAILABLE');
+    const token = await this.acquireToken();
+    const response = await this.fetcher('/api/finance/readiness', { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) throw new FinanceReadinessError(response.status === 401 ? 'FINANCE_READINESS_AUTH_REQUIRED' : response.status === 403 ? 'FINANCE_READINESS_FORBIDDEN' : 'FINANCE_READINESS_UNAVAILABLE');
     return response.json() as Promise<FinanceReadinessDto>;
   }
 

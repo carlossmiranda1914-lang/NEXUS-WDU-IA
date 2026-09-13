@@ -22,7 +22,13 @@ export function FinanceConfigurationWorkspace({ readinessClient = financeReadine
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<'legal' | 'financial' | null>(null);
-  const load = async () => { try { setReadiness(await readinessClient.get()); setError(null); } catch { setError('Não foi possível confirmar a configuração financeira atual.'); } };
+  const [loading, setLoading] = useState(true);
+  const load = async () => {
+    setLoading(true);
+    try { setReadiness(await readinessClient.get()); setError(null); }
+    catch { setError('Não foi possível confirmar a configuração financeira atual.'); }
+    finally { setLoading(false); }
+  };
   useEffect(() => { void load(); }, []);
   const legalRequirement = readiness?.requirements.find(requirement => requirement.code === 'INSTITUTION_LEGAL_PROFILE');
   const financialRequirement = readiness?.requirements.find(requirement => requirement.code === 'FINANCIAL_PROFILE');
@@ -31,21 +37,33 @@ export function FinanceConfigurationWorkspace({ readinessClient = financeReadine
     : financialRequirement?.state === 'MISSING'
       ? financialRequirement
       : undefined;
+  const requirementStateLabel = (state: FinanceReadinessDto['requirements'][number]['state']) => state === 'COMPLETE' ? 'Concluído' : state === 'MISSING' ? 'Em falta' : 'Bloqueado';
   const configure = async () => {
     try {
       setError(null); setSuccess(null); setSaving(true);
       if (editing === 'legal') await readinessClient.createLegalProfile({ legalName, taxIdentifier, countryCode: jurisdiction, addressLine1, effectiveFrom: new Date().toISOString() });
       else if (editing === 'financial') await readinessClient.createFinancialProfile({ primaryJurisdiction: jurisdiction, functionalCurrency: currency, financialTimezone: timezone, monetaryPolicyVersion: 'v1', enabledCurrencies: enabledCurrencies.split(',').map(value => value.trim().toUpperCase()).filter(Boolean), effectiveFrom: new Date().toISOString() });
-      await readinessClient.get().then(setReadiness);
+      setReadiness(await readinessClient.get());
       setSuccess('Configuração institucional guardada. A prontidão financeira foi atualizada a partir do servidor.'); setEditing(null); onComplete?.();
     } catch (caught) { setError(caught instanceof FinanceConfigurationError ? caught.message : 'Ocorreu um erro inesperado ao guardar a configuração. Tente novamente.'); }
     finally { setSaving(false); }
   };
   return <section data-testid="finance-configuration-workspace" className="rounded-xl border border-zinc-200 bg-white p-6">
     <h2 className="text-xl font-bold">Configuração Financeira</h2>
+    {loading && <p className="mt-3 text-sm text-zinc-600">A carregar configuração financeira…</p>}
     {error && <div className="mt-3"><AuroraStateNotice tone="danger" title="Não foi possível confirmar a configuração financeira">{error}</AuroraStateNotice></div>}
     {success && <div className="mt-3"><AuroraStateNotice tone="success" title="Prontidão atualizada">{success}</AuroraStateNotice></div>}
     {readiness?.status === 'READY' && <div className="mt-3"><AuroraStateNotice tone="success" title="Finance pronta">Finance operacionalmente pronta.</AuroraStateNotice></div>}
+    {readiness && <>
+      <section data-testid="finance-readiness-requirements" className="mt-4 rounded-md border border-zinc-200 p-3 text-sm">
+        <h3 className="font-semibold">Estado da configuração</h3>
+        <ul className="mt-2 space-y-1">
+          {readiness.requirements.map(requirement => <li key={requirement.code}><strong>{requirementLabel[requirement.code]}:</strong> {requirementStateLabel(requirement.state)} {requirement.code === 'FISCAL_CONFIGURATION' || requirement.code === 'RECEIPT_SERIES' ? <span className="text-zinc-600">· Recurso local Nexus</span> : null}</li>)}
+        </ul>
+      </section>
+      {readiness.receiptIssuance.status === 'BLOCKED' && /^AGT_/.test(readiness.receiptIssuance.reasonCode) && <div className="mt-4"><AuroraStateNotice tone="warning" title="Pré-requisito externo de produção AO">A emissão oficial depende de requisitos externos da AGT. Estes requisitos não são configuráveis nesta área.</AuroraStateNotice></div>}
+      {!actionableRequirement && readiness.status !== 'READY' && <div className="mt-4"><AuroraStateNotice tone="warning" title="Configuração local pendente">Existem recursos locais em falta. Esta área não apresenta uma ação que não esteja disponível para a configuração atual.</AuroraStateNotice></div>}
+    </>}
     {actionableRequirement && <>
       <h3 className="mt-4 font-semibold">Configuração necessária</h3>
       <p className="text-sm text-zinc-600">Complete os perfis institucionais. A prontidão é confirmada pelo servidor depois de cada gravação.</p>

@@ -25,6 +25,8 @@ assert.match(client, /\/api\/finance\/profile/, 'guided configuration must reuse
 assert.doesNotMatch(client, /adapterKey:\s*'core'/, 'normal client must never post the synthetic adapter');
 assert.match(finance, /finance-tab-configuration/, 'Finance must expose one canonical configuration destination');
 assert.match(payments, /onOpenFinanceConfiguration/, 'Payments remediation must navigate to the canonical Finance configuration surface');
+assert.match(payments, /hasLocallyActionableConfiguration/, 'Payments must distinguish locally actionable profile gaps from unavailable configuration resources');
+assert.match(payments, /INSTITUTION_LEGAL_PROFILE.*FINANCIAL_PROFILE/, 'the CTA may only target the two profile flows implemented by the destination');
 assert.match(finance, /Visão Geral/, 'Finance navigation must visibly group its overview');
 assert.match(finance, /Operação/, 'Finance navigation must visibly group operational destinations');
 assert.match(finance, /Configuração/, 'Finance navigation must visibly group configuration destinations');

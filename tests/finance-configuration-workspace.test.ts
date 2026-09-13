@@ -35,6 +35,21 @@ const blockedAfterLocalConfiguration: FinanceReadinessDto = {
   localPrerequisitesComplete: true,
 };
 
+const completeProfilesWithLocalGaps: FinanceReadinessDto = {
+  module: 'FINANCE', status: 'INCOMPLETE', canManageConfiguration: true,
+  requirements: [
+    { code: 'INSTITUTION_LEGAL_PROFILE', state: 'COMPLETE' },
+    { code: 'FINANCIAL_PROFILE', state: 'COMPLETE' },
+    { code: 'FISCAL_CONFIGURATION', state: 'MISSING' },
+    { code: 'RECEIPT_SERIES', state: 'MISSING' },
+  ],
+  receiptIssuance: { status: 'BLOCKED', reasonCode: 'FINANCE_MODULE_NOT_READY' },
+  localPrerequisitesComplete: true,
+  jurisdictionPolicyAvailable: true,
+  fiscalConfigurationAvailable: true,
+  seriesConfigurationAvailable: true,
+};
+
 function hasText(renderer: any, text: string) {
   return JSON.stringify(renderer.toJSON()).includes(text);
 }
@@ -97,4 +112,28 @@ test('does not expose configuration mutations to a read-only user', async () => 
 
   assert.ok(hasText(renderer, 'não tem permissão para alterar a configuração'));
   assert.equal(renderer.root.findAllByType('button').length, 0);
+});
+
+test('renders complete profiles and missing local resources instead of an empty configuration screen', async () => {
+  let renderer: any;
+  await act(async () => {
+    renderer = create(React.createElement(FinanceConfigurationWorkspace, { readinessClient: { get: async () => completeProfilesWithLocalGaps } as any }));
+  });
+  const text = JSON.stringify(renderer.toJSON());
+  assert.match(text, /Perfil jurídico institucional.*Concluído/);
+  assert.match(text, /Perfil financeiro institucional.*Concluído/);
+  assert.match(text, /Configuração fiscal.*Em falta/);
+  assert.match(text, /Série de recibos.*Em falta/);
+  assert.match(text, /Recurso local Nexus/);
+  assert.doesNotMatch(text, /Configurar perfil jurídico/);
+  assert.doesNotMatch(text, /Configurar perfil financeiro/);
+});
+
+test('exits loading with an explicit error when readiness fails', async () => {
+  let renderer: any;
+  await act(async () => {
+    renderer = create(React.createElement(FinanceConfigurationWorkspace, { readinessClient: { get: async () => { throw new Error('TOKEN_ACQUISITION_TIMEOUT'); } } as any }));
+  });
+  assert.ok(hasText(renderer, 'Não foi possível confirmar a configuração financeira atual.'));
+  assert.ok(!hasText(renderer, 'A carregar configuração financeira'));
 });
