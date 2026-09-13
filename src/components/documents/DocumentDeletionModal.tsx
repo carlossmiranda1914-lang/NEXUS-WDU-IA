@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Trash2, X, AlertCircle, AlertTriangle, ShieldCheck, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import type { Theme, DocumentDto, DocumentOperationalAvailability } from './types.ts';
 import { authorizeDeletion, executeDeletion, reconcileDeletion, generateIdempotencyKey } from './api.ts';
@@ -36,6 +36,22 @@ export default function DocumentDeletionModal({
 
   const activeHoldCount = document.activeHolds.length;
   const isBlockedByHold = activeHoldCount > 0;
+
+  // Escape key closes modal (only when not actively executing)
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      const isBusy = stage === 'authorizing' || stage === 'executing';
+      if (e.key === 'Escape' && isOpen && !isBusy) {
+        onClose();
+      }
+    },
+    [isOpen, stage, onClose],
+  );
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   useEffect(() => {
     if (isOpen) {
@@ -98,12 +114,11 @@ export default function DocumentDeletionModal({
         setStage('completed');
         setTimeout(() => {
           onSuccess();
-          onClose();
         }, 1200);
       }
     } catch (err) {
       setStage('error');
-      setErrorMessage(err instanceof Error ? err.message : 'Falha na execução de eliminação.');
+      setErrorMessage(err instanceof Error ? err.message : 'Falha na execução da eliminação física.');
     } finally {
       setLoading(false);
     }
@@ -114,25 +129,19 @@ export default function DocumentDeletionModal({
 
     setLoading(true);
     setErrorMessage(null);
+
     try {
       const res = await reconcileDeletion(document.id, authorizationId);
-      if (res.reconciliationRequired) {
-        setReconciliationRequired(true);
-        setStage('reconcile');
-        setErrorMessage(
-          'A reconciliação ainda é necessária: a confirmação física de expurgo no armazenamento permanece pendente.',
-        );
-      } else {
-        setReconciliationRequired(false);
+      if (!res.reconciliationRequired) {
         setStage('completed');
         setTimeout(() => {
           onSuccess();
-          onClose();
         }, 1200);
+      } else {
+        setErrorMessage('A reconciliação ainda acusa discrepâncias de armazenamento. Contacte o administrador.');
       }
     } catch (err) {
-      setStage('error');
-      setErrorMessage(err instanceof Error ? err.message : 'Falha na reconciliação de eliminação.');
+      setErrorMessage(err instanceof Error ? err.message : 'Falha ao reconciliar eliminação.');
     } finally {
       setLoading(false);
     }
@@ -144,9 +153,15 @@ export default function DocumentDeletionModal({
       aria-modal="true"
       aria-labelledby="deletion-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn"
+      onClick={(e) => {
+        const isBusy = stage === 'authorizing' || stage === 'executing';
+        if (e.target === e.currentTarget && !isBusy) {
+          onClose();
+        }
+      }}
     >
       <div
-        className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl transition-all ${
+        className={`w-full max-w-lg rounded-2xl border p-6 shadow-2xl transition-all ${
           isLight
             ? 'bg-white border-zinc-200 text-zinc-900'
             : 'bg-zinc-900 border-white/10 text-zinc-100'
@@ -158,18 +173,18 @@ export default function DocumentDeletionModal({
               <Trash2 className="w-5 h-5" />
             </div>
             <div>
-              <h2 id="deletion-modal-title" className="text-lg font-bold">
+              <h2 id="deletion-modal-title" className="text-base font-bold">
                 Eliminação Governada de Documento
               </h2>
               <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                Processo de expurgo governado com integridade criptográfica
+                DOC-{document.id.slice(0, 8).toUpperCase()} (v{document.currentVersion?.versionNumber || 1})
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            disabled={loading}
+            disabled={stage === 'executing' || stage === 'authorizing'}
             className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
               isLight
                 ? 'border-zinc-200 hover:bg-zinc-100 text-zinc-600'
@@ -181,79 +196,64 @@ export default function DocumentDeletionModal({
           </button>
         </div>
 
-        <div className="mt-5 space-y-4">
-          {isBlockedByHold ? (
-            <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs space-y-2">
-              <div className="flex items-center gap-2 font-bold">
-                <AlertCircle className="w-4 h-4" />
-                Eliminação Bloqueada por Bloqueio Ativo
+        <div className="mt-5 space-y-4 text-xs leading-relaxed">
+          {isBlockedByHold && (
+            <div className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Eliminação Bloqueada por Regra Institucional</p>
+                <p className="mt-0.5">
+                  Este documento possui <strong>{activeHoldCount} bloqueio(s) de retenção ativo(s)</strong>.
+                  Para proceder à eliminação, os bloqueios devem ser formalmente libertados pela respetiva autoridade.
+                </p>
               </div>
-              <p className="leading-relaxed">
-                Este documento possui <strong>{activeHoldCount} bloqueio(s) de retenção ativo(s)</strong>.
-                A eliminação governada é estritamente proibida enquanto houver impedimento legal ou administrativo em vigor.
-              </p>
             </div>
-          ) : (
-            <>
-              {stage === 'confirm' && (
-                <div className="space-y-3">
-                  <div className={`p-3.5 rounded-xl border text-xs space-y-1.5 ${
-                    isLight ? 'bg-slate-50 border-zinc-200 text-zinc-700' : 'bg-zinc-950 border-white/5 text-zinc-300'
-                  }`}>
-                    <p><span className="font-semibold">Documento:</span> {document.category} (ID: {document.id.slice(0, 8)}...)</p>
-                    <p><span className="font-semibold">Versão Atual:</span> v{document.currentVersion?.versionNumber || 1}</p>
-                    <p><span className="font-semibold">Política de Retenção:</span> {document.retention ? `Retenção até ${document.retention.retainUntil}` : 'Sem política explícita'}</p>
-                  </div>
+          )}
 
-                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <p className="leading-relaxed">
-                      A eliminação é um ato irreversível. Serão destruídos os ficheiros físicos de armazenamento e os dados pessoais serão pseudonimizados criptograficamente.
-                    </p>
-                  </div>
-                </div>
-              )}
+          {stage === 'confirm' && (
+            <div className="space-y-3">
+              <p className={isLight ? 'text-zinc-600' : 'text-zinc-300'}>
+                O processo de eliminação é <strong>irreversível</strong> e obedece ao protocolo institucional de expurgo de dois passos:
+              </p>
+              <ol className="list-decimal pl-5 space-y-1.5 text-zinc-500">
+                <li>Validação de autoridade, retenção e bloqueios legais;</li>
+                <li>Pseudonimização e destruição criptográfica do ficheiro físico.</li>
+              </ol>
+            </div>
+          )}
 
-              {stage === 'authorized' && (
-                <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-xs text-emerald-800 dark:text-emerald-300 space-y-2">
-                  <div className="flex items-center gap-2 font-bold">
-                    <ShieldCheck className="w-4 h-4" />
-                    Autorização de Eliminação Aprovada
-                  </div>
-                  <p className="leading-relaxed">
-                    A política de retenção autorizou a eliminação. Clique em <strong>Executar Eliminação</strong> para concluir a destruição física do conteúdo.
-                  </p>
-                </div>
-              )}
+          {stage === 'authorized' && (
+            <div className="p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-start gap-2.5">
+              <ShieldCheck className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Autorização de Eliminação Concedida</p>
+                <p className="mt-0.5">
+                  As políticas de retenção confirmam a elegibilidade deste documento para destruição definitiva.
+                </p>
+              </div>
+            </div>
+          )}
 
-              {stage === 'reconcile' && (
-                <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-500/10 text-xs text-amber-800 dark:text-amber-300 space-y-2">
-                  <div className="flex items-center gap-2 font-bold">
-                    <AlertTriangle className="w-4 h-4" />
-                    Reconciliação Operacional Necessária
-                  </div>
-                  <p className="leading-relaxed">
-                    A eliminação física requer confirmação adicional de integridade no armazenamento. Clique em <strong>Reconciliar</strong>.
-                  </p>
-                </div>
-              )}
+          {stage === 'completed' && (
+            <div className="p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-center space-y-2">
+              <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-600" />
+              <p className="font-bold text-sm">Documento Eliminado com Sucesso</p>
+              <p className="text-[11px]">O ficheiro físico foi destruído e a versão foi atualizada no arquivo.</p>
+            </div>
+          )}
 
-              {stage === 'completed' && (
-                <div className="py-6 text-center space-y-3">
-                  <div className="w-12 h-12 mx-auto rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-                    <CheckCircle2 className="w-8 h-8" />
-                  </div>
-                  <p className="text-base font-bold text-emerald-600">Eliminação Executada com Sucesso</p>
-                </div>
-              )}
+          {stage === 'reconcile' && (
+            <div className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400 space-y-2">
+              <p className="font-bold">Reconciliação Pendente</p>
+              <p>A eliminação física requer verificação de sincronização adicional.</p>
+            </div>
+          )}
 
-              {errorMessage && (
-                <div className="p-3.5 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <p className="leading-relaxed">{errorMessage}</p>
-                </div>
-              )}
-            </>
+          {errorMessage && (
+            <div className="p-3.5 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <p className="leading-relaxed">{errorMessage}</p>
+            </div>
           )}
         </div>
 
@@ -261,64 +261,49 @@ export default function DocumentDeletionModal({
           <button
             type="button"
             onClick={onClose}
-            disabled={loading}
-            className={`px-4 py-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+            disabled={stage === 'executing' || stage === 'authorizing'}
+            className={`px-4 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
               isLight
                 ? 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
                 : 'border-white/10 bg-zinc-800 text-zinc-300 hover:bg-white/5'
             } disabled:opacity-40`}
           >
-            {stage === 'completed' ? 'Fechar' : 'Cancelar'}
+            Cancelar
           </button>
 
-          {!isBlockedByHold && stage === 'confirm' && (
+          {stage === 'confirm' && (
             <button
               type="button"
               onClick={handleAuthorize}
-              disabled={loading || isDeleteUnavailable}
-              title={
-                isDeleteUnavailable
-                  ? 'Eliminação governada ainda não está configurada nesta instalação.'
-                  : 'Autorizar Eliminação'
-              }
-              className="px-5 py-2.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+              disabled={isBlockedByHold || loading || isDeleteUnavailable}
+              className="px-4 py-2 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1.5"
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Autorizar Eliminação
             </button>
           )}
 
-          {!isBlockedByHold && stage === 'authorized' && (
+          {stage === 'authorized' && (
             <button
               type="button"
               onClick={handleExecute}
               disabled={loading}
-              className="px-5 py-2.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+              className="px-4 py-2 rounded-lg text-xs font-bold bg-rose-700 hover:bg-rose-600 text-white transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1.5"
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Executar Eliminação Imediata
+              Confirmar e Destruir Ficheiro
             </button>
           )}
 
-          {!isBlockedByHold && stage === 'reconcile' && (
+          {stage === 'reconcile' && (
             <button
               type="button"
               onClick={handleReconcile}
               disabled={loading}
-              className="px-5 py-2.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+              className="px-4 py-2 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white transition-all cursor-pointer flex items-center gap-1.5"
             >
-              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
               Reconciliar Eliminação
-            </button>
-          )}
-
-          {stage === 'error' && (
-            <button
-              type="button"
-              onClick={reconciliationRequired ? handleReconcile : authorizationId ? handleExecute : handleAuthorize}
-              className="px-5 py-2.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <RefreshCw className="w-3.5 h-3.5" /> Tentar Novamente
             </button>
           )}
         </div>

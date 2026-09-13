@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Eye, Download, X, AlertCircle, ShieldAlert, Loader2, ShieldCheck, Lock } from 'lucide-react';
 import type { Theme, DocumentDto } from './types.ts';
 import { authorizeAccess, exchangeAccessForBlob, revokeAccess, generateIdempotencyKey } from './api.ts';
@@ -28,6 +28,28 @@ export default function DocumentAccessViewer({
   const [filename, setFilename] = useState<string>('');
 
   const idempotencyKeyRef = useRef<string>(generateIdempotencyKey('access'));
+
+  const handleRevoke = useCallback(async () => {
+    if (grantId) {
+      try {
+        await revokeAccess(grantId, 'Sessão de visualização terminada pelo utilizador', generateIdempotencyKey('rev-grant'));
+      } catch {
+        // Fallback safely
+      }
+    }
+    onClose();
+  }, [grantId, onClose]);
+
+  // Escape key closes and revokes access grant
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        void handleRevoke();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, handleRevoke]);
 
   useEffect(() => {
     let active = true;
@@ -109,16 +131,6 @@ export default function DocumentAccessViewer({
 
   if (!isOpen) return null;
 
-  const handleRevoke = async () => {
-    if (!grantId) return;
-    try {
-      await revokeAccess(grantId, 'Sessão de visualização terminada pelo utilizador', generateIdempotencyKey('rev-grant'));
-      onClose();
-    } catch {
-      onClose();
-    }
-  };
-
   const isImage = mimeType.startsWith('image/');
   const isPdf = mimeType === 'application/pdf';
 
@@ -128,6 +140,11 @@ export default function DocumentAccessViewer({
       aria-modal="true"
       aria-labelledby="access-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          void handleRevoke();
+        }
+      }}
     >
       <div
         className={`w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl border shadow-2xl transition-all ${
@@ -166,7 +183,7 @@ export default function DocumentAccessViewer({
                   ? 'border-zinc-200 hover:bg-zinc-100 text-zinc-600'
                   : 'border-white/10 hover:bg-white/5 text-zinc-400'
               }`}
-              aria-label="Fechar e revogar grant"
+              aria-label="Fechar e revogar autorização"
             >
               <X className="w-4 h-4" />
             </button>
@@ -178,10 +195,10 @@ export default function DocumentAccessViewer({
             <div className="text-center space-y-3">
               <Loader2 className="w-10 h-10 mx-auto text-emerald-600 animate-spin" />
               <p className="text-sm font-semibold">
-                A estabelecer túnel de streaming seguro e a validar autorizações...
+                A estabelecer ligação de streaming seguro e a validar autorizações...
               </p>
               <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                As credenciais de armazenamento permanecem estritamente isoladas no servidor.
+                O acesso é mediado com isolamento de credenciais e integridade governada.
               </p>
             </div>
           )}
@@ -190,7 +207,7 @@ export default function DocumentAccessViewer({
             <div className="max-w-md p-5 rounded-2xl border border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-center space-y-3">
               <ShieldAlert className="w-10 h-10 mx-auto text-rose-600" />
               <div>
-                <h3 className="text-sm font-bold">Acesso Bloqueado ou Falhado</h3>
+                <h3 className="text-sm font-bold">Acesso Bloqueado ou Não Disponível</h3>
                 <p className="text-xs mt-1 leading-relaxed">{errorMessage}</p>
               </div>
             </div>
@@ -226,13 +243,13 @@ export default function DocumentAccessViewer({
                   <div>
                     <p className="text-base font-bold">Conteúdo Disponível</p>
                     <p className={`text-xs mt-1 ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                      O formato ({mimeType}) requer download para visualização externa na aplicação local.
+                      O formato ({mimeType}) requer download para visualização na aplicação local.
                     </p>
                   </div>
                   <a
                     href={objectUrl}
                     download={filename}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold bg-emerald-700 hover:bg-emerald-600 text-white transition-all"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold bg-emerald-700 hover:bg-emerald-600 text-white transition-all cursor-pointer"
                   >
                     <Download className="w-4 h-4" /> Descarregar Ficheiro
                   </a>
@@ -245,7 +262,7 @@ export default function DocumentAccessViewer({
         <div className="p-4 border-t border-zinc-200/50 dark:border-white/5 flex items-center justify-between">
           <div className="flex items-center gap-2 text-[11px] text-zinc-500">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Acesso temporário e rastreado por auditoria institucional</span>
+            <span>Acesso temporário rastreado por auditoria institucional</span>
           </div>
           <button
             type="button"

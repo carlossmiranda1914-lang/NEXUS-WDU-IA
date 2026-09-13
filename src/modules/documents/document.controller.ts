@@ -6,6 +6,7 @@ import type { InstitutionalContext } from '../../auth/institutional-context.ts';
 import type { ObjectStorageProvider } from './object-storage-provider.ts';
 import { DocumentVerificationWorker } from './verification-worker.ts';
 import { ClamAvMalwareScanner } from './clamav-malware-scanner.ts';
+import { LocalUatMalwareScanner } from './local-uat-malware-scanner.ts';
 import type { MalwareScanner } from './malware-scanner.ts';
 import type { DocumentAccessPolicyEngine } from './document-access-policy.ts';
 import type { RetentionPolicyEngine } from './document-retention-policy.ts';
@@ -281,17 +282,26 @@ export function registerDocumentRoutes(
       ? dependencies.verificationWorker
       : null;
 
-  if (!verificationWorker && storageProvider && storageBucket) {
+  if (dependencies.verificationWorker === undefined && storageProvider && storageBucket) {
     try {
-      const clamavUrl =
-        process.env.CLAMAV_SERVICE_URL || 'https://nexus-clamav-staging-oihjcxwo5a-ew.a.run.app';
-      const malwareScanner =
-        dependencies.malwareScanner ||
-        new ClamAvMalwareScanner({
-          serviceUrl: clamavUrl,
-          host: process.env.CLAMAV_HOST || '127.0.0.1',
-          port: Number(process.env.CLAMAV_PORT || 3310),
-        });
+      let malwareScanner = dependencies.malwareScanner;
+      if (!malwareScanner) {
+        if (
+          (process.env.DOCUMENTS_STORAGE_PROVIDER === 'local_uat' ||
+            process.env.DOCUMENTS_MALWARE_SCANNER === 'local_uat') &&
+          process.env.NODE_ENV !== 'production'
+        ) {
+          malwareScanner = new LocalUatMalwareScanner();
+        } else {
+          const clamavUrl =
+            process.env.CLAMAV_SERVICE_URL || 'https://nexus-clamav-staging-oihjcxwo5a-ew.a.run.app';
+          malwareScanner = new ClamAvMalwareScanner({
+            serviceUrl: clamavUrl,
+            host: process.env.CLAMAV_HOST || '127.0.0.1',
+            port: Number(process.env.CLAMAV_PORT || 3310),
+          });
+        }
+      }
 
       verificationWorker = new DocumentVerificationWorker({
         pool: docPool,

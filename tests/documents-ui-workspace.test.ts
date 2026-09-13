@@ -258,7 +258,7 @@ try {
   const versionId = completeData.versionId;
 
   // Transition version status to 'available' to simulate passing verification
-  await pool.query(
+  await client.query(
     `UPDATE document_versions SET status = 'available' WHERE id = $1`,
     [versionId],
   );

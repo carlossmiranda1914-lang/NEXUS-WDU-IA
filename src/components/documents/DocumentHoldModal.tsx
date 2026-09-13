@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Shield, X, AlertCircle, CheckCircle2, Lock, Unlock, Loader2 } from 'lucide-react';
 import type { Theme, DocumentDto, HoldDto, DocumentOperationalAvailability } from './types.ts';
 import { placeHold, releaseHold, generateIdempotencyKey } from './api.ts';
@@ -35,6 +35,21 @@ export default function DocumentHoldModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const idempotencyKeyRef = useRef<string>(generateIdempotencyKey(mode === 'place' ? 'hold' : 'rel-hold'));
+
+  // Escape key closes modal
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen && !loading) {
+        onClose();
+      }
+    },
+    [isOpen, loading, onClose],
+  );
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   useEffect(() => {
     if (isOpen) {
@@ -108,6 +123,11 @@ export default function DocumentHoldModal({
       aria-modal="true"
       aria-labelledby="hold-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !loading) {
+          onClose();
+        }
+      }}
     >
       <div
         className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl transition-all ${
@@ -121,24 +141,18 @@ export default function DocumentHoldModal({
             <div
               className={`p-2 rounded-lg ${
                 mode === 'place'
-                  ? isLight
-                    ? 'bg-amber-50 text-amber-700'
-                    : 'bg-amber-500/10 text-amber-400'
-                  : isLight
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : 'bg-emerald-500/10 text-emerald-400'
+                  ? 'bg-amber-500/10 text-amber-500'
+                  : 'bg-emerald-500/10 text-emerald-500'
               }`}
             >
               {mode === 'place' ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
             </div>
             <div>
-              <h2 id="hold-modal-title" className="text-lg font-bold">
+              <h2 id="hold-modal-title" className="text-base font-bold">
                 {mode === 'place' ? 'Aplicar Bloqueio de Retenção' : 'Libertar Bloqueio de Retenção'}
               </h2>
               <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                {mode === 'place'
-                  ? 'Impede a eliminação e suspende expiração de retenção'
-                  : 'Remove o impedimento legal/administrativo ativo'}
+                DOC-{document.id.slice(0, 8).toUpperCase()} (v{document.currentVersion?.versionNumber || 1})
               </p>
             </div>
           </div>
@@ -162,106 +176,91 @@ export default function DocumentHoldModal({
             <>
               <div>
                 <label className={`block text-xs font-semibold mb-1.5 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
-                  Tipo de Bloqueio
+                  Tipo de Bloqueio *
                 </label>
                 <select
                   value={holdType}
                   onChange={(e) => setHoldType(e.target.value as 'legal' | 'administrative')}
-                  className={`w-full h-11 px-3 rounded-lg border text-sm outline-none ${
+                  className={`w-full h-10 px-3 rounded-lg border text-xs outline-none cursor-pointer ${
                     isLight
-                      ? 'bg-white border-zinc-200 text-zinc-900'
-                      : 'bg-zinc-800 border-white/10 text-zinc-100'
+                      ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-emerald-600'
+                      : 'bg-zinc-950 border-white/10 text-zinc-100 focus:border-emerald-500'
                   }`}
                 >
-                  <option value="legal">Legal (Ordem Judicial / Requisitório Legal)</option>
-                  <option value="administrative">Administrativo (Auditoria / Inquérito Interno)</option>
+                  <option value="legal">Legal (Ordem Judicial / Notificação Oficial)</option>
+                  <option value="administrative">Administrativo (Auditoria / Investigação Interna)</option>
                 </select>
               </div>
 
               <div>
                 <label className={`block text-xs font-semibold mb-1.5 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
-                  Autoridade Emitente <span className="text-rose-500">*</span>
+                  Autoridade Emitente *
                 </label>
                 <input
                   type="text"
-                  required
-                  minLength={4}
                   value={authority}
                   onChange={(e) => setAuthority(e.target.value)}
-                  placeholder="ex: Tribunal Provincial de Luanda / Comissão de Auditoria"
-                  className={`w-full h-11 px-3 rounded-lg border text-sm outline-none ${
+                  placeholder="Ex: Tribunal de Lisboa, Auditoria Geral..."
+                  className={`w-full h-10 px-3 rounded-lg border text-xs outline-none ${
                     isLight
-                      ? 'bg-white border-zinc-200 text-zinc-900'
-                      : 'bg-zinc-800 border-white/10 text-zinc-100'
+                      ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-emerald-600'
+                      : 'bg-zinc-950 border-white/10 text-zinc-100 focus:border-emerald-500'
                   }`}
+                  required
                 />
               </div>
 
               <div>
                 <label className={`block text-xs font-semibold mb-1.5 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
-                  Motivo e Fundamentação <span className="text-rose-500">*</span>
+                  Motivo e Justificação *
                 </label>
                 <textarea
-                  required
                   rows={3}
-                  minLength={4}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Descreva a fundamentação legal ou administrativa para retenção obrigatória..."
-                  className={`w-full p-3 rounded-lg border text-sm outline-none ${
+                  placeholder="Fundamentação formal do bloqueio de retenção..."
+                  className={`w-full p-3 rounded-lg border text-xs outline-none resize-none ${
                     isLight
-                      ? 'bg-white border-zinc-200 text-zinc-900'
-                      : 'bg-zinc-800 border-white/10 text-zinc-100'
+                      ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-emerald-600'
+                      : 'bg-zinc-950 border-white/10 text-zinc-100 focus:border-emerald-500'
                   }`}
+                  required
                 />
               </div>
             </>
           ) : (
-            <>
-              {targetHold && (
-                <div className={`p-3 rounded-xl border text-xs space-y-1 ${
-                  isLight ? 'bg-slate-50 border-zinc-200 text-zinc-700' : 'bg-zinc-950 border-white/5 text-zinc-300'
-                }`}>
-                  <p><span className="font-semibold">Bloqueio:</span> {targetHold.holdType.toUpperCase()}</p>
-                  <p><span className="font-semibold">Autoridade:</span> {targetHold.authority}</p>
-                  <p><span className="font-semibold">Motivo original:</span> {targetHold.reason}</p>
-                </div>
-              )}
-
-              <div>
-                <label className={`block text-xs font-semibold mb-1.5 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
-                  Motivo da Libertação <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  minLength={4}
-                  value={releaseReason}
-                  onChange={(e) => setReleaseReason(e.target.value)}
-                  placeholder="Fundamente o encerramento do processo ou a resolução do inquérito..."
-                  className={`w-full p-3 rounded-lg border text-sm outline-none ${
-                    isLight
-                      ? 'bg-white border-zinc-200 text-zinc-900'
-                      : 'bg-zinc-800 border-white/10 text-zinc-100'
-                  }`}
-                />
-              </div>
-            </>
+            <div>
+              <label className={`block text-xs font-semibold mb-1.5 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
+                Motivo da Libertação *
+              </label>
+              <textarea
+                rows={3}
+                value={releaseReason}
+                onChange={(e) => setReleaseReason(e.target.value)}
+                placeholder="Fundamentação da libertação do bloqueio..."
+                className={`w-full p-3 rounded-lg border text-xs outline-none resize-none ${
+                  isLight
+                    ? 'bg-slate-50 border-zinc-200 text-zinc-900 focus:bg-white focus:border-emerald-600'
+                    : 'bg-zinc-950 border-white/10 text-zinc-100 focus:border-emerald-500'
+                }`}
+                required
+              />
+            </div>
           )}
 
           {errorMessage && (
-            <div className="p-3.5 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs flex items-start gap-2">
+            <div className="p-3 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <p className="leading-relaxed">{errorMessage}</p>
             </div>
           )}
 
-          <div className="pt-4 border-t border-zinc-200/50 dark:border-white/5 flex items-center justify-end gap-2.5">
+          <div className="pt-3 border-t border-zinc-200/50 dark:border-white/5 flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
               disabled={loading}
-              className={`px-4 py-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+              className={`px-4 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                 isLight
                   ? 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
                   : 'border-white/10 bg-zinc-800 text-zinc-300 hover:bg-white/5'
@@ -271,22 +270,15 @@ export default function DocumentHoldModal({
             </button>
             <button
               type="submit"
-              disabled={loading || isHoldUnavailable}
-              title={
-                isHoldUnavailable
-                  ? 'A gestão de retenção e bloqueios ainda não está configurada nesta instalação.'
-                  : mode === 'place'
-                  ? 'Aplicar Bloqueio'
-                  : 'Libertar Bloqueio'
-              }
-              className={`px-5 py-2.5 rounded-lg text-xs font-bold text-white transition-all cursor-pointer flex items-center gap-1.5 ${
+              disabled={loading}
+              className={`px-4 py-2 rounded-lg text-xs font-bold text-white transition-all cursor-pointer flex items-center gap-1.5 ${
                 mode === 'place'
                   ? 'bg-amber-600 hover:bg-amber-500'
-                  : 'bg-emerald-700 hover:bg-emerald-600'
+                  : 'bg-emerald-600 hover:bg-emerald-500'
               } disabled:opacity-40`}
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {mode === 'place' ? 'Aplicar Bloqueio' : 'Libertar Bloqueio'}
+              {mode === 'place' ? 'Confirmar Bloqueio' : 'Libertar Bloqueio'}
             </button>
           </div>
         </form>
