@@ -43,17 +43,17 @@ export function getCategoryLabel(category: string | null | undefined): string {
     case 'academic':
     case 'academico':
     case 'académico':
-      return 'Académicos';
+      return 'Académico';
     case 'administrative':
     case 'administrativo':
     case 'administrativos':
-      return 'Administrativos';
+      return 'Administrativo';
     case 'administrative_financial':
       return 'Administrativo / Financeiro';
     case 'financial':
     case 'financeiro':
     case 'financeiros':
-      return 'Financeiros';
+      return 'Financeiro';
     case 'identity_enrollment':
       return 'Identidade / Matrícula';
     case 'absence_justification':
@@ -68,7 +68,35 @@ export function getCategoryLabel(category: string | null | undefined): string {
     case 'enrollment':
     case 'matricula':
     case 'matrícula':
-      return 'Matrículas';
+      return 'Matrícula';
+    default:
+      return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).replace(/_/g, ' ');
+  }
+}
+
+export function getClassificationLabel(classification: string | null | undefined): string {
+  if (!classification) return '—';
+  const trimmed = classification.trim();
+  const lower = trimmed.toLowerCase();
+  switch (lower) {
+    case 'internal':
+    case 'uso_interno':
+    case 'uso interno':
+      return 'Uso interno';
+    case 'standard':
+    case 'padrao':
+    case 'padrão':
+      return 'Padrão';
+    case 'confidential':
+    case 'confidencial':
+      return 'Confidencial';
+    case 'restricted':
+    case 'restrito':
+      return 'Restrito';
+    case 'public':
+    case 'publico':
+    case 'público':
+      return 'Público';
     default:
       return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).replace(/_/g, ' ');
   }

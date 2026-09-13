@@ -19,7 +19,7 @@ import {
   fetchDocumentTaxonomy,
   type CreateUploadSessionInput,
 } from './api.ts';
-import { formatByteSize, getCategoryLabel } from './utils.ts';
+import { formatByteSize, getCategoryLabel, getClassificationLabel } from './utils.ts';
 
 interface DocumentUploadModalProps {
   isOpen: boolean;
@@ -187,6 +187,8 @@ export default function DocumentUploadModal({
   const isUploading =
     step === 'authorizing' || step === 'uploading' || step === 'completing';
 
+  if (!isOpen) return null;
+
   return (
     <div
       role="dialog"
@@ -296,7 +298,7 @@ export default function DocumentUploadModal({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={`block text-xs font-semibold mb-1.5 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
-                      Categoria Documental *
+                      Categoria do documento *
                     </label>
                     {taxonomy && taxonomy.categories.length > 0 ? (
                       <select
@@ -310,7 +312,7 @@ export default function DocumentUploadModal({
                       >
                         {taxonomy.categories.map((cat) => (
                           <option key={cat.id} value={cat.id}>
-                            {cat.label} ({cat.code})
+                            {getCategoryLabel(cat.id)}
                           </option>
                         ))}
                       </select>
@@ -319,7 +321,7 @@ export default function DocumentUploadModal({
                         type="text"
                         value={category}
                         onChange={(e) => setCategory(e.target.value)}
-                        placeholder="Ex: academic, administrative, enrollment..."
+                        placeholder="Ex: Académico, Administrativo, Identificação..."
                         className={`w-full h-11 px-3 rounded-lg border text-sm outline-none ${
                           isLight
                             ? 'bg-white border-zinc-200 text-zinc-900 focus:border-emerald-600'
@@ -345,7 +347,7 @@ export default function DocumentUploadModal({
                       >
                         {taxonomy.classifications.map((cls) => (
                           <option key={cls.id} value={cls.id}>
-                            {cls.label}
+                            {getClassificationLabel(cls.id)}
                           </option>
                         ))}
                       </select>
@@ -354,7 +356,7 @@ export default function DocumentUploadModal({
                         type="text"
                         value={classification}
                         onChange={(e) => setClassification(e.target.value)}
-                        placeholder="Ex: internal, confidential, public..."
+                        placeholder="Ex: Uso interno, Confidencial, Público..."
                         className={`w-full h-11 px-3 rounded-lg border text-sm outline-none ${
                           isLight
                             ? 'bg-white border-zinc-200 text-zinc-900 focus:border-emerald-600'
@@ -483,11 +485,11 @@ export default function DocumentUploadModal({
               title={
                 isUploadUnavailable
                   ? 'Carregamento documental ainda não está configurado nesta instalação.'
-                  : 'Iniciar Upload'
+                  : 'Carregar documento'
               }
               className="px-5 py-2.5 rounded-lg text-xs font-bold bg-emerald-700 hover:bg-emerald-600 text-white transition-all cursor-pointer disabled:opacity-40"
             >
-              Iniciar Upload
+              Carregar documento
             </button>
           )}
 

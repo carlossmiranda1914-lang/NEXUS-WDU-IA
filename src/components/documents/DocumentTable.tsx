@@ -19,6 +19,7 @@ import {
   formatDate,
   formatDateTime,
   getCategoryLabel,
+  getClassificationLabel,
   getTechnicalStatusPresentation,
   getRetentionStatusPresentation,
   getBadgeClasses,
@@ -35,6 +36,7 @@ interface DocumentTableProps {
   onOpenUploadVersion: (doc: DocumentDto) => void;
   onOpenHoldModal: (doc: DocumentDto, mode: 'place' | 'release') => void;
   onOpenDeletionModal: (doc: DocumentDto) => void;
+  onOpenUploadModal?: () => void;
 }
 
 export default function DocumentTable({
@@ -48,6 +50,7 @@ export default function DocumentTable({
   onOpenUploadVersion,
   onOpenHoldModal,
   onOpenDeletionModal,
+  onOpenUploadModal,
 }: DocumentTableProps) {
   const isLight = theme === 'light';
 
@@ -67,18 +70,47 @@ export default function DocumentTable({
   }
 
   if (!loading && documents.length === 0) {
+    const canUpload = operationalAvailability?.canUpload ?? false;
+
     return (
       <div
-        className={`p-12 text-center rounded-2xl border space-y-3 my-6 ${
-          isLight ? 'bg-white border-zinc-200 text-zinc-600' : 'bg-zinc-900 border-white/5 text-zinc-400'
+        className={`p-10 text-center rounded-2xl border space-y-4 my-6 ${
+          isLight
+            ? 'bg-white border-zinc-200 text-zinc-600 shadow-sm'
+            : 'bg-zinc-900 border-white/5 text-zinc-400'
         }`}
       >
-        <FileText className="w-12 h-12 mx-auto text-emerald-600/40" />
-        <div className="space-y-1">
-          <h3 className="text-base font-bold">Nenhum documento encontrado</h3>
-          <p className="text-xs max-w-sm mx-auto">
-            Não existem documentos que correspondam aos filtros selecionados ou o arquivo da instituição ainda não tem registos.
+        <div
+          className={`w-14 h-14 mx-auto rounded-2xl flex items-center justify-center ${
+            isLight ? 'bg-emerald-50 text-emerald-700' : 'bg-emerald-500/10 text-emerald-400'
+          }`}
+        >
+          <FileText className="w-7 h-7" />
+        </div>
+        <div className="space-y-1.5 max-w-md mx-auto">
+          <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">
+            Repositório Documental Institucional
+          </h3>
+          <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+            Área centralizada para gestão de documentos com integridade criptográfica, políticas de retenção e rastreabilidade total.
           </p>
+        </div>
+
+        <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+          {canUpload && onOpenUploadModal ? (
+            <button
+              type="button"
+              onClick={onOpenUploadModal}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-600 text-white shadow-sm transition-all cursor-pointer"
+            >
+              <Upload className="w-4 h-4" /> Carregar Documento
+            </button>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>Carregamento documental não configurado nesta instalação.</span>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -176,8 +208,8 @@ export default function DocumentTable({
                   <td className="py-3.5 px-4">
                     <span className="font-medium">{getCategoryLabel(doc.category)}</span>
                     {doc.classification && (
-                      <span className="block text-[10px] text-zinc-500 uppercase">
-                        {doc.classification}
+                      <span className="block text-[10px] text-zinc-500">
+                        {getClassificationLabel(doc.classification)}
                       </span>
                     )}
                   </td>

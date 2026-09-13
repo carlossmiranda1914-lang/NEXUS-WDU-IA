@@ -528,6 +528,7 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
         onOpenUploadVersion={handleOpenUploadVersion}
         onOpenHoldModal={handleOpenHoldModal}
         onOpenDeletionModal={handleOpenDeletionModal}
+        onOpenUploadModal={handleOpenUploadNew}
       />
 
       {/* 5. PAGINATION */}

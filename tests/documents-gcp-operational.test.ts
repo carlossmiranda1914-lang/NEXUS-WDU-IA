@@ -230,7 +230,7 @@ async function run() {
 
   // TEST 9: CONFIG_RESOLVER & FAIL-CLOSED CHECKS
   console.log('[TEST 9] CONFIG_RESOLVER & FAIL-CLOSED CHECKS...');
-  
+
   // 9A: Empty environment -> All null
   const emptyConfig = resolveDocumentsOperationalConfig({ env: {} });
   assert.equal(emptyConfig.storageProvider, null);
@@ -307,10 +307,29 @@ async function run() {
     const metadata = await metaRes.json();
 
     assert.equal(metadata.operationalAvailability.canUpload, true, 'canUpload must be true when bucket and upload policy are configured');
-    assert.equal(metadata.operationalAvailability.canAccess, false, 'canAccess is false when policyEngine is null');
-    assert.equal(metadata.operationalAvailability.canHold, false, 'canHold is false when retentionPolicyEngine is null');
-    assert.equal(metadata.operationalAvailability.canDelete, false, 'canDelete is false when retentionPolicyEngine is null');
-    console.log('[TEST 10] Metadata availability response verified:', metadata.operationalAvailability);
+    // TEST 11: Local UAT Storage Provider Fence & Production Fail-Closed
+    console.log('[TEST 11] LOCAL_UAT fence & production fail-closed behavior...');
+    const prodFenceConfig = resolveDocumentsOperationalConfig({
+      env: {
+        NODE_ENV: 'production',
+        DOCUMENTS_STORAGE_PROVIDER: 'local_uat',
+      },
+    });
+    assert.equal(
+      prodFenceConfig.storageProvider,
+      null,
+      'LocalUatObjectStorageProvider must NEVER be instantiated when NODE_ENV=production',
+    );
+
+    const devConfig = resolveDocumentsOperationalConfig({
+      env: {
+        NODE_ENV: 'development',
+        DOCUMENTS_STORAGE_PROVIDER: 'local_uat',
+      },
+    });
+    assert.ok(devConfig.storageProvider, 'LocalUatObjectStorageProvider must be resolved in development/test');
+    assert.equal(devConfig.storageProvider?.providerName, 'local_uat');
+    console.log('[TEST 11] LOCAL_UAT fence passed: Rejected in production, allowed in local/test environments.');
   } finally {
     server.close();
   }

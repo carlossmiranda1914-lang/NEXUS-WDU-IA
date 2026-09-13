@@ -9,6 +9,7 @@ import {
   GoogleCloudStorageObjectProvider,
   type GcsStorageClientLike,
 } from './google-cloud-storage-provider.ts';
+import { LocalUatObjectStorageProvider } from './local-uat-storage-provider.ts';
 
 export interface DocumentsOperationalRuntimeConfig {
   storageProvider: ObjectStorageProvider | null;
@@ -73,6 +74,12 @@ export function resolveDocumentsOperationalConfig(
   let storageProvider: ObjectStorageProvider | null = null;
   if (options.customStorageProvider) {
     storageProvider = options.customStorageProvider;
+  } else if (
+    (env.DOCUMENTS_STORAGE_PROVIDER === 'local_uat' ||
+      env.DOCUMENTS_STORAGE_PROVIDER === 'local') &&
+    env.NODE_ENV !== 'production'
+  ) {
+    storageProvider = new LocalUatObjectStorageProvider();
   } else if (storageBucket) {
     const projectId =
       env.GOOGLE_CLOUD_PROJECT?.trim() || env.GCP_PROJECT_ID?.trim();
