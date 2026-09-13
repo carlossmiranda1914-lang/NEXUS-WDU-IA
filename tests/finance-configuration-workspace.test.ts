@@ -153,6 +153,9 @@ test('shows current authoritative configuration and opens versioned profile acti
   assert.match(text, /AOA/);
   assert.match(text, /Atualizar perfil jurídico/);
   assert.match(text, /Atualizar perfil financeiro/);
+  assert.match(text, /As alterações criam uma nova versão efetiva do perfil\. A versão atual permanece preservada\./);
+  assert.match(text, /As alterações criam uma nova versão efetiva do perfil financeiro\. A versão atual permanece preservada\./);
+  assert.doesNotMatch(text, /atualização substitui o registo histórico/i);
   assert.match(text, /Configuração fiscal/);
   assert.match(text, /recibos/);
   assert.match(text, /faturas/);
