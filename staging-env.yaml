@@ -2,6 +2,6 @@ ALLOW_IN_MEMORY_FALLBACK: "false"
 DOCUMENTS_STORAGE_BUCKET: "nexus-staging-documents-eu"
 GOOGLE_CLOUD_PROJECT: "nexus-wdu-staging"
 NODE_ENV: "production"
-DOCUMENTS_GLOBAL_MAX_BYTE_SIZE: "52428800"
-DOCUMENTS_INSTITUTION_MAX_BYTE_SIZE: "52428800"
+DOCUMENTS_GLOBAL_MAX_BYTE_SIZE: "26214400"
+DOCUMENTS_INSTITUTION_MAX_BYTE_SIZE: "26214400"
 DOCUMENTS_ACCESS_POLICY_CONFIG: '[{"role":"institution_admin","category":"*","allowedActions":["view_metadata","view_audit","open_content","download_content","upload_version","associate_resource","place_hold","release_hold","authorize_deletion"]},{"role":"student","category":"*","allowedActions":["view_metadata","open_content","download_content","upload_version"]},{"role":"system","category":"*","allowedActions":["view_metadata","view_audit","open_content","download_content","upload_version","associate_resource","place_hold","release_hold","authorize_deletion"]}]'

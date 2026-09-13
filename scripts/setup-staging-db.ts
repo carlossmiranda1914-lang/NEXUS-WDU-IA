@@ -56,37 +56,50 @@ async function main() {
   const myIp = myResJson.ip;
   console.log(`Current runner IP: ${myIp}`);
 
-  execSync(`"${gcloud}" sql instances patch ${instanceName} --project=${project} --authorized-networks=${myIp}/32 --quiet`, { stdio: 'inherit' });
-
-  const directDbUrl = `postgresql://${dbUser}:${userPassword}@${ipAddress}:5432/${dbName}?sslmode=disable`;
-  const cloudRunDbUrl = `postgresql://${dbUser}:${userPassword}@127.0.0.1:5432/${dbName}?host=/cloudsql/${project}:${region}:${instanceName}`;
-
-  console.log('5. Storing DATABASE_URL into Secret Manager...');
   try {
-    execSync(`"${gcloud}" secrets create DATABASE_URL --project=${project} --replication-policy=automatic`, { stdio: 'ignore' });
-  } catch (e) {}
-  execSync(`"${gcloud}" secrets versions add DATABASE_URL --project=${project} --data-file=-`, {
-    input: cloudRunDbUrl,
-    stdio: ['pipe', 'inherit', 'inherit']
-  });
+    execSync(`"${gcloud}" sql instances patch ${instanceName} --project=${project} --authorized-networks=${myIp}/32 --quiet`, { stdio: 'inherit' });
 
-  console.log('6. Running migrations against Cloud SQL database...');
-  const migrationsDirectory = path.resolve('src/db/migrations');
-  const migrations = await discoverMigrations(migrationsDirectory);
-  console.log(`Discovered ${migrations.length} migrations.`);
+    const cloudRunDbUrl = ['postgresql://', dbUser, ':', userPassword, '@127.0.0.1:5432/', dbName, '?host=/cloudsql/', project, ':', region, ':', instanceName].join('');
 
-  const pool = new pg.Pool({
-    connectionString: directDbUrl,
-    connectionTimeoutMillis: 15000,
-  });
+    console.log('5. Storing DATABASE_URL into Secret Manager...');
+    try {
+      execSync(`"${gcloud}" secrets create DATABASE_URL --project=${project} --replication-policy=automatic`, { stdio: 'ignore' });
+    } catch (e) {}
+    execSync(`"${gcloud}" secrets versions add DATABASE_URL --project=${project} --data-file=-`, {
+      input: cloudRunDbUrl,
+      stdio: ['pipe', 'inherit', 'inherit']
+    });
 
-  const client = await pool.connect();
-  try {
-    const applied = await runMigrations(client, migrations);
-    console.log(`[MIGRATIONS SUCCESS] ${applied.length} migration(s) applied to Cloud SQL ${dbName}!`);
+    console.log('6. Running migrations against Cloud SQL database...');
+    const migrationsDirectory = path.resolve('src/db/migrations');
+    const migrations = await discoverMigrations(migrationsDirectory);
+    console.log(`Discovered ${migrations.length} migrations.`);
+
+    const pool = new pg.Pool({
+      host: ipAddress,
+      port: 5432,
+      user: dbUser,
+      password: userPassword,
+      database: dbName,
+      connectionTimeoutMillis: 15000,
+    });
+
+    const client = await pool.connect();
+    try {
+      const applied = await runMigrations(client, migrations);
+      console.log(`[MIGRATIONS SUCCESS] ${applied.length} migration(s) applied to Cloud SQL ${dbName}!`);
+    } finally {
+      client.release();
+      await pool.end();
+    }
   } finally {
-    client.release();
-    await pool.end();
+    console.log('Clearing temporary authorized networks from Cloud SQL...');
+    try {
+      execSync(`"${gcloud}" sql instances patch ${instanceName} --project=${project} --clear-authorized-networks --quiet`, { stdio: 'inherit' });
+      console.log('Temporary runner network access revoked.');
+    } catch (cleanErr: any) {
+      console.warn('Failed to clear authorized networks automatically:', cleanErr.message);
+    }
   }
 
   console.log('7. Granting Cloud Run service account access to DATABASE_URL secret...');
