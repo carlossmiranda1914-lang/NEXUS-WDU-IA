@@ -45,6 +45,63 @@ const receiptPreviewBlockMessage = (reason?: string | null) => ({
   SOURCE_NOT_ELIGIBLE: 'Este pagamento não está elegível para emissão de recibo oficial.',
 }[reason ?? ''] ?? 'A emissão oficial permanece bloqueada até a instituição concluir os requisitos aplicáveis.');
 
+type ReceiptReadinessPresentation = {
+  kind: 'LOCAL_ACTIONABLE' | 'LOCAL_NON_ACTIONABLE' | 'EXTERNAL_DEPENDENCY';
+  primary: string;
+  secondary: string | null;
+  showConfigurationCta: boolean;
+};
+
+const externalSecondaryMessage = (reasonCode?: string) => receiptPreviewBlockMessage(reasonCode)
+  .replace(/^A emissão oficial depende/, 'A emissão oficial também depende');
+
+export function receiptReadinessPresentation(
+  readiness: FinanceReadinessDto | null,
+  documentReadiness: Pick<FinancialDocumentReadinessProjection, 'status' | 'reasonCode'> | null,
+): ReceiptReadinessPresentation | null {
+  if (readiness?.status === 'READY' && documentReadiness?.status === 'READY') return null;
+
+  const missing = readiness?.requirements.filter(requirement => requirement.state === 'MISSING') ?? [];
+  const legalMissing = missing.some(requirement => requirement.code === 'INSTITUTION_LEGAL_PROFILE');
+  const financialMissing = missing.some(requirement => requirement.code === 'FINANCIAL_PROFILE');
+  if (readiness?.canManageConfiguration && (legalMissing || financialMissing)) {
+    const profiles = [legalMissing && 'perfil jurídico institucional', financialMissing && 'perfil financeiro institucional'].filter(Boolean);
+    return { kind: 'LOCAL_ACTIONABLE', primary: `Falta configurar o ${profiles.join(' e ')}.`, secondary: null, showConfigurationCta: true };
+  }
+
+  if (missing.length) {
+    const labels = missing.map(requirement => ({
+      FISCAL_CONFIGURATION: 'configuração fiscal',
+      RECEIPT_SERIES: 'série de recibos',
+      INSTITUTION_LEGAL_PROFILE: 'perfil jurídico institucional',
+      FINANCIAL_PROFILE: 'perfil financeiro institucional',
+    })[requirement.code]);
+    const external = documentReadiness?.status === 'BLOCKED' && /^AGT_/.test(documentReadiness.reasonCode ?? '');
+    return {
+      kind: 'LOCAL_NON_ACTIONABLE',
+      primary: `Faltam recursos locais: ${labels.join(' e ')}.`,
+      secondary: external ? externalSecondaryMessage(documentReadiness?.reasonCode) : null,
+      showConfigurationCta: false,
+    };
+  }
+
+  if (documentReadiness?.status === 'BLOCKED') {
+    return {
+      kind: 'EXTERNAL_DEPENDENCY',
+      primary: receiptPreviewBlockMessage(documentReadiness.reasonCode),
+      secondary: null,
+      showConfigurationCta: false,
+    };
+  }
+
+  return readiness?.status === 'READY' ? null : {
+    kind: 'LOCAL_NON_ACTIONABLE',
+    primary: 'A emissão permanece bloqueada até os requisitos aplicáveis estarem disponíveis.',
+    secondary: null,
+    showConfigurationCta: false,
+  };
+}
+
 export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfiguration, onOpenFinancialDocuments, initialPaymentReference }: FinancePaymentsWorkspaceProps) {
   const [view, setView] = useState<PaymentSubView>('list');
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -58,9 +115,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   const [previewPayment, setPreviewPayment] = useState<Payment | null>(null);
   const [issuedDocumentId, setIssuedDocumentId] = useState<string | null>(null);
   const [previewReadiness, setPreviewReadiness] = useState<ReceiptPreissuePreview | null>(null);
-  const hasLocallyActionableConfiguration = readiness?.requirements.some(requirement =>
-    requirement.state === 'MISSING' && (requirement.code === 'INSTITUTION_LEGAL_PROFILE' || requirement.code === 'FINANCIAL_PROFILE'),
-  ) ?? false;
+  const receiptReadinessState = receiptReadinessPresentation(readiness, receiptDocumentReadiness);
 
   const loadPayments = useCallback(async () => {
     setLoading(true);
@@ -110,8 +165,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
 
   return (
     <div className="w-full">
-      {readiness?.status === 'INCOMPLETE' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Configuração necessária</strong><p>Os recebimentos estão disponíveis, mas ainda não é possível emitir recibos oficiais.</p>{readiness.canManageConfiguration && hasLocallyActionableConfiguration ? <button type="button" onClick={onOpenFinanceConfiguration} className="mt-2 rounded-md border px-3 py-1">Concluir configuração</button> : <p className="mt-2 text-zinc-700">A emissão permanece bloqueada até os requisitos aplicáveis estarem disponíveis.</p>}</section>}
-      {receiptDocumentReadiness?.status === 'BLOCKED' && <section className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>Emissão oficial indisponível</strong><p>{receiptPreviewBlockMessage(receiptDocumentReadiness.reasonCode)}</p><p className="mt-1">Não será atribuído qualquer número de recibo enquanto este requisito não estiver concluído.</p></section>}
+      {receiptReadinessState && <section data-testid="receipt-readiness-state" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>{receiptReadinessState.kind === 'LOCAL_ACTIONABLE' ? 'Configuração necessária' : receiptReadinessState.kind === 'LOCAL_NON_ACTIONABLE' ? 'Configuração local pendente' : 'Emissão oficial indisponível'}</strong><p>{receiptReadinessState.primary}</p>{receiptReadinessState.secondary && <p className="mt-1 text-zinc-700">{receiptReadinessState.secondary}</p>}{receiptReadinessState.showConfigurationCta && <button type="button" onClick={onOpenFinanceConfiguration} className="mt-2 rounded-md border px-3 py-1">Concluir configuração</button>}</section>}
       {view === 'list' && <>
         <FinancePaymentsListView
           payments={payments}

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { create, act } from 'react-test-renderer';
-import { FinancePaymentsWorkspace } from '../src/components/finance/payments/FinancePaymentsWorkspace.tsx';
+import { FinancePaymentsWorkspace, receiptReadinessPresentation } from '../src/components/finance/payments/FinancePaymentsWorkspace.tsx';
 import { FinancePaymentsListView } from '../src/components/finance/payments/FinancePaymentsListView.tsx';
 import { FinancePaymentCreateView } from '../src/components/finance/payments/FinancePaymentCreateView.tsx';
 import { FinancePaymentProvidersView } from '../src/components/finance/payments/FinancePaymentProvidersView.tsx';
@@ -47,6 +47,42 @@ const sampleConfigs: PaymentProviderConfigPublicProjection[] = [
     updatedAt: '2026-09-05T10:00:00.000Z',
   },
 ];
+
+const readinessFor = (requirements: Array<{ code: string; state: string }>, canManageConfiguration = true) => ({
+  module: 'FINANCE', status: requirements.some(item => item.state !== 'COMPLETE') ? 'INCOMPLETE' : 'READY', canManageConfiguration, requirements,
+  receiptIssuance: { status: 'BLOCKED', reasonCode: 'AGT_ONBOARDING_REQUIRED' }, localPrerequisitesComplete: false,
+  jurisdictionPolicyAvailable: true, fiscalConfigurationAvailable: true, seriesConfigurationAvailable: true,
+}) as any;
+
+test('receipt readiness uses one actionable local configuration state for a missing legal profile', () => {
+  const state = receiptReadinessPresentation(readinessFor([{ code: 'INSTITUTION_LEGAL_PROFILE', state: 'MISSING' }]), { status: 'BLOCKED', reasonCode: 'AGT_ONBOARDING_REQUIRED' });
+  assert.deepEqual(state, { kind: 'LOCAL_ACTIONABLE', primary: 'Falta configurar o perfil jurídico institucional.', secondary: null, showConfigurationCta: true });
+});
+
+test('receipt readiness uses one actionable local configuration state for a missing financial profile', () => {
+  const state = receiptReadinessPresentation(readinessFor([{ code: 'FINANCIAL_PROFILE', state: 'MISSING' }]), { status: 'BLOCKED', reasonCode: 'AGT_ONBOARDING_REQUIRED' });
+  assert.deepEqual(state, { kind: 'LOCAL_ACTIONABLE', primary: 'Falta configurar o perfil financeiro institucional.', secondary: null, showConfigurationCta: true });
+});
+
+test('receipt readiness represents every AGT production prerequisite as one external state without a configuration CTA', () => {
+  for (const reasonCode of ['AGT_ONBOARDING_REQUIRED', 'AGT_SIGNING_MATERIAL_REQUIRED', 'AGT_PRODUCTION_SERIES_REQUIRED']) {
+    const state = receiptReadinessPresentation(readinessFor([], true), { status: 'BLOCKED', reasonCode });
+    assert.equal(state.kind, 'EXTERNAL_DEPENDENCY');
+    assert.equal(state.showConfigurationCta, false);
+    assert.ok(state.primary.length > 0);
+    assert.equal(state.secondary, null);
+  }
+});
+
+test('receipt readiness keeps a non-actionable local gap primary and the AGT dependency secondary without duplicate alerts', () => {
+  const state = receiptReadinessPresentation(readinessFor([{ code: 'FISCAL_CONFIGURATION', state: 'MISSING' }, { code: 'RECEIPT_SERIES', state: 'MISSING' }]), { status: 'BLOCKED', reasonCode: 'AGT_ONBOARDING_REQUIRED' });
+  assert.deepEqual(state, { kind: 'LOCAL_NON_ACTIONABLE', primary: 'Faltam recursos locais: configuração fiscal e série de recibos.', secondary: 'A emissão oficial também depende da adesão da instituição à AGT.', showConfigurationCta: false });
+});
+
+test('receipt readiness is silent when both the module and receipt are ready', () => {
+  const state = receiptReadinessPresentation({ ...readinessFor([]), status: 'READY', receiptIssuance: { status: 'READY' } }, { status: 'READY' });
+  assert.equal(state, null);
+});
 
 test('FinancePaymentsListView renders payment records with Confirmado and Não aplicado badges', async () => {
   let component: any;
