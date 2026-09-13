@@ -4,6 +4,9 @@ import { pool } from '../../db/index.ts';
 import { requireAuth, type AuthRequest } from '../../middleware/auth.ts';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
 import type { ObjectStorageProvider } from './object-storage-provider.ts';
+import { DocumentVerificationWorker } from './verification-worker.ts';
+import { ClamAvMalwareScanner } from './clamav-malware-scanner.ts';
+import type { MalwareScanner } from './malware-scanner.ts';
 import type { DocumentAccessPolicyEngine } from './document-access-policy.ts';
 import type { RetentionPolicyEngine } from './document-retention-policy.ts';
 import { PostgresDocumentRepository } from './document-repository.ts';
@@ -233,6 +236,8 @@ export interface DocumentRouteDependencies {
   retentionPolicyEngine?: RetentionPolicyEngine;
   accessGrantTokenKey?: string;
   deletionPseudonymizationKey?: string;
+  verificationWorker?: DocumentVerificationWorker | null;
+  malwareScanner?: MalwareScanner | null;
 }
 
 export function registerDocumentRoutes(
@@ -270,6 +275,40 @@ export function registerDocumentRoutes(
   const storageProvider: ObjectStorageProvider | null = dependencies.storageProvider || null;
   const storageBucket: string | null =
     dependencies.storageBucket || process.env.DOCUMENTS_STORAGE_BUCKET || null;
+
+  let verificationWorker: DocumentVerificationWorker | null =
+    dependencies.verificationWorker !== undefined
+      ? dependencies.verificationWorker
+      : null;
+
+  if (!verificationWorker && storageProvider && storageBucket) {
+    try {
+      const clamavUrl =
+        process.env.CLAMAV_SERVICE_URL || 'https://nexus-clamav-staging-oihjcxwo5a-ew.a.run.app';
+      const malwareScanner =
+        dependencies.malwareScanner ||
+        new ClamAvMalwareScanner({
+          serviceUrl: clamavUrl,
+          host: process.env.CLAMAV_HOST || '127.0.0.1',
+          port: Number(process.env.CLAMAV_PORT || 3310),
+        });
+
+      verificationWorker = new DocumentVerificationWorker({
+        pool: docPool,
+        storageProvider,
+        malwareScanner,
+        storageBucket,
+        gcpProjectId: process.env.GOOGLE_CLOUD_PROJECT || 'nexus-wdu-staging',
+        trustedAuthority: {
+          kind: 'trusted_system_worker',
+          workerId: 'deployed-staging-verification-worker-01',
+          workerName: 'Nexus Cloud Run Verification Worker',
+        },
+      });
+    } catch (workerErr) {
+      console.error('[DOCUMENTS-CONTROLLER] Verification worker initialization failed:', workerErr);
+    }
+  }
 
   const operationalAvailability: DocumentOperationalAvailability = {
     canAccess: Boolean(storageProvider && policyEngine && accessGrantTokenKey),
@@ -813,6 +852,25 @@ export function registerDocumentRoutes(
 
       assertNoInternalSecretsInDto(safeSession);
       assertNoInternalSecretsInDto(safeVersion);
+
+      // Autonomous async verification execution on deployed worker
+      if (verificationWorker && !completeRes.replayed) {
+        const institutionId = context.institutionId;
+        const documentId = completeRes.result.session.documentId;
+        const versionId = completeRes.result.version.id;
+        const actorPersonId = context.personId;
+
+        setImmediate(() => {
+          verificationWorker!.processVerificationJob({
+            institutionId,
+            documentId,
+            versionId,
+            actorPersonId,
+          }).catch((workerErr) => {
+            console.error(`[DEPLOYED_ASYNC_VERIFICATION_ERROR] Doc ${documentId} Ver ${versionId}:`, workerErr);
+          });
+        });
+      }
 
       return res.json({
         success: true,

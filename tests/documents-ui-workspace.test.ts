@@ -148,6 +148,7 @@ try {
     accessGrantTokenKey,
     deletionPseudonymizationKey,
     uploadPolicyConfig,
+    verificationWorker: null,
   });
 
   server = await new Promise<http.Server>((resolve) => {

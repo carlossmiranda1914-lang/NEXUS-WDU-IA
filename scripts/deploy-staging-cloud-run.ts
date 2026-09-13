@@ -16,6 +16,7 @@ const cmd =
   `--service-account=${sa} ` +
   `--allow-unauthenticated ` +
   `--add-cloudsql-instances=${instanceConnection} ` +
+  `--no-cpu-throttling ` +
   `--set-secrets=DATABASE_URL=DATABASE_URL:latest,DOCUMENTS_ACCESS_GRANT_TOKEN_KEY=DOCUMENTS_ACCESS_GRANT_TOKEN_KEY:latest,DOCUMENTS_DELETION_PSEUDONYMIZATION_KEY=DOCUMENTS_DELETION_PSEUDONYMIZATION_KEY:latest ` +
   `--env-vars-file=staging-env.yaml ` +
   `--quiet`;

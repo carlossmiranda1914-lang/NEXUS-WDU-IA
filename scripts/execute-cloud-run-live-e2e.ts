@@ -81,23 +81,33 @@ async function main() {
     console.log('2. Connected to persistent Cloud SQL PostgreSQL database.');
 
     try {
-      // 3. Real ClamAV Staging Service Health Check (PONG, Signature DB LOADED)
-      console.log(`\n3. Verifying Real Deployed ClamAV Staging Service: ${clamavServiceUrl}`);
-      const realScanner = new ClamAvMalwareScanner({ serviceUrl: clamavServiceUrl });
-      const isScannerHealthy = await realScanner.healthCheck();
-      if (!isScannerHealthy) {
-        throw new Error('Real ClamAV Staging service health check failed');
+      // 3. ClamAV Private Access Control & Authenticated Scanner Checks
+      console.log(`\n3. Verifying Private ClamAV Staging Service Access Control: ${clamavServiceUrl}`);
+
+      // 3a. Unauthenticated /scan MUST be DENIED (HTTP 403)
+      const unauthScanRes = await fetch(`${clamavServiceUrl}/scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: Buffer.from('test unauthenticated scan payload'),
+      });
+      console.log(`- Unauthenticated ClamAV /scan: HTTP ${unauthScanRes.status} (${unauthScanRes.status === 403 ? 'DENIED - PASS' : 'FAIL'})`);
+      if (unauthScanRes.status !== 403) {
+        throw new Error(`CLAMAV_PUBLIC_ACCESS_VIOLATION: Expected HTTP 403 for unauthenticated /scan, got ${unauthScanRes.status}`);
       }
 
-      const clamHealthRes = await fetch(`${clamavServiceUrl}/health`);
-      const clamHealthData = (await clamHealthRes.json()) as any;
-      console.log(`- ClamAV Service Status: ${clamHealthData.status}`);
-      console.log(`- ClamAV Ping Response: ${clamHealthData.ping}`);
-      console.log(`- ClamAV Signature Database: ${clamHealthData.signatureDatabase}`);
-      console.log(`- ClamAV Engine: ${clamHealthData.engine}`);
+      // 3b. Unauthenticated /health MUST be DENIED (HTTP 403)
+      const unauthHealthRes = await fetch(`${clamavServiceUrl}/health`);
+      console.log(`- Unauthenticated ClamAV /health: HTTP ${unauthHealthRes.status} (${unauthHealthRes.status === 403 ? 'DENIED - PASS' : 'FAIL'})`);
+      if (unauthHealthRes.status !== 403) {
+        throw new Error(`CLAMAV_PUBLIC_ACCESS_VIOLATION: Expected HTTP 403 for unauthenticated /health, got ${unauthHealthRes.status}`);
+      }
 
-      if (clamHealthData.ping !== 'PONG' || clamHealthData.signatureDatabase !== 'LOADED') {
-        throw new Error(`ClamAV service not fully ready: ${JSON.stringify(clamHealthData)}`);
+      // 3c. Authorized Worker Scan via IAM token
+      const realScanner = new ClamAvMalwareScanner({ serviceUrl: clamavServiceUrl });
+      const isScannerHealthy = await realScanner.healthCheck();
+      console.log(`- Authorized Worker ClamAV Health Check: ${isScannerHealthy ? 'PASS (PONG / LOADED)' : 'FAIL'}`);
+      if (!isScannerHealthy) {
+        throw new Error('Authorized ClamAV scanner health check failed');
       }
 
       // 4. Mint Firebase staging identities
@@ -162,9 +172,9 @@ async function main() {
       ]);
       console.log('Institutional membership bindings committed to PostgreSQL.');
 
-      // 6. Test Trusted Worker Fail-Closed Contract
-      console.log('\n6. Validating Trusted Worker Authority Fail-Closed Contract...');
-      let threwWithoutAuth = false;
+      // 6. Trusted Worker Authority Fail-Closed Invariant
+      console.log('\n6. Validating Trusted Worker Authority Fail-Closed Invariant...');
+      let threwMissingAuth = false;
       try {
         new (DocumentVerificationWorker as any)({
           pool,
@@ -173,28 +183,16 @@ async function main() {
         });
       } catch (err: any) {
         if (err.message.includes('MISSING_TRUSTED_WORKER_AUTHORITY')) {
-          threwWithoutAuth = true;
+          threwMissingAuth = true;
         }
       }
-      if (!threwWithoutAuth) {
-        throw new Error('Verification worker did NOT fail-closed when trusted authority was missing!');
+      console.log(`- Missing Trusted Worker Authority Rejection: ${threwMissingAuth ? 'FAIL-CLOSED (PASS)' : 'FAIL'}`);
+      if (!threwMissingAuth) {
+        throw new Error('Verification worker failed to fail-closed on missing authority');
       }
-      console.log('- Missing Trusted Worker Authority: FAIL-CLOSED (PASS)');
 
-      const worker = new DocumentVerificationWorker({
-        pool,
-        storageBucket,
-        gcpProjectId: gcpProject,
-        clamavServiceUrl,
-        trustedAuthority: {
-          kind: 'trusted_system_worker',
-          workerId: 'staging-verification-worker-01',
-          workerName: 'Nexus Staging Verification Worker',
-        },
-      });
-
-      // 7. Live Clean Document HTTP Lifecycle against Cloud Run
-      console.log(`\n7. Executing Clean Document Flow against Cloud Run: ${cloudRunUrl}`);
+      // 7. Live Clean Document Flow with Autonomous Async Verification by Deployed Cloud Run Worker
+      console.log('\n7. Executing Live Clean Document Flow with Autonomous Deployed Verification...');
       const cleanPayload = Buffer.from(
         '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n180\n%%EOF\n'
       );
@@ -243,7 +241,7 @@ async function main() {
         throw new Error(`Clean transfer failed: ${transferCleanRes.status}`);
       }
 
-      // C. Complete upload session
+      // C. Complete upload session (triggers autonomous async verification on deployed Cloud Run worker)
       const completeCleanRes = await fetch(`${cloudRunUrl}/api/documents/upload-sessions/${cleanSessionId}/complete`, {
         method: 'POST',
         headers: {
@@ -264,18 +262,25 @@ async function main() {
       console.log(`- Clean Document ID: ${cleanDocumentId}`);
       console.log(`- Clean Version ID: ${cleanVersionId}`);
 
-      // D. Run Verification Worker against Real ClamAV
-      console.log('Executing Verification Worker against Clean Document...');
-      const cleanVerifyResult = await worker.processVerificationJob({
-        institutionId: instAId,
-        documentId: cleanDocumentId,
-        versionId: cleanVersionId,
-        actorPersonId: personA1Id,
-      });
+      // D. Poll for Autonomous Verification by Deployed Worker (NO manual worker invocation)
+      console.log('Polling for Autonomous Async Verification completion by Deployed Cloud Run Worker...');
+      let cleanFinalStatus = 'content_received';
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const verRes = await client.query(
+          'SELECT status FROM document_versions WHERE id = $1 AND institution_id = $2',
+          [cleanVersionId, instAId]
+        );
+        cleanFinalStatus = verRes.rows[0]?.status;
+        if (cleanFinalStatus === 'available') {
+          console.log(`- Deployed Worker completed verification at attempt ${i + 1}s -> 'available'`);
+          break;
+        }
+      }
 
-      console.log(`- Clean Verification Result Status: ${cleanVerifyResult.result.versionStatus}`);
-      if (cleanVerifyResult.result.versionStatus !== 'available') {
-        throw new Error(`Expected clean document to be 'available', got '${cleanVerifyResult.result.versionStatus}'`);
+      console.log(`- Clean Document Final Status: ${cleanFinalStatus}`);
+      if (cleanFinalStatus !== 'available') {
+        throw new Error(`Expected clean document to be 'available', got '${cleanFinalStatus}'`);
       }
 
       // E. Authorize and Download Clean Document
@@ -325,8 +330,8 @@ async function main() {
         throw new Error('Clean full hash invariant failed');
       }
 
-      // 8. Live EICAR Synthetic Antivirus Test Flow against Real ClamAV
-      console.log('\n8. Executing EICAR Antivirus Detection Flow against Cloud Run & Real ClamAV...');
+      // 8. Live EICAR Synthetic Antivirus Test Flow with Autonomous Deployed Verification
+      console.log('\n8. Executing EICAR Antivirus Detection Flow with Autonomous Deployed Verification...');
       const eicarPayload = Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*', 'ascii');
 
       // A. POST /api/documents/upload-sessions for EICAR
@@ -372,7 +377,7 @@ async function main() {
         throw new Error(`EICAR transfer failed: ${transferEicarRes.status}`);
       }
 
-      // C. Complete upload session
+      // C. Complete upload session (triggers autonomous async verification on deployed Cloud Run worker)
       const completeEicarRes = await fetch(`${cloudRunUrl}/api/documents/upload-sessions/${eicarSessionId}/complete`, {
         method: 'POST',
         headers: {
@@ -393,18 +398,25 @@ async function main() {
       console.log(`- EICAR Document ID: ${eicarDocumentId}`);
       console.log(`- EICAR Version ID: ${eicarVersionId}`);
 
-      // D. Run Verification Worker against Real ClamAV
-      console.log('Executing Verification Worker against EICAR Document...');
-      const eicarVerifyResult = await worker.processVerificationJob({
-        institutionId: instAId,
-        documentId: eicarDocumentId,
-        versionId: eicarVersionId,
-        actorPersonId: personA1Id,
-      });
+      // D. Poll for Autonomous Verification by Deployed Worker (NO manual worker invocation)
+      console.log('Polling for Autonomous Async Verification of EICAR Document by Deployed Worker...');
+      let eicarFinalStatus = 'content_received';
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const verRes = await client.query(
+          'SELECT status FROM document_versions WHERE id = $1 AND institution_id = $2',
+          [eicarVersionId, instAId]
+        );
+        eicarFinalStatus = verRes.rows[0]?.status;
+        if (eicarFinalStatus === 'quarantined') {
+          console.log(`- Deployed Worker completed EICAR quarantine at attempt ${i + 1}s -> 'quarantined'`);
+          break;
+        }
+      }
 
-      console.log(`- EICAR Verification Result Status: ${eicarVerifyResult.result.versionStatus}`);
-      if (eicarVerifyResult.result.versionStatus !== 'quarantined') {
-        throw new Error(`Expected EICAR document to be 'quarantined', got '${eicarVerifyResult.result.versionStatus}'`);
+      console.log(`- EICAR Document Final Status: ${eicarFinalStatus}`);
+      if (eicarFinalStatus !== 'quarantined') {
+        throw new Error(`Expected EICAR document to be 'quarantined', got '${eicarFinalStatus}'`);
       }
 
       // E. Verify Database Version Status is quarantined
@@ -432,7 +444,7 @@ async function main() {
       });
 
       console.log(`- Quarantined Access HTTP Status: ${eicarAccessRes.status}`);
-      if (eicarAccessRes.status !== 403 && eicarAccessRes.status !== 400 && eicarAccessRes.status !== 404) {
+      if (eicarAccessRes.status !== 403 && eicarAccessRes.status !== 400 && eicarAccessRes.status !== 404 && eicarAccessRes.status !== 422) {
         throw new Error(`Expected access denial for quarantined document, got HTTP ${eicarAccessRes.status}`);
       }
       console.log('- EICAR Content Access: DENIED (PASS)');

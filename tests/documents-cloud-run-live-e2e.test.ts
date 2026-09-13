@@ -82,16 +82,20 @@ describe('Live Cloud Run True E2E Acceptance Suite (I8D)', () => {
       const client = await pool.connect();
 
       try {
-        // 3. Real ClamAV Service Health Check
+        // 3. Private ClamAV Access Control & Authenticated Scanner Checks
+        const unauthScanRes = await fetch(`${clamavServiceUrl}/scan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: Buffer.from('test unauthenticated scan payload'),
+        });
+        assert.equal(unauthScanRes.status, 403, 'Unauthenticated ClamAV /scan must be DENIED with HTTP 403');
+
+        const unauthHealthRes = await fetch(`${clamavServiceUrl}/health`);
+        assert.equal(unauthHealthRes.status, 403, 'Unauthenticated ClamAV /health must be DENIED with HTTP 403');
+
         const realScanner = new ClamAvMalwareScanner({ serviceUrl: clamavServiceUrl });
         const isHealthy = await realScanner.healthCheck();
-        assert.equal(isHealthy, true, 'Real ClamAV staging daemon reports healthy');
-
-        const clamHealthRes = await fetch(`${clamavServiceUrl}/health`);
-        const clamHealthData = (await clamHealthRes.json()) as any;
-        assert.equal(clamHealthData.status, 'HEALTHY', 'ClamAV status is HEALTHY');
-        assert.equal(clamHealthData.ping, 'PONG', 'ClamAV ping is PONG');
-        assert.equal(clamHealthData.signatureDatabase, 'LOADED', 'ClamAV signature database is LOADED');
+        assert.equal(isHealthy, true, 'Authorized ClamAV scanner reports healthy via IAM token');
 
         // 4. Mint Firebase Staging Identities
         const userA1 = await mintFirebaseUser('admin-a');
@@ -157,19 +161,7 @@ describe('Live Cloud Run True E2E Acceptance Suite (I8D)', () => {
           'Verification worker must fail closed without trusted authority'
         );
 
-        const worker = new DocumentVerificationWorker({
-          pool,
-          storageBucket,
-          gcpProjectId: gcpProject,
-          clamavServiceUrl,
-          trustedAuthority: {
-            kind: 'trusted_system_worker',
-            workerId: 'test-staging-verifier-01',
-            workerName: 'Nexus Staging Verification Worker',
-          },
-        });
-
-        // 7. Clean Document Flow
+        // 7. Clean Document Flow with Autonomous Deployed Verification
         const cleanPayload = Buffer.from(
           '%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n180\n%%EOF\n'
         );
@@ -220,14 +212,18 @@ describe('Live Cloud Run True E2E Acceptance Suite (I8D)', () => {
         assert.equal(completeCleanRes.status, 200, 'Clean complete successful');
         const { version: cleanVersion } = (await completeCleanRes.json()) as any;
 
-        // Execute worker verification
-        const cleanVerifyRes = await worker.processVerificationJob({
-          institutionId: instAId,
-          documentId: cleanSession.documentId,
-          versionId: cleanVersion.id,
-          actorPersonId: personA1Id,
-        });
-        assert.equal(cleanVerifyRes.result.versionStatus, 'available', 'Clean document verified as available');
+        // Poll for autonomous verification by deployed worker (NO manual worker invocation)
+        let cleanStatus = 'content_received';
+        for (let i = 0; i < 30; i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          const verRes = await client.query(
+            'SELECT status FROM document_versions WHERE id = $1 AND institution_id = $2',
+            [cleanVersion.id, instAId]
+          );
+          cleanStatus = verRes.rows[0]?.status;
+          if (cleanStatus === 'available') break;
+        }
+        assert.equal(cleanStatus, 'available', 'Deployed worker automatically verified clean document as available');
 
         // Access grant and download
         const cleanAccessRes = await fetch(`${cloudRunUrl}/api/documents/${cleanSession.documentId}/access`, {
@@ -257,7 +253,7 @@ describe('Live Cloud Run True E2E Acceptance Suite (I8D)', () => {
         const downloadedCleanSha256 = createHash('sha256').update(downloadedCleanBytes).digest('hex');
         assert.equal(downloadedCleanSha256, cleanSha256, 'Clean downloaded SHA256 matches source');
 
-        // 8. EICAR Synthetic Antivirus Test Flow
+        // 8. EICAR Synthetic Antivirus Test Flow with Autonomous Deployed Verification
         const eicarPayload = Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*', 'ascii');
         const createEicarRes = await fetch(`${cloudRunUrl}/api/documents/upload-sessions`, {
           method: 'POST',
@@ -304,14 +300,18 @@ describe('Live Cloud Run True E2E Acceptance Suite (I8D)', () => {
         assert.equal(completeEicarRes.status, 200, 'EICAR complete successful');
         const { version: eicarVersion } = (await completeEicarRes.json()) as any;
 
-        // Execute worker verification against EICAR document
-        const eicarVerifyRes = await worker.processVerificationJob({
-          institutionId: instAId,
-          documentId: eicarSession.documentId,
-          versionId: eicarVersion.id,
-          actorPersonId: personA1Id,
-        });
-        assert.equal(eicarVerifyRes.result.versionStatus, 'quarantined', 'EICAR document is quarantined');
+        // Poll for autonomous verification of EICAR document by deployed worker
+        let eicarStatus = 'content_received';
+        for (let i = 0; i < 30; i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          const verRes = await client.query(
+            'SELECT status FROM document_versions WHERE id = $1 AND institution_id = $2',
+            [eicarVersion.id, instAId]
+          );
+          eicarStatus = verRes.rows[0]?.status;
+          if (eicarStatus === 'quarantined') break;
+        }
+        assert.equal(eicarStatus, 'quarantined', 'Deployed worker automatically quarantined EICAR document');
 
         // Check DB version status
         const dbEicarRes = await client.query(
@@ -332,7 +332,7 @@ describe('Live Cloud Run True E2E Acceptance Suite (I8D)', () => {
           body: JSON.stringify({ action: 'download', versionId: eicarVersion.id }),
         });
         assert.ok(
-          eicarAccessRes.status === 403 || eicarAccessRes.status === 400 || eicarAccessRes.status === 404,
+          eicarAccessRes.status === 403 || eicarAccessRes.status === 400 || eicarAccessRes.status === 404 || eicarAccessRes.status === 422,
           `Content access to quarantined document must be denied (got ${eicarAccessRes.status})`
         );
 

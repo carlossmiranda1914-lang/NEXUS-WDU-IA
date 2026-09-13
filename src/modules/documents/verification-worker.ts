@@ -39,6 +39,22 @@ export interface VerificationWorkerOptions {
   clamavServiceUrl?: string;
 }
 
+export interface SystemWorkerContext {
+  readonly kind: 'system_worker';
+  readonly institutionId: string;
+  readonly institutionName: string;
+  readonly institutionSlug: string;
+  readonly workerId: string;
+  readonly workerName: string;
+  readonly role: 'system';
+  readonly personId: string | null;
+  readonly personName?: string;
+  readonly identityEmail: string | null;
+  readonly membershipId: string | null;
+}
+
+export type DocumentExecutionContext = InstitutionalContext | SystemWorkerContext;
+
 export class DocumentVerificationWorker {
   private readonly pool: Pool;
   private readonly trustedAuthority: TrustedWorkerAuthority;
@@ -130,11 +146,11 @@ export class DocumentVerificationWorker {
 
     const inst = instRes.rows[0];
 
-    // 3. Resolve real actor identity if provided, or execute as trusted system worker authority (no fabricated membership)
-    let personId = '00000000-0000-0000-0000-000000000000';
-    let personName = this.trustedAuthority.workerName || `System Worker (${this.trustedAuthority.workerId})`;
+    // 3. Resolve real actor identity if provided, or execute as trusted system worker authority (no fabricated membership, no zero UUID placeholders)
+    let personId: string | null = null;
+    let personName: string = this.trustedAuthority.workerName || `System Worker (${this.trustedAuthority.workerId})`;
     let identityEmail: string | null = null;
-    let membershipId = '00000000-0000-0000-0000-000000000000';
+    let membershipId: string | null = null;
 
     if (job.actorPersonId) {
       const personRes = await this.pool.query<{
@@ -162,16 +178,18 @@ export class DocumentVerificationWorker {
       }
     }
 
-    // Explicit system execution context
-    const context: InstitutionalContext = {
+    // Explicit system execution context (WORKER_ROLE=SYSTEM, no institution_admin impersonation, no zero UUIDs)
+    const context: SystemWorkerContext = {
+      kind: 'system_worker',
       institutionId: inst.id,
       institutionName: inst.name,
       institutionSlug: inst.slug,
+      workerId: this.trustedAuthority.workerId,
+      workerName: personName,
+      role: 'system',
       personId,
-      personName,
       identityEmail,
       membershipId,
-      role: 'institution_admin' as any,
     };
 
     const idempotencyKey =
