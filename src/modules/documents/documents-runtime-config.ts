@@ -1,5 +1,8 @@
 import type { ObjectStorageProvider } from './object-storage-provider.ts';
-import type { DocumentAccessPolicyEngine } from './document-access-policy.ts';
+import {
+  type DocumentAccessPolicyEngine,
+  ConfigurableDocumentAccessPolicyEngine,
+} from './document-access-policy.ts';
 import type { RetentionPolicyEngine } from './document-retention-policy.ts';
 import type { DocumentSizePolicyConfig } from './document-upload-model.ts';
 import {
@@ -81,8 +84,18 @@ export function resolveDocumentsOperationalConfig(
   }
 
   // 5. Policy Engines (fail-closed if unconfigured)
-  const policyEngine: DocumentAccessPolicyEngine | null =
+  let policyEngine: DocumentAccessPolicyEngine | null =
     options.customPolicyEngine || null;
+  if (!policyEngine && env.DOCUMENTS_ACCESS_POLICY_CONFIG?.trim()) {
+    try {
+      const parsed = JSON.parse(env.DOCUMENTS_ACCESS_POLICY_CONFIG.trim());
+      if (Array.isArray(parsed)) {
+        policyEngine = new ConfigurableDocumentAccessPolicyEngine(parsed);
+      }
+    } catch (e) {
+      console.error('[DOCUMENTS-CONFIG] Invalid DOCUMENTS_ACCESS_POLICY_CONFIG:', e);
+    }
+  }
   const retentionPolicyEngine: RetentionPolicyEngine | null =
     options.customRetentionPolicyEngine || null;
 
