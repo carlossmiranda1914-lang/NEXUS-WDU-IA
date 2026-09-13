@@ -1,9 +1,15 @@
 import type { ObjectStorageProvider } from './object-storage-provider.ts';
 import {
   type DocumentAccessPolicyEngine,
+  type DocumentAccessPolicyRule,
   ConfigurableDocumentAccessPolicyEngine,
 } from './document-access-policy.ts';
-import type { RetentionPolicyEngine } from './document-retention-policy.ts';
+import {
+  type RetentionPolicyEngine,
+  type RetentionPolicyConfig,
+  ConfigurableRetentionPolicyEngine,
+} from './document-retention-policy.ts';
+import { CANONICAL_DOCUMENT_CATEGORIES } from './document-model.ts';
 import type { DocumentSizePolicyConfig } from './document-upload-model.ts';
 import {
   GoogleCloudStorageObjectProvider,
@@ -29,30 +35,94 @@ export interface ResolveDocumentsConfigOptions {
   customRetentionPolicyEngine?: RetentionPolicyEngine;
 }
 
+const DEFAULT_LOCAL_UAT_ROLES = [
+  'admin',
+  'institution_admin',
+  'director',
+  'secretary',
+  'staff',
+  'teacher',
+  'guardian',
+  'student',
+  'superadmin',
+] as const;
+
+function createLocalUatAccessPolicyRules(): DocumentAccessPolicyRule[] {
+  const rules: DocumentAccessPolicyRule[] = [];
+  for (const role of DEFAULT_LOCAL_UAT_ROLES) {
+    rules.push({
+      role,
+      category: '*',
+      allowedActions: ['open_content', 'download_content'],
+    });
+  }
+  return rules;
+}
+
+function createLocalUatRetentionPolicies(): RetentionPolicyConfig[] {
+  return CANONICAL_DOCUMENT_CATEGORIES.map((cat) => ({
+    policyId: `local-uat-retention-${cat.id}`,
+    policyVersion: '1.0',
+    jurisdictionProfileId: 'DEFAULT_JURISDICTION',
+    jurisdictionProfileVersion: '1.0',
+    category: cat.id,
+    clockTriggerType: 'document_verified',
+    retentionDurationDays: 365 * 5,
+    allowedHoldTypes: ['legal', 'administrative'],
+    allowedDeletionAuthorityScopePatterns: ['admin', 'institution_admin', 'director'],
+  }));
+}
+
+// Singleton local UAT storage provider for in-memory persistence during local sessions
+let sharedLocalUatStorageProvider: LocalUatObjectStorageProvider | null = null;
+
+export function getSharedLocalUatStorageProvider(): LocalUatObjectStorageProvider {
+  if (!sharedLocalUatStorageProvider) {
+    sharedLocalUatStorageProvider = new LocalUatObjectStorageProvider();
+  }
+  return sharedLocalUatStorageProvider;
+}
+
 /**
  * Validates and resolves Documents operational dependencies from runtime configuration.
- * Adheres strictly to fail-closed semantics: missing or invalid dependencies evaluate to null,
- * disabling dependent operational mutations while leaving read-only workspace fully functional.
+ * In production (NODE_ENV === 'production'), adheres strictly to fail-closed semantics.
+ * In non-production/local-UAT, provides fully functional local UAT operational defaults
+ * so that the real browser UAT workflow (upload, verification, access, hold, deletion)
+ * operates seamlessly without fake mocks or hardcoded frontend data.
  */
 export function resolveDocumentsOperationalConfig(
   options: ResolveDocumentsConfigOptions = {},
 ): DocumentsOperationalRuntimeConfig {
   const env = options.env || process.env;
+  const isProduction = env.NODE_ENV === 'production';
 
-  // 1. Secrets validation (fail-closed if below 32 chars)
+  // 1. Secrets validation (32+ chars; local fallback in non-production)
   const rawAccessKey = env.DOCUMENTS_ACCESS_GRANT_TOKEN_KEY?.trim();
   const accessGrantTokenKey =
-    rawAccessKey && rawAccessKey.length >= 32 ? rawAccessKey : null;
+    rawAccessKey && rawAccessKey.length >= 32
+      ? rawAccessKey
+      : !isProduction
+      ? 'nexus-local-uat-access-grant-token-key-32chars!'
+      : null;
 
   const rawDeletionKey = env.DOCUMENTS_DELETION_PSEUDONYMIZATION_KEY?.trim();
   const deletionPseudonymizationKey =
-    rawDeletionKey && rawDeletionKey.length >= 32 ? rawDeletionKey : null;
+    rawDeletionKey && rawDeletionKey.length >= 32
+      ? rawDeletionKey
+      : !isProduction
+      ? 'nexus-local-uat-deletion-pseudonymization-key-32chars!'
+      : null;
 
   // 2. Storage Bucket
   const rawBucket = env.DOCUMENTS_STORAGE_BUCKET?.trim();
-  const storageBucket = rawBucket && rawBucket.length > 0 ? rawBucket : null;
+  const storageBucket =
+    rawBucket && rawBucket.length > 0
+      ? rawBucket
+      : !isProduction
+      ? 'nexus-local-uat-documents-bucket'
+      : null;
 
-  // 3. Upload Size Policy (governed operational configuration; fail-closed if non-positive)
+  // 3. Upload Size Policy (governed operational configuration)
   let uploadPolicyConfig: DocumentSizePolicyConfig | null = null;
   const rawGlobalLimit = env.DOCUMENTS_GLOBAL_MAX_BYTE_SIZE?.trim();
   if (rawGlobalLimit) {
@@ -68,6 +138,12 @@ export function resolveDocumentsOperationalConfig(
             : undefined,
       };
     }
+  } else if (!isProduction) {
+    // 50MB default limit for local UAT
+    uploadPolicyConfig = {
+      globalMaxByteSize: 50 * 1024 * 1024,
+      institutionMaxByteSize: 50 * 1024 * 1024,
+    };
   }
 
   // 4. Storage Provider Resolution
@@ -76,21 +152,29 @@ export function resolveDocumentsOperationalConfig(
     storageProvider = options.customStorageProvider;
   } else if (
     (env.DOCUMENTS_STORAGE_PROVIDER === 'local_uat' ||
-      env.DOCUMENTS_STORAGE_PROVIDER === 'local') &&
-    env.NODE_ENV !== 'production'
+      env.DOCUMENTS_STORAGE_PROVIDER === 'local' ||
+      !env.DOCUMENTS_STORAGE_BUCKET ||
+      env.DOCUMENTS_STORAGE_BUCKET.includes('local')) &&
+    !isProduction
   ) {
-    storageProvider = new LocalUatObjectStorageProvider();
+    storageProvider = getSharedLocalUatStorageProvider();
   } else if (storageBucket) {
     const projectId =
       env.GOOGLE_CLOUD_PROJECT?.trim() || env.GCP_PROJECT_ID?.trim();
-    storageProvider = new GoogleCloudStorageObjectProvider({
-      client: options.storageClient,
-      projectId,
-      defaultBucket: storageBucket,
-    });
+    if (projectId) {
+      storageProvider = new GoogleCloudStorageObjectProvider({
+        client: options.storageClient,
+        projectId,
+        defaultBucket: storageBucket,
+      });
+    } else if (!isProduction) {
+      storageProvider = getSharedLocalUatStorageProvider();
+    }
+  } else if (!isProduction) {
+    storageProvider = getSharedLocalUatStorageProvider();
   }
 
-  // 5. Policy Engines (fail-closed if unconfigured)
+  // 5. Policy Engines
   let policyEngine: DocumentAccessPolicyEngine | null =
     options.customPolicyEngine || null;
   if (!policyEngine && env.DOCUMENTS_ACCESS_POLICY_CONFIG?.trim()) {
@@ -103,8 +187,19 @@ export function resolveDocumentsOperationalConfig(
       console.error('[DOCUMENTS-CONFIG] Invalid DOCUMENTS_ACCESS_POLICY_CONFIG:', e);
     }
   }
-  const retentionPolicyEngine: RetentionPolicyEngine | null =
+  if (!policyEngine && !isProduction) {
+    policyEngine = new ConfigurableDocumentAccessPolicyEngine(
+      createLocalUatAccessPolicyRules(),
+    );
+  }
+
+  let retentionPolicyEngine: RetentionPolicyEngine | null =
     options.customRetentionPolicyEngine || null;
+  if (!retentionPolicyEngine && !isProduction) {
+    retentionPolicyEngine = new ConfigurableRetentionPolicyEngine(
+      createLocalUatRetentionPolicies(),
+    );
+  }
 
   return {
     storageProvider,

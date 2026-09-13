@@ -262,3 +262,27 @@ export function getBadgeClasses(tone: 'emerald' | 'amber' | 'rose' | 'blue' | 'z
         : 'border-white/10 bg-zinc-800 text-zinc-300';
   }
 }
+
+export function getClassificationBadgeClass(classification: string | null | undefined, theme: Theme): string {
+  const isLight = theme === 'light';
+  const lower = (classification || '').toLowerCase();
+  switch (lower) {
+    case 'confidential':
+    case 'confidencial':
+    case 'restricted':
+    case 'restrito':
+      return isLight
+        ? 'border-amber-200 bg-amber-50 text-amber-800'
+        : 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+    case 'public':
+    case 'publico':
+    case 'público':
+      return isLight
+        ? 'border-blue-200 bg-blue-50 text-blue-800'
+        : 'border-blue-500/30 bg-blue-500/10 text-blue-300';
+    default:
+      return isLight
+        ? 'border-zinc-200 bg-zinc-100 text-zinc-700'
+        : 'border-white/10 bg-zinc-800 text-zinc-300';
+  }
+}

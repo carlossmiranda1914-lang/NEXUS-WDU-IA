@@ -26,6 +26,11 @@ import {
   ChevronUp,
   FileCode,
   Info,
+  Plus,
+  User,
+  GraduationCap,
+  Loader2,
+  Search,
 } from 'lucide-react';
 import type {
   Theme,
@@ -34,8 +39,16 @@ import type {
   DetailDrawerTab,
   DocumentVersionDto,
   DocumentOperationalAvailability,
+  AssociationTarget,
 } from './types.ts';
-import { fetchDocumentActivity, fetchDocumentVersions } from './api.ts';
+import {
+  fetchDocumentActivity,
+  fetchDocumentVersions,
+  searchAssociationTargets,
+  createDocumentAssociation,
+  deleteDocumentAssociation,
+  generateIdempotencyKey,
+} from './api.ts';
 import {
   formatByteSize,
   formatDate,
@@ -45,6 +58,7 @@ import {
   getTechnicalStatusPresentation,
   getRetentionStatusPresentation,
   getBadgeClasses,
+  getClassificationBadgeClass,
 } from './utils.ts';
 
 interface DocumentDetailDrawerProps {
@@ -54,7 +68,7 @@ interface DocumentDetailDrawerProps {
   operationalAvailability?: DocumentOperationalAvailability;
   onClose: () => void;
   onOpenUploadVersion: (doc: DocumentDto) => void;
-  onOpenAccessViewer: (doc: DocumentDto, action: 'open' | 'download') => void;
+  onOpenAccessViewer: (doc: DocumentDto, action: 'open' | 'download', versionId?: string) => void;
   onOpenHoldModal: (doc: DocumentDto, mode: 'place' | 'release') => void;
   onOpenDeletionModal: (doc: DocumentDto) => void;
   onRefreshDocument: () => void;
@@ -84,14 +98,25 @@ export default function DocumentDetailDrawer({
   const [copiedHash, setCopiedHash] = useState<string | null>(null);
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
 
+  // Association modal / form state inside drawer
+  const [isAddingAssociation, setIsAddingAssociation] = useState(false);
+  const [assocDomain, setAssocDomain] = useState<'student' | 'enrollment'>('student');
+  const [assocSearch, setAssocSearch] = useState('');
+  const [assocTargets, setAssocTargets] = useState<AssociationTarget[]>([]);
+  const [loadingAssocTargets, setLoadingAssocTargets] = useState(false);
+  const [selectedAssocTarget, setSelectedAssocTarget] = useState<AssociationTarget | null>(null);
+  const [assocPurpose, setAssocPurpose] = useState('Identificação institucional');
+  const [savingAssoc, setSavingAssoc] = useState(false);
+  const [assocError, setAssocError] = useState<string | null>(null);
+
   // Escape key closes drawer
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape' && isOpen && !isAddingAssociation) {
         onClose();
       }
     },
-    [isOpen, onClose],
+    [isOpen, isAddingAssociation, onClose],
   );
 
   useEffect(() => {
@@ -101,11 +126,41 @@ export default function DocumentDetailDrawer({
 
   useEffect(() => {
     setDocDetail(initialDoc);
+    setIsAddingAssociation(false);
     if (initialDoc && isOpen) {
       void loadActivity(initialDoc.id);
       void loadVersions(initialDoc.id);
     }
   }, [initialDoc, isOpen]);
+
+  // Search association targets
+  useEffect(() => {
+    if (!isAddingAssociation) return;
+
+    let active = true;
+    setLoadingAssocTargets(true);
+
+    const timer = setTimeout(() => {
+      searchAssociationTargets(assocDomain, assocSearch)
+        .then((targets) => {
+          if (active) {
+            setAssocTargets(targets);
+            setLoadingAssocTargets(false);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setAssocTargets([]);
+            setLoadingAssocTargets(false);
+          }
+        });
+    }, 200);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [isAddingAssociation, assocDomain, assocSearch]);
 
   const loadActivity = async (docId: string) => {
     setLoadingActivity(true);
@@ -114,7 +169,7 @@ export default function DocumentDetailDrawer({
       const items = await fetchDocumentActivity(docId);
       setActivities(items);
     } catch (err) {
-      setActivityError(err instanceof Error ? err.message : 'Não foi possível carregar o histórico de atividade.');
+      setActivityError(err instanceof Error ? err.message : 'Não foi possível carregar a atividade.');
     } finally {
       setLoadingActivity(false);
     }
@@ -142,6 +197,53 @@ export default function DocumentDetailDrawer({
     }
   };
 
+  const handleSaveAssociation = async () => {
+    if (!docDetail || !selectedAssocTarget) return;
+
+    setSavingAssoc(true);
+    setAssocError(null);
+
+    try {
+      await createDocumentAssociation(
+        docDetail.id,
+        {
+          targetDomain: selectedAssocTarget.domain,
+          targetResourceType: selectedAssocTarget.resourceType,
+          targetResourceId: selectedAssocTarget.id,
+          purpose: assocPurpose || 'Documentação escolar',
+          pinnedVersionId: docDetail.currentVersion?.id || null,
+        },
+        generateIdempotencyKey('drawer-assoc'),
+      );
+
+      setIsAddingAssociation(false);
+      setSelectedAssocTarget(null);
+      setAssocSearch('');
+      onRefreshDocument();
+      void loadActivity(docDetail.id);
+    } catch (err) {
+      setAssocError(err instanceof Error ? err.message : 'Erro ao guardar associação.');
+    } finally {
+      setSavingAssoc(false);
+    }
+  };
+
+  const handleRemoveAssociation = async (assocId: string) => {
+    if (!docDetail) return;
+    try {
+      await deleteDocumentAssociation(
+        docDetail.id,
+        assocId,
+        generateIdempotencyKey('del-assoc'),
+        'Associação retirada pelo utilizador',
+      );
+      onRefreshDocument();
+      void loadActivity(docDetail.id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao retirar associação.');
+    }
+  };
+
   if (!isOpen || !docDetail) return null;
 
   const techStatus = getTechnicalStatusPresentation(docDetail.currentVersion?.status ?? docDetail.status);
@@ -154,11 +256,18 @@ export default function DocumentDetailDrawer({
   const isQuarantined = docDetail.currentVersion?.status === 'quarantined';
   const isAvailable = docDetail.currentVersion?.status === 'available';
 
+  const displayFilename =
+    docDetail.originalFilename ||
+    docDetail.declaredFilename ||
+    docDetail.currentVersion?.originalFilename ||
+    docDetail.title ||
+    `${docDetail.category.toUpperCase()} - DOC-${docDetail.id.slice(0, 8).toUpperCase()}`;
+
   return (
     <>
       {/* Backdrop overlay */}
       <div
-        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] transition-opacity animate-fadeIn"
+        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px] transition-opacity animate-fadeIn"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -168,35 +277,51 @@ export default function DocumentDetailDrawer({
         role="dialog"
         aria-modal="true"
         aria-label="Painel de detalhe do documento"
-        className={`fixed inset-y-0 right-0 z-50 w-full sm:w-[400px] lg:w-[420px] shadow-2xl border-l flex flex-col transition-all duration-300 ${
-          isLight ? 'bg-white border-zinc-200 text-zinc-900' : 'bg-zinc-900 border-white/10 text-zinc-100'
+        className={`fixed inset-y-0 right-0 z-50 w-full sm:w-[480px] lg:w-[540px] shadow-2xl border-l flex flex-col transition-all duration-300 ${
+          isLight ? 'bg-white border-zinc-200 text-zinc-900' : 'bg-[#0e1411] border-emerald-950/40 text-zinc-100'
         }`}
       >
-        {/* DRAWER HEADER */}
-        <div className={`p-5 border-b space-y-3 shrink-0 ${isLight ? 'border-zinc-200/80 bg-zinc-50/50' : 'border-white/10 bg-zinc-950/40'}`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+        {/* DRAWER HEADER — Centered on Original Filename / Document Title */}
+        <div
+          className={`p-5 border-b space-y-3.5 shrink-0 ${
+            isLight ? 'border-zinc-200/80 bg-zinc-50/70' : 'border-white/5 bg-white/[0.02]'
+          }`}
+        >
+          {/* Top Row: Badges & Close */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span
-                className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border ${getBadgeClasses(
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getBadgeClasses(
                   techStatus.tone,
                   theme,
                 )}`}
               >
                 {techStatus.label}
               </span>
+
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${getClassificationBadgeClass(
+                  docDetail.classification,
+                  theme,
+                )}`}
+              >
+                {getClassificationLabel(docDetail.classification)}
+              </span>
+
               {hasActiveHolds && (
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center gap-1">
-                  <Lock className="w-3 h-3" /> Bloqueio Ativo
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-500/15 text-amber-500 border border-amber-500/30 flex items-center gap-1">
+                  <Lock className="w-2.5 h-2.5" /> Bloqueio Ativo
                 </span>
               )}
             </div>
+
             <button
               type="button"
               onClick={onClose}
-              className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+              className={`p-1.5 rounded-xl border transition-all cursor-pointer ${
                 isLight
-                  ? 'border-zinc-200 hover:bg-zinc-100 text-zinc-600 hover:text-zinc-900'
-                  : 'border-white/10 hover:bg-white/5 text-zinc-400 hover:text-zinc-100'
+                  ? 'border-zinc-200 hover:bg-zinc-100 text-zinc-600'
+                  : 'border-white/10 hover:bg-white/5 text-zinc-400 hover:text-white'
               }`}
               aria-label="Fechar gaveta de detalhe"
             >
@@ -204,25 +329,34 @@ export default function DocumentDetailDrawer({
             </button>
           </div>
 
+          {/* Document Identity Protagonist Title */}
           <div className="flex items-start gap-3">
             <div
-              className={`p-2.5 rounded-xl shrink-0 mt-0.5 ${
-                isLight ? 'bg-emerald-50 text-emerald-700' : 'bg-emerald-500/10 text-emerald-400'
+              className={`p-2.5 rounded-2xl shrink-0 mt-0.5 ${
+                isLight
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/70'
+                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
               }`}
             >
-              <FileText className="w-5 h-5" />
+              <FileText className="w-6 h-6" />
             </div>
+
             <div className="min-w-0 flex-1">
-              <h2 className="text-base font-bold truncate">
-                {getCategoryLabel(docDetail.category)}
+              <h2 className="text-base sm:text-lg font-bold break-all leading-snug">
+                {displayFilename}
               </h2>
-              <div className="flex items-center gap-2 mt-0.5 text-xs">
-                <span className={`font-mono text-[11px] ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                  DOC-{docDetail.id.slice(0, 8).toUpperCase()}
+
+              <div className="flex items-center gap-2 mt-1 text-xs flex-wrap">
+                <span className={`font-semibold ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
+                  {getCategoryLabel(docDetail.category)}
                 </span>
                 <span className="text-zinc-400">•</span>
-                <span className="text-zinc-500 text-[11px] font-semibold">
+                <span className="font-mono text-[11px] text-zinc-500">
                   v{docDetail.currentVersion?.versionNumber ?? 1}
+                </span>
+                <span className="text-zinc-400">•</span>
+                <span className={`text-[11px] ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                  {formatByteSize(docDetail.currentVersion?.byteSize ?? 0)}
                 </span>
               </div>
             </div>
@@ -232,534 +366,604 @@ export default function DocumentDetailDrawer({
           <div className="flex flex-wrap items-center gap-1.5 pt-1">
             <button
               type="button"
-              disabled={!docDetail.capabilities.canOpen || operationalAvailability?.canAccess === false || isDeleted || isQuarantined}
-              onClick={() => onOpenAccessViewer(docDetail, 'open')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                isLight
-                  ? 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-800 shadow-sm'
-                  : 'border-white/10 bg-zinc-800 hover:bg-zinc-700 text-zinc-200'
-              } disabled:opacity-40 disabled:cursor-not-allowed`}
-              title={
-                operationalAvailability?.canAccess === false
-                  ? 'Visualização ainda não está configurada nesta instalação.'
-                  : !docDetail.capabilities.canOpen
-                  ? 'Visualização não autorizada pela política'
-                  : isQuarantined
-                  ? 'Documento retido em quarentena'
-                  : isDeleted
-                  ? 'Documento eliminado'
-                  : 'Abrir documento'
+              disabled={
+                !docDetail.capabilities.canOpen ||
+                operationalAvailability?.canAccess === false ||
+                isDeleted ||
+                isQuarantined
               }
+              onClick={() => onOpenAccessViewer(docDetail, 'open')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                isLight
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 shadow-sm'
+                  : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
+              } disabled:opacity-40 disabled:cursor-not-allowed`}
+              title="Abrir documento no leitor institucional"
             >
-              <Eye className="w-3.5 h-3.5 text-emerald-600" /> Abrir documento
+              <Eye className="w-3.5 h-3.5" /> Abrir
             </button>
 
             <button
               type="button"
-              disabled={!docDetail.capabilities.canDownload || operationalAvailability?.canAccess === false || isDeleted || isQuarantined}
+              disabled={
+                !docDetail.capabilities.canDownload ||
+                operationalAvailability?.canAccess === false ||
+                isDeleted ||
+                isQuarantined
+              }
               onClick={() => onOpenAccessViewer(docDetail, 'download')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
                 isLight
                   ? 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-800 shadow-sm'
                   : 'border-white/10 bg-zinc-800 hover:bg-zinc-700 text-zinc-200'
               } disabled:opacity-40 disabled:cursor-not-allowed`}
-              title={
-                operationalAvailability?.canAccess === false
-                  ? 'Download ainda não está configurado nesta instalação.'
-                  : !docDetail.capabilities.canDownload
-                  ? 'Download não autorizado pela política'
-                  : isQuarantined
-                  ? 'Documento retido em quarentena'
-                  : 'Descarregar documento seguro'
-              }
+              title="Descarregar ficheiro original"
             >
               <Download className="w-3.5 h-3.5 text-emerald-600" /> Baixar
             </button>
 
             <button
               type="button"
-              disabled={!docDetail.capabilities.canUploadVersion || operationalAvailability?.canUpload === false || isDeleted || isQuarantined}
+              disabled={
+                !docDetail.capabilities.canUploadVersion ||
+                operationalAvailability?.canUpload === false ||
+                isDeleted ||
+                isQuarantined
+              }
               onClick={() => onOpenUploadVersion(docDetail)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
                 isLight
                   ? 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-800 shadow-sm'
                   : 'border-white/10 bg-zinc-800 hover:bg-zinc-700 text-zinc-200'
               } disabled:opacity-40 disabled:cursor-not-allowed`}
-              title={
-                operationalAvailability?.canUpload === false
-                  ? 'Carregamento documental ainda não está configurado nesta instalação.'
-                  : !docDetail.capabilities.canUploadVersion
-                  ? 'Sem autorização para carregar nova versão'
-                  : 'Carregar nova versão'
-              }
+              title="Carregar nova versão deste documento"
             >
               <Upload className="w-3.5 h-3.5 text-blue-500" /> Nova versão
             </button>
 
             <button
               type="button"
-              disabled={(hasActiveHolds ? !docDetail.capabilities.canReleaseHold : !docDetail.capabilities.canPlaceHold) || operationalAvailability?.canHold === false || isDeleted}
-              onClick={() => onOpenHoldModal(docDetail, hasActiveHolds ? 'release' : 'place')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                hasActiveHolds
-                  ? 'border-amber-500/30 bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'
-                  : isLight
+              onClick={() => {
+                setActiveTab('associations');
+                setIsAddingAssociation(true);
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                isLight
                   ? 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-800 shadow-sm'
                   : 'border-white/10 bg-zinc-800 hover:bg-zinc-700 text-zinc-200'
-              } disabled:opacity-40 disabled:cursor-not-allowed`}
-              title={
-                operationalAvailability?.canHold === false
-                  ? 'Gestão de retenção e bloqueios ainda não está configurada nesta instalação.'
-                  : hasActiveHolds
-                  ? 'Libertar bloqueio de retenção'
-                  : 'Aplicar bloqueio de retenção'
-              }
+              }`}
+              title="Associar a Aluno ou Matrícula"
             >
-              {hasActiveHolds ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
-              {hasActiveHolds ? 'Libertar' : 'Bloquear'}
+              <Link2 className="w-3.5 h-3.5 text-teal-500" /> Associar
             </button>
 
             <button
               type="button"
-              disabled={!(docDetail.capabilities.canAuthorizeDeletion || docDetail.capabilities.canExecuteDeletion) || operationalAvailability?.canDelete === false || hasActiveHolds || isDeleted}
+              onClick={() => onOpenHoldModal(docDetail, hasActiveHolds ? 'release' : 'place')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                isLight
+                  ? 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-800 shadow-sm'
+                  : 'border-white/10 bg-zinc-800 hover:bg-zinc-700 text-zinc-200'
+              }`}
+              title={hasActiveHolds ? 'Libertar bloqueio de retenção' : 'Aplicar bloqueio de retenção'}
+            >
+              {hasActiveHolds ? (
+                <>
+                  <Unlock className="w-3.5 h-3.5 text-amber-500" /> Libertar hold
+                </>
+              ) : (
+                <>
+                  <Lock className="w-3.5 h-3.5 text-amber-500" /> Hold
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              disabled={isDeleted}
               onClick={() => onOpenDeletionModal(docDetail)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-rose-500/20 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-              title={
-                operationalAvailability?.canDelete === false
-                  ? 'Eliminação governada ainda não está configurada nesta instalação.'
-                  : hasActiveHolds
-                  ? 'Eliminação bloqueada: documento possui bloqueio de retenção ativo'
-                  : isDeleted
-                  ? 'Documento já eliminado'
-                  : !(docDetail.capabilities.canAuthorizeDeletion || docDetail.capabilities.canExecuteDeletion)
-                  ? 'Sem autoridade de eliminação'
-                  : 'Eliminar documento'
-              }
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                isLight
+                  ? 'border-red-200 bg-red-50/50 hover:bg-red-50 text-red-700'
+                  : 'border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400'
+              } disabled:opacity-30 disabled:cursor-not-allowed`}
+              title="Eliminação governada"
             >
               <Trash2 className="w-3.5 h-3.5" /> Eliminar
             </button>
           </div>
         </div>
 
-        {/* DRAWER TABS NAVIGATION (Guaranteed Horizontal Reachability) */}
+        {/* 4 REACHABLE TABS */}
         <nav
-          className={`flex overflow-x-auto no-scrollbar border-b px-3 shrink-0 ${
-            isLight ? 'border-zinc-200 bg-slate-50/70' : 'border-white/5 bg-zinc-950/60'
+          className={`flex max-w-full border-b px-5 shrink-0 ${
+            isLight ? 'border-zinc-200 bg-zinc-50/40' : 'border-white/5 bg-black/20'
           }`}
           aria-label="Separadores de detalhe do documento"
         >
-          <button
-            type="button"
-            onClick={() => setActiveTab('info')}
-            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === 'info'
-                ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400'
-                : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" /> Informações
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('versions')}
-            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === 'versions'
-                ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400'
-                : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" /> Versões ({docDetail.versionCount})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('associations')}
-            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === 'associations'
-                ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400'
-                : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'
-            }`}
-          >
-            <Link2 className="w-3.5 h-3.5" /> Associações ({docDetail.associations.length})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('activity')}
-            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === 'activity'
-                ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400'
-                : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'
-            }`}
-          >
-            <Activity className="w-3.5 h-3.5" /> Atividade
-          </button>
+          {[
+            { id: 'info', label: 'Informações', icon: Info },
+            { id: 'versions', label: `Versões (${versions.length || docDetail.versionCount})`, icon: Layers },
+            { id: 'associations', label: `Associações (${docDetail.associations.length})`, icon: Link2 },
+            { id: 'activity', label: 'Atividade', icon: Activity },
+          ].map((t) => {
+            const isActive = activeTab === t.id;
+            const IconComp = t.icon;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => {
+                  setActiveTab(t.id as DetailDrawerTab);
+                  if (t.id !== 'associations') setIsAddingAssociation(false);
+                }}
+                className={`flex-1 min-h-[44px] flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                  isActive
+                    ? isLight
+                      ? 'border-emerald-600 text-emerald-800'
+                      : 'border-emerald-400 text-emerald-300'
+                    : 'border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                }`}
+              >
+                <IconComp className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{t.label}</span>
+              </button>
+            );
+          })}
         </nav>
 
-        {/* DRAWER CONTENT (Independent Internal Scroll) */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          {/* TAB 1: INFORMACOES */}
+        {/* TAB PANELS */}
+        <div className="p-5 overflow-y-auto flex-1 space-y-5">
+          {/* TAB 1: INFORMAÇÕES */}
           {activeTab === 'info' && (
-            <div className="space-y-4">
-              {/* Status Alert Banners */}
-              {isQuarantined && (
-                <div className="p-3.5 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs flex items-start gap-2.5">
-                  <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-bold">Documento em Quarentena</p>
-                    <p className="mt-0.5 leading-relaxed text-[11px]">
-                      O documento não pode ser disponibilizado e requer verificação de segurança adicional.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {isDeleted && (
-                <div className="p-3.5 rounded-xl border border-zinc-500/20 bg-zinc-500/10 text-zinc-400 text-xs flex items-start gap-2.5">
-                  <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-bold">Versão Eliminada</p>
-                    <p className="mt-0.5 leading-relaxed text-[11px]">
-                      Este documento foi eliminado e o conteúdo físico foi destruído com integridade governada.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Card: Principais Informações */}
-              <div
-                className={`p-4 rounded-xl border space-y-3 ${
-                  isLight ? 'bg-slate-50/80 border-zinc-200' : 'bg-zinc-950/60 border-white/5'
-                }`}
-              >
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
-                  <Info className="w-3.5 h-3.5 text-emerald-600" /> Informações Principais
+            <div className="space-y-5 animate-fadeIn">
+              {/* Primary Human Hierarchy */}
+              <section className="space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                  Dados do Documento
                 </h3>
 
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <span className="text-zinc-500 block text-[11px]">Categoria</span>
-                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">{getCategoryLabel(docDetail.category)}</span>
+                <div
+                  className={`p-4 rounded-2xl border space-y-3 text-xs ${
+                    isLight ? 'bg-zinc-50/80 border-zinc-200/80' : 'bg-zinc-900/40 border-white/5'
+                  }`}
+                >
+                  <div className="flex justify-between py-1 border-b border-zinc-200/50 dark:border-white/5">
+                    <span className={isLight ? 'text-zinc-500' : 'text-zinc-400'}>Nome Original:</span>
+                    <span className="font-bold break-all text-right max-w-[240px]">{displayFilename}</span>
                   </div>
-                  <div>
-                    <span className="text-zinc-500 block text-[11px]">Classificação</span>
-                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">{getClassificationLabel(docDetail.classification)}</span>
+
+                  <div className="flex justify-between py-1 border-b border-zinc-200/50 dark:border-white/5">
+                    <span className={isLight ? 'text-zinc-500' : 'text-zinc-400'}>Categoria:</span>
+                    <span className="font-bold">{getCategoryLabel(docDetail.category)}</span>
                   </div>
-                  <div>
-                    <span className="text-zinc-500 block text-[11px]">Estado Técnico</span>
-                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">{techStatus.label}</span>
+
+                  <div className="flex justify-between py-1 border-b border-zinc-200/50 dark:border-white/5">
+                    <span className={isLight ? 'text-zinc-500' : 'text-zinc-400'}>Classificação:</span>
+                    <span className="font-bold">{getClassificationLabel(docDetail.classification)}</span>
                   </div>
-                  <div>
-                    <span className="text-zinc-500 block text-[11px]">Resultado da Verificação</span>
-                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                      {isAvailable ? 'Validado e Seguro' : isQuarantined ? 'Quarentena' : 'Em Análise'}
+
+                  <div className="flex justify-between py-1 border-b border-zinc-200/50 dark:border-white/5">
+                    <span className={isLight ? 'text-zinc-500' : 'text-zinc-400'}>Estado Técnico:</span>
+                    <span className="font-bold">{techStatus.label}</span>
+                  </div>
+
+                  <div className="flex justify-between py-1 border-b border-zinc-200/50 dark:border-white/5">
+                    <span className={isLight ? 'text-zinc-500' : 'text-zinc-400'}>Criado por:</span>
+                    <span className="font-bold">
+                      {docDetail.createdByPersonName || docDetail.currentVersion?.createdByPersonName || 'Administrador'}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-zinc-500 block text-[11px]">Tamanho</span>
-                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">{formatByteSize(docDetail.currentVersion?.byteSize)}</span>
+
+                  <div className="flex justify-between py-1 border-b border-zinc-200/50 dark:border-white/5">
+                    <span className={isLight ? 'text-zinc-500' : 'text-zinc-400'}>Data de Registo:</span>
+                    <span className="font-medium">{formatDateTime(docDetail.createdAt)}</span>
                   </div>
-                  <div>
-                    <span className="text-zinc-500 block text-[11px]">Versão em Vigor</span>
-                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">v{docDetail.currentVersion?.versionNumber ?? 1}</span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-500 block text-[11px]">Criado em</span>
-                    <span className="text-zinc-800 dark:text-zinc-200">{formatDateTime(docDetail.createdAt)}</span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-500 block text-[11px]">Atualizado em</span>
-                    <span className="text-zinc-800 dark:text-zinc-200">{formatDateTime(docDetail.updatedAt)}</span>
+
+                  <div className="flex justify-between py-1">
+                    <span className={isLight ? 'text-zinc-500' : 'text-zinc-400'}>Última Atualização:</span>
+                    <span className="font-medium">{formatDateTime(docDetail.updatedAt)}</span>
                   </div>
                 </div>
-              </div>
+              </section>
 
-              {/* Card: Governança de Retenção */}
-              <div
-                className={`p-4 rounded-xl border space-y-3 ${
-                  isLight ? 'bg-slate-50/80 border-zinc-200' : 'bg-zinc-950/60 border-white/5'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5 text-emerald-600" /> Governança de Retenção
-                  </h3>
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getBadgeClasses(
-                      retentionStatus.tone,
-                      theme,
-                    )}`}
-                  >
-                    {retentionStatus.label}
-                  </span>
-                </div>
+              {/* Secondary Governance Hierarchy: Retention & Holds */}
+              <section className="space-y-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                  Governação e Retenção
+                </h3>
 
-                {docDetail.retention ? (
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <span className="text-zinc-500 block text-[11px]">Política</span>
-                      <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                        {docDetail.retention.policyId} (v{docDetail.retention.policyVersion})
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-zinc-500 block text-[11px]">Perfil de Jurisdição</span>
-                      <span className="font-semibold text-zinc-900 dark:text-zinc-100">{docDetail.retention.jurisdictionProfileId}</span>
-                    </div>
-                    <div>
-                      <span className="text-zinc-500 block text-[11px]">Gatilho Temporal</span>
-                      <span className="text-zinc-800 dark:text-zinc-200">
-                        {docDetail.retention.clockTriggerType} ({formatDate(docDetail.retention.clockTriggerEventAt)})
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-zinc-500 block text-[11px]">Data Limite de Retenção</span>
-                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                        {formatDate(docDetail.retention.retainUntil)}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-zinc-500">
-                    Nenhuma política de retenção governada configurada para esta categoria.
-                  </p>
-                )}
-              </div>
-
-              {/* Card: Bloqueios de Retenção (Holds) */}
-              <div
-                className={`p-4 rounded-xl border space-y-3 ${
-                  hasActiveHolds
-                    ? 'border-amber-500/20 bg-amber-500/10'
-                    : isLight
-                    ? 'bg-slate-50/80 border-zinc-200'
-                    : 'bg-zinc-950/60 border-white/5'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <h3
-                    className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                      hasActiveHolds ? 'text-amber-500' : 'text-zinc-500'
-                    }`}
-                  >
-                    <Lock className="w-3.5 h-3.5" /> Bloqueios de Retenção
-                  </h3>
-                  {hasActiveHolds && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-500">
-                      {docDetail.activeHolds.length} Ativo(s)
+                <div
+                  className={`p-4 rounded-2xl border space-y-3 text-xs ${
+                    isLight ? 'bg-zinc-50/80 border-zinc-200/80' : 'bg-zinc-900/40 border-white/5'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className={isLight ? 'text-zinc-500' : 'text-zinc-400'}>Retenção Governança:</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${getBadgeClasses(
+                        retentionStatus.tone,
+                        theme,
+                      )}`}
+                    >
+                      {retentionStatus.label}
                     </span>
+                  </div>
+
+                  {docDetail.retention?.retainUntil && (
+                    <div className="flex justify-between text-[11px]">
+                      <span className={isLight ? 'text-zinc-500' : 'text-zinc-400'}>Retido até:</span>
+                      <span className="font-semibold">{formatDate(docDetail.retention.retainUntil)}</span>
+                    </div>
+                  )}
+
+                  {docDetail.activeHolds.length > 0 && (
+                    <div className="pt-2 border-t border-zinc-200/50 dark:border-white/5 space-y-2">
+                      <span className="font-bold text-amber-500 block">Bloqueios Ativos ({docDetail.activeHolds.length}):</span>
+                      {docDetail.activeHolds.map((h, i) => (
+                        <div key={i} className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-1">
+                          <div className="flex justify-between font-bold text-amber-500 text-[11px]">
+                            <span>{h.holdType === 'legal' ? 'Bloqueio Jurídico' : 'Bloqueio Administrativo'}</span>
+                            <span>{formatDate(h.effectiveAt)}</span>
+                          </div>
+                          <div className="text-[11px] text-zinc-300">{h.reason}</div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
+              </section>
 
-                {hasActiveHolds ? (
-                  <div className="space-y-2">
-                    {docDetail.activeHolds.map((hold) => (
-                      <div key={hold.id} className="p-2.5 rounded-lg bg-black/10 dark:bg-black/30 text-xs space-y-1">
-                        <div className="flex items-center justify-between font-bold">
-                          <span>{hold.authority}</span>
-                          <span className="uppercase text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500">
-                            {hold.holdType === 'legal' ? 'Legal' : 'Administrativo'}
-                          </span>
-                        </div>
-                        <p className="text-zinc-700 dark:text-zinc-300">{hold.reason}</p>
-                        <p className="text-[10px] text-zinc-500">Efetivo desde: {formatDateTime(hold.effectiveAt)}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-zinc-500">Nenhum hold ativo.</p>
-                )}
-              </div>
-
-              {/* Collapsible Card: Detalhes Técnicos Avançados */}
-              <div
-                className={`rounded-xl border overflow-hidden ${
-                  isLight ? 'bg-slate-50/60 border-zinc-200' : 'bg-zinc-950/40 border-white/5'
-                }`}
-              >
+              {/* Collapsed Technical Details */}
+              <section className="space-y-2">
                 <button
                   type="button"
                   onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
-                  className="w-full p-3.5 flex items-center justify-between text-xs font-semibold text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 cursor-pointer"
+                  className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                    isLight ? 'border-zinc-200 bg-white hover:bg-zinc-50' : 'border-white/10 bg-zinc-900/60 hover:bg-zinc-900'
+                  }`}
                 >
-                  <span className="flex items-center gap-1.5">
-                    <FileCode className="w-3.5 h-3.5 text-zinc-400" /> Metadados Técnicos Avançados
+                  <span className="flex items-center gap-2">
+                    <FileCode className="w-4 h-4 text-zinc-400" />
+                    <span>Detalhes Técnicos e Criptográficos</span>
                   </span>
                   {showTechnicalDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </button>
 
                 {showTechnicalDetails && (
-                  <div className="p-4 pt-0 space-y-3 text-xs border-t border-zinc-200/50 dark:border-white/5">
-                    <div className="space-y-1 pt-3">
-                      <span className="text-zinc-500 text-[11px] block">Identificador Único (UUID)</span>
-                      <code className="text-[11px] font-mono text-zinc-700 dark:text-zinc-300 block select-all">
-                        {docDetail.id}
-                      </code>
+                  <div
+                    className={`p-4 rounded-2xl border space-y-3 font-mono text-[11px] break-all ${
+                      isLight ? 'bg-zinc-100/70 border-zinc-200' : 'bg-black/40 border-white/5'
+                    }`}
+                  >
+                    <div>
+                      <span className="text-zinc-400 block text-[10px] uppercase">ID do Documento:</span>
+                      <span>{docDetail.id}</span>
                     </div>
 
-                    {docDetail.currentVersion && (
-                      <>
-                        <div className="space-y-1">
-                          <span className="text-zinc-500 text-[11px] block">Formato MIME</span>
-                          <span className="font-mono text-zinc-700 dark:text-zinc-300">
-                            {docDetail.currentVersion.mimeType}
-                          </span>
-                        </div>
+                    <div>
+                      <span className="text-zinc-400 block text-[10px] uppercase">MIME Type:</span>
+                      <span>{docDetail.currentVersion?.mimeType ?? 'application/octet-stream'}</span>
+                    </div>
 
-                        <div className="space-y-1">
-                          <span className="text-zinc-500 text-[11px] block">Hash SHA-256 (Integridade Criptográfica)</span>
-                          <div className="flex items-center gap-2">
-                            <code className="text-[10px] font-mono p-1.5 rounded bg-zinc-200/60 dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 flex-1 truncate">
-                              {docDetail.currentVersion.sha256Hash}
-                            </code>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyHash(docDetail.currentVersion!.sha256Hash)}
-                              className="p-1.5 rounded border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all cursor-pointer shrink-0"
-                              title="Copiar Hash"
-                            >
-                              {copiedHash ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                            </button>
-                          </div>
+                    {docDetail.currentVersion?.sha256Hash && (
+                      <div>
+                        <div className="flex items-center justify-between text-zinc-400 text-[10px] uppercase mb-0.5">
+                          <span>SHA-256 Digest:</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyHash(docDetail.currentVersion!.sha256Hash)}
+                            className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold hover:underline cursor-pointer"
+                          >
+                            {copiedHash ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                            <span>{copiedHash ? 'Copiado!' : 'Copiar'}</span>
+                          </button>
                         </div>
-                      </>
+                        <span className="text-emerald-600 dark:text-emerald-400 text-[10px]">
+                          {docDetail.currentVersion.sha256Hash}
+                        </span>
+                      </div>
                     )}
                   </div>
                 )}
-              </div>
+              </section>
             </div>
           )}
 
-          {/* TAB 2: VERSOES */}
+          {/* TAB 2: VERSÕES */}
           {activeTab === 'versions' && (
-            <div className="space-y-4">
+            <div className="space-y-4 animate-fadeIn">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                  Histórico de Versões ({versions.length || docDetail.versionCount})
-                </span>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                  Histórico de Versões
+                </h3>
                 <button
                   type="button"
-                  disabled={!docDetail.capabilities.canUploadVersion || operationalAvailability?.canUpload === false || isDeleted || isQuarantined}
                   onClick={() => onOpenUploadVersion(docDetail)}
-                  className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline cursor-pointer"
-                  title="Carregar nova versão"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold shadow-sm hover:bg-emerald-500 cursor-pointer"
                 >
-                  <Upload className="w-3.5 h-3.5" /> Nova versão
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Nova Versão</span>
                 </button>
               </div>
 
-              {loadingVersions && versions.length === 0 ? (
-                <div className="py-8 text-center text-xs text-zinc-500 space-y-2">
-                  <RefreshCw className="w-5 h-5 mx-auto animate-spin text-emerald-600" />
-                  <p>A carregar versões...</p>
+              {loadingVersions ? (
+                <div className="p-8 text-center text-xs text-zinc-400 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> A carregar versões...
                 </div>
-              ) : versions.length > 0 ? (
+              ) : versions.length === 0 ? (
+                <div className="p-6 text-center text-xs text-zinc-400">
+                  Nenhuma versão registada.
+                </div>
+              ) : (
                 <div className="space-y-3">
-                  {versions.map((v) => {
+                  {versions.map((v, idx) => {
+                    const isCurrent = idx === 0 || v.versionNumber === docDetail.currentVersion?.versionNumber;
                     const vTechStatus = getTechnicalStatusPresentation(v.status);
-                    const isLatest = v.versionNumber === (docDetail.currentVersion?.versionNumber ?? 1);
+                    const vName = v.originalFilename || v.declaredFilename || displayFilename;
                     return (
                       <div
                         key={v.id}
-                        className={`p-3.5 rounded-xl border ${
-                          isLight ? 'bg-slate-50 border-zinc-200' : 'bg-zinc-950 border-white/5'
-                        } space-y-2`}
+                        className={`p-4 rounded-2xl border space-y-2.5 transition-all ${
+                          isCurrent
+                            ? isLight
+                              ? 'bg-emerald-50/50 border-emerald-300 shadow-sm'
+                              : 'bg-emerald-950/20 border-emerald-500/30'
+                            : isLight
+                            ? 'bg-zinc-50 border-zinc-200'
+                            : 'bg-zinc-900/40 border-white/5'
+                        }`}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm">Versão v{v.versionNumber}</span>
-                            {isLatest && (
-                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                                Atual
+                            <span className="font-mono font-bold text-xs px-2 py-0.5 rounded-md bg-zinc-200 dark:bg-white/10">
+                              v{v.versionNumber}
+                            </span>
+                            {isCurrent && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-zinc-950 uppercase">
+                                Versão Atual
                               </span>
                             )}
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border ${getBadgeClasses(
+                                vTechStatus.tone,
+                                theme,
+                              )}`}
+                            >
+                              {vTechStatus.label}
+                            </span>
                           </div>
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getBadgeClasses(
-                              vTechStatus.tone,
-                              theme,
-                            )}`}
-                          >
-                            {vTechStatus.label}
-                          </span>
-                        </div>
 
-                        <div className="grid grid-cols-2 gap-2 text-xs text-zinc-500">
-                          <p>
-                            Tamanho:{' '}
-                            <strong className="text-zinc-800 dark:text-zinc-200">{formatByteSize(v.byteSize)}</strong>
-                          </p>
-                          <p>
-                            Formato:{' '}
-                            <strong className="text-zinc-800 dark:text-zinc-200">{v.mimeType}</strong>
-                          </p>
-                          <p className="col-span-2">Criado em: {formatDateTime(v.createdAt)}</p>
-                        </div>
-
-                        <div className="pt-2 border-t border-zinc-200/50 dark:border-white/5 flex items-center justify-between gap-2">
-                          <code className="text-[10px] font-mono text-zinc-400 truncate flex-1">
-                            SHA: {v.sha256Hash}
-                          </code>
                           <button
                             type="button"
-                            onClick={() => handleCopyHash(v.sha256Hash)}
-                            className="p-1 rounded border border-zinc-200 dark:border-white/10 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-all cursor-pointer shrink-0"
-                            title="Copiar Hash"
+                            onClick={() => onOpenAccessViewer(docDetail, 'download', v.id)}
+                            className={`p-1.5 rounded-lg border text-xs font-semibold cursor-pointer ${
+                              isLight ? 'border-zinc-300 hover:bg-zinc-100' : 'border-white/10 hover:bg-white/10'
+                            }`}
+                            title="Descarregar esta versão específica"
                           >
-                            {copiedHash === v.sha256Hash ? (
-                              <Check className="w-3 h-3 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
+                            <Download className="w-3.5 h-3.5" />
                           </button>
+                        </div>
+
+                        <div className="text-xs font-bold truncate break-all">{vName}</div>
+
+                        <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                          <span>{formatByteSize(v.byteSize)} • {v.createdByPersonName || 'Utilizador'}</span>
+                          <span>{formatDateTime(v.createdAt)}</span>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              ) : (
-                <p className="text-xs text-zinc-500 py-6 text-center">Nenhuma versão registada.</p>
               )}
             </div>
           )}
 
-          {/* TAB 3: ASSOCIACOES */}
+          {/* TAB 3: ASSOCIAÇÕES */}
           {activeTab === 'associations' && (
-            <div className="space-y-4">
-              <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">
-                Processos e Domínios Vinculados
-              </span>
+            <div className="space-y-4 animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                  Entidades Escolares Associadas
+                </h3>
+                {!isAddingAssociation && (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingAssociation(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold shadow-sm hover:bg-emerald-500 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Adicionar Associação</span>
+                  </button>
+                )}
+              </div>
 
-              {docDetail.associations.length > 0 ? (
-                <div className="space-y-3">
-                  {docDetail.associations.map((assoc) => (
-                    <div
-                      key={assoc.id}
-                      className={`p-3.5 rounded-xl border text-xs space-y-1.5 ${
-                        isLight ? 'bg-slate-50 border-zinc-200' : 'bg-zinc-950 border-white/5'
+              {/* Inline Association Creator */}
+              {isAddingAssociation && (
+                <div
+                  className={`p-4 rounded-2xl border space-y-4 ${
+                    isLight ? 'bg-zinc-50 border-emerald-300' : 'bg-zinc-900 border-emerald-500/30'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold">Ligar Documento a Entidade</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingAssociation(false)}
+                      className="p-1 rounded-lg text-zinc-400 hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Domain Toggle */}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAssocDomain('student');
+                        setSelectedAssocTarget(null);
+                      }}
+                      className={`flex-1 py-2 text-xs font-bold rounded-xl border cursor-pointer ${
+                        assocDomain === 'student'
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-zinc-800 text-zinc-300 border-white/5'
                       }`}
                     >
-                      <div className="flex items-center justify-between font-bold">
-                        <span className="text-emerald-600 uppercase">{assoc.targetDomain}</span>
-                        <span className="px-2 py-0.5 rounded text-[10px] bg-zinc-200 dark:bg-zinc-800">
-                          {assoc.status}
-                        </span>
-                      </div>
-                      <p>
-                        <span className="text-zinc-500">Recurso:</span> {assoc.targetResourceType} ({assoc.targetResourceId})
-                      </p>
-                      <p>
-                        <span className="text-zinc-500">Finalidade:</span> {assoc.purpose}
-                      </p>
-                      <p className="text-[10px] text-zinc-500">Vinculado em: {formatDateTime(assoc.createdAt)}</p>
+                      Aluno
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAssocDomain('enrollment');
+                        setSelectedAssocTarget(null);
+                      }}
+                      className={`flex-1 py-2 text-xs font-bold rounded-xl border cursor-pointer ${
+                        assocDomain === 'enrollment'
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-zinc-800 text-zinc-300 border-white/5'
+                      }`}
+                    >
+                      Matrícula
+                    </button>
+                  </div>
+
+                  {/* Search box */}
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                      <input
+                        type="text"
+                        value={assocSearch}
+                        onChange={(e) => setAssocSearch(e.target.value)}
+                        placeholder="Pesquisar por nome..."
+                        className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border bg-black/20 border-white/10 outline-none"
+                      />
                     </div>
-                  ))}
+
+                    <div className="max-h-36 overflow-y-auto rounded-xl border divide-y border-white/10 divide-white/5 bg-black/20">
+                      {loadingAssocTargets ? (
+                        <div className="p-3 text-center text-xs text-zinc-400 flex items-center justify-center gap-1.5">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> A carregar...
+                        </div>
+                      ) : assocTargets.length === 0 ? (
+                        <div className="p-3 text-center text-xs text-zinc-400">Nenhum resultado encontrado.</div>
+                      ) : (
+                        assocTargets.map((target) => (
+                          <button
+                            key={target.id}
+                            type="button"
+                            onClick={() => setSelectedAssocTarget(target)}
+                            className={`w-full p-2.5 text-left text-xs flex items-center justify-between cursor-pointer ${
+                              selectedAssocTarget?.id === target.id
+                                ? 'bg-emerald-500/20 text-emerald-300 font-bold'
+                                : 'hover:bg-white/5 text-zinc-200'
+                            }`}
+                          >
+                            <span className="truncate">{target.name}</span>
+                            {selectedAssocTarget?.id === target.id && (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 ml-1" />
+                            )}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {selectedAssocTarget && (
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-bold block">Finalidade</label>
+                      <input
+                        type="text"
+                        value={assocPurpose}
+                        onChange={(e) => setAssocPurpose(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs rounded-xl border bg-black/20 border-white/10"
+                      />
+                    </div>
+                  )}
+
+                  {assocError && <p className="text-xs text-red-400">{assocError}</p>}
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingAssociation(false)}
+                      className="px-3 py-1.5 text-xs rounded-xl border border-white/10"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!selectedAssocTarget || savingAssoc}
+                      onClick={() => void handleSaveAssociation()}
+                      className="px-4 py-1.5 text-xs font-bold rounded-xl bg-emerald-600 text-white disabled:opacity-40 cursor-pointer"
+                    >
+                      {savingAssoc ? 'A guardar...' : 'Confirmar Associação'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Associations List */}
+              {docDetail.associations.length === 0 ? (
+                <div className="p-8 text-center text-xs text-zinc-400">
+                  Nenhuma associação escolar vinculada a este documento.
                 </div>
               ) : (
-                <div className="py-8 text-center text-zinc-500 text-xs space-y-2">
-                  <Link2 className="w-8 h-8 mx-auto opacity-40" />
-                  <p>Este documento não possui processos associados atualmente.</p>
+                <div className="space-y-3">
+                  {docDetail.associations.map((a) => {
+                    const isStudent = a.targetDomain === 'student';
+                    return (
+                      <div
+                        key={a.id}
+                        className={`p-4 rounded-2xl border space-y-2 ${
+                          isLight ? 'bg-zinc-50 border-zinc-200' : 'bg-zinc-900/40 border-white/5'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`p-1.5 rounded-lg ${
+                                isStudent
+                                  ? 'bg-blue-500/15 text-blue-400'
+                                  : 'bg-emerald-500/15 text-emerald-400'
+                              }`}
+                            >
+                              {isStudent ? <User className="w-4 h-4" /> : <GraduationCap className="w-4 h-4" />}
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold">
+                                {a.targetEntityName || `${isStudent ? 'Aluno' : 'Matrícula'} #${a.targetResourceId.slice(0, 8)}`}
+                              </div>
+                              <div className="text-[10px] text-zinc-400 uppercase font-semibold">
+                                {isStudent ? 'Aluno Registado' : 'Processo de Matrícula'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => void handleRemoveAssociation(a.id)}
+                            className="p-1 rounded-lg text-zinc-500 hover:text-red-400 transition-colors"
+                            title="Retirar associação"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="text-xs text-zinc-300">
+                          <span className="text-zinc-500">Finalidade: </span>
+                          <span className="font-medium">{a.purpose}</span>
+                        </div>
+
+                        <div className="text-[11px] text-zinc-500 flex justify-between">
+                          <span>Estado: {a.status === 'active' ? 'Ativa' : a.status}</span>
+                          <span>{formatDate(a.createdAt)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -767,55 +971,45 @@ export default function DocumentDetailDrawer({
 
           {/* TAB 4: ATIVIDADE */}
           {activeTab === 'activity' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                  Trilha de Auditoria e Eventos Fatuais
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void loadActivity(docDetail.id)}
-                  disabled={loadingActivity}
-                  className="text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-all cursor-pointer p-1"
-                  title="Atualizar atividade"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loadingActivity ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
+            <div className="space-y-4 animate-fadeIn">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                Registo de Atividade e Auditoria
+              </h3>
 
-              {loadingActivity && (
-                <div className="py-8 text-center text-xs text-zinc-500 space-y-2">
-                  <RefreshCw className="w-5 h-5 mx-auto animate-spin text-emerald-600" />
-                  <p>A carregar histórico...</p>
+              {loadingActivity ? (
+                <div className="p-8 text-center text-xs text-zinc-400 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> A carregar histórico de auditoria...
                 </div>
-              )}
-
-              {activityError && (
-                <div className="p-3 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-500 text-xs">
+              ) : activityError ? (
+                <div className="p-4 rounded-xl border border-red-500/20 text-xs text-red-400">
                   {activityError}
                 </div>
-              )}
-
-              {!loadingActivity && !activityError && activities.length > 0 && (
-                <div className="relative pl-6 space-y-5 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-zinc-200 dark:before:bg-zinc-800">
+              ) : activities.length === 0 ? (
+                <div className="p-8 text-center text-xs text-zinc-400">
+                  Nenhum registo de atividade disponível.
+                </div>
+              ) : (
+                <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-zinc-200 dark:before:bg-zinc-800">
                   {activities.map((act) => (
-                    <div key={act.id} className="relative text-xs space-y-1">
-                      <div className="absolute -left-6 top-0.5 w-4 h-4 rounded-full bg-emerald-600/20 border-2 border-emerald-600" />
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-zinc-800 dark:text-zinc-200">{act.title}</span>
-                        <span className="text-[10px] text-zinc-500">{formatDateTime(act.occurredAt)}</span>
+                    <div key={act.id} className="relative space-y-1 text-xs">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 absolute -left-6 top-1 border-2 border-zinc-900" />
+                      <div className="flex items-center justify-between font-bold">
+                        <span>{act.title}</span>
+                        <span className="text-[10px] font-normal text-zinc-400">
+                          {formatDateTime(act.occurredAt)}
+                        </span>
                       </div>
-                      <p className="text-zinc-600 dark:text-zinc-400 leading-relaxed">{act.description}</p>
-                      <p className="text-[10px] text-zinc-500">
-                        Ator: {act.actorName || (act.actorKind === 'system' ? 'Sistema Automático' : 'Utilizador Institucional')}
+                      <p className={`text-[11px] leading-relaxed ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                        {act.description}
                       </p>
+                      {act.actorName && (
+                        <div className="text-[10px] text-zinc-500">
+                          Operador: <span className="font-semibold">{act.actorName}</span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
-              )}
-
-              {!loadingActivity && !activityError && activities.length === 0 && (
-                <p className="text-xs text-zinc-500 py-8 text-center">Nenhuma atividade registada ainda.</p>
               )}
             </div>
           )}

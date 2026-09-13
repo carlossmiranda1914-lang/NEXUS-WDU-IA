@@ -512,3 +512,90 @@ export async function reconcileDeletion(
   }
   return data;
 }
+
+export interface AssociationTargetItem {
+  id: string;
+  name: string;
+  domain: 'student' | 'enrollment';
+  resourceType: string;
+  detail?: string;
+}
+
+export async function searchAssociationTargets(
+  domain: 'student' | 'enrollment',
+  query = '',
+  signal?: AbortSignal,
+): Promise<AssociationTargetItem[]> {
+  const headers = await getAuthHeaders();
+  const params = new URLSearchParams({ domain, q: query });
+  const res = await fetch(`/api/documents/association-targets/search?${params.toString()}`, {
+    method: 'GET',
+    headers,
+    signal,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Não foi possível pesquisar entidades para associação.');
+  }
+  return Array.isArray(data.targets) ? data.targets : [];
+}
+
+export async function createDocumentAssociation(
+  documentId: string,
+  params: {
+    targetDomain: string;
+    targetResourceType: string;
+    targetResourceId: string;
+    purpose: string;
+    pinnedVersionId?: string | null;
+  },
+  idempotencyKey: string,
+): Promise<{ success: boolean; association: unknown; replayed: boolean }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/documents/${documentId}/associations`, {
+    method: 'POST',
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey,
+    },
+    body: JSON.stringify({
+      ...params,
+      idempotencyKey,
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Não foi possível associar o documento.');
+  }
+  return data;
+}
+
+export async function deleteDocumentAssociation(
+  documentId: string,
+  associationId: string,
+  idempotencyKey: string,
+  reason?: string,
+): Promise<{ success: boolean; association: unknown; replayed: boolean }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/documents/${documentId}/associations/${associationId}`, {
+    method: 'DELETE',
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey,
+    },
+    body: JSON.stringify({
+      reason,
+      idempotencyKey,
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Não foi possível retirar a associação.');
+  }
+  return data;
+}

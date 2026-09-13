@@ -7,6 +7,9 @@ export interface FrontendSafeDocumentVersionDto {
   byteSize: number;
   sha256Hash: string;
   status: DocumentVersionStatus;
+  originalFilename?: string;
+  declaredFilename?: string;
+  createdByPersonName?: string | null;
   createdAt: string;
 }
 
@@ -15,6 +18,7 @@ export interface FrontendSafeAssociationDto {
   targetDomain: string;
   targetResourceType: string;
   targetResourceId: string;
+  targetEntityName?: string | null;
   purpose: string;
   status: string;
   pinnedVersionId: string | null;
@@ -63,6 +67,10 @@ export interface FrontendSafeDocumentDto {
   category: string;
   classification: string | null;
   status: DocumentStatus;
+  originalFilename?: string;
+  declaredFilename?: string;
+  title?: string;
+  createdByPersonName?: string | null;
   createdAt: string;
   updatedAt: string;
   currentVersion: FrontendSafeDocumentVersionDto | null;

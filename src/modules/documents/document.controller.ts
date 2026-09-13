@@ -32,6 +32,10 @@ import {
   revokeContentAccessGrantCommand,
 } from './document-access-command.ts';
 import {
+  createDocumentAssociationCommand,
+  transitionAssociationStatusCommand,
+} from './document-association-command.ts';
+import {
   placeHoldCommand,
   releaseHoldCommand,
   authorizeDeletionCommand,
@@ -418,12 +422,18 @@ export function registerDocumentRoutes(
         byte_size: string;
         sha256_hash: string;
         status: string;
+        created_by_person_name: string | null;
+        original_filename: string | null;
         created_at: Date;
       }>(
-        `SELECT id, document_id, version_number, mime_type, byte_size, sha256_hash, status, created_at
-           FROM document_versions
-          WHERE institution_id = $1 AND document_id = $2
-          ORDER BY version_number DESC`,
+        `SELECT v.id, v.document_id, v.version_number, v.mime_type, v.byte_size, v.sha256_hash, v.status, v.created_at,
+                p.name AS created_by_person_name,
+                s.declared_filename AS original_filename
+           FROM document_versions v
+           LEFT JOIN people p ON p.id = v.created_by_person_id
+           LEFT JOIN document_upload_sessions s ON s.institution_id = v.institution_id AND s.completed_version_id = v.id
+          WHERE v.institution_id = $1 AND v.document_id = $2
+          ORDER BY v.version_number DESC`,
         [context.institutionId, documentId],
       );
 
@@ -434,11 +444,172 @@ export function registerDocumentRoutes(
         byteSize: Number(r.byte_size),
         sha256Hash: r.sha256_hash,
         status: r.status as any,
+        originalFilename: r.original_filename || undefined,
+        declaredFilename: r.original_filename || undefined,
+        createdByPersonName: r.created_by_person_name,
         createdAt: r.created_at.toISOString(),
       }));
 
       assertNoInternalSecretsInDto(items);
       return res.json({ items });
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
+  // 2.2. GET /api/documents/association-targets/search — Search same-tenant targets
+  app.get('/api/documents/association-targets/search', docAuth, async (req: AuthRequest, res: Response) => {
+    const context = req.institutionalContext;
+    if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    const domain = (req.query.domain as string) || 'student';
+    const searchQuery = ((req.query.q as string) || '').trim();
+
+    try {
+      if (domain === 'student') {
+        const query = `
+          SELECT p.id, p.name, p.national_id, p.birth_date
+          FROM people p
+          JOIN institution_memberships m ON m.person_id = p.id AND m.institution_id = $1
+          WHERE m.role = 'student' AND m.membership_status = 'active'
+            AND ($2 = '' OR p.name ILIKE $3 OR p.national_id ILIKE $3)
+          ORDER BY p.name ASC
+          LIMIT 25
+        `;
+        const result = await docPool.query(query, [
+          context.institutionId,
+          searchQuery,
+          `%${searchQuery}%`,
+        ]);
+        const targets = result.rows.map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          domain: 'student',
+          resourceType: 'student_profile',
+          detail: r.national_id ? `NIF/BI: ${r.national_id}` : 'Aluno Ativo',
+        }));
+        return res.json({ targets });
+      } else if (domain === 'enrollment') {
+        const query = `
+          SELECT e.id, p.name AS student_name, y.name AS academic_year_name, o.name AS offer_name, e.status
+          FROM enrollment_applications e
+          JOIN people p ON p.id = e.student_person_id
+          JOIN academic_years y ON y.id = e.academic_year_id
+          JOIN enrollment_offers o ON o.id = e.offer_id
+          WHERE e.institution_id = $1
+            AND ($2 = '' OR p.name ILIKE $3 OR y.name ILIKE $3 OR o.name ILIKE $3)
+          ORDER BY e.updated_at DESC
+          LIMIT 25
+        `;
+        const result = await docPool.query(query, [
+          context.institutionId,
+          searchQuery,
+          `%${searchQuery}%`,
+        ]);
+        const targets = result.rows.map((r: any) => ({
+          id: r.id,
+          name: `${r.student_name} (${r.academic_year_name})`,
+          domain: 'enrollment',
+          resourceType: 'enrollment_application',
+          detail: `Oferta: ${r.offer_name} | Estado: ${r.status}`,
+        }));
+        return res.json({ targets });
+      } else {
+        return reject(res, 400, 'Domínio de associação inválido (deve ser "student" ou "enrollment").');
+      }
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
+  // 2.3. POST /api/documents/:id/associations — Create canonical association
+  app.post('/api/documents/:id/associations', docAuth, async (req: AuthRequest, res: Response) => {
+    const context = req.institutionalContext;
+    if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    const documentId = req.params.id;
+    if (!validUuid(documentId)) {
+      return reject(res, 400, 'Identificador de documento inválido.');
+    }
+
+    const { targetDomain, targetResourceType, targetResourceId, purpose, pinnedVersionId } = req.body || {};
+    if (!targetDomain || typeof targetDomain !== 'string') {
+      return reject(res, 400, 'targetDomain é obrigatório.');
+    }
+    if (!targetResourceType || typeof targetResourceType !== 'string') {
+      return reject(res, 400, 'targetResourceType é obrigatório.');
+    }
+    if (!targetResourceId || typeof targetResourceId !== 'string') {
+      return reject(res, 400, 'targetResourceId é obrigatório.');
+    }
+    if (!purpose || typeof purpose !== 'string') {
+      return reject(res, 400, 'purpose é obrigatório.');
+    }
+    if (pinnedVersionId !== undefined && pinnedVersionId !== null && !validUuid(pinnedVersionId)) {
+      return reject(res, 400, 'pinnedVersionId inválido.');
+    }
+
+    try {
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
+
+      const assocRes = await createDocumentAssociationCommand({
+        pool: docPool,
+        context,
+        idempotencyKey,
+        input: {
+          documentId,
+          pinnedVersionId: pinnedVersionId || null,
+          targetDomain,
+          targetResourceType,
+          targetResourceId,
+          purpose,
+          correlationId: req.header('x-correlation-id') || null,
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        association: assocRes.result,
+        replayed: assocRes.replayed,
+      });
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
+  // 2.4. DELETE /api/documents/:id/associations/:assocId — Withdraw association
+  app.delete('/api/documents/:id/associations/:assocId', docAuth, async (req: AuthRequest, res: Response) => {
+    const context = req.institutionalContext;
+    if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    const documentId = req.params.id;
+    const assocId = req.params.assocId;
+    if (!validUuid(documentId) || !validUuid(assocId)) {
+      return reject(res, 400, 'Identificadores inválidos.');
+    }
+
+    try {
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
+
+      const result = await transitionAssociationStatusCommand({
+        pool: docPool,
+        context,
+        idempotencyKey,
+        input: {
+          associationId: assocId,
+          targetStatus: 'withdrawn',
+          reason: (req.body?.reason as string) || 'Associação retirada pelo utilizador',
+          correlationId: req.header('x-correlation-id') || null,
+        },
+      });
+
+      return res.json({
+        success: true,
+        association: result.result,
+        replayed: result.replayed,
+      });
     } catch (error) {
       return rejectDomainError(res, error);
     }

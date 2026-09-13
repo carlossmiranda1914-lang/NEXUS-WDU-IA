@@ -9,6 +9,9 @@ export interface DocumentVersionDto {
   byteSize: number;
   sha256Hash: string;
   status: DocumentVersionStatus;
+  originalFilename?: string;
+  declaredFilename?: string;
+  createdByPersonName?: string | null;
   createdAt: string;
 }
 
@@ -17,10 +20,19 @@ export interface AssociationDto {
   targetDomain: string;
   targetResourceType: string;
   targetResourceId: string;
+  targetEntityName?: string | null;
   purpose: string;
   status: string;
   pinnedVersionId: string | null;
   createdAt: string;
+}
+
+export interface AssociationTarget {
+  id: string;
+  name: string;
+  domain: 'student' | 'enrollment';
+  resourceType: string;
+  detail?: string;
 }
 
 export interface RetentionDto {
@@ -65,6 +77,10 @@ export interface DocumentDto {
   category: string;
   classification: string | null;
   status: DocumentStatus;
+  originalFilename?: string;
+  declaredFilename?: string;
+  title?: string;
+  createdByPersonName?: string | null;
   createdAt: string;
   updatedAt: string;
   currentVersion: DocumentVersionDto | null;
