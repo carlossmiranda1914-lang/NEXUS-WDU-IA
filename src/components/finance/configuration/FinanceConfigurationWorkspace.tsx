@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FinanceConfigurationError, FinanceReadinessClient, financeReadinessClient, type FinanceReadinessDto } from '../../../modules/finance/finance-readiness-client.ts';
+import { FinanceConfigurationError, FinanceReadinessClient, financeReadinessClient, type DocumentSeriesConfiguration, type FinanceReadinessDto, type FinancialProfileConfiguration, type FiscalConfiguration, type LegalProfileConfiguration } from '../../../modules/finance/finance-readiness-client.ts';
 import { AuroraStateNotice } from '../../aurora/AuroraStateNotice.tsx';
 
 const requirementLabel: Record<FinanceReadinessDto['requirements'][number]['code'], string> = {
@@ -23,9 +23,19 @@ export function FinanceConfigurationWorkspace({ readinessClient = financeReadine
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<'legal' | 'financial' | null>(null);
   const [loading, setLoading] = useState(true);
+  const [legalProfile, setLegalProfile] = useState<LegalProfileConfiguration | null>(null);
+  const [financialProfile, setFinancialProfile] = useState<FinancialProfileConfiguration | null>(null);
+  const [fiscalConfigurations, setFiscalConfigurations] = useState<FiscalConfiguration[]>([]);
+  const [documentSeries, setDocumentSeries] = useState<DocumentSeriesConfiguration[]>([]);
   const load = async () => {
     setLoading(true);
-    try { setReadiness(await readinessClient.get()); setError(null); }
+    try {
+      const optionalClient = readinessClient as Partial<FinanceReadinessClient>;
+      const [nextReadiness, legal, financial, fiscal, series] = await Promise.all([
+        readinessClient.get(), optionalClient.getLegalProfile?.() ?? Promise.resolve({ item: null }), optionalClient.getFinancialProfile?.() ?? Promise.resolve({ item: null }), optionalClient.listFiscalConfigurations?.() ?? Promise.resolve({ items: [] }), optionalClient.listDocumentSeries?.() ?? Promise.resolve({ items: [] }),
+      ]);
+      setReadiness(nextReadiness); setLegalProfile(legal.item); setFinancialProfile(financial.item); setFiscalConfigurations(fiscal.items); setDocumentSeries(series.items); setError(null);
+    }
     catch { setError('Não foi possível confirmar a configuração financeira atual.'); }
     finally { setLoading(false); }
   };
@@ -38,12 +48,14 @@ export function FinanceConfigurationWorkspace({ readinessClient = financeReadine
       ? financialRequirement
       : undefined;
   const requirementStateLabel = (state: FinanceReadinessDto['requirements'][number]['state']) => state === 'COMPLETE' ? 'Concluído' : state === 'MISSING' ? 'Em falta' : 'Bloqueado';
+  const startLegalVersion = () => { setLegalName(legalProfile?.legalName ?? ''); setTaxIdentifier(legalProfile?.taxIdentifier ?? ''); setAddressLine1(legalProfile?.registeredAddress.line1 ?? ''); setEditing('legal'); };
+  const startFinancialVersion = () => { setJurisdiction(financialProfile?.primaryJurisdiction ?? 'AO'); setCurrency(financialProfile?.functionalCurrency ?? 'AOA'); setTimezone(financialProfile?.financialTimezone ?? 'Africa/Luanda'); setEnabledCurrencies(financialProfile?.enabledCurrencies.join(', ') ?? 'AOA'); setEditing('financial'); };
   const configure = async () => {
     try {
       setError(null); setSuccess(null); setSaving(true);
       if (editing === 'legal') await readinessClient.createLegalProfile({ legalName, taxIdentifier, countryCode: jurisdiction, addressLine1, effectiveFrom: new Date().toISOString() });
       else if (editing === 'financial') await readinessClient.createFinancialProfile({ primaryJurisdiction: jurisdiction, functionalCurrency: currency, financialTimezone: timezone, monetaryPolicyVersion: 'v1', enabledCurrencies: enabledCurrencies.split(',').map(value => value.trim().toUpperCase()).filter(Boolean), effectiveFrom: new Date().toISOString() });
-      setReadiness(await readinessClient.get());
+      await load();
       setSuccess('Configuração institucional guardada. A prontidão financeira foi atualizada a partir do servidor.'); setEditing(null); onComplete?.();
     } catch (caught) { setError(caught instanceof FinanceConfigurationError ? caught.message : 'Ocorreu um erro inesperado ao guardar a configuração. Tente novamente.'); }
     finally { setSaving(false); }
@@ -63,13 +75,19 @@ export function FinanceConfigurationWorkspace({ readinessClient = financeReadine
       </section>
       {readiness.receiptIssuance.status === 'BLOCKED' && /^AGT_/.test(readiness.receiptIssuance.reasonCode) && <div className="mt-4"><AuroraStateNotice tone="warning" title="Pré-requisito externo de produção AO">A emissão oficial depende de requisitos externos da AGT. Estes requisitos não são configuráveis nesta área.</AuroraStateNotice></div>}
       {!actionableRequirement && readiness.status !== 'READY' && <div className="mt-4"><AuroraStateNotice tone="warning" title="Configuração local pendente">Existem recursos locais em falta. Esta área não apresenta uma ação que não esteja disponível para a configuração atual.</AuroraStateNotice></div>}
+      <section className="mt-5 grid gap-4" data-testid="finance-configuration-management">
+        <section className="rounded-md border border-zinc-200 p-4"><h3 className="font-semibold">Perfil jurídico institucional</h3>{legalProfile ? <><p className="mt-2 text-sm">{legalProfile.legalName} · NIF: {legalProfile.taxIdentifier ?? 'não registado'}</p><p className="text-sm">{legalProfile.registeredAddress.line1}</p><p className="text-sm text-zinc-600">Efetivo desde {new Date(legalProfile.effectiveFrom).toLocaleDateString('pt-PT')}</p>{readiness.canManageConfiguration && !editing && <button type="button" className="mt-3 rounded-md border px-3 py-1 text-sm" onClick={startLegalVersion}>Atualizar perfil jurídico</button>}</> : <p className="mt-2 text-sm">Ainda não configurado.</p>}</section>
+        <section className="rounded-md border border-zinc-200 p-4"><h3 className="font-semibold">Perfil financeiro</h3>{financialProfile ? <><p className="mt-2 text-sm">Jurisdição: {financialProfile.primaryJurisdiction} · Moeda funcional: {financialProfile.functionalCurrency}</p><p className="text-sm">Fuso horário: {financialProfile.financialTimezone} · Moedas ativas: {financialProfile.enabledCurrencies.join(', ')}</p><p className="text-sm text-zinc-600">Efetivo desde {new Date(financialProfile.effectiveFrom).toLocaleDateString('pt-PT')}</p>{readiness.canManageConfiguration && !editing && <button type="button" className="mt-3 rounded-md border px-3 py-1 text-sm" onClick={startFinancialVersion}>Atualizar perfil financeiro</button>}</> : <p className="mt-2 text-sm">Ainda não configurado.</p>}</section>
+        <section className="rounded-md border border-zinc-200 p-4"><h3 className="font-semibold">Configuração fiscal</h3>{fiscalConfigurations[0] ? <p className="mt-2 text-sm">Configuração efetiva: versão {fiscalConfigurations[0].version} · estado efetivo</p> : <p className="mt-2 text-sm">Ainda não existe configuração fiscal efetiva.</p>}<p className="mt-2 text-sm text-zinc-600">Para produção AO, adesão AGT, material de assinatura e série de produção são pré-requisitos externos. Não são configuráveis nesta área.</p></section>
+        <section className="rounded-md border border-zinc-200 p-4"><h3 className="font-semibold">Séries documentais</h3>{(['receipt', 'invoice'] as const).map(type => { const items = documentSeries.filter(item => item.document_type === type); return <div key={type} className="mt-3"><strong className="text-sm">Séries de {type === 'receipt' ? 'recibos' : 'faturas'}</strong><p className="text-sm">{items.length ? items.map(item => `${item.code} · ${item.status}`).join(', ') : 'Nenhuma série efetiva configurada.'}</p></div>; })}<p className="mt-2 text-sm text-zinc-600">A criação de séries só é possível após política e configuração fiscal efetivas; não há ação de produção AO enquanto a autoridade externa estiver incompleta.</p></section>
+      </section>
     </>}
     {actionableRequirement && <>
       <h3 className="mt-4 font-semibold">Configuração necessária</h3>
       <p className="text-sm text-zinc-600">Complete os perfis institucionais. A prontidão é confirmada pelo servidor depois de cada gravação.</p>
       <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm"><strong>{requirementLabel[actionableRequirement.code]}: em falta</strong><p className="mt-1">{actionableRequirement.code === 'INSTITUTION_LEGAL_PROFILE' ? 'Registe a identidade jurídica da instituição para continuar.' : 'Registe o contexto financeiro institucional para continuar.'}</p></div>
-      {readiness?.canManageConfiguration && !editing && actionableRequirement.code === 'INSTITUTION_LEGAL_PROFILE' && <button type="button" onClick={() => setEditing('legal')} className="mt-4 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Configurar perfil jurídico</button>}
-      {readiness?.canManageConfiguration && !editing && actionableRequirement.code === 'FINANCIAL_PROFILE' && <button type="button" onClick={() => setEditing('financial')} className="mt-4 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Configurar perfil financeiro</button>}
+      {readiness?.canManageConfiguration && !editing && actionableRequirement.code === 'INSTITUTION_LEGAL_PROFILE' && <button type="button" onClick={startLegalVersion} className="mt-4 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Configurar perfil jurídico</button>}
+      {readiness?.canManageConfiguration && !editing && actionableRequirement.code === 'FINANCIAL_PROFILE' && <button type="button" onClick={startFinancialVersion} className="mt-4 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Configurar perfil financeiro</button>}
       {!readiness?.canManageConfiguration && <p className="mt-4 text-sm text-zinc-600">A sua sessão pode consultar a prontidão, mas não tem permissão para alterar a configuração.</p>}
       {editing === 'legal' && readiness?.canManageConfiguration && <div data-testid="legal-profile-form" className="mt-4 space-y-3"><label className="block text-sm font-medium">Nome jurídico<input value={legalName} onChange={event => setLegalName(event.target.value)} disabled={saving} className="mt-1 block w-full rounded-md border p-2" /></label><label className="block text-sm font-medium">Identificação fiscal<input value={taxIdentifier} onChange={event => setTaxIdentifier(event.target.value)} disabled={saving} className="mt-1 block w-full rounded-md border p-2" /></label><label className="block text-sm font-medium">País / jurisdição<input value={jurisdiction} onChange={event => setJurisdiction(event.target.value.toUpperCase())} disabled={saving} className="mt-1 block w-full rounded-md border p-2" /></label><label className="block text-sm font-medium">Morada registada<input value={addressLine1} onChange={event => setAddressLine1(event.target.value)} disabled={saving} className="mt-1 block w-full rounded-md border p-2" /></label><button data-testid="legal-profile-save" type="button" onClick={configure} disabled={saving} className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Guardar perfil jurídico</button></div>}
       {editing === 'financial' && readiness?.canManageConfiguration && <div data-testid="financial-profile-form" className="mt-4 space-y-3"><label className="block text-sm font-medium">Jurisdição principal<input value={jurisdiction} onChange={event => setJurisdiction(event.target.value.toUpperCase())} disabled={saving} className="mt-1 block w-full rounded-md border p-2" /></label><label className="block text-sm font-medium">Moeda funcional<input value={currency} onChange={event => setCurrency(event.target.value.toUpperCase())} disabled={saving} className="mt-1 block w-full rounded-md border p-2" /></label><label className="block text-sm font-medium">Fuso horário financeiro<input value={timezone} onChange={event => setTimezone(event.target.value)} disabled={saving} className="mt-1 block w-full rounded-md border p-2" /></label><label className="block text-sm font-medium">Moedas ativas<input value={enabledCurrencies} onChange={event => setEnabledCurrencies(event.target.value)} disabled={saving} className="mt-1 block w-full rounded-md border p-2" /></label><button data-testid="financial-profile-save" type="button" onClick={configure} disabled={saving} className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white">Guardar perfil financeiro</button></div>}

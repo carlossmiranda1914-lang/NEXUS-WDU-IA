@@ -13,6 +13,11 @@ export type FinanceReadinessDto = {
   paymentCurrency?: { functionalCurrency: string; enabledCurrencies: string[] };
 };
 
+export type LegalProfileConfiguration = { legalName: string; taxIdentifier: string | null; registeredAddress: { line1: string }; effectiveFrom: string };
+export type FinancialProfileConfiguration = { primaryJurisdiction: string; functionalCurrency: string; financialTimezone: string; enabledCurrencies: string[]; effectiveFrom: string };
+export type FiscalConfiguration = { id: string; version: number; adapter_key: string; effective_from: string; effective_to: string | null };
+export type DocumentSeriesConfiguration = { id: string; code: string; document_type: string; status: string; effective_from: string; effective_to: string | null };
+
 export class FinanceConfigurationError extends Error {
   constructor(readonly code: string, message: string) { super(message); this.name = 'FinanceConfigurationError'; }
 }
@@ -57,11 +62,20 @@ export class FinanceReadinessClient {
   }
 
   async get(): Promise<FinanceReadinessDto> {
-    const token = await this.acquireToken();
-    const response = await this.fetcher('/api/finance/readiness', { headers: { Authorization: `Bearer ${token}` } });
-    if (!response.ok) throw new FinanceReadinessError(response.status === 401 ? 'FINANCE_READINESS_AUTH_REQUIRED' : response.status === 403 ? 'FINANCE_READINESS_FORBIDDEN' : 'FINANCE_READINESS_UNAVAILABLE');
-    return response.json() as Promise<FinanceReadinessDto>;
+    return this.request('/api/finance/readiness');
   }
+
+  private async request<T>(path: string, init?: RequestInit): Promise<T> {
+    const token = await this.acquireToken();
+    const response = await this.fetcher(path, { ...init, headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}` } });
+    if (!response.ok) throw new FinanceReadinessError(response.status === 401 ? 'FINANCE_READINESS_AUTH_REQUIRED' : response.status === 403 ? 'FINANCE_READINESS_FORBIDDEN' : 'FINANCE_READINESS_UNAVAILABLE');
+    return response.json() as Promise<T>;
+  }
+
+  async getLegalProfile(): Promise<{ item: LegalProfileConfiguration | null }> { return this.request('/api/institution/legal-profile'); }
+  async getFinancialProfile(): Promise<{ item: FinancialProfileConfiguration | null }> { return this.request('/api/finance/profile'); }
+  async listFiscalConfigurations(): Promise<{ items: FiscalConfiguration[] }> { return this.request('/api/finance/fiscal-configurations'); }
+  async listDocumentSeries(): Promise<{ items: DocumentSeriesConfiguration[] }> { return this.request('/api/finance/document-series'); }
 
   async createLegalProfile(input: { legalName: string; taxIdentifier?: string; countryCode: string; addressLine1: string; effectiveFrom: string }): Promise<void> {
     const token = await this.getToken().catch(() => null);

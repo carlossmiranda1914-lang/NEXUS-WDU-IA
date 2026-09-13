@@ -137,3 +137,25 @@ test('exits loading with an explicit error when readiness fails', async () => {
   assert.ok(hasText(renderer, 'Não foi possível confirmar a configuração financeira atual.'));
   assert.ok(!hasText(renderer, 'A carregar configuração financeira'));
 });
+
+test('shows current authoritative configuration and opens versioned profile actions without inventing AO production actions', async () => {
+  const readinessClient = {
+    get: async () => completeProfilesWithLocalGaps,
+    getLegalProfile: async () => ({ item: { legalName: 'Escola UAT', taxIdentifier: 'AO-1', registeredAddress: { line1: 'Rua UAT' }, effectiveFrom: '2026-09-01T00:00:00.000Z' } }),
+    getFinancialProfile: async () => ({ item: { primaryJurisdiction: 'AO', functionalCurrency: 'AOA', financialTimezone: 'Africa/Luanda', enabledCurrencies: ['AOA'], effectiveFrom: '2026-09-01T00:00:00.000Z' } }),
+    listFiscalConfigurations: async () => ({ items: [] }),
+    listDocumentSeries: async () => ({ items: [] }),
+  };
+  let renderer: any;
+  await act(async () => { renderer = create(React.createElement(FinanceConfigurationWorkspace, { readinessClient: readinessClient as any })); });
+  const text = JSON.stringify(renderer.toJSON());
+  assert.match(text, /Escola UAT/);
+  assert.match(text, /AOA/);
+  assert.match(text, /Atualizar perfil jurídico/);
+  assert.match(text, /Atualizar perfil financeiro/);
+  assert.match(text, /Configuração fiscal/);
+  assert.match(text, /recibos/);
+  assert.match(text, /faturas/);
+  assert.match(text, /AGT/);
+  assert.doesNotMatch(text, /Criar configuração fiscal de produção/);
+});
