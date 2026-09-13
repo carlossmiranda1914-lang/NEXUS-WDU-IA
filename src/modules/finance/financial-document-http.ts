@@ -14,6 +14,7 @@ import { PostgresFinancialProfileStore } from './financial-context.ts';
 import { InstitutionLegalProfileRepository } from '../institution/institution-legal-profile.ts';
 import { resolveDocumentParties, resolveDocumentaryPartySnapshot } from './document-party-resolution.ts';
 import { captureReceiptSettlement } from './documentary-settlement-capture.ts';
+import { resolveInvoiceBillableSource } from './invoice-billable-source.ts';
 
 type DocumentRow = { id: string; document_type: string; status: string; sequence_number: string; issued_at: Date; documentary_snapshot: DocumentarySnapshot | null; corrects_document_id: string | null; series_code: string };
 const view = (row: DocumentRow) => {
@@ -102,21 +103,41 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
   app.get('/api/finance/obligations/:id/invoice-preview', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'read'); if (!context) return;
     const at = (await pool.query<{ now: Date }>('SELECT clock_timestamp() now')).rows[0]?.now ?? new Date();
-    const activeSeries = await pool.query<{ id: string; code: string }>("SELECT id,code FROM finance_financial_document_series WHERE institution_id=$1 AND document_type='invoice' AND status='active' AND effective_from<=$2 AND (effective_to IS NULL OR effective_to>$2) ORDER BY code LIMIT 1", [context.institutionId, at]);
-    const series = activeSeries.rows[0];
-    const eligibility = series ? await resolveInvoiceEligibility(pool, fiscalAdapters, { institutionId: context.institutionId, obligationId: req.params.id, seriesId: series.id, documentType: 'invoice', at }) : { eligible: false as const, reasonCode: 'INVOICE_SERIES_NOT_EFFECTIVE' };
-    if (eligibility.eligible === false) return void res.json({ documentType: 'invoice', officialDocumentCreated: false, definitiveNumberAllocated: false, sourceEligibility: 'BLOCKED', readiness: { status: 'BLOCKED', reasonCode: eligibility.reasonCode }, blockingReason: eligibility.reasonCode, series: { available: false, reference: null } });
-    const issuer = await new InstitutionLegalProfileRepository(pool).resolveEffective(context.institutionId, at);
-    if (!issuer) return void res.json({ documentType: 'invoice', officialDocumentCreated: false, definitiveNumberAllocated: false, sourceEligibility: 'ELIGIBLE', readiness: { status: 'BLOCKED', reasonCode: 'INSTITUTION_LEGAL_PROFILE_REQUIRED' }, blockingReason: 'INSTITUTION_LEGAL_PROFILE_REQUIRED', series: { available: true, reference: series.code } });
+    // The financial source is read before issuance readiness. A missing
+    // series or fiscal prerequisite must never erase an authorized
+    // obligation's documentary facts from the operator preview.
+    let source;
     try {
-      const parties = await resolveDocumentParties(pool, { institutionId: context.institutionId, financialAccountId: eligibility.obligation.financialAccountId, obligationId: eligibility.obligation.obligationId });
-      const recipient = await resolveDocumentaryPartySnapshot(pool, parties.recipient);
-      const policy = resolveDocumentaryPolicy(eligibility.adapter, 'invoice');
-      res.json({ documentType: 'invoice', officialDocumentCreated: false, definitiveNumberAllocated: false, sourceEligibility: 'ELIGIBLE', readiness: { status: 'READY' }, blockingReason: null, series: { available: true, reference: series.code }, issuer: { legalName: issuer.legalName, taxIdentifier: issuer.taxIdentifier, address: issuer.registeredAddress.line1 }, recipient: { name: recipient.name }, obligation: { reference: eligibility.obligation.reference, dueAt: eligibility.obligation.dueAt.toISOString(), originalAmount: eligibility.obligation.originalAmount, adjustmentTotal: eligibility.obligation.adjustmentTotal, discountTotal: eligibility.obligation.discountTotal, amount: eligibility.obligation.billableAmount, currency: eligibility.obligation.currency, lineDescription: eligibility.obligation.description }, totals: { subtotal: eligibility.obligation.preDiscountAmount, discountTotal: eligibility.obligation.discountTotal, taxTotal: '0', documentTotal: eligibility.obligation.billableAmount, currency: eligibility.obligation.currency }, documentaryPolicy: { taxTreatment: policy.taxTreatment, legalMentions: policy.legalMentions } });
+      source = await resolveInvoiceBillableSource(pool, { institutionId: context.institutionId, obligationId: req.params.id, at });
     } catch (error) {
       const reasonCode = canonicalDocumentaryEligibilityReason(error);
-      res.json({ documentType: 'invoice', officialDocumentCreated: false, definitiveNumberAllocated: false, sourceEligibility: 'ELIGIBLE', readiness: { status: 'BLOCKED', reasonCode }, blockingReason: reasonCode, series: { available: true, reference: series.code } });
+      return void res.json({ documentType: 'invoice', officialDocumentCreated: false, definitiveNumberAllocated: false, sourceEligibility: 'BLOCKED', readiness: { status: 'BLOCKED', reasonCode }, blockingReason: reasonCode, series: { available: false, reference: null }, documentFacts: null });
     }
+    const issuer = await new InstitutionLegalProfileRepository(pool).resolveEffective(context.institutionId, at);
+    let recipient: { name: string; taxIdentifier: string | null; address: string | null } | null = null;
+    try {
+      const parties = await resolveDocumentParties(pool, { institutionId: context.institutionId, financialAccountId: source.financialAccountId, obligationId: source.obligationId });
+      const party = await resolveDocumentaryPartySnapshot(pool, parties.recipient);
+      recipient = { name: party.name, taxIdentifier: null, address: null };
+    } catch { /* Documentary party incompleteness is a readiness state, not a loss of source facts. */ }
+    const documentFacts = {
+      obligation: { reference: source.reference, dueAt: source.dueAt.toISOString(), description: source.description, currency: source.currency },
+      issuer: issuer ? { legalName: issuer.legalName, taxIdentifier: issuer.taxIdentifier, address: issuer.registeredAddress.line1 } : null,
+      recipient,
+      lines: [{ description: source.description, quantity: '1', unitPrice: source.preDiscountAmount, discount: source.discountTotal, tax: null as string | null, netAmount: source.billableAmount, totalAmount: source.billableAmount, currency: source.currency }],
+      totals: { subtotal: source.preDiscountAmount, discountTotal: source.discountTotal, taxTotal: null as string | null, documentTotal: source.billableAmount, currency: source.currency },
+      policy: null as { taxTreatment: string; legalMentions: readonly string[]; jurisdictionCode: string } | null,
+    };
+    const activeSeries = await pool.query<{ id: string; code: string }>("SELECT id,code FROM finance_financial_document_series WHERE institution_id=$1 AND document_type='invoice' AND status='active' AND effective_from<=$2 AND (effective_to IS NULL OR effective_to>$2) ORDER BY code LIMIT 1", [context.institutionId, at]);
+    const series = activeSeries.rows[0];
+    if (!series) return void res.json({ documentType: 'invoice', officialDocumentCreated: false, definitiveNumberAllocated: false, sourceEligibility: 'ELIGIBLE', readiness: { status: 'BLOCKED', reasonCode: 'INVOICE_SERIES_NOT_EFFECTIVE' }, blockingReason: 'INVOICE_SERIES_NOT_EFFECTIVE', series: { available: false, reference: null }, documentFacts });
+    if (!issuer) return void res.json({ documentType: 'invoice', officialDocumentCreated: false, definitiveNumberAllocated: false, sourceEligibility: 'ELIGIBLE', readiness: { status: 'BLOCKED', reasonCode: 'INSTITUTION_LEGAL_PROFILE_REQUIRED' }, blockingReason: 'INSTITUTION_LEGAL_PROFILE_REQUIRED', series: { available: true, reference: series.code }, documentFacts });
+    if (!recipient) return void res.json({ documentType: 'invoice', officialDocumentCreated: false, definitiveNumberAllocated: false, sourceEligibility: 'ELIGIBLE', readiness: { status: 'BLOCKED', reasonCode: 'DOCUMENT_RECIPIENT_REQUIRED' }, blockingReason: 'DOCUMENT_RECIPIENT_REQUIRED', series: { available: true, reference: series.code }, documentFacts });
+    const eligibility = await resolveInvoiceEligibility(pool, fiscalAdapters, { institutionId: context.institutionId, obligationId: req.params.id, seriesId: series.id, documentType: 'invoice', at });
+    if (eligibility.eligible === false) return void res.json({ documentType: 'invoice', officialDocumentCreated: false, definitiveNumberAllocated: false, sourceEligibility: 'ELIGIBLE', readiness: { status: 'BLOCKED', reasonCode: eligibility.reasonCode }, blockingReason: eligibility.reasonCode, series: { available: true, reference: series.code }, documentFacts });
+    const policy = resolveDocumentaryPolicy(eligibility.adapter, 'invoice');
+    const resolvedFacts = { ...documentFacts, lines: documentFacts.lines.map(line => ({ ...line, tax: '0' })), totals: { ...documentFacts.totals, taxTotal: '0' }, policy: { taxTreatment: policy.taxTreatment, legalMentions: policy.legalMentions, jurisdictionCode: eligibility.adapter.key } };
+    res.json({ documentType: 'invoice', officialDocumentCreated: false, definitiveNumberAllocated: false, sourceEligibility: 'ELIGIBLE', readiness: { status: 'READY' }, blockingReason: null, series: { available: true, reference: series.code }, documentFacts: resolvedFacts });
   });
   app.post('/api/finance/documents/issue', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'issue'); const idempotencyKey = key(req, res); if (!context || !idempotencyKey) return;

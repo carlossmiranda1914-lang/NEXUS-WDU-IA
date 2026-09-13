@@ -39,8 +39,18 @@ test('dispatches a V3 invoice from its frozen obligation reference without live 
   const presentation = buildFinancialDocumentPresentation({ document: { documentType: 'invoice', seriesCode: 'FT', sequenceNumber: 1, issuedAt: new Date('2026-09-12T10:00:00.000Z'), status: 'issued' }, snapshot: v3 });
   assert.equal(presentation.operation.reference, 'OBR-42');
   assert.equal(presentation.operation.lines.length, 1);
-  assert.match(presentation.operation.lines[0]!.label, /Propina/);
-  assert.equal(presentation.operation.lines[0]!.amount, '100');
+  assert.equal(presentation.operation.lines[0]!.description, 'Propina');
+  assert.equal(presentation.operation.lines[0]!.quantity, '1');
+  assert.equal(presentation.operation.lines[0]!.unitPrice, '100');
+  assert.equal(presentation.operation.lines[0]!.discount, '0');
+  assert.equal(presentation.operation.lines[0]!.tax, '0');
+  assert.equal(presentation.operation.lines[0]!.netAmount, '100');
+  assert.equal(presentation.operation.lines[0]!.totalAmount, '100');
+  assert.equal(presentation.totals.subtotal, '100');
+  assert.equal(presentation.totals.discountTotal, '0');
+  assert.equal(presentation.totals.taxTotal, '0');
+  assert.equal(presentation.policy.taxTreatment, 'not_applicable');
+  assert.equal(presentation.policy.jurisdictionCode, 'NEXUS_TEST');
   assert.equal(presentation.document.dueDate, '2026-10-12T00:00:00.000Z');
   assert.equal(presentation.payment, null);
   assert.equal(presentation.totals.documentTotal, '100');
@@ -49,6 +59,12 @@ test('dispatches a V3 invoice from its frozen obligation reference without live 
   assert.match(pdf.toString('latin1'), /Propina/);
   assert.match(pdf.toString('latin1'), /Vencimento: 2026-10-12/);
   assert.match(pdf.toString('latin1'), /NIF: PT999/);
+  assert.match(pdf.toString('latin1'), /Qtd\./);
+  assert.match(pdf.toString('latin1'), /Unitario/);
+  assert.match(pdf.toString('latin1'), /Desconto/);
+  assert.match(pdf.toString('latin1'), /Imposto/);
+  assert.match(pdf.toString('latin1'), /TOTAIS/);
+  assert.match(pdf.toString('latin1'), /Menção de teste/);
 });
 
 test('renderer entrypoint receives only immutable presentation, never a live Finance authority', async () => {
