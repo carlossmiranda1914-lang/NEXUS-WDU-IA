@@ -1,14 +1,15 @@
 import { auth } from '../../lib/firebase.ts';
 
-export type FinancialDocumentPresentation = { document: { typeLabel: string; officialNumber: string; issueDate: string; currency: string; statusLabel: string }; issuer: { legalName: string; taxIdentifier: string | null; addressLines: string[] }; recipient: { name: string; operationalReference: string | null }; operation: { reference: string | null }; totals: { documentTotal: string; currency: string }; payment: { reference: string; amount: string; currency: string } | null };
+export type FinancialDocumentPresentation = { document: { typeLabel: string; officialNumber: string; issueDate: string; dueDate: string | null; currency: string; statusLabel: string }; issuer: { legalName: string; taxIdentifier: string | null; addressLines: string[] }; recipient: { name: string; operationalReference: string | null }; operation: { reference: string | null; lines: Array<{ label: string; amount: string }> }; totals: { documentTotal: string; currency: string }; payment: { reference: string; amount: string; currency: string } | null };
 export type FinancialDocumentProjection = { id: string; type: string; status: string; seriesCode: string; sequenceNumber: number; issuedAt: string; correctsDocumentId: string | null; presentation: FinancialDocumentPresentation | null };
 export type FinancialDocumentCapabilities = { issue: boolean; correct: boolean };
-export type FinancialDocumentDetail = FinancialDocumentProjection & { sources: Array<{ type: string; paymentReference: string | null }>; corrections: FinancialDocumentProjection[] };
+export type FinancialDocumentDetail = FinancialDocumentProjection & { sources: Array<{ type: string; paymentReference: string | null; obligationReference: string | null }>; corrections: FinancialDocumentProjection[] };
 export type FinancialDocumentArtifactProjection = { id: string; document_id: string; render_version: string; template_version: string; generated_at: string; content_hash: string; media_type: string; byte_size: number };
-type FinancialDocumentSeriesProjection = { id: string; document_type: string; status: string };
+type FinancialDocumentSeriesProjection = { id: string; code: string; document_type: string; status: string };
 export type ReceiptEligibilityProjection = { status: 'ELIGIBLE' } | { status: 'BLOCKED'; reasonCode: string };
 export type FinancialDocumentReadinessProjection = { documentType: string; status: 'READY' | 'BLOCKED'; reasonCode?: string; prerequisites: Record<string, boolean> };
 export type ReceiptPreissuePreview = { documentType: 'receipt'; officialDocumentCreated: false; definitiveNumberAllocated: false; officialQrAvailable: false; payment: { reference: string; date: string; amount: string; currency: string; confirmationState: string }; sourceEligibility: 'ELIGIBLE' | 'BLOCKED'; readiness: FinancialDocumentReadinessProjection; blockingReason: string | null; series: { available: boolean; reference: string | null }; issuer: { legalName: string; taxIdentifier: string | null; address: string } | null; parties: { payer: string | null; beneficiary: string | null; recipient: string | null }; settlement: { sourceDocuments: Array<{ reference: string }>; allocations: Array<{ before: { amount: string; currency: string }; movement: { amount: string; currency: string }; after: { amount: string; currency: string } }>; unallocated: { amount: string; currency: string } | null } | null; documentaryPrerequisites: { partiesResolved: boolean; documentaryDataComplete: boolean } };
+export type InvoicePreissuePreview = { documentType: 'invoice'; officialDocumentCreated: false; definitiveNumberAllocated: false; sourceEligibility: 'ELIGIBLE' | 'BLOCKED'; readiness: FinancialDocumentReadinessProjection; blockingReason: string | null; series: { available: boolean; reference: string | null }; issuer?: { legalName: string; taxIdentifier: string | null; address: string }; recipient?: { name: string }; obligation?: { reference: string; dueAt: string; originalAmount: string; adjustmentTotal: string; discountTotal: string; amount: string; currency: string; lineDescription: string }; totals?: { subtotal: string; discountTotal: string; taxTotal: string; documentTotal: string; currency: string }; documentaryPolicy?: { taxTreatment: string; legalMentions: string[] } };
 
 export class FinancialDocumentApiError extends Error {
   constructor(readonly code: string, message: string) {
@@ -50,7 +51,10 @@ export class FinancialDocumentClient {
   }
   async documentReadiness(documentType: string): Promise<FinancialDocumentReadinessProjection> { return this.request(`/api/finance/readiness/documents/${encodeURIComponent(documentType)}`); }
   async receiptPreview(paymentId: string): Promise<ReceiptPreissuePreview> { return this.request(`/api/finance/payments/${encodeURIComponent(paymentId)}/receipt-preview`); }
+  async invoicePreview(obligationId: string): Promise<InvoicePreissuePreview> { return this.request(`/api/finance/obligations/${encodeURIComponent(obligationId)}/invoice-preview`); }
   async listActiveReceiptSeries(): Promise<FinancialDocumentSeriesProjection[]> { return (await this.request<{ items: FinancialDocumentSeriesProjection[] }>('/api/finance/document-series')).items.filter(series => series.document_type === 'receipt' && series.status === 'active'); }
+  async listActiveInvoiceSeries(): Promise<FinancialDocumentSeriesProjection[]> { return (await this.request<{ items: FinancialDocumentSeriesProjection[] }>('/api/finance/document-series')).items.filter(series => series.document_type === 'invoice' && series.status === 'active'); }
+  async issueInvoice(input: { obligationId: string; seriesId: string; idempotencyKey: string }): Promise<{ id: string; sequenceNumber: number; replayed: boolean }> { return this.request('/api/finance/documents/invoice', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': input.idempotencyKey }, body: JSON.stringify({ obligationId: input.obligationId, seriesId: input.seriesId }) }); }
   async listActiveCorrectionSeries(): Promise<FinancialDocumentSeriesProjection[]> { return (await this.request<{ items: FinancialDocumentSeriesProjection[] }>('/api/finance/document-series')).items.filter(series => series.document_type === 'credit_note' && series.status === 'active'); }
   async issueCorrection(input: { originalDocumentId: string; seriesId: string; idempotencyKey: string }): Promise<{ id: string; sequenceNumber: number; originalDocumentId: string; replayed: boolean }> {
     return this.request(`/api/finance/documents/${encodeURIComponent(input.originalDocumentId)}/corrections`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': input.idempotencyKey }, body: JSON.stringify({ seriesId: input.seriesId, documentType: 'credit_note' }) });
@@ -80,6 +84,10 @@ async function documentApiError(response: Response): Promise<FinancialDocumentAp
     FISCAL_CONFIGURATION_NOT_EFFECTIVE: 'Não existe uma configuração fiscal efetiva para emissão oficial.',
     FINANCIAL_PROFILE_NOT_FOUND: 'Não existe um perfil financeiro efetivo para a origem deste recebimento.',
     RECEIPT_SERIES_NOT_EFFECTIVE: 'Não existe uma série de recibos ativa e efetiva.',
+    INVOICE_SERIES_NOT_EFFECTIVE: 'Não existe uma série de faturas ativa e efetiva.',
+    INVOICE_SOURCE_NOT_ELIGIBLE: 'Esta obrigação não é elegível para emissão de fatura.',
+    INVOICE_DUE_DATE_REQUIRED: 'A obrigação não possui uma data de vencimento válida para emissão de fatura.',
+    INVOICE_BILLABLE_AMOUNT_INVALID: 'O valor faturável da obrigação não é válido.',
     SOURCE_NOT_ELIGIBLE: 'Este pagamento não é elegível para emissão de recibo oficial.',
     DOCUMENT_TYPE_UNSUPPORTED: 'A política documental ativa não suporta este tipo de documento.',
     FINANCIAL_DOCUMENT_VALIDATION: 'Não foi possível concluir a ação. Verifique a configuração fiscal e a série efetiva.',

@@ -2,12 +2,15 @@ import React, { useState } from 'react';
 import { FinancialObligationsListView } from './FinancialObligationsListView.tsx';
 import { FinancialObligationCreateView } from './FinancialObligationCreateView.tsx';
 import { FinancialAccountsView } from './FinancialAccountsView.tsx';
+import type { FinancialObligationRecord } from '../../../modules/finance/financial-obligation-client.ts';
+import { InvoicePreissuePreview } from './InvoicePreissuePreview.tsx';
 
 export type ObligationsViewMode = 'list' | 'create' | 'accounts';
 
-export function FinancialObligationsWorkspace() {
+export function FinancialObligationsWorkspace({ onOpenFinancialDocument }: { onOpenFinancialDocument?: (documentId: string) => void }) {
   const [view, setView] = useState<ObligationsViewMode>('list');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [invoiceObligation, setInvoiceObligation] = useState<FinancialObligationRecord | null>(null);
 
   const handleCreated = async () => {
     setRefreshTrigger((prev) => prev + 1);
@@ -32,10 +35,12 @@ export function FinancialObligationsWorkspace() {
   }
 
   return (
-    <FinancialObligationsListView
+    <><FinancialObligationsListView
       refreshTrigger={refreshTrigger}
       onOpenCreate={() => setView('create')}
       onOpenAccounts={() => setView('accounts')}
+      onPreviewInvoice={setInvoiceObligation}
     />
+    {invoiceObligation && <InvoicePreissuePreview obligationId={invoiceObligation.id} onClose={() => setInvoiceObligation(null)} onIssued={(documentId) => onOpenFinancialDocument?.(documentId)} />}</>
   );
 }

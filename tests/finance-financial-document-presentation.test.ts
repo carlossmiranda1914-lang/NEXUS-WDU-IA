@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { composeInvoiceDocumentarySnapshotV3, createDocumentarySnapshot, createDocumentarySnapshotV2 } from '../src/modules/finance/documentary-snapshot.ts';
 import { buildFinancialDocumentPresentation } from '../src/modules/finance/financial-document-presentation.ts';
+import { renderFinancialDocumentPdf } from '../src/modules/finance/financial-document-artifact-renderer.ts';
 
 const snapshot = createDocumentarySnapshot({ issuer: { legalName: 'Escola Aurora', taxIdentifier: 'PT999', address: { countryCode: 'PT', line1: 'Rua da Escola, 1' } }, recipient: { name: 'Maria Silva', authorityId: 'person-1' }, operation: { reference: 'PAG-42' }, payment: { reference: 'PAG-42', amount: '10.00', currency: 'EUR' }, totals: { documentTotal: '10.00', currency: 'EUR' }, jurisdiction: { code: 'core', policyVersion: 'core-1' } });
 
@@ -37,9 +38,17 @@ test('dispatches a V3 invoice from its frozen obligation reference without live 
   });
   const presentation = buildFinancialDocumentPresentation({ document: { documentType: 'invoice', seriesCode: 'FT', sequenceNumber: 1, issuedAt: new Date('2026-09-12T10:00:00.000Z'), status: 'issued' }, snapshot: v3 });
   assert.equal(presentation.operation.reference, 'OBR-42');
+  assert.equal(presentation.operation.lines.length, 1);
+  assert.match(presentation.operation.lines[0]!.label, /Propina/);
+  assert.equal(presentation.operation.lines[0]!.amount, '100');
+  assert.equal(presentation.document.dueDate, '2026-10-12T00:00:00.000Z');
   assert.equal(presentation.payment, null);
   assert.equal(presentation.totals.documentTotal, '100');
   assert.deepEqual(presentation.legalMentions, ['Menção de teste']);
+  const pdf = renderFinancialDocumentPdf({ presentation });
+  assert.match(pdf.toString('latin1'), /Propina/);
+  assert.match(pdf.toString('latin1'), /Vencimento: 2026-10-12/);
+  assert.match(pdf.toString('latin1'), /NIF: PT999/);
 });
 
 test('renderer entrypoint receives only immutable presentation, never a live Finance authority', async () => {

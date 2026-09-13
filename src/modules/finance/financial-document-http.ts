@@ -58,7 +58,7 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
       pool.query<{ source_type: string; snapshot: Record<string, unknown> }>('SELECT source_type,snapshot FROM finance_financial_document_sources WHERE institution_id=$1 AND document_id=$2 ORDER BY source_type,source_id', [context.institutionId, row.id]),
       pool.query<DocumentRow>(`${select} WHERE d.institution_id=$1 AND d.corrects_document_id=$2 ORDER BY d.issued_at ASC,d.id ASC`, [context.institutionId, row.id]),
     ]);
-    res.json({ ...view(row), sources: sources.rows.map(source => ({ type: source.source_type, paymentReference: typeof source.snapshot.paymentReference === 'string' ? source.snapshot.paymentReference : null })), corrections: corrections.rows.map(view) });
+    res.json({ ...view(row), sources: sources.rows.map(source => ({ type: source.source_type, paymentReference: typeof source.snapshot.paymentReference === 'string' ? source.snapshot.paymentReference : null, obligationReference: typeof source.snapshot.obligationReference === 'string' ? source.snapshot.obligationReference : null })), corrections: corrections.rows.map(view) });
   });
   const key = (req: AuthRequest, res: Response) => { const value = req.header('Idempotency-Key')?.trim(); if (!value) { res.status(422).json({ code: 'IDEMPOTENCY_KEY_REQUIRED', error: 'O cabeçalho Idempotency-Key é obrigatório.' }); return undefined; } return value; };
   const handleCommand = (res: Response, error: unknown) => {

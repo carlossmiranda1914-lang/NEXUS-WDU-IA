@@ -38,9 +38,9 @@ export function FinanceWorkspace({ theme = 'light', initialTab = 'operations', i
     <main aria-label="Área de trabalho financeira" className="min-w-0">
       {activeTab === 'operations' && <FinanceOperationalContextWorkspace theme={theme} initialFinancialAccountId={initialFinancialAccountId} initialContextQuery={initialContextQuery} />}
       {activeTab === 'catalogue' && <FinanceFeeCatalogueWorkspace theme={theme} />}
-      {activeTab === 'obligations' && <FinancialObligationsWorkspace theme={theme} />}
+      {activeTab === 'obligations' && <FinancialObligationsWorkspace onOpenFinancialDocument={(documentId) => { setSelectedDocumentId(documentId); setActiveTab('documents'); }} />}
       {activeTab === 'recebimentos' && <FinancePaymentsWorkspace theme={theme} initialPaymentReference={selectedPaymentReference} onOpenFinanceConfiguration={() => setActiveTab('configuration')} onOpenFinancialDocuments={(documentId) => { setSelectedDocumentId(documentId); setActiveTab('documents'); }} />}
-      {activeTab === 'documents' && <FinancialDocumentsWorkspace theme={theme} initialDocumentId={selectedDocumentId} onOpenPayment={(paymentReference) => { setSelectedPaymentReference(paymentReference); setActiveTab('recebimentos'); }} />}
+      {activeTab === 'documents' && <FinancialDocumentsWorkspace theme={theme} initialDocumentId={selectedDocumentId} onOpenPayment={(paymentReference) => { setSelectedPaymentReference(paymentReference); setActiveTab('recebimentos'); }} onOpenObligation={() => setActiveTab('obligations')} />}
       {activeTab === 'configuration' && <FinanceConfigurationWorkspace />}
     </main>
   </div>;

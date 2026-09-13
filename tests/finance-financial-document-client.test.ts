@@ -68,3 +68,14 @@ test('F7-06 default browser fetch preserves the global receiver', async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test('invoice preview and issuance send only source identity, series and idempotency intent', async () => {
+  const calls: Array<{ path: string; init?: RequestInit }> = [];
+  const client = new FinancialDocumentClient(async (path, init) => { calls.push({ path: String(path), init }); return response({ documentType: 'invoice', id: 'invoice-1', sequenceNumber: 1, replayed: false }); }, async () => 'token');
+  await client.invoicePreview('obligation-1');
+  await client.issueInvoice({ obligationId: 'obligation-1', seriesId: 'invoice-series-1', idempotencyKey: 'invoice-key' });
+  assert.equal(calls[0]?.path, '/api/finance/obligations/obligation-1/invoice-preview');
+  assert.equal(calls[1]?.path, '/api/finance/documents/invoice');
+  assert.equal((calls[1]?.init?.headers as Record<string, string>)['Idempotency-Key'], 'invoice-key');
+  assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), { obligationId: 'obligation-1', seriesId: 'invoice-series-1' });
+});

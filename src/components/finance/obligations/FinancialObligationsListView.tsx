@@ -4,17 +4,20 @@ import {
   type FinancialObligationRecord,
 } from '../../../modules/finance/financial-obligation-client.ts';
 import { AuroraPageHeader } from '../../aurora/AuroraPageHeader.tsx';
+import { formatFinanceMoney } from '../../../modules/finance/money-presentation.ts';
 
 export interface FinancialObligationsListViewProps {
   refreshTrigger: number;
   onOpenCreate: () => void;
   onOpenAccounts: () => void;
+  onPreviewInvoice: (obligation: FinancialObligationRecord) => void;
 }
 
 export function FinancialObligationsListView({
   refreshTrigger,
   onOpenCreate,
   onOpenAccounts,
+  onPreviewInvoice,
 }: FinancialObligationsListViewProps) {
   const [items, setItems] = useState<FinancialObligationRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,6 +149,7 @@ export function FinancialObligationsListView({
                   <th className="py-3 px-4 font-semibold">Data Emissão</th>
                   <th className="py-3 px-4 font-semibold">Vencimento</th>
                   <th className="py-3 px-4 font-semibold text-right">Estado</th>
+                  <th className="py-3 px-4 font-semibold">Ação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/60">
@@ -165,7 +169,7 @@ export function FinancialObligationsListView({
                       </div>
                     </td>
                     <td className="py-3.5 px-4 text-right font-mono font-bold text-emerald-400">
-                      {item.money.amount} {item.money.currency}
+                      {formatFinanceMoney(item.money)}
                     </td>
                     <td className="py-3.5 px-4 text-zinc-400 text-xs">
                       {item.sourceType === 'manual_finance'
@@ -190,6 +194,9 @@ export function FinancialObligationsListView({
                       >
                         {item.status === 'open' ? 'Aberta' : 'Cancelada (Histórico)'}
                       </span>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      {item.status === 'open' && <button type="button" data-testid={`invoice-preview-${item.id}`} onClick={() => onPreviewInvoice(item)} className="rounded-md border border-zinc-600 px-3 py-1.5 text-xs font-semibold text-zinc-100 hover:bg-zinc-800">Pré-visualizar fatura</button>}
                     </td>
                   </tr>
                 ))}
