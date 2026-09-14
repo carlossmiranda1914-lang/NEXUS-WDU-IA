@@ -46,8 +46,21 @@ export type InvoiceReceiptDocumentarySnapshotV4 = Readonly<{
   lines: InvoiceDocumentarySnapshotV3['lines']; totals: InvoiceDocumentarySnapshotV3['totals']; tax: InvoiceDocumentarySnapshotV3['tax'];
   jurisdiction: InvoiceDocumentarySnapshotV3['jurisdiction']; legalMentions: readonly string[]; policyProvenance: DocumentarySnapshotV2['policyProvenance'];
 }>;
-export type DocumentarySnapshot = DocumentarySnapshotV1 | DocumentarySnapshotV2 | InvoiceDocumentarySnapshotV3 | InvoiceReceiptDocumentarySnapshotV4;
-export type DecodedDocumentarySnapshot = Readonly<{ snapshotVersion: 1 | 2 | 3 | 4; snapshot: DocumentarySnapshot }>;
+/** A Nota de Crédito freezes its own bounded correction fact and the immutable V4 original it corrects. */
+export type CreditNoteDocumentarySnapshotV5 = Readonly<{
+  snapshotVersion: 5;
+  document: Readonly<{ type: 'credit_note'; issuedAt: string; currency: string }>;
+  issuer: DocumentarySnapshotV1['issuer']; recipient: DocumentaryPartySnapshot; billingParty: DocumentaryPartySnapshot; payer?: DocumentaryPartySnapshot;
+  original: Readonly<{ documentId: string; officialNumber: string; documentType: 'invoice_receipt'; snapshotVersion: 4; amount: string; currency: string }>;
+  correction: Readonly<{ originalDocumentId: string; originalSnapshotVersion: 4; amount: string; currency: string; permittedAmount: string }>;
+  obligation: InvoiceDocumentarySnapshotV3['obligation']; payment: NonNullable<DocumentarySnapshotV2['payment']>;
+  allocations: DocumentarySnapshotV2['allocations']; unallocated?: DocumentaryMoney;
+  totals: Readonly<{ documentTotal: string; currency: string }>;
+  tax: InvoiceDocumentarySnapshotV3['tax']; jurisdiction: InvoiceDocumentarySnapshotV3['jurisdiction']; legalMentions: readonly string[];
+  policyProvenance: DocumentarySnapshotV2['policyProvenance'];
+}>;
+export type DocumentarySnapshot = DocumentarySnapshotV1 | DocumentarySnapshotV2 | InvoiceDocumentarySnapshotV3 | InvoiceReceiptDocumentarySnapshotV4 | CreditNoteDocumentarySnapshotV5;
+export type DecodedDocumentarySnapshot = Readonly<{ snapshotVersion: 1 | 2 | 3 | 4 | 5; snapshot: DocumentarySnapshot }>;
 
 const freeze = <T>(value: T): Readonly<T> => Object.freeze(value);
 const deepFreeze = <T>(value: T): Readonly<T> => {
@@ -201,6 +214,7 @@ export function decodeDocumentarySnapshot(value: unknown): DecodedDocumentarySna
   if (snapshot.snapshotVersion === 2) return { snapshotVersion: 2, snapshot: value as DocumentarySnapshotV2 };
   if (snapshot.snapshotVersion === 3) return { snapshotVersion: 3, snapshot: value as InvoiceDocumentarySnapshotV3 };
   if (snapshot.snapshotVersion === 4) return { snapshotVersion: 4, snapshot: value as InvoiceReceiptDocumentarySnapshotV4 };
+  if (snapshot.snapshotVersion === 5) return { snapshotVersion: 5, snapshot: value as CreditNoteDocumentarySnapshotV5 };
   if (snapshot.schemaVersion === 1) return { snapshotVersion: 1, snapshot: value as DocumentarySnapshotV1 };
   throw new Error('DOCUMENTARY_SNAPSHOT_VERSION_UNSUPPORTED');
 }

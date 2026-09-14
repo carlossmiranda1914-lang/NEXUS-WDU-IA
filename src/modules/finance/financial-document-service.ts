@@ -7,6 +7,8 @@ import { FiscalAdapterRegistry, productionFiscalAdapterRegistry, resolveDocument
 import { resolveEffectiveInstitutionLegalProfile } from '../institution/institution-legal-profile.ts';
 import { resolveDocumentParties, resolveDocumentaryPartySnapshot } from './document-party-resolution.ts';
 import { composeInvoiceDocumentarySnapshotV3, composeInvoiceReceiptDocumentarySnapshotV4, composeReceiptDocumentarySnapshotV2, decodeDocumentarySnapshot } from './documentary-snapshot.ts';
+import { composeCreditNoteDocumentarySnapshotV5 } from './financial-document-credit-note.ts';
+import { Money } from './money.ts';
 import { captureReceiptSettlement } from './documentary-settlement-capture.ts';
 import { resolveInvoiceReceiptComposition } from './financial-document-invoice-receipt.ts';
 import { validateDocumentaryDocumentType, validateDocumentaryFinancialReconciliation, validateDocumentaryJurisdiction, validateDocumentarySnapshotStructure } from './documentary-snapshot-validation.ts';
@@ -36,6 +38,15 @@ export type FinancialDocumentCorrectionCommand = {
   documentType: string;
   idempotencyKey: string;
 };
+
+export type CreditNoteIssuanceCommand = Readonly<{
+  institutionId: string;
+  originalDocumentId: string;
+  seriesId: string;
+  amount: string;
+  currency: string;
+  idempotencyKey: string;
+}>;
 
 export type InvoiceIssuanceCommand = Readonly<{
   institutionId: string;
@@ -285,6 +296,78 @@ export class PostgresFinancialDocumentRepository {
       loadResult: async (client, id) => {
         const row = await client.query<{ sequence_number: string; corrects_document_id: string }>('SELECT sequence_number,corrects_document_id FROM finance_financial_documents WHERE institution_id=$1 AND id=$2', [command.institutionId, id]);
         if (!row.rows[0]) throw new Error('FINANCIAL_DOCUMENT_CORRECTION_RESULT_MISSING');
+        return { id, sequenceNumber: Number(row.rows[0].sequence_number), originalDocumentId: row.rows[0].corrects_document_id };
+      },
+    });
+    return { ...commandResult.result, replayed: commandResult.replayed };
+  }
+
+  /** P01: V4 Factura-Recibo corrections have their own immutable credit-note authority. */
+  async issueCreditNote(command: CreditNoteIssuanceCommand) {
+    const commandResult = await executeIdempotentFinanceCommand({
+      pool: this.pool,
+      identity: { institutionId: command.institutionId, operationNamespace: 'financial_document_credit_note', idempotencyKey: command.idempotencyKey, canonicalFingerprint: createCanonicalFinanceFingerprint(command) },
+      execute: async client => {
+        const originalResult = await client.query<{ id: string; document_type: string; documentary_snapshot: Record<string, unknown> | null; source_snapshot: Record<string, unknown>; series_code: string }>(
+          `SELECT d.id,d.document_type,d.documentary_snapshot,d.source_snapshot,s.code series_code
+           FROM finance_financial_documents d
+           JOIN finance_financial_document_series s ON s.institution_id=d.institution_id AND s.id=d.series_id
+           WHERE d.institution_id=$1 AND d.id=$2 AND d.status='issued' FOR UPDATE`,
+          [command.institutionId, command.originalDocumentId],
+        );
+        const originalRow = originalResult.rows[0];
+        if (!originalRow) throw new Error('FINANCIAL_DOCUMENT_ORIGINAL_NOT_FOUND');
+        if (originalRow.document_type !== 'invoice_receipt' || !originalRow.documentary_snapshot) throw new Error('CREDIT_NOTE_ORIGINAL_INELIGIBLE');
+        const decoded = decodeDocumentarySnapshot(originalRow.documentary_snapshot);
+        if (decoded.snapshotVersion !== 4 || decoded.snapshot.document.type !== 'invoice_receipt') throw new Error('CREDIT_NOTE_ORIGINAL_INELIGIBLE');
+        const priorCredits = await client.query<{ documentary_snapshot: Record<string, unknown> }>(
+          "SELECT documentary_snapshot FROM finance_financial_documents WHERE institution_id=$1 AND corrects_document_id=$2 AND document_type='credit_note' AND status='issued' FOR UPDATE",
+          [command.institutionId, command.originalDocumentId],
+        );
+        const originalTotal = Money.parse(decoded.snapshot.totals.documentTotal, decoded.snapshot.totals.currency);
+        const priorCreditTotal = priorCredits.rows.reduce((total, row) => {
+          const prior = decodeDocumentarySnapshot(row.documentary_snapshot);
+          if (prior.snapshotVersion !== 5 || prior.snapshot.document.type !== 'credit_note') throw new Error('CREDIT_NOTE_PRIOR_SNAPSHOT_INVALID');
+          return total.add(Money.parse(prior.snapshot.correction.amount, prior.snapshot.correction.currency));
+        }, Money.parse('0', originalTotal.currency));
+        const remainingCredit = originalTotal.subtract(priorCreditTotal);
+        const originalSources = await client.query<{ source_type: string; source_id: string; snapshot: Record<string, unknown> }>(
+          'SELECT source_type,source_id,snapshot FROM finance_financial_document_sources WHERE institution_id=$1 AND document_id=$2 FOR UPDATE',
+          [command.institutionId, command.originalDocumentId],
+        );
+        const paymentSource = originalSources.rows.find(source => source.source_type === 'payment');
+        if (!paymentSource) throw new Error('CREDIT_NOTE_ORIGINAL_PROVENANCE_MISSING');
+        // This is a shared fiscal/series gate only. Composition below takes no
+        // live Payment, Obligation or party facts from it.
+        const eligibility = await resolveReceiptEligibility(client, this.fiscalAdapters, { institutionId: command.institutionId, paymentId: paymentSource.source_id, seriesId: command.seriesId, documentType: 'credit_note', lock: true });
+        if (eligibility.eligible === false) throw new Error(eligibility.reasonCode);
+        const policy = resolveDocumentaryPolicy(eligibility.adapter, 'credit_note');
+        const issuedAt = (await client.query<{ issued_at: Date }>('SELECT clock_timestamp() issued_at')).rows[0]!.issued_at;
+        const snapshot = composeCreditNoteDocumentarySnapshotV5({
+          originalDocumentId: command.originalDocumentId,
+          originalOfficialNumber: `${originalRow.series_code}/${(await client.query<{ sequence_number: string }>('SELECT sequence_number FROM finance_financial_documents WHERE institution_id=$1 AND id=$2', [command.institutionId, command.originalDocumentId])).rows[0]!.sequence_number}`,
+          original: decoded.snapshot,
+          issuedAt,
+          amount: command.amount,
+          currency: command.currency,
+          permittedAmount: remainingCredit.canonicalAmount(),
+          seriesId: command.seriesId,
+          policy,
+          policyProvenance: { financialProfileVersion: decoded.snapshot.policyProvenance.financialProfileVersion, fiscalConfigurationVersion: eligibility.fiscalConfiguration.version, adapterKey: eligibility.adapter.key, policyVersion: eligibility.adapter.policy.version },
+        });
+        const id = randomUUID(); const sequenceNumber = eligibility.series.nextSequenceNumber;
+        await client.query('UPDATE finance_financial_document_series SET next_sequence_number=$3 WHERE institution_id=$1 AND id=$2', [command.institutionId, command.seriesId, sequenceNumber + 1]);
+        const sourceSnapshot = { sourceType: 'financial_document_correction', originalDocumentId: command.originalDocumentId, originalDocumentType: 'invoice_receipt', amount: snapshot.correction.amount, currency: snapshot.correction.currency };
+        const fiscalPolicySnapshot = { adapterKey: eligibility.adapter.key, documentType: 'credit_note', policyVersion: eligibility.adapter.policy.version };
+        await client.query("INSERT INTO finance_financial_documents(id,institution_id,document_type,status,series_id,sequence_number,source_snapshot,documentary_snapshot,documentary_snapshot_schema_version,corrects_document_id,fiscal_configuration_id,fiscal_adapter_key,fiscal_policy_version,fiscal_policy_snapshot,jurisdiction_extension_data,issued_at) VALUES($1,$2,'credit_note','issued',$3,$4,$5,$6,5,$7,$8,$9,$10,$11,$12,now())", [id, command.institutionId, command.seriesId, sequenceNumber, sourceSnapshot, snapshot, command.originalDocumentId, eligibility.fiscalConfiguration.id, eligibility.adapter.key, eligibility.adapter.policy.version, fiscalPolicySnapshot, {}]);
+        for (const source of originalSources.rows) await client.query('INSERT INTO finance_financial_document_sources(institution_id,document_id,source_type,source_id,snapshot) VALUES($1,$2,$3,$4,$5)', [command.institutionId, id, source.source_type, source.source_id, source.snapshot]);
+        await client.query("INSERT INTO finance_audit_records(institution_id,event_type,metadata) VALUES($1,'financial_document_corrected',$2)", [command.institutionId, { documentId: id, originalDocumentId: command.originalDocumentId, seriesId: command.seriesId, sequenceNumber, documentType: 'credit_note' }]);
+        await client.query("INSERT INTO finance_outbox(institution_id,topic,aggregate_id,payload) VALUES($1,'financial_document_corrected',$2,$3)", [command.institutionId, id, { documentId: id, originalDocumentId: command.originalDocumentId, seriesId: command.seriesId, sequenceNumber, documentType: 'credit_note' }]);
+        return { resultRef: id, result: { id, sequenceNumber, originalDocumentId: command.originalDocumentId } };
+      },
+      loadResult: async (client, id) => {
+        const row = await client.query<{ sequence_number: string; corrects_document_id: string }>('SELECT sequence_number,corrects_document_id FROM finance_financial_documents WHERE institution_id=$1 AND id=$2', [command.institutionId, id]);
+        if (!row.rows[0]) throw new Error('FINANCIAL_DOCUMENT_CREDIT_NOTE_RESULT_MISSING');
         return { id, sequenceNumber: Number(row.rows[0].sequence_number), originalDocumentId: row.rows[0].corrects_document_id };
       },
     });

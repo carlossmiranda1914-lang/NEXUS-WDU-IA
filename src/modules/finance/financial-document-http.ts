@@ -16,6 +16,7 @@ import { resolveDocumentParties, resolveDocumentaryPartySnapshot } from './docum
 import { captureReceiptSettlement } from './documentary-settlement-capture.ts';
 import { resolveInvoiceBillableSource } from './invoice-billable-source.ts';
 import { resolveInvoiceReceiptComposition } from './financial-document-invoice-receipt.ts';
+import { Money } from './money.ts';
 
 type DocumentRow = { id: string; document_type: string; status: string; sequence_number: string; issued_at: Date; documentary_snapshot: DocumentarySnapshot | null; corrects_document_id: string | null; series_code: string };
 const view = (row: DocumentRow) => {
@@ -174,6 +175,43 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
   app.post('/api/finance/documents/:id/corrections', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'correct'); const idempotencyKey = key(req, res); if (!context || !idempotencyKey) return;
     try { const result = await new PostgresFinancialDocumentRepository(pool as Pool, fiscalAdapters).issueCorrection({ institutionId: context.institutionId, originalDocumentId: req.params.id, seriesId: req.body?.seriesId, documentType: req.body?.documentType, idempotencyKey }); res.status(result.replayed ? 200 : 201).json(result); } catch (error) { handleCommand(res, error); }
+  });
+  app.get('/api/finance/documents/:id/credit-note-readiness', auth, async (req: AuthRequest, res) => {
+    const context = actor(req, res, 'correct'); if (!context) return;
+    const original = await pool.query<{ document_type: string; documentary_snapshot: DocumentarySnapshot | null }>(
+      'SELECT document_type,documentary_snapshot FROM finance_financial_documents WHERE institution_id=$1 AND id=$2 AND status=\'issued\'',
+      [context.institutionId, req.params.id],
+    );
+    const row = original.rows[0];
+    if (!row) return void res.status(404).json({ code: 'FINANCIAL_DOCUMENT_NOT_FOUND', error: 'Documento financeiro não encontrado.' });
+    const decoded = row.documentary_snapshot ? decodeDocumentarySnapshot(row.documentary_snapshot) : null;
+    if (row.document_type !== 'invoice_receipt' || decoded?.snapshotVersion !== 4 || decoded.snapshot.document.type !== 'invoice_receipt') {
+      return void res.json({ status: 'BLOCKED', reasonCode: 'CREDIT_NOTE_ORIGINAL_INELIGIBLE' });
+    }
+    const sources = await pool.query<{ source_type: string; source_id: string }>('SELECT source_type,source_id FROM finance_financial_document_sources WHERE institution_id=$1 AND document_id=$2 ORDER BY source_type,source_id', [context.institutionId, req.params.id]);
+    const payment = sources.rows.find(source => source.source_type === 'payment');
+    if (!payment) return void res.json({ status: 'BLOCKED', reasonCode: 'CREDIT_NOTE_ORIGINAL_PROVENANCE_MISSING' });
+    const series = await pool.query<{ id: string }>("SELECT id FROM finance_financial_document_series WHERE institution_id=$1 AND document_type='credit_note' AND status='active' AND effective_from<=now() AND (effective_to IS NULL OR effective_to>now()) ORDER BY code LIMIT 1", [context.institutionId]);
+    if (!series.rows[0]) return void res.json({ status: 'BLOCKED', reasonCode: 'CREDIT_NOTE_SERIES_NOT_EFFECTIVE' });
+    const eligibility = await resolveReceiptEligibility(pool, fiscalAdapters, { institutionId: context.institutionId, paymentId: payment.source_id, seriesId: series.rows[0].id, documentType: 'credit_note' });
+    if (eligibility.eligible === false) return void res.json({ status: 'BLOCKED', reasonCode: eligibility.reasonCode });
+    const issuedCredits = await pool.query<{ documentary_snapshot: DocumentarySnapshot }>("SELECT documentary_snapshot FROM finance_financial_documents WHERE institution_id=$1 AND corrects_document_id=$2 AND document_type='credit_note' AND status='issued'", [context.institutionId, req.params.id]);
+    const originalTotal = Money.parse(decoded.snapshot.totals.documentTotal, decoded.snapshot.totals.currency);
+    const alreadyCredited = issuedCredits.rows.reduce((total, credit) => {
+      const prior = decodeDocumentarySnapshot(credit.documentary_snapshot);
+      if (prior.snapshotVersion !== 5 || prior.snapshot.document.type !== 'credit_note') throw new Error('CREDIT_NOTE_PRIOR_SNAPSHOT_INVALID');
+      return total.add(Money.parse(prior.snapshot.correction.amount, prior.snapshot.correction.currency));
+    }, Money.parse('0', originalTotal.currency));
+    const maximum = originalTotal.subtract(alreadyCredited);
+    if (maximum.compare(Money.parse('0', maximum.currency)) <= 0) return void res.json({ status: 'BLOCKED', reasonCode: 'CREDIT_NOTE_AMOUNT_EXHAUSTED' });
+    res.json({ status: 'ELIGIBLE', seriesId: series.rows[0].id, currency: maximum.currency, maximumAmount: maximum.canonicalAmount() });
+  });
+  app.post('/api/finance/documents/:id/credit-note', auth, async (req: AuthRequest, res) => {
+    const context = actor(req, res, 'correct'); const idempotencyKey = key(req, res); if (!context || !idempotencyKey) return;
+    try {
+      const result = await new PostgresFinancialDocumentRepository(pool as Pool, fiscalAdapters).issueCreditNote({ institutionId: context.institutionId, originalDocumentId: req.params.id, seriesId: req.body?.seriesId, amount: req.body?.amount, currency: req.body?.currency, idempotencyKey });
+      res.status(result.replayed ? 200 : 201).json(result);
+    } catch (error) { handleCommand(res, error); }
   });
   app.get('/api/finance/documents/:id/artifacts', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'read'); if (!context) return;

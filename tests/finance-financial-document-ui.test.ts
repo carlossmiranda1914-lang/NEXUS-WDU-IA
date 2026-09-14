@@ -21,8 +21,10 @@ assert.match(clientSource, /issueReceipt\(/, 'issuance must be delegated to the 
 assert.match(clientSource, /Idempotency-Key/, 'issuance must carry an idempotency key for double-click and timeout recovery');
 assert.match(clientSource, /listActiveReceiptSeries\(/, 'the client must derive effective receipt series from the authoritative API');
 assert.match(clientSource, /generateArtifact\(/, 'the client must generate versioned evidence through the authoritative route');
-assert.match(clientSource, /issueCorrection\(/, 'correction must be delegated to the immutable server authority');
-assert.match(workspaceSource, /Criar correção autorizada/, 'the document preview must expose the bounded correction action');
+assert.match(clientSource, /issueCreditNote\(/, 'credit-note issuance must be delegated to the immutable server authority');
+assert.match(clientSource, /creditNoteReadiness\(/, 'credit-note action availability must be derived from the server');
+assert.match(workspaceSource, /Criar Nota de Crédito/, 'the document preview must expose the bounded credit-note action');
+assert.match(workspaceSource, /openCreditNoteForm/, 'the credit-note form must be opened only after server readiness');
 const paymentsListSource = fs.readFileSync(path.join(root, 'src/components/finance/payments/FinancePaymentsListView.tsx'), 'utf8');
 assert.match(paymentsListSource, /Emitir recibo oficial/, 'a confirmed payment must expose the bounded source-context action');
 assert.match(paymentsListSource, /Pré-visualizar recibo/, 'a confirmed payment must expose a truthful pre-issuance receipt preview');

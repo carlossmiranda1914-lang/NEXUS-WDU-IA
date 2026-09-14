@@ -6,13 +6,20 @@ const response = (body: unknown) => ({ ok: true, json: async () => body }) as Re
 const unavailable = () => ({ ok: false, status: 422, json: async () => ({ code: 'FINANCIAL_DOCUMENT_VALIDATION' }) }) as Response;
 const authenticationRequired = () => ({ ok: false, status: 401, json: async () => ({ error: 'Unauthorized: Missing token' }) }) as Response;
 
-test('F7-06 delegates receipt issuance and correction through idempotent authoritative HTTP commands', async () => {
+test('F7-06 delegates receipt issuance and credit-note correction through idempotent authoritative HTTP commands', async () => {
   const calls: Array<{ path: string; init?: RequestInit }> = [];
   const client = new FinancialDocumentClient(async (path, init) => { calls.push({ path: String(path), init }); return response({ id: 'doc-1', sequenceNumber: 7, replayed: false }); }, async () => 'token');
   await client.issueReceipt({ sourceId: 'pay-1', seriesId: 'series-1', idempotencyKey: 'receipt-stable-key' });
-  await client.issueCorrection({ originalDocumentId: 'doc-1', seriesId: 'credit-series', idempotencyKey: 'correction-stable-key' });
+  await client.issueCreditNote({ originalDocumentId: 'doc-1', seriesId: 'credit-series', amount: '10.00', currency: 'EUR', idempotencyKey: 'correction-stable-key' });
   assert.equal(calls[0]?.path, '/api/finance/documents/issue'); assert.equal((calls[0]?.init?.headers as Record<string, string>)['Idempotency-Key'], 'receipt-stable-key'); assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), { sourceId: 'pay-1', seriesId: 'series-1', documentType: 'receipt' });
-  assert.equal(calls[1]?.path, '/api/finance/documents/doc-1/corrections'); assert.equal((calls[1]?.init?.headers as Record<string, string>)['Idempotency-Key'], 'correction-stable-key'); assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), { seriesId: 'credit-series', documentType: 'credit_note' });
+  assert.equal(calls[1]?.path, '/api/finance/documents/doc-1/credit-note'); assert.equal((calls[1]?.init?.headers as Record<string, string>)['Idempotency-Key'], 'correction-stable-key'); assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), { seriesId: 'credit-series', amount: '10.00', currency: 'EUR' });
+});
+
+test('P01 asks the server for credit-note readiness before the browser exposes an issuance form', async () => {
+  const calls: string[] = [];
+  const client = new FinancialDocumentClient(async path => { calls.push(String(path)); return response({ status: 'ELIGIBLE', seriesId: 'credit-series', currency: 'EUR', maximumAmount: '100' }); }, async () => 'token');
+  assert.deepEqual(await client.creditNoteReadiness('original-1'), { status: 'ELIGIBLE', seriesId: 'credit-series', currency: 'EUR', maximumAmount: '100' });
+  assert.deepEqual(calls, ['/api/finance/documents/original-1/credit-note-readiness']);
 });
 
 test('F7-06 only presents active receipt and credit-note series returned by the server', async () => {
