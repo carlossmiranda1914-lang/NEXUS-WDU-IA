@@ -542,6 +542,33 @@ async function startServer() {
     }
   });
 
+  // UAT Runtime Identity — LOCAL / DEV ONLY
+  // Registered ONLY when: NODE_ENV !== 'production' AND NEXUS_UAT_HARNESS_TOKEN is set.
+  // Purpose: allows the Local UAT Harness to prove that this runtime matches the
+  //          expected worktree + branch + HEAD before handing control to the Product Owner.
+  // Security: double-guarded; token compared with timingSafeEqual; no secrets exposed.
+  // Production: this block is entirely skipped — the route does not exist in production.
+  if (process.env.NODE_ENV !== 'production' && process.env.NEXUS_UAT_HARNESS_TOKEN) {
+    const _uatTokenBuf = Buffer.from(process.env.NEXUS_UAT_HARNESS_TOKEN, 'utf8');
+    app.get('/api/uat-identity', (req: any, res: any) => {
+      const supplied    = req.headers['x-nexus-uat-token'];
+      const suppliedBuf = Buffer.from(typeof supplied === 'string' ? supplied : '', 'utf8');
+      if (
+        suppliedBuf.length !== _uatTokenBuf.length ||
+        !crypto.timingSafeEqual(suppliedBuf, _uatTokenBuf)
+      ) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      return res.json({
+        worktree:   process.env.NEXUS_UAT_WORKTREE_PATH  ?? null,
+        branch:     process.env.NEXUS_UAT_BRANCH          ?? null,
+        head:       process.env.NEXUS_UAT_HEAD            ?? null,
+        nodeEnv:    process.env.NODE_ENV,
+        startedAt:  process.env.NEXUS_UAT_STARTED_AT      ?? null,
+      });
+    });
+  }
+
   // Real-time Platform Status DevOps API
   app.get('/api/platform-status', requireAuth, async (req, res) => {
     try {

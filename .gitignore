@@ -7,3 +7,4 @@ coverage/
 .uat-storage/
 .env*
 !.env.example
+.nexus-uat.pid
