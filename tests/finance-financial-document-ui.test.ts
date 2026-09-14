@@ -39,6 +39,7 @@ assert.match(workspaceSource, /Moeda:/, 'the workspace must show the persisted d
 assert.match(workspaceSource, /A sessão autenticada não foi reconhecida pelo servidor/, 'the workspace must surface a safe authentication diagnostic instead of masking it as a document-read failure');
 assert.match(workspaceSource, /Não existem documentos financeiros emitidos para esta instituição\./, 'an authorized empty collection must render an honest zero state');
 assert.match(workspaceSource, /Nota de crédito/, 'the workspace must translate the authoritative corrective document type for operators');
+assert.match(workspaceSource, /Documento corrigido/, 'an issued credit note must expose its immutable relationship to the original document');
 assert.match(workspaceSource, /Pagamento .*paymentReference/, 'the workspace must prefer an authoritative payment reference over raw source UUIDs');
 assert.match(workspaceSource, /Abrir pagamento/, 'an issued document must navigate back to its authoritative payment reference');
 assert.match(financeWorkspaceSource, /selectedPaymentReference/, 'returning from a document must preserve the persisted payment reference');

@@ -14,7 +14,7 @@ import { createSyntheticUatFiscalAdapterRegistry } from '../src/modules/finance/
 import { registerFinancialDocumentRoutes } from '../src/modules/finance/financial-document-http.ts';
 
 async function seed(client: pg.PoolClient, institutionId: string) {
-  const person=randomUUID(), account=randomUUID(), feeType=randomUUID(), fee=randomUUID(), obligation=randomUUID(), payment=randomUUID(), paymentJournal=randomUUID(), allocationJournal=randomUUID(), invoiceReceiptSeries=randomUUID(), creditNoteSeries=randomUUID();
+  const person=randomUUID(), account=randomUUID(), feeType=randomUUID(), fee=randomUUID(), obligation=randomUUID(), payment=randomUUID(), paymentJournal=randomUUID(), allocationJournal=randomUUID(), receiptSeries=randomUUID(), invoiceReceiptSeries=randomUUID(), creditNoteSeries=randomUUID();
   await client.query("INSERT INTO institutions(id,name,slug,status) VALUES($1,'Credit note',$2,'active')",[institutionId,`credit-note-${institutionId}`]);
   await client.query("INSERT INTO people(id,name) VALUES($1,'Payer')",[person]);
   await client.query("INSERT INTO institution_legal_profiles(institution_id,version,legal_name,tax_identifier,registered_address,effective_from) VALUES($1,1,'Issuer','NIF',$2,now()-interval '1 day')",[institutionId,{countryCode:'NEXUS_TEST',line1:'Rua 1'}]);
@@ -30,8 +30,8 @@ async function seed(client: pg.PoolClient, institutionId: string) {
   await client.query("INSERT INTO finance_payments(id,institution_id,payment_reference,journal_transaction_id,financial_account_id,source_type,method,amount,currency,status,allocation_status,payer_person_id,effective_at,financial_profile_version,actor_person_id) VALUES($1,$2,'PAG-1',$3,$4,'manual_offline','cash',40,'EUR','confirmed','unapplied',$5,now(),1,$5)",[payment,institutionId,paymentJournal,account,person]);
   await client.query("INSERT INTO finance_journal_transactions(id,institution_id,status,currency,amount,command_id,journal_type,actor_person_id,financial_profile_version,confirmed_at) VALUES($1,$2,'confirmed','EUR',40,'allocation','payment_allocation',$3,1,now())",[allocationJournal,institutionId,person]);
   await client.query("INSERT INTO finance_allocations(id,institution_id,financial_account_id,payment_id,obligation_id,journal_transaction_id,amount,currency,effective_at,actor_person_id) VALUES($1,$2,$3,$4,$5,$6,40,'EUR',now(),$7)",[randomUUID(),institutionId,account,payment,obligation,allocationJournal,person]);
-  await client.query("INSERT INTO finance_financial_document_series(id,institution_id,code,document_type,status,effective_from,next_sequence_number) VALUES($1,$2,'FR','invoice_receipt','active',now()-interval '1 day',1),($3,$2,'NC','credit_note','active',now()-interval '1 day',1)",[invoiceReceiptSeries,institutionId,creditNoteSeries]);
-  return { payment, obligation, invoiceReceiptSeries, creditNoteSeries };
+  await client.query("INSERT INTO finance_financial_document_series(id,institution_id,code,document_type,status,effective_from,next_sequence_number) VALUES($1,$2,'REC','receipt','active',now()-interval '1 day',1),($3,$2,'FR','invoice_receipt','active',now()-interval '1 day',1),($4,$2,'NC','credit_note','active',now()-interval '1 day',1)",[receiptSeries,institutionId,invoiceReceiptSeries,creditNoteSeries]);
+  return { payment, obligation, receiptSeries, invoiceReceiptSeries, creditNoteSeries };
 }
 
 test('P01 PostgreSQL credit note is bounded, immutable, tenant-safe and idempotent', async () => {
@@ -39,6 +39,8 @@ test('P01 PostgreSQL credit note is bounded, immutable, tenant-safe and idempote
   try {
     const client=await pool.connect(); let fixture: Awaited<ReturnType<typeof seed>>; try { await client.query(`CREATE SCHEMA ${quote(schema)}`); await runMigrations(client,await discoverMigrations(path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../src/db/migrations'))); fixture=await seed(client,institutionId); } finally { client.release(); }
     const repo=new PostgresFinancialDocumentRepository(pool,createSyntheticUatFiscalAdapterRegistry());
+    const ineligibleOriginal=await repo.issue({institutionId,sourceInstitutionId:institutionId,sourceType:'payment',sourceId:fixture!.payment,seriesId:fixture!.receiptSeries,idempotencyKey:'receipt-original',documentType:'receipt'});
+    await assert.rejects(()=>repo.issueCreditNote({institutionId,originalDocumentId:ineligibleOriginal.id,seriesId:fixture!.creditNoteSeries,amount:'1',currency:'EUR',idempotencyKey:'ineligible-original'}),/CREDIT_NOTE_ORIGINAL_INELIGIBLE/);
     const original=await repo.issueInvoiceReceipt({institutionId,sourceInstitutionId:institutionId,sourceType:'payment',paymentId:fixture!.payment,obligationId:fixture!.obligation,seriesId:fixture!.invoiceReceiptSeries,idempotencyKey:'original'});
     const before=await pool.query<{snapshot:unknown;source:unknown;payments:number;allocations:number}>('SELECT (SELECT documentary_snapshot FROM finance_financial_documents WHERE institution_id=$1 AND id=$2) snapshot,(SELECT source_snapshot FROM finance_financial_documents WHERE institution_id=$1 AND id=$2) source,(SELECT count(*)::int FROM finance_payments WHERE institution_id=$1) payments,(SELECT count(*)::int FROM finance_allocations WHERE institution_id=$1) allocations',[institutionId,original.id]);
     const command={institutionId,originalDocumentId:original.id,seriesId:fixture!.creditNoteSeries,amount:'0.3',currency:'EUR',idempotencyKey:'credit-note'};

@@ -319,16 +319,17 @@ export class PostgresFinancialDocumentRepository {
         if (!originalRow) throw new Error('FINANCIAL_DOCUMENT_ORIGINAL_NOT_FOUND');
         if (originalRow.document_type !== 'invoice_receipt' || !originalRow.documentary_snapshot) throw new Error('CREDIT_NOTE_ORIGINAL_INELIGIBLE');
         const decoded = decodeDocumentarySnapshot(originalRow.documentary_snapshot);
-        if (decoded.snapshotVersion !== 4 || decoded.snapshot.document.type !== 'invoice_receipt') throw new Error('CREDIT_NOTE_ORIGINAL_INELIGIBLE');
+        const originalSnapshot = decoded.snapshot;
+        if (!('snapshotVersion' in originalSnapshot) || originalSnapshot.snapshotVersion !== 4 || originalSnapshot.document.type !== 'invoice_receipt') throw new Error('CREDIT_NOTE_ORIGINAL_INELIGIBLE');
         const priorCredits = await client.query<{ documentary_snapshot: Record<string, unknown> }>(
           "SELECT documentary_snapshot FROM finance_financial_documents WHERE institution_id=$1 AND corrects_document_id=$2 AND document_type='credit_note' AND status='issued' FOR UPDATE",
           [command.institutionId, command.originalDocumentId],
         );
-        const originalTotal = Money.parse(decoded.snapshot.totals.documentTotal, decoded.snapshot.totals.currency);
+        const originalTotal = Money.parse(originalSnapshot.totals.documentTotal, originalSnapshot.totals.currency);
         const priorCreditTotal = priorCredits.rows.reduce((total, row) => {
-          const prior = decodeDocumentarySnapshot(row.documentary_snapshot);
-          if (prior.snapshotVersion !== 5 || prior.snapshot.document.type !== 'credit_note') throw new Error('CREDIT_NOTE_PRIOR_SNAPSHOT_INVALID');
-          return total.add(Money.parse(prior.snapshot.correction.amount, prior.snapshot.correction.currency));
+          const prior = decodeDocumentarySnapshot(row.documentary_snapshot).snapshot;
+          if (!('snapshotVersion' in prior) || prior.snapshotVersion !== 5 || prior.document.type !== 'credit_note') throw new Error('CREDIT_NOTE_PRIOR_SNAPSHOT_INVALID');
+          return total.add(Money.parse(prior.correction.amount, prior.correction.currency));
         }, Money.parse('0', originalTotal.currency));
         const remainingCredit = originalTotal.subtract(priorCreditTotal);
         const originalSources = await client.query<{ source_type: string; source_id: string; snapshot: Record<string, unknown> }>(
@@ -346,14 +347,14 @@ export class PostgresFinancialDocumentRepository {
         const snapshot = composeCreditNoteDocumentarySnapshotV5({
           originalDocumentId: command.originalDocumentId,
           originalOfficialNumber: `${originalRow.series_code}/${(await client.query<{ sequence_number: string }>('SELECT sequence_number FROM finance_financial_documents WHERE institution_id=$1 AND id=$2', [command.institutionId, command.originalDocumentId])).rows[0]!.sequence_number}`,
-          original: decoded.snapshot,
+          original: originalSnapshot,
           issuedAt,
           amount: command.amount,
           currency: command.currency,
           permittedAmount: remainingCredit.canonicalAmount(),
           seriesId: command.seriesId,
           policy,
-          policyProvenance: { financialProfileVersion: decoded.snapshot.policyProvenance.financialProfileVersion, fiscalConfigurationVersion: eligibility.fiscalConfiguration.version, adapterKey: eligibility.adapter.key, policyVersion: eligibility.adapter.policy.version },
+          policyProvenance: { financialProfileVersion: originalSnapshot.policyProvenance.financialProfileVersion, fiscalConfigurationVersion: eligibility.fiscalConfiguration.version, adapterKey: eligibility.adapter.key, policyVersion: eligibility.adapter.policy.version },
         });
         const id = randomUUID(); const sequenceNumber = eligibility.series.nextSequenceNumber;
         await client.query('UPDATE finance_financial_document_series SET next_sequence_number=$3 WHERE institution_id=$1 AND id=$2', [command.institutionId, command.seriesId, sequenceNumber + 1]);

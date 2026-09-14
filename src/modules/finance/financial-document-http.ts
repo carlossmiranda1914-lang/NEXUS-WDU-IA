@@ -184,8 +184,8 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
     );
     const row = original.rows[0];
     if (!row) return void res.status(404).json({ code: 'FINANCIAL_DOCUMENT_NOT_FOUND', error: 'Documento financeiro não encontrado.' });
-    const decoded = row.documentary_snapshot ? decodeDocumentarySnapshot(row.documentary_snapshot) : null;
-    if (row.document_type !== 'invoice_receipt' || decoded?.snapshotVersion !== 4 || decoded.snapshot.document.type !== 'invoice_receipt') {
+    const decoded = row.documentary_snapshot ? decodeDocumentarySnapshot(row.documentary_snapshot).snapshot : null;
+    if (row.document_type !== 'invoice_receipt' || !decoded || !('snapshotVersion' in decoded) || decoded.snapshotVersion !== 4 || decoded.document.type !== 'invoice_receipt') {
       return void res.json({ status: 'BLOCKED', reasonCode: 'CREDIT_NOTE_ORIGINAL_INELIGIBLE' });
     }
     const sources = await pool.query<{ source_type: string; source_id: string }>('SELECT source_type,source_id FROM finance_financial_document_sources WHERE institution_id=$1 AND document_id=$2 ORDER BY source_type,source_id', [context.institutionId, req.params.id]);
@@ -196,11 +196,11 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
     const eligibility = await resolveReceiptEligibility(pool, fiscalAdapters, { institutionId: context.institutionId, paymentId: payment.source_id, seriesId: series.rows[0].id, documentType: 'credit_note' });
     if (eligibility.eligible === false) return void res.json({ status: 'BLOCKED', reasonCode: eligibility.reasonCode });
     const issuedCredits = await pool.query<{ documentary_snapshot: DocumentarySnapshot }>("SELECT documentary_snapshot FROM finance_financial_documents WHERE institution_id=$1 AND corrects_document_id=$2 AND document_type='credit_note' AND status='issued'", [context.institutionId, req.params.id]);
-    const originalTotal = Money.parse(decoded.snapshot.totals.documentTotal, decoded.snapshot.totals.currency);
+    const originalTotal = Money.parse(decoded.totals.documentTotal, decoded.totals.currency);
     const alreadyCredited = issuedCredits.rows.reduce((total, credit) => {
-      const prior = decodeDocumentarySnapshot(credit.documentary_snapshot);
-      if (prior.snapshotVersion !== 5 || prior.snapshot.document.type !== 'credit_note') throw new Error('CREDIT_NOTE_PRIOR_SNAPSHOT_INVALID');
-      return total.add(Money.parse(prior.snapshot.correction.amount, prior.snapshot.correction.currency));
+      const prior = decodeDocumentarySnapshot(credit.documentary_snapshot).snapshot;
+      if (!('snapshotVersion' in prior) || prior.snapshotVersion !== 5 || prior.document.type !== 'credit_note') throw new Error('CREDIT_NOTE_PRIOR_SNAPSHOT_INVALID');
+      return total.add(Money.parse(prior.correction.amount, prior.correction.currency));
     }, Money.parse('0', originalTotal.currency));
     const maximum = originalTotal.subtract(alreadyCredited);
     if (maximum.compare(Money.parse('0', maximum.currency)) <= 0) return void res.json({ status: 'BLOCKED', reasonCode: 'CREDIT_NOTE_AMOUNT_EXHAUSTED' });
