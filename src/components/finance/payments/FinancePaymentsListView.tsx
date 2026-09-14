@@ -11,8 +11,11 @@ export interface FinancePaymentsListViewProps {
   onOpenCreate: () => void;
   onOpenProviders: () => void;
   onIssueReceipt?: (payment: Payment) => void;
+  onIssueInvoiceReceipt?: (payment: Payment) => void;
   onPreviewReceipt?: (payment: Payment) => void;
+  onPreviewInvoiceReceipt?: (payment: Payment) => void;
   canIssueReceipt?: (payment: Payment) => boolean;
+  canIssueInvoiceReceipt?: (payment: Payment) => boolean;
   receiptBlockReason?: (payment: Payment) => string | undefined;
 }
 
@@ -25,8 +28,11 @@ export function FinancePaymentsListView({
   onOpenCreate,
   onOpenProviders,
   onIssueReceipt,
+  onIssueInvoiceReceipt,
   onPreviewReceipt,
+  onPreviewInvoiceReceipt,
   canIssueReceipt,
+  canIssueInvoiceReceipt,
   receiptBlockReason,
 }: FinancePaymentsListViewProps) {
   const isLight = theme === 'light';
@@ -162,7 +168,7 @@ export function FinancePaymentsListView({
                         {allocation(p.allocationStatus).label}
                       </span>
                     </td>
-                    <td className="px-6 py-4 space-y-2">{p.status === 'confirmed' && <button type="button" data-testid={`preview-receipt-${p.id}`} onClick={() => onPreviewReceipt?.(p)} className="block rounded-md border px-2 py-1 text-xs font-semibold">Pré-visualizar recibo</button>}{p.status === 'confirmed' && onIssueReceipt && (canIssueReceipt?.(p) ?? true) ? <button type="button" data-testid={`issue-receipt-${p.id}`} onClick={() => onIssueReceipt(p)} className="block rounded-md border px-2 py-1 text-xs font-semibold">Emitir recibo oficial</button> : <span className="block text-xs text-zinc-500">{receiptBlockReason?.(p) ?? 'Emissão não autorizada'}</span>}</td>
+                    <td className="px-6 py-4 space-y-2">{p.status === 'confirmed' && <button type="button" data-testid={`preview-receipt-${p.id}`} onClick={() => onPreviewReceipt?.(p)} className="block rounded-md border px-2 py-1 text-xs font-semibold">Pré-visualizar recibo</button>}{p.status === 'confirmed' && <button type="button" data-testid={`preview-invoice-receipt-${p.id}`} onClick={() => onPreviewInvoiceReceipt?.(p)} className="block rounded-md border px-2 py-1 text-xs font-semibold">Pré-visualizar Factura-Recibo</button>}{p.status === 'confirmed' && onIssueInvoiceReceipt && (canIssueInvoiceReceipt?.(p) ?? true) && <button type="button" data-testid={`issue-invoice-receipt-${p.id}`} onClick={() => onIssueInvoiceReceipt(p)} className="block rounded-md border px-2 py-1 text-xs font-semibold">Emitir Factura-Recibo</button>}{p.status === 'confirmed' && onIssueReceipt && (canIssueReceipt?.(p) ?? true) ? <button type="button" data-testid={`issue-receipt-${p.id}`} onClick={() => onIssueReceipt(p)} className="block rounded-md border px-2 py-1 text-xs font-semibold">Emitir recibo oficial</button> : <span className="block text-xs text-zinc-500">{receiptBlockReason?.(p) ?? 'Emissão não autorizada'}</span>}</td>
                   </tr>
                 ))}
               </tbody>

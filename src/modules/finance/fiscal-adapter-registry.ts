@@ -68,11 +68,12 @@ const syntheticUatAdapter: FiscalAdapter = {
   key: 'core',
   supportedJurisdictions: ['NEXUS_TEST'],
   policy: {
-    version: 'core-1', supportedDocumentTypes: ['receipt', 'credit_note', 'invoice'],
+    version: 'core-1', supportedDocumentTypes: ['receipt', 'credit_note', 'invoice', 'invoice_receipt'],
     documentary: {
       receipt: { taxTreatment: 'not_applicable', legalMentions: [] },
       credit_note: { taxTreatment: 'not_applicable', legalMentions: [] },
       invoice: { taxTreatment: 'not_applicable', legalMentions: [] },
+      invoice_receipt: { taxTreatment: 'not_applicable', legalMentions: [] },
     },
   },
 };

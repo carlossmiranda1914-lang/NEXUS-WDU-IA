@@ -15,6 +15,7 @@ import { InstitutionLegalProfileRepository } from '../institution/institution-le
 import { resolveDocumentParties, resolveDocumentaryPartySnapshot } from './document-party-resolution.ts';
 import { captureReceiptSettlement } from './documentary-settlement-capture.ts';
 import { resolveInvoiceBillableSource } from './invoice-billable-source.ts';
+import { resolveInvoiceReceiptComposition } from './financial-document-invoice-receipt.ts';
 
 type DocumentRow = { id: string; document_type: string; status: string; sequence_number: string; issued_at: Date; documentary_snapshot: DocumentarySnapshot | null; corrects_document_id: string | null; series_code: string };
 const view = (row: DocumentRow) => {
@@ -139,6 +140,23 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
     const resolvedFacts = { ...documentFacts, lines: documentFacts.lines.map(line => ({ ...line, tax: '0' })), totals: { ...documentFacts.totals, taxTotal: '0' }, policy: { taxTreatment: policy.taxTreatment, legalMentions: policy.legalMentions, jurisdictionCode: eligibility.adapter.key } };
     res.json({ documentType: 'invoice', officialDocumentCreated: false, definitiveNumberAllocated: false, sourceEligibility: 'ELIGIBLE', readiness: { status: 'READY' }, blockingReason: null, series: { available: true, reference: series.code }, documentFacts: resolvedFacts });
   });
+  app.get('/api/finance/payments/:paymentId/obligations/:obligationId/invoice-receipt-preview', auth, async (req: AuthRequest, res) => {
+    const context = actor(req, res, 'read'); if (!context) return;
+    const payment = await pool.query<{ id:string; payment_reference:string; effective_at:Date; amount:string; currency:string; financial_account_id:string | null }>('SELECT id,payment_reference,effective_at,amount::text,currency,financial_account_id FROM finance_payments WHERE institution_id=$1 AND id=$2 AND status=\'confirmed\'', [context.institutionId, req.params.paymentId]);
+    const source = payment.rows[0]; if (!source) return void res.status(404).json({ code: 'PAYMENT_NOT_FOUND', error: 'Pagamento não encontrado.' });
+    const at = (await pool.query<{ now: Date }>('SELECT clock_timestamp() now')).rows[0]?.now ?? new Date();
+    try {
+      const composition = await resolveInvoiceReceiptComposition(pool, { institutionId: context.institutionId, payment: { id: source.id, amount: source.amount, currency: source.currency }, obligationId: req.params.obligationId, at });
+      const legal = await new InstitutionLegalProfileRepository(pool).resolveEffective(context.institutionId, at);
+      const profile = await new PostgresFinancialProfileStore(pool).resolveEffective(context.institutionId, at);
+      const fiscal = await pool.query<{ id: string }>('SELECT id FROM finance_fiscal_configuration_versions WHERE institution_id=$1 AND effective_from<=$2 AND (effective_to IS NULL OR effective_to>$2) ORDER BY version DESC LIMIT 1', [context.institutionId, at]);
+      const parties = await resolveDocumentParties(pool, { institutionId: context.institutionId, financialAccountId: composition.obligation.financialAccountId, paymentId: source.id, obligationId: composition.obligation.obligationId });
+      const [recipient, payer] = await Promise.all([resolveDocumentaryPartySnapshot(pool, parties.recipient), parties.payer ? resolveDocumentaryPartySnapshot(pool, parties.payer) : Promise.resolve(null)]);
+      const effectiveSeries = await pool.query<{ document_type: string }>('SELECT document_type FROM finance_financial_document_series WHERE institution_id=$1 AND document_type=$2 AND status=\'active\' AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>$3) ORDER BY code LIMIT 1', [context.institutionId, 'invoice_receipt', at]);
+      const readiness = resolveFinanceDocumentReadiness({ documentType: 'invoice_receipt', primaryJurisdiction: profile?.primaryJurisdiction ?? null, legalProfilePresent: Boolean(legal), financialProfilePresent: Boolean(profile), institutionFactsPresent: Boolean(legal?.legalName && legal.taxIdentifier && legal.registeredAddress.line1), agtOnboardingPresent: false, signingMaterialPresent: false, fiscalConfigurationPresent: Boolean(fiscal.rows[0]), productionSeriesDocumentTypes: effectiveSeries.rows.map(item => item.document_type), sourceEligible: true, documentPartiesResolved: true, documentaryDataComplete: true, jurisdictionPolicyAvailable: Boolean(profile && fiscalAdapters.supportsJurisdiction(profile.primaryJurisdiction)), externalProductionPrerequisitesRequired: profile?.primaryJurisdiction === 'AO' });
+      res.json({ mode: 'preview', documentType: 'invoice_receipt', officialDocumentCreated: false, definitiveNumberAllocated: false, sourceEligibility: 'ELIGIBLE', readiness, blockingReason: readiness.reasonCode ?? null, issuer: legal ? { legalName: legal.legalName, taxIdentifier: legal.taxIdentifier, address: legal.registeredAddress.line1 } : null, recipient: { name: recipient.name, taxIdentifier: null, address: null }, payer: payer?.name ?? null, obligation: { reference: composition.obligation.reference, dueAt: composition.obligation.dueAt.toISOString() }, lines: [{ description: composition.obligation.description, quantity: '1', unitPrice: composition.obligation.preDiscountAmount, discount: composition.obligation.discountTotal, totalAmount: composition.obligation.billableAmount, currency: composition.obligation.currency }], totals: { documentTotal: composition.obligation.billableAmount, currency: composition.obligation.currency }, payment: { reference: source.payment_reference, date: source.effective_at.toISOString(), amount: source.amount, currency: source.currency }, allocations: composition.settlement.allocations.map(item => ({ before: item.before, movement: item.movement, after: item.after })), unallocated: composition.settlement.unallocated ?? null });
+    } catch (error) { return void res.status(404).json({ code: 'INVOICE_RECEIPT_PREVIEW_NOT_FOUND', error: 'A relação financeira não está disponível.' }); }
+  });
   app.post('/api/finance/documents/issue', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'issue'); const idempotencyKey = key(req, res); if (!context || !idempotencyKey) return;
     try { const result = await new PostgresFinancialDocumentRepository(pool as Pool, fiscalAdapters).issue({ institutionId: context.institutionId, sourceInstitutionId: context.institutionId, sourceType: 'payment', sourceId: req.body?.sourceId, seriesId: req.body?.seriesId, documentType: req.body?.documentType, idempotencyKey }); res.status(result.replayed ? 200 : 201).json(result); } catch (error) { handleCommand(res, error); }
@@ -147,6 +165,11 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
     const context = actor(req, res, 'issue'); if (!context) return;
     const idempotencyKey = key(req, res); if (!idempotencyKey) return;
     try { const result = await new PostgresFinancialDocumentRepository(pool as Pool, fiscalAdapters).issueInvoice({ institutionId: context.institutionId, sourceInstitutionId: context.institutionId, sourceType: 'obligation', obligationId: req.body?.obligationId, seriesId: req.body?.seriesId, idempotencyKey }); res.status(result.replayed ? 200 : 201).json(result); } catch (error) { handleCommand(res, error); }
+  });
+  app.post('/api/finance/documents/invoice-receipt', auth, async (req: AuthRequest, res) => {
+    const context = actor(req, res, 'issue'); if (!context) return;
+    const idempotencyKey = key(req, res); if (!idempotencyKey) return;
+    try { const result = await new PostgresFinancialDocumentRepository(pool as Pool, fiscalAdapters).issueInvoiceReceipt({ institutionId: context.institutionId, sourceInstitutionId: context.institutionId, sourceType: 'payment', paymentId: req.body?.paymentId, obligationId: req.body?.obligationId, seriesId: req.body?.seriesId, idempotencyKey }); res.status(result.replayed ? 200 : 201).json(result); } catch (error) { handleCommand(res, error); }
   });
   app.post('/api/finance/documents/:id/corrections', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'correct'); const idempotencyKey = key(req, res); if (!context || !idempotencyKey) return;

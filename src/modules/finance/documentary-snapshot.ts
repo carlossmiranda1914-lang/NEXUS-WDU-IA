@@ -35,8 +35,19 @@ export type InvoiceDocumentarySnapshotV3 = Readonly<{
   legalMentions: readonly string[];
   policyProvenance: DocumentarySnapshotV2['policyProvenance'];
 }>;
-export type DocumentarySnapshot = DocumentarySnapshotV1 | DocumentarySnapshotV2 | InvoiceDocumentarySnapshotV3;
-export type DecodedDocumentarySnapshot = Readonly<{ snapshotVersion: 1 | 2 | 3; snapshot: DocumentarySnapshot }>;
+/** A Factura-Recibo freezes commercial obligation facts and payment settlement facts together. */
+export type InvoiceReceiptDocumentarySnapshotV4 = Readonly<{
+  snapshotVersion: 4;
+  document: Readonly<{ type: 'invoice_receipt'; issuedAt: string; dueAt: string; currency: string }>;
+  issuer: DocumentarySnapshotV1['issuer']; recipient: DocumentaryPartySnapshot; billingParty: DocumentaryPartySnapshot; payer?: DocumentaryPartySnapshot;
+  obligation: InvoiceDocumentarySnapshotV3['obligation'];
+  payment: NonNullable<DocumentarySnapshotV2['payment']>;
+  allocations: DocumentarySnapshotV2['allocations']; unallocated?: DocumentaryMoney;
+  lines: InvoiceDocumentarySnapshotV3['lines']; totals: InvoiceDocumentarySnapshotV3['totals']; tax: InvoiceDocumentarySnapshotV3['tax'];
+  jurisdiction: InvoiceDocumentarySnapshotV3['jurisdiction']; legalMentions: readonly string[]; policyProvenance: DocumentarySnapshotV2['policyProvenance'];
+}>;
+export type DocumentarySnapshot = DocumentarySnapshotV1 | DocumentarySnapshotV2 | InvoiceDocumentarySnapshotV3 | InvoiceReceiptDocumentarySnapshotV4;
+export type DecodedDocumentarySnapshot = Readonly<{ snapshotVersion: 1 | 2 | 3 | 4; snapshot: DocumentarySnapshot }>;
 
 const freeze = <T>(value: T): Readonly<T> => Object.freeze(value);
 const deepFreeze = <T>(value: T): Readonly<T> => {
@@ -146,12 +157,50 @@ export function composeInvoiceDocumentarySnapshotV3(input: {
   }) as InvoiceDocumentarySnapshotV3;
 }
 
+/**
+ * The V4 envelope deliberately keeps the commercial invoice total separate
+ * from the confirmed payment and settlement position. It never derives either
+ * from live data after this composition boundary.
+ */
+export function composeInvoiceReceiptDocumentarySnapshotV4(input: {
+  issuedAt: Date; dueAt: Date; issuer: DocumentarySnapshotV1['issuer']; recipient: DocumentaryPartySnapshot; billingParty: DocumentaryPartySnapshot; payer?: DocumentaryPartySnapshot;
+  obligation: { authorityId: string; reference: string; amount: string; currency: string; dueAt: string };
+  payment: { authorityId: string; reference: string; confirmedAt: Date; method: string; amount: string; currency: string };
+  allocations: DocumentarySnapshotV2['allocations']; unallocated?: DocumentaryMoney;
+  line: { description: string; quantity: string; unitPrice: string; discount: string; tax: string };
+  taxTreatment: string; legalMentions: readonly string[]; jurisdictionCode: string; policyVersion: string;
+  financialProfileVersion: number; fiscalConfigurationVersion: number; seriesId: string; adapterKey: string;
+}): InvoiceReceiptDocumentarySnapshotV4 {
+  const invoice = composeInvoiceDocumentarySnapshotV3({
+    issuedAt: input.issuedAt, dueAt: input.dueAt, issuer: input.issuer, recipient: input.recipient, obligation: input.obligation, line: input.line,
+    taxTreatment: input.taxTreatment, legalMentions: input.legalMentions, jurisdictionCode: input.jurisdictionCode, policyVersion: input.policyVersion,
+    financialProfileVersion: input.financialProfileVersion, fiscalConfigurationVersion: input.fiscalConfigurationVersion, seriesId: input.seriesId, adapterKey: input.adapterKey,
+  });
+  const payment = Money.parse(input.payment.amount, input.payment.currency);
+  if (invoice.document.currency !== payment.currency) throw new Error('DOCUMENTARY_SNAPSHOT_INVOICE_RECEIPT_CURRENCY_MISMATCH');
+  if (input.allocations.length === 0) throw new Error('DOCUMENTARY_SNAPSHOT_INVOICE_RECEIPT_ALLOCATION_REQUIRED');
+  const applied = input.allocations.reduce((total, allocation) => {
+    if (allocation.obligationAuthorityId !== input.obligation.authorityId) throw new Error('DOCUMENTARY_SNAPSHOT_INVOICE_RECEIPT_ALLOCATION_RELATIONSHIP_INVALID');
+    return total.add(Money.parse(allocation.movement.amount, allocation.movement.currency));
+  }, Money.parse('0', payment.currency));
+  const residual = input.unallocated ? Money.parse(input.unallocated.amount, input.unallocated.currency) : Money.parse('0', payment.currency);
+  if (!applied.add(residual).equals(payment)) throw new Error('DOCUMENTARY_SNAPSHOT_INVOICE_RECEIPT_PAYMENT_RECONCILIATION_FAILED');
+  return deepFreeze({ snapshotVersion: 4 as const,
+    document: { type: 'invoice_receipt' as const, issuedAt: input.issuedAt.toISOString(), dueAt: input.dueAt.toISOString(), currency: invoice.document.currency },
+    issuer: input.issuer, recipient: input.recipient, billingParty: input.billingParty, ...(input.payer ? { payer: input.payer } : {}), obligation: { ...input.obligation },
+    payment: { authorityId: input.payment.authorityId, reference: input.payment.reference, confirmedAt: input.payment.confirmedAt.toISOString(), method: input.payment.method, amount: payment.canonicalAmount(), currency: payment.currency },
+    allocations: input.allocations, ...(input.unallocated ? { unallocated: input.unallocated } : {}), lines: invoice.lines, totals: invoice.totals, tax: invoice.tax,
+    jurisdiction: invoice.jurisdiction, legalMentions: invoice.legalMentions, policyProvenance: invoice.policyProvenance,
+  }) as InvoiceReceiptDocumentarySnapshotV4;
+}
+
 /** Explicit discriminator: legacy rows are recognized solely by their stored V1 schema marker. */
 export function decodeDocumentarySnapshot(value: unknown): DecodedDocumentarySnapshot {
   if (!value || typeof value !== 'object') throw new Error('DOCUMENTARY_SNAPSHOT_INVALID');
   const snapshot = value as Record<string, unknown>;
   if (snapshot.snapshotVersion === 2) return { snapshotVersion: 2, snapshot: value as DocumentarySnapshotV2 };
   if (snapshot.snapshotVersion === 3) return { snapshotVersion: 3, snapshot: value as InvoiceDocumentarySnapshotV3 };
+  if (snapshot.snapshotVersion === 4) return { snapshotVersion: 4, snapshot: value as InvoiceReceiptDocumentarySnapshotV4 };
   if (snapshot.schemaVersion === 1) return { snapshotVersion: 1, snapshot: value as DocumentarySnapshotV1 };
   throw new Error('DOCUMENTARY_SNAPSHOT_VERSION_UNSUPPORTED');
 }

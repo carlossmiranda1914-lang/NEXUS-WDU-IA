@@ -65,3 +65,26 @@ test('per-document Angola readiness derives tenant facts and ignores browser rea
     assert.ok(calls.every(values => values.includes('tenant-a')), 'per-document readiness must query only the server-derived tenant');
   } finally { server.close(); }
 });
+
+test('per-document NEXUS_TEST readiness is resolved only from the server-composed UAT registry', async () => {
+  const pool: any = { query: async (sql: string, values: unknown[]) => {
+    if (values[0] !== 'tenant-a') return { rows: [] };
+    if (sql.includes('institution_legal_profiles')) return { rows: [{ id: 'legal-a', institution_id: 'tenant-a', version: 1, legal_name: 'Tenant A', tax_identifier: 'TEST-123', registered_address: { countryCode: 'NEXUS_TEST', line1: 'Rua' }, effective_from: new Date('2026-01-01'), effective_to: null }] };
+    if (sql.includes('finance_profile_versions')) return { rows: [{ institution_id: 'tenant-a', version: 1, effective_from: new Date('2026-01-01'), effective_to: null, primary_jurisdiction: 'NEXUS_TEST', functional_currency: 'EUR', financial_timezone: 'Europe/Lisbon', monetary_policy_version: 'v1', enabled_currencies: ['EUR'] }] };
+    if (sql.includes('finance_fiscal_configuration_versions')) return { rows: [{ id: 'fiscal-a', institution_id: 'tenant-a', version: 1, adapter_key: 'core', operational_configuration: {}, effective_from: new Date('2026-01-01'), effective_to: null }] };
+    if (sql.includes('finance_financial_document_series')) return { rows: [{ id: 'series-a', institution_id: 'tenant-a', code: 'FR', document_type: 'invoice_receipt', fiscal_configuration_id: 'fiscal-a' }] };
+    return { rows: [] };
+  } };
+  const app = express();
+  const auth: any = (req: any, _res: any, next: any) => { if (req.header('Authorization') === 'Bearer admin') req.institutionalContext = { institutionId: 'tenant-a', role: 'institution_admin' }; next(); };
+  registerFinanceReadinessRoutes(app, pool, auth, createSyntheticUatFiscalAdapterRegistry());
+  const server = http.createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  try {
+    const url = `http://127.0.0.1:${(server.address() as any).port}/api/finance/readiness/documents/invoice_receipt`;
+    const response = await fetch(url, { headers: { Authorization: 'Bearer admin' } });
+    assert.equal(response.status, 200);
+    const readiness: any = await response.json();
+    assert.equal(readiness.status, 'READY');
+    assert.equal(readiness.prerequisites.jurisdictionPolicy, true);
+  } finally { server.close(); }
+});

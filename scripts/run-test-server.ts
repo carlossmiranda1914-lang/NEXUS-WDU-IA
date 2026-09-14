@@ -5,6 +5,9 @@ import { readApprovedTestTarget } from './nexus-test-db-safety.mjs';
 
 dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env.test.local'), override: true, quiet: true });
 process.env.TEST_DATABASE_LOCAL_AUTHORIZED = 'true';
+// The canonical local UAT runtime is the only runtime that composes the
+// synthetic NEXUS_TEST fiscal adapter. Production remains fail-closed.
+process.env.NEXUS_UAT_SYNTHETIC_FISCAL_ADAPTERS = 'true';
 
 const productionUrl = process.env.DATABASE_URL;
 const { connectionString: testUrl } = readApprovedTestTarget();

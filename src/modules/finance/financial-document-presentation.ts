@@ -1,5 +1,5 @@
 import { productTerm, type ProductTermKey } from '../../lib/product-terminology.ts';
-import type { DocumentarySnapshot, InvoiceDocumentarySnapshotV3 } from './documentary-snapshot.ts';
+import type { DocumentarySnapshot, InvoiceDocumentarySnapshotV3, InvoiceReceiptDocumentarySnapshotV4 } from './documentary-snapshot.ts';
 
 export type CanonicalFinancialDocumentPresentation = Readonly<{
   document: Readonly<{ typeLabel: string; officialNumber: string; issueDate: string; dueDate: string | null; currency: string; statusLabel: string }>;
@@ -29,7 +29,7 @@ const documentTermKey = (documentType: string): ProductTermKey => {
   return productTerm(key) ? key : 'financial_document.receipt';
 };
 
-const isInvoiceDocumentarySnapshot = (snapshot: DocumentarySnapshot): snapshot is InvoiceDocumentarySnapshotV3 => 'snapshotVersion' in snapshot && snapshot.snapshotVersion === 3;
+const isInvoiceDocumentarySnapshot = (snapshot: DocumentarySnapshot): snapshot is InvoiceDocumentarySnapshotV3 | InvoiceReceiptDocumentarySnapshotV4 => 'snapshotVersion' in snapshot && (snapshot.snapshotVersion === 3 || snapshot.snapshotVersion === 4);
 
 /** Pure presentation adapter: it receives immutable issued evidence and never queries or recalculates Finance. */
 export function buildFinancialDocumentPresentation(input: { document: IssuedDocumentRecord; snapshot: DocumentarySnapshot; terminology?: typeof productTerm }): CanonicalFinancialDocumentPresentation {

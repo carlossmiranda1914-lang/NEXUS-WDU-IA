@@ -8,6 +8,7 @@ import { canAccessFinancialDocuments } from './financial-document-policy.ts';
 import { resolveFinanceDocumentReadiness, resolveFinanceReadiness } from './finance-readiness.ts';
 import { FiscalAdapterRegistry, productionFiscalAdapterRegistry } from './fiscal-adapter-registry.ts';
 import { InstitutionLegalProfileRepository } from '../institution/institution-legal-profile.ts';
+import { isAngolaProductionJurisdiction } from './jurisdictions/angola/angola-document-policy.ts';
 
 export function registerFinanceReadinessRoutes(app: Express, pool: Pool, auth = requireAuth, fiscalAdapters: FiscalAdapterRegistry = productionFiscalAdapterRegistry): void {
   const contextForReadiness = (req: AuthRequest, res: Response) => {
@@ -75,6 +76,8 @@ export function registerFinanceReadinessRoutes(app: Express, pool: Pool, auth = 
       signingMaterialPresent: false,
       fiscalConfigurationPresent: Boolean(fiscalConfiguration),
       productionSeriesDocumentTypes: effectiveSeries && fiscalConfiguration && effectiveSeries.fiscalConfigurationId === fiscalConfiguration.id ? [effectiveSeries.documentType] : [],
+      jurisdictionPolicyAvailable: Boolean(financialProfile && fiscalAdapters.supportsJurisdiction(financialProfile.primaryJurisdiction)),
+      externalProductionPrerequisitesRequired: isAngolaProductionJurisdiction(financialProfile?.primaryJurisdiction ?? null),
     });
     res.json(response);
   });

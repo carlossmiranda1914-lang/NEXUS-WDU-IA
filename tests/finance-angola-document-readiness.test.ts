@@ -46,3 +46,19 @@ test('unsupported document types do not become ready from otherwise complete inp
   const result = resolveFinanceDocumentReadiness({ ...complete, documentType: 'unknown-document' });
   assert.deepEqual([result.status, result.reasonCode], ['BLOCKED', 'DOCUMENT_TYPE_UNSUPPORTED']);
 });
+
+test('the server-composed NEXUS_TEST policy can be ready without claiming Angola production readiness', () => {
+  const result = resolveFinanceDocumentReadiness({
+    ...complete,
+    documentType: 'invoice_receipt',
+    primaryJurisdiction: 'NEXUS_TEST',
+    jurisdictionPolicyAvailable: true,
+    externalProductionPrerequisitesRequired: false,
+    agtOnboardingPresent: false,
+    signingMaterialPresent: false,
+    productionSeriesDocumentTypes: ['invoice_receipt'],
+  });
+  assert.equal(result.status, 'READY');
+  assert.equal(result.prerequisites.jurisdictionPolicy, true);
+  assert.equal(result.prerequisites.agtOnboarding, false);
+});

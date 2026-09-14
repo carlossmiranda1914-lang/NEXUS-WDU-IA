@@ -56,7 +56,8 @@ import {
 } from './supabaseClient';
 
 import { auth, googleAuthProvider } from './lib/firebase.ts';
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
+import { onIdTokenChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signOut, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
+import { canRetainInstitutionalContext, projectInstitutionalContext } from './auth/institutional-context-projection.ts';
 
 // Subcomponents - Statically Imported
 import GlobalSearch from './components/GlobalSearch';
@@ -352,6 +353,8 @@ const defaultNotificationPresets: NotificationPreset[] = [
 
 export default function App() {
   const constraintsRef = useRef<HTMLDivElement>(null);
+  const institutionalContextEpochRef = useRef(0);
+  const resolvedInstitutionalUidRef = useRef<string | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [loginEmail, setLoginEmail] = useState<string>('');
@@ -390,6 +393,7 @@ export default function App() {
   const [financeContextQuery, setFinanceContextQuery] = useState<{ financialAccountId?: string; studentRef?: string; enrollmentId?: string } | null>(null);
   // Until the backend resolves an active Membership, the client has no institutional authority.
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>('student');
+  const [currentInstitutionReference, setCurrentInstitutionReference] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState<string>('');
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
@@ -576,7 +580,7 @@ export default function App() {
   const clearInstitutionalPresentation = () => {
     setStudents([]); setTeachers([]); setInvoices([]); setAnnouncements([]); setMessages([]);
     setAutomationFlows([]); setSchoolDocs([]); setApprovals([]); setSignatures([]); setTasks([]);
-    setRealtimeNotifications([]); setCurrentUserRole('student'); setCurrentUserStatus('inactive');
+    setRealtimeNotifications([]); setCurrentUserRole('student'); setCurrentUserStatus('inactive'); setCurrentInstitutionReference(null);
   };
 
   const handleWipeSystemSessions = async () => {
@@ -589,53 +593,66 @@ export default function App() {
     window.location.reload();
   };
 
-  // Auth Listener
+  // Firebase establishes identity; the institutional shell is authorized only
+  // after the backend projects the active Membership and Institution.
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (usr) => {
-      if (usr) {
-        console.log('[AUTH-CLIENT] onAuthStateChanged active user detected:', usr.email);
-        setFirebaseUser(usr);
-        // Load the PostgreSQL profile role on access
-        try {
-          const token = await usr.getIdToken();
-          console.log('[AUTH-CLIENT] onAuthStateChanged fetching PostgreSQL profile...');
-          const pRes = await fetch('/api/profile', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (pRes.ok) {
-            const profile = await pRes.json();
-            console.log('[AUTH-PG] Active PG user role profile loaded:', profile);
-            if (profile.status === 'suspended') {
-              console.warn('[AUTH-PG] Account is suspended, signing out.');
-              await signOut(auth);
-              setFirebaseUser(null);
-              clearInstitutionalPresentation();
-              setLoginError('A sua conta está temporariamente suspensa pelo administrador pedagógico.');
-            } else {
-              setCurrentUserRole(profile.role);
-              setCurrentUserStatus(profile.status || 'active');
-            }
-          } else {
-            console.error('[AUTH-PG] Profile fetch failed with status:', pRes.status);
-            // If the profile fetch fails (e.g. user deleted from PostgreSQL), we must sign out to remain synchronized!
-            await signOut(auth);
-            setFirebaseUser(null);
-            clearInstitutionalPresentation();
-          }
-        } catch (e) {
-          console.error('[AUTH-PG] Error loading profile from Postgres:', e);
+    let disposed = false;
+    let retryTimer: number | undefined;
+
+    const resolveInstitutionalContext = async (usr: any) => {
+      const epoch = ++institutionalContextEpochRef.current;
+      const isRefreshForResolvedIdentity = canRetainInstitutionalContext(resolvedInstitutionalUidRef.current, usr.uid);
+      if (!isRefreshForResolvedIdentity) setAuthLoading(true);
+      setFirebaseUser(usr);
+
+      try {
+        const token = await usr.getIdToken();
+        const pRes = await fetch('/api/profile', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!pRes.ok) throw new Error(`PROFILE_CONTEXT_HTTP_${pRes.status}`);
+
+        const profile = await pRes.json();
+        if (disposed || epoch !== institutionalContextEpochRef.current || auth.currentUser?.uid !== usr.uid) return;
+        if (profile.status === 'suspended') {
+          resolvedInstitutionalUidRef.current = null;
           await signOut(auth);
           setFirebaseUser(null);
           clearInstitutionalPresentation();
+          setLoginError('A sua conta está temporariamente suspensa pelo administrador pedagógico.');
+          return;
         }
+        const context = projectInstitutionalContext(profile);
+        if (!context) throw new Error('PROFILE_INSTITUTION_CONTEXT_MISSING');
+
+        setCurrentUserRole(context.role as UserRole);
+        setCurrentUserStatus(context.status);
+        setCurrentInstitutionReference(context.institutionReference);
+        resolvedInstitutionalUidRef.current = usr.uid;
+        setAuthLoading(false);
+      } catch (error) {
+        if (disposed || epoch !== institutionalContextEpochRef.current || auth.currentUser?.uid !== usr.uid) return;
+        // A profile/context request can fail while a local runtime restarts.
+        // Keep a previously verified context for this same identity; a new
+        // identity remains behind the loading boundary until the server proves it.
+        if (!isRefreshForResolvedIdentity) clearInstitutionalPresentation();
+        retryTimer = window.setTimeout(() => { void resolveInstitutionalContext(usr); }, 1000);
+      }
+    };
+
+    const unsubscribe = onIdTokenChanged(auth, (usr) => {
+      if (retryTimer) window.clearTimeout(retryTimer);
+      if (usr) {
+        void resolveInstitutionalContext(usr);
       } else {
-        console.log('[AUTH-CLIENT] onAuthStateChanged detected signed out state.');
+        ++institutionalContextEpochRef.current;
+        resolvedInstitutionalUidRef.current = null;
         setFirebaseUser(null);
         clearInstitutionalPresentation();
+        setAuthLoading(false);
       }
-      setAuthLoading(false);
     });
-    return () => unsubscribe();
+    return () => { disposed = true; if (retryTimer) window.clearTimeout(retryTimer); unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -934,26 +951,11 @@ export default function App() {
       }
 
       if (usrCredential && usrCredential.user) {
-        const token = await usrCredential.user.getIdToken();
-        const pRes = await fetch('/api/profile', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (pRes.ok) {
-          const profile = await pRes.json();
-          console.log('[AUTH-CLIENT] Existing profile found in PostgreSQL:', profile);
-          if (profile.status === 'suspended') {
-            await signOut(auth);
-            setLoginError('A sua conta está temporariamente suspensa pelo administrador pedagógico.');
-            return;
-          }
-          setCurrentUserRole(profile.role);
-          setCurrentUserStatus(profile.status || 'active');
-          setFirebaseUser(usrCredential.user);
-        } else {
-          await signOut(auth);
-          setLoginError('Falha crítica de sincronização: Não foi possível obter ou persistir o perfil do utilizador no PostgreSQL.');
-        }
+        // onIdTokenChanged owns the single backend profile/context resolution.
+        // Keeping this handler free of a competing profile fetch prevents a
+        // transient local-runtime failure from signing out a valid identity.
+        setAuthLoading(true);
+        setFirebaseUser(usrCredential.user);
       }
     } catch (err: any) {
       let errorMsg = 'Falha durante a autenticação. Verifique os dados introduzidos.';
@@ -2588,7 +2590,7 @@ export default function App() {
               <div className={`p-3 rounded-lg border text-[9px] leading-relaxed space-y-0.5 ${
                 theme === 'light' ? 'bg-slate-50 border-zinc-200 text-zinc-500' : 'bg-zinc-950 border-zinc-850 text-zinc-550'
               } mt-4`}>
-                <p className="font-semibold">Tenant: lisboa_central_01</p>
+                <p className="font-semibold">Tenant: {currentInstitutionReference ?? 'Contexto institucional autorizado'}</p>
                 <p className="text-emerald-500 font-mono">● Online via Edge CDN</p>
               </div>
             </motion.div>

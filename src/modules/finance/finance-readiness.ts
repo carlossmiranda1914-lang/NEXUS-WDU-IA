@@ -67,11 +67,17 @@ export function resolveFinanceDocumentReadiness(input: {
   sourceEligible?: boolean;
   documentPartiesResolved?: boolean;
   documentaryDataComplete?: boolean;
+  /** Resolved only by server composition from the fiscal-adapter registry. */
+  jurisdictionPolicyAvailable?: boolean;
+  /** Production jurisdictions retain their explicit external onboarding gates. */
+  externalProductionPrerequisitesRequired?: boolean;
 }): FinanceDocumentReadiness {
+  const jurisdictionPolicyAvailable = input.jurisdictionPolicyAvailable ?? isAngolaProductionJurisdiction(input.primaryJurisdiction);
+  const externalProductionPrerequisitesRequired = input.externalProductionPrerequisitesRequired ?? isAngolaProductionJurisdiction(input.primaryJurisdiction);
   const prerequisites = Object.freeze({
     legalProfile: input.legalProfilePresent,
     financialProfile: input.financialProfilePresent,
-    jurisdictionPolicy: isAngolaProductionJurisdiction(input.primaryJurisdiction),
+    jurisdictionPolicy: jurisdictionPolicyAvailable,
     institutionFacts: input.institutionFactsPresent,
     agtOnboarding: input.agtOnboardingPresent,
     signingMaterial: input.signingMaterialPresent,
@@ -84,15 +90,17 @@ export function resolveFinanceDocumentReadiness(input: {
   const blocked = (reasonCode: FinanceDocumentReadinessReason): FinanceDocumentReadiness => Object.freeze({ documentType: input.documentType, status: 'BLOCKED', reasonCode, prerequisites });
   if (!input.legalProfilePresent) return blocked('LEGAL_PROFILE_REQUIRED');
   if (!input.financialProfilePresent) return blocked('FINANCIAL_PROFILE_REQUIRED');
-  if (!isAngolaProductionJurisdiction(input.primaryJurisdiction)) return blocked('JURISDICTION_POLICY_UNAVAILABLE');
-  if (!isAngolaDocumentType(input.documentType)) return blocked('DOCUMENT_TYPE_UNSUPPORTED');
-  const policy = resolveAngolaDocumentCapability(input.documentType, new Date(), {
-    institutionFacts: input.institutionFactsPresent,
-    agtOnboarding: input.agtOnboardingPresent,
-    signingMaterial: input.signingMaterialPresent,
-    productionSeries: true,
-  });
-  if (policy.status === 'BLOCKED') return blocked(policy.reasonCode);
+  if (!jurisdictionPolicyAvailable) return blocked('JURISDICTION_POLICY_UNAVAILABLE');
+  if (externalProductionPrerequisitesRequired) {
+    if (!isAngolaDocumentType(input.documentType)) return blocked('DOCUMENT_TYPE_UNSUPPORTED');
+    const policy = resolveAngolaDocumentCapability(input.documentType, new Date(), {
+      institutionFacts: input.institutionFactsPresent,
+      agtOnboarding: input.agtOnboardingPresent,
+      signingMaterial: input.signingMaterialPresent,
+      productionSeries: true,
+    });
+    if (policy.status === 'BLOCKED') return blocked(policy.reasonCode);
+  }
   if (!input.fiscalConfigurationPresent) return blocked('FISCAL_CONFIGURATION_REQUIRED');
   if (!input.productionSeriesDocumentTypes.includes(input.documentType)) return blocked('AGT_PRODUCTION_SERIES_REQUIRED');
   if (input.sourceEligible === false) return blocked('SOURCE_NOT_ELIGIBLE');

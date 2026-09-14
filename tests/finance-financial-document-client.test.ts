@@ -79,3 +79,19 @@ test('invoice preview and issuance send only source identity, series and idempot
   assert.equal((calls[1]?.init?.headers as Record<string, string>)['Idempotency-Key'], 'invoice-key');
   assert.deepEqual(JSON.parse(String(calls[1]?.init?.body)), { obligationId: 'obligation-1', seriesId: 'invoice-series-1' });
 });
+
+test('Factura-Recibo issuance sends the authoritative payment and obligation relationship only', async () => {
+  const calls: Array<{ path: string; init?: RequestInit }> = [];
+  const client = new FinancialDocumentClient(async (path, init) => { calls.push({ path: String(path), init }); return response({ id: 'invoice-receipt-1', sequenceNumber: 1, replayed: false }); }, async () => 'token');
+  await client.issueInvoiceReceipt({ paymentId: 'payment-1', obligationId: 'obligation-1', seriesId: 'series-1', idempotencyKey: 'invoice-receipt-key' });
+  assert.equal(calls[0]?.path, '/api/finance/documents/invoice-receipt');
+  assert.equal((calls[0]?.init?.headers as Record<string, string>)['Idempotency-Key'], 'invoice-receipt-key');
+  assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), { paymentId: 'payment-1', obligationId: 'obligation-1', seriesId: 'series-1' });
+});
+
+test('Factura-Recibo preview sends only the payment and obligation identifiers', async () => {
+  const calls: string[] = [];
+  const client = new FinancialDocumentClient(async path => { calls.push(String(path)); return response({ mode: 'preview', documentType: 'invoice_receipt' }); }, async () => 'token');
+  await client.invoiceReceiptPreview({ paymentId: 'payment-1', obligationId: 'obligation-1' });
+  assert.deepEqual(calls, ['/api/finance/payments/payment-1/obligations/obligation-1/invoice-receipt-preview']);
+});

@@ -8,6 +8,9 @@ import { FinancePaymentCreateView } from '../src/components/finance/payments/Fin
 import { FinancePaymentProvidersView } from '../src/components/finance/payments/FinancePaymentProvidersView.tsx';
 import { FinanceWorkspace } from '../src/components/finance/FinanceWorkspace.tsx';
 import { paymentClient } from '../src/modules/finance/payment-client.ts';
+import { allocationClient } from '../src/modules/finance/allocation-client.ts';
+import { financialDocumentClient } from '../src/modules/finance/financial-document-client.ts';
+import { financeReadinessClient } from '../src/modules/finance/finance-readiness-client.ts';
 import type { Payment } from '../src/modules/finance/payment-model.ts';
 import type { PaymentProviderConfigPublicProjection } from '../src/modules/finance/payment-provider-model.ts';
 
@@ -270,5 +273,55 @@ test('FinanceWorkspace switches to Recebimentos tab and renders FinancePaymentsW
     assert.ok(text.includes('PAG-000001'));
   } finally {
     paymentClient.listPayments = origList;
+  }
+});
+
+test('an enabled Factura-Recibo action invokes the canonical client with the selected payment, allocation, series and persistent intent', async () => {
+  const originalListPayments = paymentClient.listPayments;
+  const originalCapabilities = financialDocumentClient.capabilities;
+  const originalDocumentReadiness = financialDocumentClient.documentReadiness;
+  const originalSeries = financialDocumentClient.listActiveInvoiceReceiptSeries;
+  const originalPreview = financialDocumentClient.invoiceReceiptPreview;
+  const originalIssue = financialDocumentClient.issueInvoiceReceipt;
+  const originalAllocationList = allocationClient.listForPayment;
+  const originalReadiness = financeReadinessClient.get;
+  const calls: Array<{ paymentId: string; obligationId: string; seriesId: string; idempotencyKey: string }> = [];
+
+  paymentClient.listPayments = async () => samplePayments;
+  financialDocumentClient.capabilities = async () => ({ issue: true, correct: false });
+  financialDocumentClient.documentReadiness = async () => ({ documentType: 'invoice_receipt', status: 'READY', prerequisites: {} });
+  financialDocumentClient.listActiveInvoiceReceiptSeries = async () => [{ id: 'series-001', code: 'FR-UAT', document_type: 'invoice_receipt', status: 'active' }];
+  financialDocumentClient.invoiceReceiptPreview = async () => ({ sourceEligibility: 'ELIGIBLE', readiness: { status: 'READY', prerequisites: {} } } as any);
+  financialDocumentClient.issueInvoiceReceipt = async (input) => { calls.push(input); return { id: 'document-001', sequenceNumber: 1, replayed: false }; };
+  allocationClient.listForPayment = async () => ({ allocations: [{ obligationId: 'obligation-001' }] } as any);
+  financeReadinessClient.get = async () => ({ ...readinessFor([], true), status: 'READY' });
+
+  try {
+    let renderer: any;
+    await act(async () => {
+      renderer = create(React.createElement(FinancePaymentsWorkspace));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const action = renderer.root.findByProps({ 'data-testid': 'issue-invoice-receipt-pay-001' });
+    assert.equal(action.props.disabled, undefined);
+    await act(async () => { await action.props.onClick(); });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.paymentId, 'pay-001');
+    assert.equal(calls[0]?.obligationId, 'obligation-001');
+    assert.equal(calls[0]?.seriesId, 'series-001');
+    assert.match(calls[0]?.idempotencyKey ?? '', /^document-invoice-receipt-/);
+  } finally {
+    paymentClient.listPayments = originalListPayments;
+    financialDocumentClient.capabilities = originalCapabilities;
+    financialDocumentClient.documentReadiness = originalDocumentReadiness;
+    financialDocumentClient.listActiveInvoiceReceiptSeries = originalSeries;
+    financialDocumentClient.invoiceReceiptPreview = originalPreview;
+    financialDocumentClient.issueInvoiceReceipt = originalIssue;
+    allocationClient.listForPayment = originalAllocationList;
+    financeReadinessClient.get = originalReadiness;
   }
 });

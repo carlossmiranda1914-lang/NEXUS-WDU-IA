@@ -10,6 +10,7 @@ for (const required of [
   "'NEXUS_TEST'",
   "'000-UAT-REC'",
   "'000-UAT-CN'",
+  "'000-UAT-FR'",
   "UAT-F7-RECEIPT-SOURCE",
   'ensureReceiptEligiblePayment',
   'InstitutionLegalProfileRepository',

@@ -4,10 +4,12 @@ import { paymentClient } from '../../../modules/finance/payment-client.ts';
 import { FinancePaymentsListView } from './FinancePaymentsListView.tsx';
 import { FinancePaymentCreateView } from './FinancePaymentCreateView.tsx';
 import { FinancePaymentProvidersView } from './FinancePaymentProvidersView.tsx';
-import { financialDocumentClient, type FinancialDocumentReadinessProjection, type ReceiptPreissuePreview } from '../../../modules/finance/financial-document-client.ts';
+import { financialDocumentClient, type FinancialDocumentReadinessProjection, type InvoiceReceiptPreissuePreview, type ReceiptPreissuePreview } from '../../../modules/finance/financial-document-client.ts';
+import { allocationClient } from '../../../modules/finance/allocation-client.ts';
 import { browserDocumentIntentStorage, resolvePersistentDocumentIntentKey } from '../../../modules/finance/financial-document-intent.ts';
 import { financeReadinessClient, type FinanceReadinessDto } from '../../../modules/finance/finance-readiness-client.ts';
 import { ReceiptDocumentSurface } from '../documents/ReceiptDocumentSurface.tsx';
+import { InvoiceReceiptDocumentSurface } from '../documents/InvoiceReceiptDocumentSurface.tsx';
 
 export type PaymentSubView = 'list' | 'create' | 'providers';
 
@@ -111,10 +113,13 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   const [canIssueDocument, setCanIssueDocument] = useState(false);
   const [readiness, setReadiness] = useState<FinanceReadinessDto | null>(null);
   const [receiptDocumentReadiness, setReceiptDocumentReadiness] = useState<FinancialDocumentReadinessProjection | null>(null);
+  const [invoiceReceiptDocumentReadiness, setInvoiceReceiptDocumentReadiness] = useState<FinancialDocumentReadinessProjection | null>(null);
   const [receiptEligibility, setReceiptEligibility] = useState<Record<string, { eligible: boolean; reason?: string }>>({});
+  const [invoiceReceiptEligibility, setInvoiceReceiptEligibility] = useState<Record<string, { eligible: boolean }>>({});
   const [previewPayment, setPreviewPayment] = useState<Payment | null>(null);
   const [issuedDocumentId, setIssuedDocumentId] = useState<string | null>(null);
   const [previewReadiness, setPreviewReadiness] = useState<ReceiptPreissuePreview | null>(null);
+  const [invoiceReceiptPreview, setInvoiceReceiptPreview] = useState<InvoiceReceiptPreissuePreview | null>(null);
   const receiptReadinessState = receiptReadinessPresentation(readiness, receiptDocumentReadiness);
 
   const loadPayments = useCallback(async () => {
@@ -141,8 +146,10 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   useEffect(() => { financialDocumentClient.capabilities().then(capabilities => setCanIssueDocument(capabilities.issue)).catch(() => setCanIssueDocument(false)); }, []);
   useEffect(() => { financeReadinessClient.get().then(setReadiness).catch(() => setReadiness(null)); }, []);
   useEffect(() => { financialDocumentClient.documentReadiness('receipt').then(setReceiptDocumentReadiness).catch(() => setReceiptDocumentReadiness(null)); }, []);
+  useEffect(() => { financialDocumentClient.documentReadiness('invoice_receipt').then(setInvoiceReceiptDocumentReadiness).catch(() => setInvoiceReceiptDocumentReadiness(null)); }, []);
   useEffect(() => { if (!previewPayment) return void setPreviewReadiness(null); financialDocumentClient.receiptPreview(previewPayment.id).then(setPreviewReadiness).catch(() => setPreviewReadiness(null)); }, [previewPayment]);
   useEffect(() => { if (readiness?.status !== 'READY' || receiptDocumentReadiness?.status !== 'READY' || !canIssueDocument || payments.length === 0) return; financialDocumentClient.listActiveReceiptSeries().then(async series => { const selected = series[0]; if (!selected) return; const entries = await Promise.all(payments.map(async payment => { const result = await financialDocumentClient.receiptEligibility({ paymentId: payment.id, seriesId: selected.id }); return [payment.id, result.status === 'ELIGIBLE' ? { eligible: true } : { eligible: false, reason: result.reasonCode }] as const; })); setReceiptEligibility(Object.fromEntries(entries)); }).catch(() => setReceiptEligibility({})); }, [readiness?.status, receiptDocumentReadiness?.status, canIssueDocument, payments]);
+  useEffect(() => { if (readiness?.status !== 'READY' || invoiceReceiptDocumentReadiness?.status !== 'READY' || !canIssueDocument || payments.length === 0) return void setInvoiceReceiptEligibility({}); financialDocumentClient.listActiveInvoiceReceiptSeries().then(async series => { if (!series[0]) return void setInvoiceReceiptEligibility({}); const entries = await Promise.all(payments.map(async payment => { const { allocations } = await allocationClient.listForPayment(payment.id); const relationship = allocations[0]; if (!relationship) return [payment.id, { eligible: false }] as const; const preview = await financialDocumentClient.invoiceReceiptPreview({ paymentId: payment.id, obligationId: relationship.obligationId }); return [payment.id, { eligible: preview.sourceEligibility === 'ELIGIBLE' && preview.readiness.status === 'READY' }] as const; })); setInvoiceReceiptEligibility(Object.fromEntries(entries)); }).catch(() => setInvoiceReceiptEligibility({})); }, [readiness?.status, invoiceReceiptDocumentReadiness?.status, canIssueDocument, payments]);
 
   const handleCreated = (newPayment: Payment) => {
     setPayments((prev) => [newPayment, ...prev]);
@@ -162,6 +169,27 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
       setIssuedDocumentId(result.id); setIssuanceNotice(`Recibo oficial ${result.replayed ? 'recuperado' : 'emitido'}: n.º ${result.sequenceNumber}.`);
     } catch (err: any) { setError(err?.message || 'Não foi possível emitir o recibo oficial. Tente novamente para recuperar a operação.'); }
   };
+  const previewInvoiceReceipt = async (payment: Payment) => {
+    setError(null); setInvoiceReceiptPreview(null);
+    try {
+      const { allocations } = await allocationClient.listForPayment(payment.id);
+      const relationship = allocations[0];
+      if (!relationship) throw new Error('Este pagamento não possui uma alocação ativa para pré-visualizar uma Factura-Recibo.');
+      setInvoiceReceiptPreview(await financialDocumentClient.invoiceReceiptPreview({ paymentId: payment.id, obligationId: relationship.obligationId }));
+    } catch (err: any) { setError(err?.message || 'A relação financeira não está disponível para pré-visualização.'); }
+  };
+  const issueInvoiceReceipt = async (payment: Payment) => {
+    setError(null); setIssuanceNotice(null);
+    try {
+      const [{ allocations }, series] = await Promise.all([allocationClient.listForPayment(payment.id), financialDocumentClient.listActiveInvoiceReceiptSeries()]);
+      const relationship = allocations[0], selected = series[0];
+      if (!relationship) throw new Error('Este pagamento não possui uma alocação ativa para emitir uma Factura-Recibo.');
+      if (!selected) throw new Error('Não existe uma série de Factura-Recibo efetiva configurada.');
+      const key = resolvePersistentDocumentIntentKey(browserDocumentIntentStorage(), `finance-document-intent:invoice-receipt:${payment.id}:${relationship.obligationId}:${selected.id}`, () => `document-invoice-receipt-${crypto.randomUUID()}`);
+      const result = await financialDocumentClient.issueInvoiceReceipt({ paymentId: payment.id, obligationId: relationship.obligationId, seriesId: selected.id, idempotencyKey: key });
+      setIssuedDocumentId(result.id); setIssuanceNotice(`Factura-Recibo ${result.replayed ? 'recuperada' : 'emitida'}: n.º ${result.sequenceNumber}.`);
+    } catch (err: any) { setError(err?.message || 'Não foi possível emitir a Factura-Recibo. Tente novamente para recuperar a operação.'); }
+  };
 
   return (
     <div className="w-full">
@@ -176,11 +204,15 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
           onOpenCreate={() => setView('create')}
           onOpenProviders={() => setView('providers')}
           onIssueReceipt={readiness?.status === 'READY' && receiptDocumentReadiness?.status === 'READY' && canIssueDocument ? issueReceipt : undefined}
+          onIssueInvoiceReceipt={readiness?.status === 'READY' && invoiceReceiptDocumentReadiness?.status === 'READY' && canIssueDocument ? issueInvoiceReceipt : undefined}
           onPreviewReceipt={setPreviewPayment}
+          onPreviewInvoiceReceipt={previewInvoiceReceipt}
           canIssueReceipt={payment => receiptEligibility[payment.id]?.eligible === true}
+          canIssueInvoiceReceipt={payment => invoiceReceiptEligibility[payment.id]?.eligible === true}
           receiptBlockReason={payment => receiptEligibilityMessage(receiptEligibility[payment.id]?.reason, canIssueDocument)}
       />
       {previewPayment && <section data-testid="receipt-pre-issue-preview" className="mt-4 space-y-4">{previewReadiness ? <><ReceiptDocumentSurface model={{ mode: 'preview', status: previewReadiness.payment.confirmationState === 'CONFIRMED' ? 'Confirmado' : 'Não confirmado', payment: previewReadiness.payment, issuer: previewReadiness.issuer, payer: previewReadiness.parties.payer, recipient: previewReadiness.parties.recipient, settlement: previewReadiness.settlement }} /><section data-testid="receipt-preview-readiness" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><h3 className="font-semibold">Estado de emissão</h3><p>{previewReadiness.sourceEligibility === 'ELIGIBLE' ? 'Fonte elegível para emissão.' : 'A fonte ainda não está elegível para emissão.'}</p><p className="mt-1 text-zinc-700">{previewReadiness.readiness.status === 'READY' && previewReadiness.sourceEligibility === 'ELIGIBLE' ? 'A emissão oficial pode ser confirmada.' : receiptPreviewBlockMessage(previewReadiness.blockingReason ?? previewReadiness.readiness.reasonCode)}</p></section></> : <div className="rounded-lg border p-4 text-sm">A carregar a pré-visualização autorizada do recibo.</div>}</section>}
+      {invoiceReceiptPreview && <section data-testid="invoice-receipt-pre-issue-preview" className="mt-4 space-y-4"><InvoiceReceiptDocumentSurface model={invoiceReceiptPreview} /><section data-testid="invoice-receipt-preview-readiness" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><h3 className="font-semibold">Estado de emissão</h3><p>{invoiceReceiptPreview.readiness.status === 'READY' ? 'A emissão oficial pode ser confirmada.' : receiptPreviewBlockMessage(invoiceReceiptPreview.blockingReason ?? invoiceReceiptPreview.readiness.reasonCode)}</p></section></section>}
       </>}
 
       {issuanceNotice && <div data-testid="financial-document-issuance-notice" className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><p>{issuanceNotice}</p>{onOpenFinancialDocuments && issuedDocumentId && <button type="button" onClick={() => onOpenFinancialDocuments(issuedDocumentId)} className="rounded-md border border-emerald-300 bg-white px-3 py-1 font-semibold text-emerald-800">Abrir documento financeiro</button>}</div>}
