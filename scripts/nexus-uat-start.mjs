@@ -250,12 +250,13 @@ async function main() {
 
 /** Spawn the existing server runtime with UAT env vars set. */
 function spawnServer(env, cwd) {
-  // Use npx tsx (cross-platform, matches the project's npm run dev mechanism).
+  // Use npx tsx — cross-platform, matches the project's npm run dev mechanism.
+  // shell:true is required on Windows when invoking .cmd shims (npx.cmd) without a shell.
   const isWin = process.platform === 'win32';
   return spawn(
     isWin ? 'npx.cmd' : 'npx',
     ['tsx', 'server.ts'],
-    { env, cwd, stdio: 'inherit', shell: false },
+    { env, cwd, stdio: 'inherit', shell: isWin },
   );
 }
 
