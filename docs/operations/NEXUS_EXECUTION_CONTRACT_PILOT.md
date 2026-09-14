@@ -295,3 +295,212 @@ Finance is the first real pilot of this contract. Documents is intentionally exc
 The pilot is successful only if it measurably reduces Product Owner intervention, handoffs and remediation cycles while preserving or improving architectural rigor and real product evidence.
 
 Do not expand this document into a larger manual during the pilot unless repeated evidence proves a missing mechanism.
+
+---
+
+# Pilot 01 — Finance / Authoritative Credit Note
+
+## P01.1 Baseline and objective
+
+```text
+CAPABILITY=FINANCE_AUTHORITATIVE_CREDIT_NOTE
+SOURCE_PLAN=docs/superpowers/plans/2026-09-12-finance-f7-g02-angola-production-jurisdiction.md
+PRIOR_CLOSED_CAPABILITY=Task 7 / Factura-Recibo
+PRIOR_FINANCE_BRANCH=codex/finance-case-b-invoice
+PRIOR_FINANCE_HEAD=fb241c26f2dddb514e4db22a6986b4ca399b6902
+DOCUMENTS_SCOPE=EXCLUDED
+```
+
+Before implementation, the executor must verify actual Git/worktree reality. Historical SHA values are baseline references, not permission to ignore newer repository state.
+
+```text
+ACTOR=authorized institutional Finance user with document-correction permission
+STARTING_STATE=an eligible immutable issued financial document exists in the active institution
+ACTION=create a Nota de Crédito through the normal Nexus Finance product flow
+AUTHORITATIVE_RESULT=a new immutable credit_note FinancialDocument is persisted and linked to the original without rewriting the original
+VISIBLE_RESULT=the user can see the issued credit note, its authoritative number/value and its relationship to the original document
+```
+
+## P01.2 Risk and authority
+
+```text
+RISK=R2_CRITICAL_STATE
+DOMAIN_AUTHORITY=Finance Financial Document correction authority
+PERSISTENCE_AUTHORITY=PostgreSQL
+AUTHORIZATION_AUTHORITY=backend institutional Membership/capability context
+TENANT_AUTHORITY=server-resolved active institution
+MONETARY_AUTHORITY=Finance exact-money/domain authority
+CLIENT_AUTHORITY=interaction and presentation only
+```
+
+A discovery becomes R3/escalation if the smallest correct solution requires changing IAM/tenant architecture, shared legal/fiscal production authority, or another protected cross-domain authority.
+
+## P01.3 Authorized surface
+
+The executor has GREEN autonomy within the smallest implementation surface required for:
+
+- credit-note correction eligibility/composition;
+- the existing Financial Document correction path;
+- a focused credit-note policy/composition helper if required;
+- correction HTTP/client contracts;
+- the minimum Validation UI inside Finance Document surfaces;
+- focused Finance tests and legitimate NEXUS_TEST UAT fixture support.
+
+Normal in-scope defects in these areas are fixed and verified without Product Owner interruption.
+
+## P01.4 Protected surface
+
+Do not change without YELLOW escalation and explicit decision:
+
+- closed Task 7 Factura-Recibo semantics merely to clean deferred debt;
+- receipt issuance authority;
+- invoice issuance authority;
+- payment, allocation or obligation authority;
+- `src/App.tsx` or global application-shell behavior;
+- global authentication/IAM/Membership/tenant architecture;
+- Finance schema/migrations unless a factual prerequisite is proven;
+- shared idempotency/numbering engines beyond the existing extension contract;
+- Angola production enablement or AGT integration;
+- Documents module.
+
+## P01.5 Invariants
+
+The pilot must preserve:
+
+- the original issued document and historical snapshot are immutable;
+- a credit note is a new first-class linked Financial Document, not an UPDATE/DELETE of the original;
+- same-institution ownership is resolved and enforced server-side;
+- browser input is never authority for institution, original totals, original ownership, policy eligibility, series eligibility or correction-chain truth;
+- correction money is exact and currency-consistent;
+- duplicate/retry intent does not consume a second authoritative sequence or create a duplicate credit note;
+- successful issuance uses the existing transactional audit/outbox authority;
+- NEXUS_TEST/UAT authority must never become Angola production authority;
+- debit-note semantics remain out of scope.
+
+## P01.6 Authority Core target
+
+The backend must establish a first-class credit-note correction path from an eligible issued original document through authoritative eligibility, exact-money limits, effective credit-note series, immutable correction snapshot, persistence, source/correction linkage, audit and outbox.
+
+The current generic correction behavior must not be accepted as sufficient merely because it can produce a `credit_note` row. Existing receipt/payment-derived shortcuts must be adjudicated against this contract before reuse.
+
+## P01.7 Validation UI target
+
+The Validation UI is intentionally minimal but real. Through normal Finance product navigation, an authorized user must be able to:
+
+1. open an eligible issued financial document;
+2. see a truthful `Criar Nota de Crédito` action only when backend capability allows it;
+3. see enough authoritative information to understand the original document and correction intent;
+4. submit the correction through the real API;
+5. observe the issued credit note and its relationship to the original.
+
+This is not authorization for Finance redesign, global navigation changes or final Nexus UX polish.
+
+## P01.8 Early vertical proof
+
+As soon as the thin slice exists, prove before deeper hardening:
+
+```text
+REAL_ACTOR=YES
+REAL_FINANCE_UI=YES
+REAL_API_REQUEST=YES
+AUTHORITATIVE_CORRECTION_COMMAND=YES
+POSTGRESQL_CREDIT_NOTE=YES
+ORIGINAL_UNCHANGED=YES
+UI_READBACK=YES
+```
+
+If this proof fails, classify the failure and resolve only within GREEN autonomy. Do not deepen unrelated frontend or hardening while the basic vertical path is unproven.
+
+## P01.9 Required evidence — E1 to E8
+
+Only these behavioral evidence classes define pilot closure unless a mandatory security/authority contradiction is discovered:
+
+### E1 — Domain truth
+
+An eligible original is accepted and an explicitly ineligible original is rejected according to the authoritative correction contract.
+
+### E2 — Monetary truth
+
+Correction amount is positive, exact, currency-consistent and does not exceed the authoritative permitted correction bound.
+
+### E3 — Persistence truth
+
+PostgreSQL readback proves one new `credit_note` FinancialDocument, correct correction linkage and persisted immutable correction snapshot/provenance.
+
+### E4 — Original immutability
+
+Readback proves the original document row/snapshot/source truth is not rewritten by credit-note issuance.
+
+### E5 — Tenant/security
+
+Same-tenant authorized behavior succeeds; foreign-tenant/original/series access fails closed or non-discloses according to existing Nexus security semantics.
+
+### E6 — Idempotency/numbering
+
+The same canonical intent/key returns the same credit-note result without consuming a second authoritative number; modified payload under the same key conflicts/fails according to the canonical command contract.
+
+### E7 — Audit/outbox
+
+First successful issuance produces the required durable audit/outbox intent exactly once under the existing Finance transactional authority.
+
+### E8 — Vertical product proof
+
+A real user completes `Finance UI -> API -> authoritative command -> persistence -> UI readback`, and the resulting document remains present after the persistence boundary required by the current Finance runtime (at minimum refresh; relogin/restart only where the delta can invalidate previously proven persistence behavior).
+
+Build/lint/static gates remain normal engineering checks but do not replace E1-E8 behavioral proof.
+
+## P01.10 Evidence reuse rule
+
+Classify each existing Finance proof as `FRESH`, `REUSABLE` or `INVALIDATED` against the final delta. Do not rerun unrelated aggregate proof merely for ceremony. If the credit-note delta changes a shared authority, the affected shared evidence becomes `INVALIDATED` and must be rerun before closure.
+
+## P01.11 Autonomous failure handling
+
+GREEN examples: correction eligibility bug, exact-money validation bug, correction-path query bug, API/client mismatch, Validation UI wiring defect, legitimate NEXUS_TEST fixture issue, focused test defect caused by the delta, safe local UAT recovery.
+
+YELLOW examples: need to change App/IAM, tenant model, unrelated Finance domain authority, shared schema, global numbering/idempotency contract, new Angola legal rule or production AGT authority.
+
+RED examples: browser-authorized tenant, fabricated legal eligibility, destructive rewrite of the original, weakened tenant isolation, synthetic production enablement, weakened tests or fabricated evidence.
+
+## P01.12 Executor closure request
+
+The executor finishes with only:
+
+```text
+OBJECTIVE_RESULT=
+FINAL_HEAD=
+CHANGED_AUTHORITIES=
+E1_DOMAIN=
+E2_MONEY=
+E3_PERSISTENCE=
+E4_ORIGINAL_IMMUTABILITY=
+E5_TENANT_SECURITY=
+E6_IDEMPOTENCY_NUMBERING=
+E7_AUDIT_OUTBOX=
+E8_VERTICAL_PRODUCT=
+EVIDENCE_REUSE=
+KNOWN_DEFERRED_ITEMS=
+PROTECTED_SURFACES_CHANGED=NO|YES
+READY_FOR_INDEPENDENT_CLOSURE=YES|NO
+```
+
+A narrative PASS without the underlying evidence is `UNPROVEN`.
+
+## P01.13 Independent closure
+
+The independent auditor binds review to the exact final HEAD, inspects the objective/contract/diff/evidence and asks:
+
+**What is the most likely way this implementation could look like a valid Nota de Crédito while not representing a real authoritative financial correction?**
+
+Minimum adversarial targets:
+
+- credit note is merely receipt/payment semantics renamed;
+- original document is mutated;
+- correction exceeds permitted monetary basis;
+- foreign tenant can discover or correct another institution's document;
+- idempotent replay consumes another number or duplicates the document.
+
+Closure output is exactly one of:
+
+`CLOSED | UNPROVEN | BLOCKED`
+
+No new feature, unrelated remediation or Product UX expansion is authorized by the closure audit.
