@@ -65,6 +65,8 @@ type UploadExecutionStage =
   | 'verifying'
   | 'verified'
   | 'quarantined'
+  | 'verification_pending_timeout'
+  | 'verification_status_unavailable'
   | 'error';
 
 export default function DocumentUploadModal({
@@ -91,6 +93,7 @@ export default function DocumentUploadModal({
   const [loadingTargets, setLoadingTargets] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<AssociationTarget | null>(null);
   const [associationPurpose, setAssociationPurpose] = useState('Identificação institucional');
+  const [associationWarning, setAssociationWarning] = useState<string | null>(null);
 
   // Step 5: Execution
   const [executionStage, setExecutionStage] = useState<UploadExecutionStage>('idle');
@@ -131,6 +134,7 @@ export default function DocumentUploadModal({
       setSelectedTarget(null);
       setAssociationSearch('');
       setAssociationPurpose('Identificação institucional');
+      setAssociationWarning(null);
       setExecutionStage('idle');
       setUploadProgress(null);
       setErrorMessage(null);
@@ -215,11 +219,13 @@ export default function DocumentUploadModal({
   const pollVerificationStatus = (docId: string) => {
     let attempts = 0;
     const maxAttempts = 20;
+    let consecutiveErrors = 0;
 
     pollIntervalRef.current = setInterval(async () => {
       attempts++;
       try {
         const detail = await fetchDocumentDetail(docId);
+        consecutiveErrors = 0;
         const versionStatus = detail.currentVersion?.status;
 
         if (versionStatus === 'available') {
@@ -230,12 +236,14 @@ export default function DocumentUploadModal({
           setExecutionStage('quarantined');
         } else if (attempts >= maxAttempts) {
           if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-          setExecutionStage('verified');
+          // Do NOT claim verified if backend has not confirmed available
+          setExecutionStage('verification_pending_timeout');
         }
-      } catch {
-        if (attempts >= maxAttempts && pollIntervalRef.current) {
-          clearInterval(pollIntervalRef.current);
-          setExecutionStage('verified');
+      } catch (err) {
+        consecutiveErrors++;
+        if (consecutiveErrors >= 3 || attempts >= maxAttempts) {
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          setExecutionStage('verification_status_unavailable');
         }
       }
     }, 1200);
@@ -247,6 +255,7 @@ export default function DocumentUploadModal({
     setStep(5);
     setExecutionStage('authorizing');
     setErrorMessage(null);
+    setAssociationWarning(null);
     setUploadProgress(0);
 
     try {
@@ -298,7 +307,8 @@ export default function DocumentUploadModal({
             generateIdempotencyKey('assoc'),
           );
         } catch (assocErr) {
-          console.warn('[UPLOAD-ASSOCIATION] Non-blocking association error:', assocErr);
+          console.warn('[UPLOAD-ASSOCIATION] Association error:', assocErr);
+          setAssociationWarning('Documento carregado, mas não foi possível concluir a associação selecionada.');
         }
       }
 
@@ -856,6 +866,17 @@ export default function DocumentUploadModal({
                       O ficheiro foi verificado com sucesso e está acessível no arquivo institucional.
                     </p>
                   </div>
+
+                  {associationWarning && (
+                    <div className="max-w-md mx-auto p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs text-left flex items-start gap-2.5">
+                      <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+                      <div>
+                        <div className="font-bold">Aviso de Associação</div>
+                        <div className="text-[11px] opacity-90">{associationWarning} Pode associar o documento a qualquer momento no painel de detalhes.</div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="pt-2">
                     <button
                       type="button"
@@ -864,6 +885,84 @@ export default function DocumentUploadModal({
                         onClose();
                       }}
                       className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs shadow-md hover:from-emerald-500 hover:to-teal-500 cursor-pointer"
+                    >
+                      Concluir e Ver no Arquivo
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {executionStage === 'verification_pending_timeout' && (
+                <div className="space-y-4">
+                  <div className="w-14 h-14 rounded-full bg-blue-500/20 text-blue-500 flex items-center justify-center mx-auto">
+                    <Clock className="w-8 h-8" />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold text-blue-600 dark:text-blue-400">
+                      Verificação em Curso
+                    </h3>
+                    <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                      O documento foi recebido e continua em verificação. Pode aceder ao arquivo enquanto a análise técnica conclui.
+                    </p>
+                  </div>
+
+                  {associationWarning && (
+                    <div className="max-w-md mx-auto p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs text-left flex items-start gap-2.5">
+                      <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+                      <div>
+                        <div className="font-bold">Aviso de Associação</div>
+                        <div className="text-[11px] opacity-90">{associationWarning}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (uploadedDocId) onSuccess(uploadedDocId);
+                        onClose();
+                      }}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-xs shadow-md hover:from-emerald-500 hover:to-teal-500 cursor-pointer"
+                    >
+                      Concluir e Ver no Arquivo
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {executionStage === 'verification_status_unavailable' && (
+                <div className="space-y-4">
+                  <div className="w-14 h-14 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center mx-auto">
+                    <AlertCircle className="w-8 h-8" />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold text-amber-600 dark:text-amber-400">
+                      Estado de Verificação Indisponível
+                    </h3>
+                    <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                      Não foi possível atualizar o estado da verificação neste momento. O documento foi recebido pelo sistema.
+                    </p>
+                  </div>
+
+                  {associationWarning && (
+                    <div className="max-w-md mx-auto p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs text-left flex items-start gap-2.5">
+                      <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+                      <div>
+                        <div className="font-bold">Aviso de Associação</div>
+                        <div className="text-[11px] opacity-90">{associationWarning}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (uploadedDocId) onSuccess(uploadedDocId);
+                        onClose();
+                      }}
+                      className="px-6 py-2.5 rounded-xl bg-zinc-800 text-white font-bold text-xs cursor-pointer"
                     >
                       Concluir e Ver no Arquivo
                     </button>

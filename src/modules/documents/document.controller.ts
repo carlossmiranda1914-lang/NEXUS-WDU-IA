@@ -168,7 +168,10 @@ export function rejectDomainError(res: Response, error: unknown): Response {
       msg.includes('DELETION_AUTHORIZATION_NOT_FOUND') ||
       msg.includes('STORAGE_OBJECT_NOT_FOUND') ||
       msg.includes('STORAGE_REFERENCE_NOT_FOUND') ||
-      msg.includes('RETENTION_ASSIGNMENT_MISSING')
+      msg.includes('RETENTION_ASSIGNMENT_MISSING') ||
+      msg.includes('document_associations_document_tenant_fk') ||
+      msg.includes('violates foreign key constraint') ||
+      (error as any)?.code === '23503'
     ) {
       return reject(res, 404, 'O recurso solicitado não foi encontrado no tenant.', 'NOT_FOUND');
     }
@@ -291,7 +294,8 @@ export function registerDocumentRoutes(
       let malwareScanner = dependencies.malwareScanner;
       if (!malwareScanner) {
         if (
-          (process.env.DOCUMENTS_STORAGE_PROVIDER === 'local_uat' ||
+          (storageProvider.providerName === 'local_uat' ||
+            process.env.DOCUMENTS_STORAGE_PROVIDER === 'local_uat' ||
             process.env.DOCUMENTS_MALWARE_SCANNER === 'local_uat') &&
           process.env.NODE_ENV !== 'production'
         ) {
@@ -928,35 +932,7 @@ export function registerDocumentRoutes(
           return reject(res, 422, `DECLARED_SIZE_EXCEEDS_POLICY: Tamanho do ficheiro excede o limite efetivo de ${effectiveLimit} bytes.`);
         }
       } else {
-        const chunks: Buffer[] = [];
-        let totalBytes = 0;
-        for await (const chunk of req) {
-          const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-          totalBytes += buf.length;
-          if (totalBytes > effectiveLimit) {
-            return reject(res, 422, `DECLARED_SIZE_EXCEEDS_POLICY: Tamanho do ficheiro excede o limite efetivo de ${effectiveLimit} bytes.`);
-          }
-          chunks.push(buf);
-        }
-        const fullBuffer = Buffer.concat(chunks);
-        if (fullBuffer.length > effectiveLimit) {
-          return reject(res, 422, `DECLARED_SIZE_EXCEEDS_POLICY: Tamanho do ficheiro excede o limite efetivo.`);
-        }
-        if (typeof (storageProvider as any).simulateDirectUpload === 'function') {
-          const simulated = await (storageProvider as any).simulateDirectUpload({
-            storageBucket: row.storage_bucket,
-            storageKey: row.storage_key,
-            content: fullBuffer,
-            mimeType: req.header('content-type') || row.declared_mime_type,
-          });
-          transferResult = {
-            byteSize: simulated.byteSize,
-            sha256Hash: simulated.sha256Hash,
-            mimeType: simulated.mimeType,
-          };
-        } else {
-          throw new Error('STORAGE_PROVIDER_STREAM_NOT_SUPPORTED');
-        }
+        throw new Error('STORAGE_PROVIDER_STREAM_NOT_SUPPORTED');
       }
 
       // 6. Confirm object presence in storage
