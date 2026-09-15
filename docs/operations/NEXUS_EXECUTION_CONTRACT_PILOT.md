@@ -296,6 +296,20 @@ The pilot is successful only if it measurably reduces Product Owner intervention
 
 Do not expand this document into a larger manual during the pilot unless repeated evidence proves a missing mechanism.
 
+### 19.1 Transversal Product Realism + PAP rule
+
+`docs/governance/NEXUS_PRODUCT_REALISM_AND_PAP_CONTRACT.md` is mandatory across the project.
+
+```text
+PRODUCT_REALISM_CONTRACT=MANDATORY
+PAP_REQUIREMENTS_CANNOT_WEAKEN_PRODUCT_ENGINEERING=YES
+PAP_KNOWLEDGE_CAPTURE_REQUIRED_FOR_PAP_READY=YES
+```
+
+This transversal rule does **not** redefine Finance authority, E1-E8 closure evidence, Product status or the sequence of this pilot. Product engineering remains primary; PAP readiness is a separate knowledge/presentation status.
+
+Documents remains excluded from the **Finance execution pilot**, but the Documents analyst and Documents module are fully covered by the transversal Product Realism + PAP governance.
+
 ---
 
 # Pilot 01 — Finance / Authoritative Credit Note
