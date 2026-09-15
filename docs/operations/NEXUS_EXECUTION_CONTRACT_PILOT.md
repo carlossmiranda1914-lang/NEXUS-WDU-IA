@@ -5,6 +5,242 @@
 **Documents module:** explicitly excluded from this pilot; handled by a separate analyst.  
 **Purpose:** preserve the approved development method in durable repository context so execution does not depend on chat history.
 
+## 0. Institutional Problem First Gate — mandatory before every implementation
+
+This gate executes **before** the Execution Contract. It exists to prevent Nexus from accumulating technically correct capabilities that do not solve the institution's real operational work.
+
+### 0.1 Governing rule
+
+Nexus does not implement a feature because it is technically possible or architecturally attractive. Nexus implements the **minimum change necessary to solve a proven institutional problem**, while preserving existing authority, security, tenant isolation and historical truth.
+
+The mandatory sequence is:
+
+`Institution Problem -> Real User Journey -> Existing Capabilities -> Factual Gaps -> Minimum Necessary Change -> School Scenario Proof -> Execution Contract Closure`
+
+The executor must not invert this sequence into:
+
+`Technical Idea -> New Feature/Endpoint/Table -> Find a Product Use Later`
+
+### 0.2 Default posture — SOLIDIFY AND REUSE
+
+Unless the Product Owner explicitly authorizes functional expansion, the default posture is:
+
+```text
+PRODUCT_MODE=SOLIDIFICATION
+REUSE_BEFORE_EXPANSION=MANDATORY
+```
+
+The executor must first attempt to solve the institutional journey by reusing and connecting existing Nexus authorities, entities, APIs, persisted state and UI surfaces.
+
+Before proposing a new domain entity, table, service, endpoint, workflow engine, module, abstraction or product capability, the executor must prove that the existing product cannot satisfy a required step of the real institutional journey.
+
+The following are **not** factual gaps:
+
+- "it would be cleaner";
+- "it would be more professional";
+- "it may be useful later";
+- "a new abstraction would be elegant";
+- "this could simplify the code";
+- preference for rebuilding instead of understanding existing authority.
+
+### 0.3 Mandatory pre-implementation problem statement
+
+Before editing product code, the executor must establish:
+
+```text
+INSTITUTION_PROBLEM=
+USER=
+REAL_WORLD_TRIGGER=
+CURRENT_JOURNEY=
+EXPECTED_JOURNEY=
+EXISTING_CAPABILITIES_REUSED=
+FACTUAL_GAPS=
+EXPANSION_REQUIRED=YES|NO
+```
+
+The wording must describe the institution's work, not an implementation mechanism.
+
+Bad objective:
+
+```text
+Implement recurring obligations.
+Add a debt dashboard.
+Create a collection endpoint.
+```
+
+Acceptable objective:
+
+```text
+PROBLEM:
+At the beginning of the billing period the institution needs to know which students owe money, how much is due and when it becomes overdue.
+
+USER:
+Secretariat / Finance operator.
+
+RESULT:
+The operator can find the student, understand due/paid/outstanding values and execute the next permitted action without knowing internal financial identifiers or engineering concepts.
+```
+
+If `FACTUAL_GAPS` is empty, new functional expansion is not authorized. The work is integration, simplification, correction or consolidation of existing product behavior.
+
+### 0.4 Factual-gap test
+
+A factual gap exists only when a required journey step cannot be completed correctly with the current product.
+
+For every claimed gap, provide:
+
+```text
+JOURNEY_STEP=
+EXPECTED_RESULT=
+EXISTING_CAPABILITY_CHECKED=
+WHY_EXISTING_CAPABILITY_CANNOT_SATISFY=
+MINIMUM_NEW_CAPABILITY_REQUIRED=
+```
+
+A gap must be demonstrated from repository/product reality. It may not be inferred merely from inconvenience or architectural preference.
+
+### 0.5 Expansion control
+
+If the executor proves `EXPANSION_REQUIRED=YES`, that finding is **not** automatic authorization to build the expansion.
+
+Before crossing the existing product boundary, return:
+
+```text
+EXPANSION_REQUIRED=YES
+ROOT_CAUSE=
+JOURNEY_STEP_BLOCKED=
+WHY_EXISTING_PRODUCT_CANNOT_SOLVE=
+MINIMUM_EXPANSION=
+ALTERNATIVE_WITHOUT_EXPANSION=
+RECOMMENDATION=
+```
+
+The executor may continue investigating to root cause, but must stop before introducing the new authority/capability unless the current contract explicitly authorizes that expansion.
+
+### 0.6 Product language vs internal architecture
+
+Internal domain complexity may remain sophisticated. User complexity must be minimized.
+
+```text
+DOMAIN_COMPLEXITY_MAY_EXIST=YES
+USER_COMPLEXITY_MUST_BE_MINIMIZED=YES
+```
+
+The institution should normally reason in product concepts such as:
+
+- student;
+- guardian/responsible party;
+- amount due;
+- amount paid;
+- outstanding balance;
+- due date;
+- payment history;
+- document/receipt;
+- next permitted action.
+
+The user must not be forced to understand internal identifiers or architecture such as `financial_account_id`, allocation records, journal transaction IDs or internal command mechanics when those concepts are not necessary to perform the institutional task.
+
+### 0.7 School-scenario completion rule
+
+Technical correctness is necessary but not sufficient.
+
+A capability or consolidation task is not complete merely because:
+
+```text
+API_PASS=YES
+DB_PASS=YES
+TEST_PASS=YES
+```
+
+Closure must also prove:
+
+```text
+SCHOOL_SCENARIO_PASS=YES
+```
+
+`SCHOOL_SCENARIO_PASS=YES` means a real authorized institutional user can complete the intended journey through the Nexus product, understand the resulting state and determine the next appropriate action without database inspection, internal IDs or engineering knowledge.
+
+Example proof shape:
+
+```text
+SCENARIO:
+Student owes 100 EUR and has paid 40 EUR.
+
+USER_CAN:
+- find the student/account through normal institutional context;
+- understand 100 due / 40 paid / 60 outstanding;
+- inspect the real payment and related document;
+- execute the next permitted action;
+- refresh/re-enter the flow and observe the same authoritative state.
+```
+
+If backend/API evidence passes but the institutional user cannot complete or understand the journey:
+
+```text
+TECHNICAL_PASS=YES
+INSTITUTIONAL_RESULT=FAIL
+OVERALL_RESULT=NOT_DONE
+```
+
+### 0.8 Finance solidification directive
+
+For the Finance pilot, until explicit Product Owner authorization changes this status:
+
+```text
+FINANCE_MODE=SOLIDIFICATION
+```
+
+Allowed without new product-expansion authorization:
+
+- connect existing Finance capabilities into coherent school journeys;
+- remove duplication and contradictory interaction paths;
+- improve search, navigation, context continuity and understandable readback;
+- correct broken or misleading journeys;
+- surface existing authoritative state in institution-oriented language;
+- close factual integration gaps inside already authorized Finance authority;
+- prove complete school scenarios using existing capabilities.
+
+Not authorized by initiative alone:
+
+- new Finance modules or domains;
+- new document types;
+- new workflow engines;
+- new structural abstractions with product authority;
+- new database tables or migrations merely for convenience;
+- new external integrations;
+- new capabilities whose institutional need has not been proven.
+
+### 0.9 Relationship to the Execution Contract
+
+The Institutional Problem First Gate does **not** replace the Execution Contract. It determines whether the objective entering the contract is the correct institutional objective and whether expansion is justified.
+
+Only after:
+
+```text
+INSTITUTION_PROBLEM_VALIDATED=YES
+REAL_USER_JOURNEY_DEFINED=YES
+EXISTING_CAPABILITIES_REVIEWED=YES
+FACTUAL_GAPS_KNOWN=YES
+```
+
+may normal execution proceed through:
+
+`Authority Core -> Validation UI -> Early Vertical Proof -> Hardening -> Independent Closure`
+
+All existing authority, tenant, security, immutability, evidence and protected-surface rules remain mandatory.
+
+### 0.10 Executor anti-drift rule
+
+During implementation, every material change must still map to the institutional problem and journey step:
+
+```text
+CHANGE -> WHY_REQUIRED -> JOURNEY_STEP -> OBJECTIVE/INVARIANT
+```
+
+If a change cannot map to a required journey step or invariant, classify it `OUT_OF_OBJECTIVE` and do not implement it.
+
+The executor must not turn each discovered inconvenience into a new feature. Normal implementation defects remain GREEN. Genuine product expansion follows the factual-gap and expansion-control rules above.
+
 ## 1. Core principle
 
 A Nexus capability is developed as:
@@ -186,6 +422,7 @@ HEAD=
 CHANGED_AUTHORITIES=
 EVIDENCE=
 VERTICAL_RESULT=
+SCHOOL_SCENARIO_PASS=YES|NO|NOT_APPLICABLE
 KNOWN_DEFERRED_ITEMS=
 PROTECTED_SURFACES_CHANGED=NO
 READY_FOR_INDEPENDENT_CLOSURE=YES
@@ -205,13 +442,17 @@ The auditor asks one adversarial question:
 
 **What is the most likely way this implementation could look correct while still failing the objective or authority model?**
 
+For institution-facing work, the auditor must additionally ask:
+
+**Could the technical implementation pass while the real institutional user still cannot complete or understand the intended journey?**
+
 Audit depth follows risk. It is not a repository-wide audit by default.
 
 ## 15. Closure states
 
 Only three closure results are valid:
 
-- `CLOSED` — every mandatory criterion is independently proven and no contract violation remains.
+- `CLOSED` — every mandatory criterion is independently proven and no contract violation remains. For institution-facing work, the required school scenario is also proven.
 - `UNPROVEN` — no demonstrated violation, but required evidence is missing or invalid.
 - `BLOCKED` — factual violation of the objective, authority/truth contract, security, tenancy or another mandatory invariant.
 
@@ -225,7 +466,7 @@ Otherwise it is recorded as `DEFERRED` and does not retroactively redefine DONE.
 
 ## 17. Product Owner intervention
 
-The Product Owner is required for product decisions, authority/architecture trade-offs, destructive/external production authorization and Human UAT where the contract requires human acceptance.
+The Product Owner is required for product decisions, authority/architecture trade-offs, functional expansion beyond the authorized journey, destructive/external production authorization and Human UAT where the contract requires human acceptance.
 
 The Product Owner is not a router for normal bugs, retries, safe runtime restart, fixture repair, wiring corrections or ordinary implementation choices inside the authorized boundary.
 
@@ -233,6 +474,14 @@ The Product Owner is not a router for normal bugs, retries, safe runtime restart
 
 ```text
 NEXUS EXECUTION CONTRACT
+
+INSTITUTION_PROBLEM=
+USER=
+REAL_WORLD_TRIGGER=
+EXPECTED_JOURNEY=
+EXISTING_CAPABILITIES_REUSED=
+FACTUAL_GAPS=
+EXPANSION_REQUIRED=YES|NO
 
 CAPABILITY=
 OBJECTIVE=
@@ -266,11 +515,15 @@ EARLY_VERTICAL_PROOF=
 REQUIRED_EVIDENCE=
 -
 
+SCHOOL_SCENARIO=
+-
+
 AUTONOMY=
 Fix and continue for in-scope implementation/integration defects.
 
 ESCALATE_ONLY_IF=
 - product decision required
+- functional expansion beyond the proven journey is required
 - authority/architecture boundary must change
 - protected surface must change
 - destructive/external production action required
@@ -282,7 +535,7 @@ HARD_STOP_IF=
 - success/evidence fabricated
 
 DONE=
-Every required criterion independently proven at the exact final HEAD.
+Every required criterion independently proven at the exact final HEAD and, where institution-facing, SCHOOL_SCENARIO_PASS=YES.
 
 CLOSURE=
 Independent targeted audit returns CLOSED.
