@@ -7,7 +7,9 @@
 
 Anyone — human or agent — planning, reviewing or implementing Nexus work starts here. Never let an old mission, chat handoff, prototype, agent prompt or legacy code path become authority merely because it was found first.
 
-For coding-agent execution, `AGENTS.md` is mandatory. All agents also read `docs/operations/PROJECT_STATE.md` and `docs/operations/NEXUS_ENGINEERING_CONFIG.yaml`. Codex additionally reads `docs/operations/CODEX_EXECUTION_ADAPTER.md`; Antigravity additionally reads `docs/operations/ANTIGRAVITY_EXECUTION_ADAPTER.md`. Adapters never override canonical product/architecture/mission sources.
+For coding-agent execution, `AGENTS.md` is mandatory. All agents also read `docs/governance/NEXUS_PRODUCT_REALISM_AND_PAP_CONTRACT.md`, `docs/operations/PROJECT_STATE.md` and `docs/operations/NEXUS_ENGINEERING_CONFIG.yaml`. Codex additionally reads `docs/operations/CODEX_EXECUTION_ADAPTER.md`; Antigravity additionally reads `docs/operations/ANTIGRAVITY_EXECUTION_ADAPTER.md`. Adapters never override canonical product/architecture/mission sources.
+
+PAP documentation under `docs/pap/` explains the real project for understanding, report-building and presentation. It is supporting academic documentation and cannot override product, architecture, mission, security, tenancy or implementation authority.
 
 ## 2. Authority hierarchy
 
@@ -16,12 +18,13 @@ When sources conflict, stop and resolve the conflict explicitly. Authority order
 1. **Current approved product direction:** `docs/product/NEXUS_MASTER_PLAN_V2.md` and explicit later product decisions.
 2. **Current architecture:** `docs/architecture/NEXUS_ARCHITECTURE_TO_BE_V2.md` plus accepted ADRs that do not conflict with it.
 3. **Current roadmap / active Mission Pack:** `docs/roadmap/IMPLEMENTATION_PLAN_VNEXT_V2.md` and `docs/roadmap/missions/`.
-4. **Security, tenancy, data and domain contracts** referenced by the active mission.
+4. **Security, tenancy, data and domain contracts** referenced by the active mission, including the transversal Product Realism + PAP contract where applicable.
 5. **Current factual state/audit:** `docs/operations/PROJECT_STATE.md`, `docs/audit/AUDIT_01_TECHNICAL_BASELINE.md` and `LEGACY_REPLACEMENT_MAP.md`.
 6. **Active GitHub issue/PR evidence.**
 7. **Current code/schema/tests as AS-IS evidence.**
 8. **Supporting Drive/reference documents** when a canonical repository document points to them for source evidence or normative detail.
-9. **Archived/superseded missions, plans, tool workflows and historical conversations.**
+9. **PAP knowledge-capture documentation** as explanation of current repository truth, never as authority over product behavior.
+10. **Archived/superseded missions, plans, tool workflows and historical conversations.**
 
 Code proves what exists; it does not automatically define what should exist. A benchmark proves an observed pattern; it does not automatically authorize a Nexus feature.
 
@@ -30,6 +33,8 @@ Code proves what exists; it does not automatically define what should exist. A b
 | Need | Source |
 |---|---|
 | Coding-agent operating contract | `AGENTS.md` |
+| Product realism + PAP transversal contract | `docs/governance/NEXUS_PRODUCT_REALISM_AND_PAP_CONTRACT.md` |
+| PAP knowledge-capture entrypoint | `docs/pap/README.md` (SUPPORTING) |
 | Engineering operating system | `docs/operations/NEXUS_ENGINEERING_OPERATING_SYSTEM.md` |
 | Current execution selector | `docs/operations/NEXUS_ENGINEERING_CONFIG.yaml` |
 | Product direction + market decisions | `docs/product/NEXUS_MASTER_PLAN_V2.md` |
@@ -57,6 +62,7 @@ Each information class has one durable home:
 - Drive — original business/external source material.
 - ChatGPT — direction, reasoning and coordination, not durable authority alone.
 - Codex/Antigravity sessions — engineering workspaces, not durable authority alone.
+- `docs/pap/` — student understanding/report/presentation material grounded in repository truth, not a source of weaker product behavior.
 
 Important discoveries are promoted to the correct canonical source and then referenced rather than duplicated.
 
@@ -69,6 +75,10 @@ No mission is READY unless it can trace:
 Every implementation agent must additionally prove:
 
 `Mission state → explicit scope → invariants → AS-IS verification → tests/evidence plan → minimal change → negative/regression gates → DoD`.
+
+For PAP-relevant significant capabilities, knowledge capture follows product truth rather than replacing it:
+
+`truthful product state → author explanation → Feature Record/journal update → PAP readiness when applicable`.
 
 ## 6. Documentation states
 
