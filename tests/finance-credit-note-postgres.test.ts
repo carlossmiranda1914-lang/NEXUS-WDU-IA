@@ -42,6 +42,12 @@ test('P01 PostgreSQL credit note is bounded, immutable, tenant-safe and idempote
     const ineligibleOriginal=await repo.issue({institutionId,sourceInstitutionId:institutionId,sourceType:'payment',sourceId:fixture!.payment,seriesId:fixture!.receiptSeries,idempotencyKey:'receipt-original',documentType:'receipt'});
     await assert.rejects(()=>repo.issueCreditNote({institutionId,originalDocumentId:ineligibleOriginal.id,seriesId:fixture!.creditNoteSeries,amount:'1',currency:'EUR',idempotencyKey:'ineligible-original'}),/CREDIT_NOTE_ORIGINAL_INELIGIBLE/);
     const original=await repo.issueInvoiceReceipt({institutionId,sourceInstitutionId:institutionId,sourceType:'payment',paymentId:fixture!.payment,obligationId:fixture!.obligation,seriesId:fixture!.invoiceReceiptSeries,idempotencyKey:'original'});
+    await assert.rejects(
+      () => pool.query("UPDATE finance_payments SET status='reversed' WHERE institution_id=$1 AND id=$2", [institutionId, fixture!.payment]),
+      /(immutable|check constraint|status)/i,
+    );
+    const paymentAfterRejectedLifecycleMutation=await pool.query<{status:string}>('SELECT status FROM finance_payments WHERE institution_id=$1 AND id=$2',[institutionId,fixture!.payment]);
+    assert.equal(paymentAfterRejectedLifecycleMutation.rows[0]?.status,'confirmed');
     const before=await pool.query<{snapshot:unknown;source:unknown;payments:number;allocations:number}>('SELECT (SELECT documentary_snapshot FROM finance_financial_documents WHERE institution_id=$1 AND id=$2) snapshot,(SELECT source_snapshot FROM finance_financial_documents WHERE institution_id=$1 AND id=$2) source,(SELECT count(*)::int FROM finance_payments WHERE institution_id=$1) payments,(SELECT count(*)::int FROM finance_allocations WHERE institution_id=$1) allocations',[institutionId,original.id]);
     const command={institutionId,originalDocumentId:original.id,seriesId:fixture!.creditNoteSeries,amount:'0.3',currency:'EUR',idempotencyKey:'credit-note'};
     const issued=await repo.issueCreditNote(command), replay=await repo.issueCreditNote(command); assert.equal(issued.id,replay.id); assert.equal(issued.sequenceNumber,1); assert.equal(replay.replayed,true);
