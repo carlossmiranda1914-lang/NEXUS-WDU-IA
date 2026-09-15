@@ -16,18 +16,19 @@ Read in this order:
 
 1. `AGENTS.md`
 2. `docs/README.md`
-3. `docs/operations/PROJECT_STATE.md`
-4. `docs/operations/NEXUS_ENGINEERING_CONFIG.yaml`
-5. `docs/product/NEXUS_MASTER_PLAN_V2.md`
-6. `docs/architecture/NEXUS_ARCHITECTURE_TO_BE_V2.md`
-7. current audit/legacy evidence required by the active work
-8. `docs/roadmap/IMPLEMENTATION_PLAN_VNEXT_V2.md`
-9. the **single active Mission Pack** under `docs/roadmap/missions/`
-10. Mission-referenced spec/plan/ADR/domain contracts
-11. `docs/DEFINITION_READY_DONE_EVIDENCE.md`
-12. `docs/operations/NEXUS_ENGINEERING_OPERATING_SYSTEM.md`
-13. `docs/operations/ENGINEERING_PLAYBOOK.md`
-14. the applicable execution adapter:
+3. `docs/governance/NEXUS_PRODUCT_REALISM_AND_PAP_CONTRACT.md`
+4. `docs/operations/PROJECT_STATE.md`
+5. `docs/operations/NEXUS_ENGINEERING_CONFIG.yaml`
+6. `docs/product/NEXUS_MASTER_PLAN_V2.md`
+7. `docs/architecture/NEXUS_ARCHITECTURE_TO_BE_V2.md`
+8. current audit/legacy evidence required by the active work
+9. `docs/roadmap/IMPLEMENTATION_PLAN_VNEXT_V2.md`
+10. the **single active Mission Pack** under `docs/roadmap/missions/`
+11. Mission-referenced spec/plan/ADR/domain contracts
+12. `docs/DEFINITION_READY_DONE_EVIDENCE.md`
+13. `docs/operations/NEXUS_ENGINEERING_OPERATING_SYSTEM.md`
+14. `docs/operations/ENGINEERING_PLAYBOOK.md`
+15. the applicable execution adapter:
    - Codex → `docs/operations/CODEX_EXECUTION_ADAPTER.md`
    - Antigravity → `docs/operations/ANTIGRAVITY_EXECUTION_ADAPTER.md`
 
@@ -40,7 +41,7 @@ When sources conflict:
 1. approved current product decision / Master Plan;
 2. current TO-BE Architecture and accepted ADRs;
 3. current roadmap and active Mission Pack;
-4. security/tenancy/data-authority contracts;
+4. security/tenancy/data-authority contracts, including the transversal Product Realism + PAP contract;
 5. current project-state/audit evidence;
 6. issue/PR evidence;
 7. current code as AS-IS evidence;
@@ -171,7 +172,19 @@ Never present operational success without real evidence for persistence, payment
 
 Mocks, demos and prototypes remain explicitly isolated from operational truth.
 
-## 15. Frontend/UX implementation
+## 15. Product Realism + PAP governance
+
+All modules, agents and analysts must follow `docs/governance/NEXUS_PRODUCT_REALISM_AND_PAP_CONTRACT.md`.
+
+The PAP is an explanation, knowledge-capture and presentation obligation over the real Nexus product. It does not authorize weaker architecture, demo-only product behavior, fake operational data, disposable persistence, browser-owned authority, weakened security/tenancy, or visual success without real persistence.
+
+Track product completion and PAP readiness separately. A successful demo does not close product engineering. For significant PAP-relevant capabilities, capture enough repository-grounded explanation for the student author to understand and present the real flow without replacing product authority.
+
+Documents remains outside the Finance execution pilot where that pilot says so, but Documents is fully covered by this transversal Product Realism + PAP governance.
+
+Where scale can materially affect correctness or usability, use a realistic-scale profile instead of assuming that behavior proven with a handful of records is institution-ready.
+
+## 16. Frontend/UX implementation
 
 When a Mission includes user-facing work:
 
@@ -184,7 +197,7 @@ When a Mission includes user-facing work:
 
 Do not redesign unrelated surfaces in backend/foundation work.
 
-## 16. Testing and evidence budget
+## 17. Testing and evidence budget
 
 Use the smallest evidence that proves the current invariant, then widen:
 
@@ -202,12 +215,12 @@ Use the smallest evidence that proves the current invariant, then widen:
 Evidence classes:
 
 - `FRESH` — must run for the current delta.
-- `REUSABLE` — remains valid because current delta does not affect it.
+- `REUSABLE` — remains valid because the current delta does not affect it.
 - `INVALIDATED` — current delta may affect it; rerun required.
 
 Never rerun expensive unrelated proof only for ceremony, and never reuse evidence after its authority has been invalidated.
 
-## 17. Four GREEN gates and DONE
+## 18. Four GREEN gates and DONE
 
 Where applicable, track separately:
 
@@ -218,7 +231,9 @@ Where applicable, track separately:
 
 A task may be GREEN in its own scope while the mission remains not PRODUCT_GREEN. `DONE` requires every applicable gate, integration evidence and truthful `PROJECT_STATE` update.
 
-## 18. Multi-agent ownership and review
+PAP readiness is not an additional Product GREEN gate. It is a separate knowledge/presentation status governed by the Product Realism + PAP contract.
+
+## 19. Multi-agent ownership and review
 
 Codex and Antigravity may both implement and review, but:
 
@@ -231,7 +246,7 @@ Codex and Antigravity may both implement and review, but:
 
 Reviewer findings use `P0`, `P1`, `P2`, `OBSERVATION`, `FALSE_POSITIVE` (or an equivalent mission-defined taxonomy).
 
-## 19. Resource/context discipline
+## 20. Resource/context discipline
 
 Use progressive context from the engineering config:
 
@@ -246,7 +261,7 @@ Expand only with evidence. Avoid duplicate investigations and broad rereads. Use
 
 Resource savings may never remove TDD, security, tenant isolation, integrity, independent/adversarial review or mandatory final gates.
 
-## 20. Git and integration safety
+## 21. Git and integration safety
 
 - Preserve unrelated changes.
 - Never `git reset --hard`, `git clean`, force push or rewrite shared history without explicit authorization and recovery justification.
@@ -261,7 +276,7 @@ Integration has two levels:
 
 A commit/push does not itself mean integration or DONE.
 
-## 21. Handoff and session recovery
+## 22. Handoff and session recovery
 
 A recoverable handoff records:
 
@@ -289,7 +304,7 @@ When credits/context/session end, preserve this factual state in Git/ledger. Do 
 
 A new agent recovers by reading the canonical chain in §2, verifying Git reality, then continuing only the selected task.
 
-## 22. Agent adapters
+## 23. Agent adapters
 
 - Codex must read `docs/operations/CODEX_EXECUTION_ADAPTER.md`.
 - Antigravity must read `docs/operations/ANTIGRAVITY_EXECUTION_ADAPTER.md`.
