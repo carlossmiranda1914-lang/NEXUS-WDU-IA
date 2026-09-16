@@ -50,6 +50,13 @@ const completeProfilesWithLocalGaps: FinanceReadinessDto = {
   seriesConfigurationAvailable: true,
 };
 
+const baseConfigurationReady: FinanceReadinessDto = {
+  ...completeProfilesWithLocalGaps,
+  status: 'READY',
+  requirements: completeProfilesWithLocalGaps.requirements.map((requirement) => ({ ...requirement, state: 'COMPLETE' })),
+  receiptIssuance: { status: 'BLOCKED', reasonCode: 'AGT_ONBOARDING_REQUIRED' },
+};
+
 function hasText(renderer: any, text: string) {
   return JSON.stringify(renderer.toJSON()).includes(text);
 }
@@ -127,6 +134,19 @@ test('renders complete profiles and missing local resources instead of an empty 
   assert.match(text, /Recurso local Nexus/);
   assert.doesNotMatch(text, /Configurar perfil jurídico/);
   assert.doesNotMatch(text, /Configurar perfil financeiro/);
+});
+
+test('describes READY as base configuration rather than universal Finance or AO-production readiness', async () => {
+  let renderer: any;
+  await act(async () => {
+    renderer = create(React.createElement(FinanceConfigurationWorkspace, { readinessClient: { get: async () => baseConfigurationReady } as any }));
+  });
+  const text = JSON.stringify(renderer.toJSON());
+  assert.match(text, /Configuração base concluída/);
+  assert.match(text, /A prontidão de emissão é avaliada separadamente por tipo de documento/);
+  assert.match(text, /requisitos externos da AGT/);
+  assert.doesNotMatch(text, /Finance pronta/);
+  assert.doesNotMatch(text, /Finance operacionalmente pronta/);
 });
 
 test('exits loading with an explicit error when readiness fails', async () => {

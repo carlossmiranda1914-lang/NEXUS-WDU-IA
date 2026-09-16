@@ -65,7 +65,7 @@ export function FinanceConfigurationWorkspace({ readinessClient = financeReadine
     {loading && <p className="mt-3 text-sm text-zinc-600">A carregar configuração financeira…</p>}
     {error && <div className="mt-3"><AuroraStateNotice tone="danger" title="Não foi possível confirmar a configuração financeira">{error}</AuroraStateNotice></div>}
     {success && <div className="mt-3"><AuroraStateNotice tone="success" title="Prontidão atualizada">{success}</AuroraStateNotice></div>}
-    {readiness?.status === 'READY' && <div className="mt-3"><AuroraStateNotice tone="success" title="Finance pronta">Finance operacionalmente pronta.</AuroraStateNotice></div>}
+    {readiness?.status === 'READY' && <div className="mt-3"><AuroraStateNotice tone="success" title="Configuração base concluída">Os recursos institucionais base estão configurados. A prontidão de emissão é avaliada separadamente por tipo de documento; a produção AO pode permanecer bloqueada por pré-requisitos externos.</AuroraStateNotice></div>}
     {readiness && <>
       <section data-testid="finance-readiness-requirements" className="mt-4 rounded-md border border-zinc-200 p-3 text-sm">
         <h3 className="font-semibold">Estado da configuração</h3>
