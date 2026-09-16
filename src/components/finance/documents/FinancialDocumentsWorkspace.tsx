@@ -44,6 +44,14 @@ export function FinancialDocumentsWorkspace({ theme = 'light', onOpenPayment, on
     setDetail(nextDetail);
     setArtifacts(nextArtifacts);
   };
+  const openDocument = async (documentId: string) => {
+    try {
+      const document = await financialDocumentClient.detail(documentId);
+      await selectDocument(document);
+    } catch {
+      setError('Não foi possível abrir o documento financeiro relacionado.');
+    }
+  };
   useEffect(() => { Promise.all([financialDocumentClient.list(), financialDocumentClient.capabilities()]).then(([documents, permissions]) => { setItems(documents); setCapabilities(permissions); }).catch(loadError => setError(errorMessage(loadError))).finally(() => setLoaded(true)); }, []);
   useEffect(() => { if (!initialDocumentId) return; financialDocumentClient.detail(initialDocumentId).then(document => selectDocument(document)).catch(() => setError('Não foi possível abrir o documento financeiro emitido.')); }, [initialDocumentId]);
 
@@ -59,7 +67,7 @@ export function FinancialDocumentsWorkspace({ theme = 'light', onOpenPayment, on
           <button type="button" onClick={() => selectDocument(document)} className="rounded-md border px-3 py-1 text-sm">Visualizar</button>
         </article>)}
       </div>
-      {selected && <SelectedFinancialDocumentDetail selected={selected} detail={detail} artifacts={artifacts} capabilities={capabilities} theme={theme} onBack={() => setSelected(null)} onOpenPayment={onOpenPayment} onOpenObligation={onOpenObligation} onArtifactsChanged={setArtifacts} onDocumentChanged={reloadSelectedDocument} onError={setError} />}
+      {selected && <SelectedFinancialDocumentDetail selected={selected} detail={detail} artifacts={artifacts} capabilities={capabilities} theme={theme} onBack={() => setSelected(null)} onOpenPayment={onOpenPayment} onOpenObligation={onOpenObligation} onOpenDocument={openDocument} onArtifactsChanged={setArtifacts} onDocumentChanged={reloadSelectedDocument} onError={setError} />}
       {!selected && <div className={`hidden rounded-lg border p-5 text-sm text-zinc-500 lg:block ${light ? 'border-[var(--color-border-default)]' : 'border-zinc-700'}`}>Selecione um documento para consultar o seu detalhe oficial, proveniência e ações disponíveis.</div>}
     </div>}
   </section>;

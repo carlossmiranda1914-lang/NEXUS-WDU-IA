@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   financialObligationClient,
   type FinancialObligationRecord,
@@ -11,6 +11,7 @@ export interface FinancialObligationsListViewProps {
   onOpenCreate: () => void;
   onOpenAccounts: () => void;
   onPreviewInvoice: (obligation: FinancialObligationRecord) => void;
+  initialObligationId?: string | null;
 }
 
 export function FinancialObligationsListView({
@@ -18,11 +19,13 @@ export function FinancialObligationsListView({
   onOpenCreate,
   onOpenAccounts,
   onPreviewInvoice,
+  initialObligationId,
 }: FinancialObligationsListViewProps) {
   const [items, setItems] = useState<FinancialObligationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const openedInitialObligation = useRef<string | null>(null);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -40,6 +43,15 @@ export function FinancialObligationsListView({
   useEffect(() => {
     void loadItems();
   }, [loadItems, refreshTrigger]);
+
+  useEffect(() => {
+    if (!initialObligationId || openedInitialObligation.current === initialObligationId) return;
+    const obligation = items.find((item) => item.id === initialObligationId);
+    if (obligation) {
+      openedInitialObligation.current = initialObligationId;
+      onPreviewInvoice(obligation);
+    }
+  }, [initialObligationId, items, onPreviewInvoice]);
 
   const filteredItems = (items || []).filter((item) => {
     if (!search.trim()) return true;

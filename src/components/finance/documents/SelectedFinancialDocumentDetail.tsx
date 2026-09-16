@@ -19,7 +19,8 @@ type Props = {
   theme?: string;
   onBack: () => void;
   onOpenPayment?: (reference: string) => void;
-  onOpenObligation?: (reference: string) => void;
+  onOpenObligation?: (obligationId: string) => void;
+  onOpenDocument?: (documentId: string) => void;
   onArtifactsChanged: (artifacts: FinancialDocumentArtifactProjection[]) => void;
   onDocumentChanged: () => Promise<void>;
   onError: (message: string) => void;
@@ -27,7 +28,7 @@ type Props = {
 
 const documentTypeLabel = (type: string) => ({ receipt: 'Recibo', invoice: 'Fatura', invoice_receipt: 'Factura-Recibo', credit_note: 'Nota de crédito' }[type] ?? 'Documento financeiro');
 
-export function SelectedFinancialDocumentDetail({ selected, detail, artifacts, capabilities, theme = 'light', onBack, onOpenPayment, onOpenObligation, onArtifactsChanged, onDocumentChanged, onError }: Props) {
+export function SelectedFinancialDocumentDetail({ selected, detail, artifacts, capabilities, theme = 'light', onBack, onOpenPayment, onOpenObligation, onOpenDocument, onArtifactsChanged, onDocumentChanged, onError }: Props) {
   const [creditNoteAmount, setCreditNoteAmount] = useState('');
   const [creditNoteFormOpen, setCreditNoteFormOpen] = useState(false);
   const [creditNoteReadiness, setCreditNoteReadiness] = useState<CreditNoteReadinessProjection | null>(null);
@@ -80,10 +81,11 @@ export function SelectedFinancialDocumentDetail({ selected, detail, artifacts, c
       {selected.presentation && <div className="mt-3 space-y-1 text-sm"><p>Emitente: {selected.presentation.issuer.legalName}</p><p>Destinatário: {selected.presentation.recipient.name}</p><p>Total: {formatFinanceMoney({ amount: selected.presentation.totals.documentTotal, currency: selected.presentation.totals.currency })}</p>{selected.presentation.correction?.originalOfficialNumber && <p>Documento corrigido: {selected.presentation.correction.originalOfficialNumber}</p>}</div>}
     </section>}
     <section className={`mt-4 border-t pt-4 ${light ? 'border-[var(--color-border-default)]' : 'border-zinc-700'}`}>
-      <h4 className="font-semibold">Proveniência</h4>
-      <ul className="text-sm">{detail?.sources.map((source, index) => <li key={`${source.type}-${source.paymentReference ?? source.obligationReference ?? index}`}>{sourceLabel(source)}{source.type === 'payment' && source.paymentReference && onOpenPayment && <button type="button" onClick={() => onOpenPayment(source.paymentReference!)} className="ml-2 underline">Abrir pagamento</button>}{source.type === 'obligation' && source.obligationReference && onOpenObligation && <button type="button" onClick={() => onOpenObligation(source.obligationReference!)} className="ml-2 underline">Abrir obrigação</button>}</li>)}</ul>
+      <h4 className="font-semibold">Proveniência do documento</h4>
+      <ul className="text-sm">{detail?.sources.map((source, index) => <li key={`${source.type}-${source.sourceId}-${index}`}>{sourceLabel(source)}{source.type === 'payment' && source.paymentReference && onOpenPayment && <button type="button" onClick={() => onOpenPayment(source.paymentReference!)} className="ml-2 underline">Abrir pagamento</button>}{source.type === 'obligation' && onOpenObligation && <button type="button" onClick={() => onOpenObligation(source.sourceId)} className="ml-2 underline">Abrir obrigação</button>}</li>)}</ul>
       <h4 className="mt-3 font-semibold">Correções relacionadas</h4>
-      <ul className="text-sm">{detail?.corrections.map(correction => <li key={correction.id}>{correction.presentation?.document.officialNumber ?? `${correction.seriesCode}/${correction.sequenceNumber}`}</li>)}</ul>
+      <ul className="text-sm">{detail?.corrections.map(correction => <li key={correction.id}>{correction.presentation?.document.officialNumber ?? `${correction.seriesCode}/${correction.sequenceNumber}`}{onOpenDocument && <button type="button" onClick={() => onOpenDocument(correction.id)} className="ml-2 underline">Abrir Nota de crédito</button>}</li>)}</ul>
+      {selected.type === 'credit_note' && selected.correctsDocumentId && onOpenDocument && <p className="mt-3 text-sm">Esta Nota de Crédito corrige o documento emitido indicado abaixo. A obrigação e o pagamento apresentados são proveniência histórica e não são corrigidos diretamente. <button type="button" onClick={() => onOpenDocument(selected.correctsDocumentId!)} className="underline">Abrir documento original</button></p>}
     </section>
     <section className={`mt-4 border-t pt-4 ${light ? 'border-[var(--color-border-default)]' : 'border-zinc-700'}`} aria-label="Ações do documento selecionado">
       {creditNoteReadiness?.status === 'ELIGIBLE' && <><button type="button" onClick={() => setCreditNoteFormOpen(true)} className="mr-2 rounded-md border px-3 py-1 text-sm">Criar Nota de Crédito</button>{creditNoteFormOpen && <div className="mt-3"><p className="text-sm">Montante da Nota de Crédito (máximo: {creditNoteReadiness.maximumAmount} {creditNoteReadiness.currency})</p><input aria-label="Montante da Nota de Crédito" value={creditNoteAmount} onChange={event => setCreditNoteAmount(event.target.value)} inputMode="decimal" className="mt-1 rounded border px-2 py-1" /><button type="button" onClick={createCreditNote} className="ml-2 rounded-md border px-3 py-1 text-sm">Emitir Nota de Crédito</button></div>}</>}

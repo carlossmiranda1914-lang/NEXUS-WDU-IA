@@ -7,7 +7,7 @@ import { InvoicePreissuePreview } from './InvoicePreissuePreview.tsx';
 
 export type ObligationsViewMode = 'list' | 'create' | 'accounts';
 
-export function FinancialObligationsWorkspace({ onOpenFinancialDocument }: { onOpenFinancialDocument?: (documentId: string) => void }) {
+export function FinancialObligationsWorkspace({ onOpenFinancialDocument, initialObligationId }: { onOpenFinancialDocument?: (documentId: string) => void; initialObligationId?: string | null }) {
   const [view, setView] = useState<ObligationsViewMode>('list');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [invoiceObligation, setInvoiceObligation] = useState<FinancialObligationRecord | null>(null);
@@ -37,6 +37,7 @@ export function FinancialObligationsWorkspace({ onOpenFinancialDocument }: { onO
   return (
     <><FinancialObligationsListView
       refreshTrigger={refreshTrigger}
+      initialObligationId={initialObligationId}
       onOpenCreate={() => setView('create')}
       onOpenAccounts={() => setView('accounts')}
       onPreviewInvoice={setInvoiceObligation}
