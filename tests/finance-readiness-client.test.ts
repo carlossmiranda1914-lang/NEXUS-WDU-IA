@@ -71,3 +71,20 @@ test('Finance readiness client creates only local institutional prerequisites wi
   assert.equal(calls[1]?.input, '/api/finance/profile');
   assert.doesNotMatch(JSON.stringify(calls), /institutionId|nextSequenceNumber|adapterKey|core/);
 });
+
+test('Finance readiness client exposes existing fiscal and series commands without browser-derived authority', async () => {
+  const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const client = new FinanceReadinessClient(async (input, init) => {
+    calls.push({ input, init });
+    return { ok: true, json: async () => ({ id: 'result' }) } as Response;
+  }, async () => 'token');
+
+  await client.createFiscalConfiguration({ version: 1, operationalConfiguration: {}, effectiveFrom: '2026-01-01T00:00:00.000Z', idempotencyKey: 'fiscal-ui-1' });
+  await client.createDocumentSeries({ code: 'UAT-R', documentType: 'receipt', effectiveFrom: '2026-01-01T00:00:00.000Z', idempotencyKey: 'series-ui-1' });
+
+  assert.equal(calls[0]?.input, '/api/finance/fiscal-configurations');
+  assert.equal(calls[1]?.input, '/api/finance/document-series');
+  assert.equal((calls[0]?.init?.headers as Record<string, string>)['Idempotency-Key'], 'fiscal-ui-1');
+  assert.equal((calls[1]?.init?.headers as Record<string, string>)['Idempotency-Key'], 'series-ui-1');
+  assert.doesNotMatch(JSON.stringify(calls), /institutionId|adapterKey|nextSequenceNumber|core/);
+});

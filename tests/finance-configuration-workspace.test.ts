@@ -182,3 +182,32 @@ test('shows current authoritative configuration and opens versioned profile acti
   assert.match(text, /AGT/);
   assert.doesNotMatch(text, /Criar configuração fiscal de produção/);
 });
+
+test('exposes fiscal and supported document-series commands only in an authorized local test corridor', async () => {
+  const readinessClient = {
+    get: async () => completeProfilesWithLocalGaps,
+    getFinancialProfile: async () => ({ item: { primaryJurisdiction: 'NEXUS_TEST', functionalCurrency: 'EUR', financialTimezone: 'UTC', enabledCurrencies: ['EUR'], effectiveFrom: '2026-09-01T00:00:00.000Z' } }),
+    listFiscalConfigurations: async () => ({ items: [] }),
+    listDocumentSeries: async () => ({ items: [] }),
+  };
+  let renderer: any;
+  await act(async () => { renderer = create(React.createElement(FinanceConfigurationWorkspace, { readinessClient: readinessClient as any })); });
+  const text = JSON.stringify(renderer.toJSON());
+  assert.match(text, /Criar configuração fiscal/);
+  assert.doesNotMatch(text, /Criar configuração fiscal de produção AO/);
+});
+
+test('withholds fiscal and series actions when AO production prerequisites are externally blocked', async () => {
+  const readinessClient = {
+    get: async () => ({ ...completeProfilesWithLocalGaps, receiptIssuance: { status: 'BLOCKED' as const, reasonCode: 'AGT_ONBOARDING_REQUIRED' } }),
+    getFinancialProfile: async () => ({ item: { primaryJurisdiction: 'AO', functionalCurrency: 'AOA', financialTimezone: 'Africa/Luanda', enabledCurrencies: ['AOA'], effectiveFrom: '2026-09-01T00:00:00.000Z' } }),
+    listFiscalConfigurations: async () => ({ items: [] }),
+    listDocumentSeries: async () => ({ items: [] }),
+  };
+  let renderer: any;
+  await act(async () => { renderer = create(React.createElement(FinanceConfigurationWorkspace, { readinessClient: readinessClient as any })); });
+  const text = JSON.stringify(renderer.toJSON());
+  assert.doesNotMatch(text, /Criar configuração fiscal/);
+  assert.doesNotMatch(text, /Criar série documental/);
+  assert.match(text, /requisitos externos da AGT/);
+});

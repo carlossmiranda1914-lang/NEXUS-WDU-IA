@@ -96,6 +96,34 @@ export class FinanceReadinessClient {
     });
     if (!response.ok) throw await configurationError(response, 'FINANCIAL_PROFILE_FAILED');
   }
+
+  async createFiscalConfiguration(input: { version: number; operationalConfiguration: Record<string, unknown>; effectiveFrom: string; effectiveTo?: string | null; idempotencyKey: string }): Promise<void> {
+    await this.createConfigurationCommand('/api/finance/fiscal-configurations', {
+      version: input.version,
+      operationalConfiguration: input.operationalConfiguration,
+      effectiveFrom: input.effectiveFrom,
+      effectiveTo: input.effectiveTo ?? null,
+    }, input.idempotencyKey, 'FISCAL_CONFIGURATION_VALIDATION');
+  }
+
+  async createDocumentSeries(input: { code: string; documentType: 'receipt' | 'invoice' | 'invoice_receipt' | 'credit_note'; effectiveFrom: string; effectiveTo?: string | null; idempotencyKey: string }): Promise<void> {
+    await this.createConfigurationCommand('/api/finance/document-series', {
+      code: input.code,
+      documentType: input.documentType,
+      effectiveFrom: input.effectiveFrom,
+      effectiveTo: input.effectiveTo ?? null,
+    }, input.idempotencyKey, 'FINANCE_RECEIPT_SERIES_VALIDATION');
+  }
+
+  private async createConfigurationCommand(path: string, body: Record<string, unknown>, idempotencyKey: string, fallback: string): Promise<void> {
+    const token = await this.acquireToken();
+    const response = await this.fetcher(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'Idempotency-Key': idempotencyKey },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw await configurationError(response, fallback);
+  }
 }
 
 async function configurationError(response: Response, fallback: string): Promise<FinanceConfigurationError> {
