@@ -516,13 +516,13 @@ export async function reconcileDeletion(
 export interface AssociationTargetItem {
   id: string;
   name: string;
-  domain: 'student' | 'enrollment';
+  domain: string;
   resourceType: string;
   detail?: string;
 }
 
 export async function searchAssociationTargets(
-  domain: 'student' | 'enrollment',
+  domain: string,
   query = '',
   signal?: AbortSignal,
 ): Promise<AssociationTargetItem[]> {

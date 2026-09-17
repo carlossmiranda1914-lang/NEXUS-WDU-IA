@@ -30,7 +30,7 @@ export interface AssociationDto {
 export interface AssociationTarget {
   id: string;
   name: string;
-  domain: 'student' | 'enrollment';
+  domain: string;
   resourceType: string;
   detail?: string;
 }

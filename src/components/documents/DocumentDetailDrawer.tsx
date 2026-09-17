@@ -100,7 +100,7 @@ export default function DocumentDetailDrawer({
 
   // Association modal / form state inside drawer
   const [isAddingAssociation, setIsAddingAssociation] = useState(false);
-  const [assocDomain, setAssocDomain] = useState<'student' | 'enrollment'>('student');
+  const [assocDomain, setAssocDomain] = useState<'enrollment' | 'academic'>('enrollment');
   const [assocSearch, setAssocSearch] = useState('');
   const [assocTargets, setAssocTargets] = useState<AssociationTarget[]>([]);
   const [loadingAssocTargets, setLoadingAssocTargets] = useState(false);
@@ -802,20 +802,6 @@ export default function DocumentDetailDrawer({
                     <button
                       type="button"
                       onClick={() => {
-                        setAssocDomain('student');
-                        setSelectedAssocTarget(null);
-                      }}
-                      className={`flex-1 py-2 text-xs font-bold rounded-xl border cursor-pointer ${
-                        assocDomain === 'student'
-                          ? 'bg-emerald-600 text-white border-emerald-600'
-                          : 'bg-zinc-800 text-zinc-300 border-white/5'
-                      }`}
-                    >
-                      Aluno
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
                         setAssocDomain('enrollment');
                         setSelectedAssocTarget(null);
                       }}
@@ -825,7 +811,21 @@ export default function DocumentDetailDrawer({
                           : 'bg-zinc-800 text-zinc-300 border-white/5'
                       }`}
                     >
-                      Matrícula
+                      Aluno / Matrícula
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAssocDomain('academic');
+                        setSelectedAssocTarget(null);
+                      }}
+                      className={`flex-1 py-2 text-xs font-bold rounded-xl border cursor-pointer ${
+                        assocDomain === 'academic'
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-zinc-800 text-zinc-300 border-white/5'
+                      }`}
+                    >
+                      Ano Letivo
                     </button>
                   </div>
 

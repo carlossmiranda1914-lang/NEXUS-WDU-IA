@@ -87,7 +87,7 @@ export default function DocumentUploadModal({
   const [taxonomy, setTaxonomy] = useState<DocumentTaxonomyDto | null>(null);
 
   // Step 3: Association
-  const [associationDomain, setAssociationDomain] = useState<'student' | 'enrollment'>('student');
+  const [associationDomain, setAssociationDomain] = useState<'enrollment' | 'academic'>('enrollment');
   const [associationSearch, setAssociationSearch] = useState('');
   const [associationTargets, setAssociationTargets] = useState<AssociationTarget[]>([]);
   const [loadingTargets, setLoadingTargets] = useState(false);
@@ -527,10 +527,10 @@ export default function DocumentUploadModal({
                   {(taxonomy?.categories || [
                     { id: 'academic', label: 'Académico' },
                     { id: 'enrollment', label: 'Matrícula' },
-                    { id: 'identity', label: 'Identificação' },
+                    { id: 'identification', label: 'Identificação' },
                     { id: 'financial', label: 'Financeiro' },
                     { id: 'administrative', label: 'Administrativo' },
-                    { id: 'other', label: 'Outro' },
+                    { id: 'general', label: 'Geral' },
                   ]).map((cat) => {
                     const isSelected = category === cat.id;
                     return (
@@ -598,32 +598,12 @@ export default function DocumentUploadModal({
               <div className="space-y-1">
                 <h3 className="text-sm font-bold">3. Associação a Entidade Escolar (Opcional)</h3>
                 <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                  Ligue este documento diretamente ao registo de um Aluno ou Matrícula. Pode associar agora ou mais tarde.
+                  Ligue este documento diretamente ao registo de um Aluno / Matrícula ou Ano Letivo. Pode associar agora ou mais tarde.
                 </p>
               </div>
 
               {/* Domain Switcher */}
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAssociationDomain('student');
-                    setSelectedTarget(null);
-                  }}
-                  className={`flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                    associationDomain === 'student'
-                      ? isLight
-                        ? 'border-emerald-600 bg-emerald-50 text-emerald-950 shadow-sm'
-                        : 'border-emerald-500 bg-emerald-500/15 text-emerald-300'
-                      : isLight
-                      ? 'border-zinc-200 hover:bg-zinc-50 text-zinc-600'
-                      : 'border-white/10 hover:bg-white/5 text-zinc-400'
-                  }`}
-                >
-                  <User className="w-4 h-4" />
-                  <span>Aluno</span>
-                </button>
-
                 <button
                   type="button"
                   onClick={() => {
@@ -641,7 +621,27 @@ export default function DocumentUploadModal({
                   }`}
                 >
                   <GraduationCap className="w-4 h-4" />
-                  <span>Matrícula</span>
+                  <span>Aluno / Matrícula</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssociationDomain('academic');
+                    setSelectedTarget(null);
+                  }}
+                  className={`flex-1 flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    associationDomain === 'academic'
+                      ? isLight
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-950 shadow-sm'
+                        : 'border-emerald-500 bg-emerald-500/15 text-emerald-300'
+                      : isLight
+                      ? 'border-zinc-200 hover:bg-zinc-50 text-zinc-600'
+                      : 'border-white/10 hover:bg-white/5 text-zinc-400'
+                  }`}
+                >
+                  <User className="w-4 h-4" />
+                  <span>Ano Letivo</span>
                 </button>
               </div>
 
@@ -654,9 +654,9 @@ export default function DocumentUploadModal({
                     value={associationSearch}
                     onChange={(e) => setAssociationSearch(e.target.value)}
                     placeholder={
-                      associationDomain === 'student'
+                      associationDomain === 'enrollment'
                         ? 'Pesquisar aluno por nome ou NIF/BI...'
-                        : 'Pesquisar matrícula por aluno ou ano letivo...'
+                        : 'Pesquisar ano letivo...'
                     }
                     className={`w-full pl-9 pr-4 py-2.5 text-xs rounded-xl border outline-none transition-all ${
                       isLight
@@ -783,7 +783,7 @@ export default function DocumentUploadModal({
                     </span>
                     <span className="font-bold">
                       {selectedTarget
-                        ? `${selectedTarget.domain === 'student' ? 'Aluno: ' : 'Matrícula: '}${selectedTarget.name}`
+                        ? `${selectedTarget.domain === 'enrollment' ? 'Aluno / Matrícula: ' : selectedTarget.domain === 'academic' ? 'Ano Letivo: ' : ''}${selectedTarget.name}`
                         : 'Sem associação imediata (Associar mais tarde)'}
                     </span>
                   </div>

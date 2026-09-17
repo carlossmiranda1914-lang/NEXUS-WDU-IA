@@ -245,6 +245,7 @@ export async function listDocumentsQuery(
            CASE
              WHEN a.target_domain = 'student' THEN (SELECT name FROM people WHERE id::text = a.target_resource_id LIMIT 1)
              WHEN a.target_domain = 'enrollment' THEN (SELECT CONCAT(p.name, ' (', y.name, ')') FROM enrollment_applications e JOIN people p ON p.id = e.student_person_id JOIN academic_years y ON y.id = e.academic_year_id WHERE e.id::text = a.target_resource_id LIMIT 1)
+             WHEN a.target_domain = 'academic' THEN (SELECT name FROM academic_years WHERE id::text = a.target_resource_id LIMIT 1)
              ELSE NULL
            END AS target_entity_name
     FROM document_associations a
@@ -501,6 +502,7 @@ export async function getDocumentDetailQuery(
             CASE
               WHEN a.target_domain = 'student' THEN (SELECT name FROM people WHERE id::text = a.target_resource_id LIMIT 1)
               WHEN a.target_domain = 'enrollment' THEN (SELECT CONCAT(p.name, ' (', y.name, ')') FROM enrollment_applications e JOIN people p ON p.id = e.student_person_id JOIN academic_years y ON y.id = e.academic_year_id WHERE e.id::text = a.target_resource_id LIMIT 1)
+              WHEN a.target_domain = 'academic' THEN (SELECT name FROM academic_years WHERE id::text = a.target_resource_id LIMIT 1)
               ELSE NULL
             END AS target_entity_name
      FROM document_associations a

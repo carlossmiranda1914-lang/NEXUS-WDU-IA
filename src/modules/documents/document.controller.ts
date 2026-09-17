@@ -466,42 +466,19 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
-    const domain = (req.query.domain as string) || 'student';
+    const domain = (req.query.domain as string) || 'enrollment';
     const searchQuery = ((req.query.q as string) || '').trim();
 
     try {
-      if (domain === 'student') {
+      if (domain === 'enrollment' || domain === 'student') {
         const query = `
-          SELECT p.id, p.name, p.national_id, p.birth_date
-          FROM people p
-          JOIN institution_memberships m ON m.person_id = p.id AND m.institution_id = $1
-          WHERE m.role = 'student' AND m.membership_status = 'active'
-            AND ($2 = '' OR p.name ILIKE $3 OR p.national_id ILIKE $3)
-          ORDER BY p.name ASC
-          LIMIT 25
-        `;
-        const result = await docPool.query(query, [
-          context.institutionId,
-          searchQuery,
-          `%${searchQuery}%`,
-        ]);
-        const targets = result.rows.map((r: any) => ({
-          id: r.id,
-          name: r.name,
-          domain: 'student',
-          resourceType: 'student_profile',
-          detail: r.national_id ? `NIF/BI: ${r.national_id}` : 'Aluno Ativo',
-        }));
-        return res.json({ targets });
-      } else if (domain === 'enrollment') {
-        const query = `
-          SELECT e.id, p.name AS student_name, y.name AS academic_year_name, o.name AS offer_name, e.status
+          SELECT e.id, p.name AS student_name, y.name AS academic_year_name, o.name AS offer_name, e.status, p.national_id_number
           FROM enrollment_applications e
           JOIN people p ON p.id = e.student_person_id
           JOIN academic_years y ON y.id = e.academic_year_id
           JOIN enrollment_offers o ON o.id = e.offer_id
           WHERE e.institution_id = $1
-            AND ($2 = '' OR p.name ILIKE $3 OR y.name ILIKE $3 OR o.name ILIKE $3)
+            AND ($2 = '' OR p.name ILIKE $3 OR y.name ILIKE $3 OR o.name ILIKE $3 OR (p.national_id_number IS NOT NULL AND p.national_id_number ILIKE $3))
           ORDER BY e.updated_at DESC
           LIMIT 25
         `;
@@ -515,11 +492,33 @@ export function registerDocumentRoutes(
           name: `${r.student_name} (${r.academic_year_name})`,
           domain: 'enrollment',
           resourceType: 'enrollment_application',
-          detail: `Oferta: ${r.offer_name} | Estado: ${r.status}`,
+          detail: `Oferta: ${r.offer_name} | Estado: ${r.status}${r.national_id_number ? ` | NIF/BI: ${r.national_id_number}` : ''}`,
+        }));
+        return res.json({ targets });
+      } else if (domain === 'academic') {
+        const query = `
+          SELECT y.id, y.name, y.status, y.starts_on, y.ends_on
+          FROM academic_years y
+          WHERE y.institution_id = $1
+            AND ($2 = '' OR y.name ILIKE $3)
+          ORDER BY y.starts_on DESC
+          LIMIT 25
+        `;
+        const result = await docPool.query(query, [
+          context.institutionId,
+          searchQuery,
+          `%${searchQuery}%`,
+        ]);
+        const targets = result.rows.map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          domain: 'academic',
+          resourceType: 'academic_year',
+          detail: `Ano Letivo | Estado: ${r.status}`,
         }));
         return res.json({ targets });
       } else {
-        return reject(res, 400, 'Domínio de associação inválido (deve ser "student" ou "enrollment").');
+        return reject(res, 400, 'Domínio de associação inválido (deve ser "enrollment" ou "academic").');
       }
     } catch (error) {
       return rejectDomainError(res, error);
