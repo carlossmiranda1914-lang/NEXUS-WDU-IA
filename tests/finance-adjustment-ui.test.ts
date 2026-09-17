@@ -40,7 +40,7 @@ let submitted: any;
 const successful = await render('dark', async (_id, input) => { submitted = input; });
 await set(successful, 'Valor', '10.00'); await set(successful, 'Motivo obrigatório', 'Acerto aprovado');
 await act(async () => { await successful.root.findByProps({ 'data-testid': 'obligation-adjustment-form' }).props.onSubmit({ preventDefault() {} }); });
-assert.deepEqual(submitted, { direction: 'decrease', amount: '10.00', currency: 'EUR', reason: 'Acerto aprovado' });
+assert.deepEqual(submitted, { direction: 'decrease', amount: '10.00', currency: 'EUR', reason: 'Acerto aprovado', basisType: 'general' });
 assert.match(JSON.stringify(successful.toJSON()), /bg-zinc-900/);
 
 const failed = await render('light', async () => { throw new Error('Erro do servidor'); });

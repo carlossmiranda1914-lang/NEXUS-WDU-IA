@@ -7,6 +7,7 @@ type Input = {
   amount: string;
   currency: string;
   reason: string;
+  basisType: 'general' | 'debit_event';
 };
 
 export interface FinanceObligationAdjustmentViewProps {
@@ -25,6 +26,7 @@ export function FinanceObligationAdjustmentView({
   const isLight = theme === 'light';
   const [id, setId] = useState(obligations[0]?.id ?? '');
   const [direction, setDirection] = useState<Input['direction']>('decrease');
+  const [basisType, setBasisType] = useState<Input['basisType']>('general');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
@@ -79,6 +81,7 @@ export function FinanceObligationAdjustmentView({
         amount: amount.trim(),
         currency,
         reason: reason.trim(),
+        basisType,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível registar a correção.');
@@ -198,7 +201,7 @@ export function FinanceObligationAdjustmentView({
               >
                 <button
                   type="button"
-                  onClick={() => setDirection('decrease')}
+                  onClick={() => { setDirection('decrease'); setBasisType('general'); }}
                   className={`flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all duration-150 motion-reduce:transition-none ${
                     direction === 'decrease'
                       ? isLight
@@ -224,6 +227,37 @@ export function FinanceObligationAdjustmentView({
                 </button>
               </div>
             </fieldset>
+
+            {direction === 'increase' ? (
+              <fieldset className="space-y-2" data-testid="adjustment-basis-selector">
+                <legend className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                  Natureza do aumento
+                </legend>
+                <div className={`grid grid-cols-1 gap-1.5 rounded-xl border p-1 ${isLight ? 'border-zinc-200 bg-zinc-100/80' : 'border-zinc-800 bg-zinc-950'}`}>
+                  <button
+                    type="button"
+                    onClick={() => setBasisType('general')}
+                    className={`rounded-lg px-3 py-2 text-left text-xs font-semibold transition-all ${basisType === 'general' ? (isLight ? 'border border-sky-200/60 bg-white text-sky-800 shadow-sm' : 'border border-sky-800/60 bg-zinc-800 text-sky-300 shadow-sm') : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'}`}
+                  >
+                    Ajuste financeiro geral
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBasisType('debit_event')}
+                    className={`rounded-lg px-3 py-2 text-left text-xs font-semibold transition-all ${basisType === 'debit_event' ? (isLight ? 'border border-sky-200/60 bg-white text-sky-800 shadow-sm' : 'border border-sky-800/60 bg-zinc-800 text-sky-300 shadow-sm') : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'}`}
+                  >
+                    Evento de débito sujeito a validação documental
+                  </button>
+                </div>
+                <p className={`text-xs leading-relaxed ${isLight ? 'text-zinc-600' : 'text-zinc-300'}`}>
+                  Esta classificação descreve o facto financeiro; não garante a emissão de qualquer documento.
+                </p>
+              </fieldset>
+            ) : (
+              <p className={`text-xs ${isLight ? 'text-zinc-600' : 'text-zinc-300'}`} data-testid="adjustment-general-basis">
+                Ajuste financeiro geral
+              </p>
+            )}
 
             {/* Value Input */}
             <div className="space-y-1.5">
