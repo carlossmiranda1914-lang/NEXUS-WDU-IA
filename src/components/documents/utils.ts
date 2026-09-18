@@ -201,6 +201,7 @@ export function getRetentionStatusPresentation(
   }
 
   switch (retentionStatus.toLowerCase()) {
+    case 'retention_active':
     case 'active':
     case 'in_force':
       return {
@@ -208,23 +209,37 @@ export function getRetentionStatusPresentation(
         tone: 'emerald',
         description: 'Prazo legal de conservação em vigor.',
       };
+    case 'retention_expired':
     case 'expired':
       return {
         label: 'Prazo Expirado',
         tone: 'amber',
         description: 'Período legal de retenção concluído. Elegível para revisão ou eliminação.',
       };
+    case 'eligible_for_deletion':
+      return {
+        label: 'Elegível para Eliminação',
+        tone: 'amber',
+        description: 'Retenção concluída e elegível para autorização de eliminação governada.',
+      };
+    case 'deletion_authorized':
+      return {
+        label: 'Eliminação Autorizada',
+        tone: 'rose',
+        description: 'Eliminação autorizada por custodiante governado.',
+      };
+    case 'deleted':
+    case 'disposed':
+      return {
+        label: 'Eliminado',
+        tone: 'zinc',
+        description: 'Conteúdo eliminado com base no calendário de retenção.',
+      };
     case 'permanent':
       return {
         label: 'Conservação Permanente',
         tone: 'blue',
         description: 'Documento de arquivo institucional perpétuo.',
-      };
-    case 'disposed':
-      return {
-        label: 'Expurgado',
-        tone: 'zinc',
-        description: 'Conteúdo eliminado com base no calendário de retenção.',
       };
     default:
       return {

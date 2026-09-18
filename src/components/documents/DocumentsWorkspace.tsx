@@ -390,9 +390,11 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
               }`}
             >
               <option value="all">Retenção: Todas</option>
-              <option value="active">Retenção Ativa</option>
-              <option value="expired">Prazo Expirado</option>
-              <option value="permanent">Conservação Permanente</option>
+              <option value="retention_active">Retenção Ativa</option>
+              <option value="retention_expired">Prazo Expirado</option>
+              <option value="eligible_for_deletion">Elegível para Eliminação</option>
+              <option value="deletion_authorized">Eliminação Autorizada</option>
+              <option value="deleted">Eliminado</option>
             </select>
 
             {/* Hold Status Filter */}
@@ -476,9 +478,11 @@ export default function DocumentsWorkspace({ theme = 'dark' }: DocumentsWorkspac
                 className="w-full h-10 px-2.5 rounded-lg border text-xs bg-zinc-100 dark:bg-zinc-950 border-zinc-200 dark:border-white/10"
               >
                 <option value="all">Todas</option>
-                <option value="active">Retenção Ativa</option>
-                <option value="expired">Prazo Expirado</option>
-                <option value="permanent">Conservação Permanente</option>
+                <option value="retention_active">Retenção Ativa</option>
+                <option value="retention_expired">Prazo Expirado</option>
+                <option value="eligible_for_deletion">Elegível para Eliminação</option>
+                <option value="deletion_authorized">Eliminação Autorizada</option>
+                <option value="deleted">Eliminado</option>
               </select>
             </div>
 

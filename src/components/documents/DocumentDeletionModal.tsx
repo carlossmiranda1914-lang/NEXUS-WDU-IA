@@ -37,8 +37,8 @@ export default function DocumentDeletionModal({
   const activeHoldCount = document.activeHolds.length;
   const isBlockedByHold = activeHoldCount > 0;
   const isRetentionExpired =
-    document.retention?.retentionStatus === 'expired' ||
-    document.retention?.retentionStatus === 'permanent';
+    document.retention?.retentionStatus === 'retention_expired' ||
+    document.retention?.retentionStatus === 'eligible_for_deletion';
   const hasRetentionAssignment = document.retention != null;
   const isBlockedByRetention = !hasRetentionAssignment || !isRetentionExpired;
 

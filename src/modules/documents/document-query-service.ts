@@ -19,7 +19,7 @@ export interface DocumentListQueryParams {
   technicalStatus?: string;
   associationDomain?: string;
   retentionStatus?: string;
-  holdStatus?: 'active' | 'released' | 'none';
+  holdStatus?: 'active' | 'released' | 'none' | 'all' | string;
   updatedFrom?: string;
   updatedTo?: string;
 }
@@ -63,7 +63,8 @@ function computeCapabilities(
   const hasRetentionPolicy = retentionStatus != null;
   const canPlaceHold = !isArchived && isHoldAvailable && hasRetentionPolicy;
   const canReleaseHold = activeHoldsCount > 0 && isHoldAvailable;
-  const isRetentionExpired = retentionStatus === 'expired';
+  const isRetentionExpired =
+    retentionStatus === 'retention_expired' || retentionStatus === 'eligible_for_deletion';
   const canAuthorizeDeletion = !isArchived && isDeleteAvailable && isRetentionExpired && activeHoldsCount === 0;
   const canExecuteDeletion = false;
 
