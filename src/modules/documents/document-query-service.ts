@@ -43,6 +43,7 @@ function computeCapabilities(
   docStatus: DocumentStatus,
   currentVersionStatus: DocumentVersionStatus | null,
   activeHoldsCount: number,
+  retentionStatus?: string | null,
   operationalAvailability?: DocumentOperationalAvailability,
 ): FrontendSafeDocumentCapabilities {
   const isArchived = docStatus === 'archived';
@@ -53,16 +54,27 @@ function computeCapabilities(
   const canOpen = !isArchived && isVersionAvailable && isAccessAvailable;
   const canDownload = !isArchived && isVersionAvailable && isAccessAvailable;
 
-  // Management actions: return conservative false. No API-local role matrix is used.
-  // Backend command endpoints enforce authoritative policy and role authorization.
+  // Management actions: advisory capability flags strictly aligned with factual operational availability, retention governance, and document state
+  const isUploadAvailable = operationalAvailability?.canUpload !== false;
+  const isHoldAvailable = operationalAvailability?.canHold !== false;
+  const isDeleteAvailable = operationalAvailability?.canDelete !== false;
+
+  const canUploadVersion = !isArchived && isUploadAvailable;
+  const hasRetentionPolicy = retentionStatus != null;
+  const canPlaceHold = !isArchived && isHoldAvailable && hasRetentionPolicy;
+  const canReleaseHold = activeHoldsCount > 0 && isHoldAvailable;
+  const isRetentionExpired = retentionStatus === 'expired';
+  const canAuthorizeDeletion = !isArchived && isDeleteAvailable && isRetentionExpired && activeHoldsCount === 0;
+  const canExecuteDeletion = false;
+
   return {
     canOpen,
     canDownload,
-    canUploadVersion: false,
-    canPlaceHold: false,
-    canReleaseHold: false,
-    canAuthorizeDeletion: false,
-    canExecuteDeletion: false,
+    canUploadVersion,
+    canPlaceHold,
+    canReleaseHold,
+    canAuthorizeDeletion,
+    canExecuteDeletion,
   };
 }
 
@@ -82,7 +94,7 @@ export async function listDocumentsQuery(
   const values: unknown[] = [context.institutionId];
   let paramIdx = 2;
 
-  if (params.category && params.category.trim()) {
+  if (params.category && params.category.trim() && params.category !== 'all') {
     conditions.push(`d.category = $${paramIdx++}`);
     values.push(params.category.trim());
   }
@@ -103,7 +115,7 @@ export async function listDocumentsQuery(
     paramIdx++;
   }
 
-  if (params.technicalStatus && params.technicalStatus.trim()) {
+  if (params.technicalStatus && params.technicalStatus.trim() && params.technicalStatus !== 'all') {
     conditions.push(`EXISTS (
       SELECT 1 FROM document_versions v
       WHERE v.institution_id = d.institution_id
@@ -119,7 +131,7 @@ export async function listDocumentsQuery(
     values.push(params.technicalStatus.trim());
   }
 
-  if (params.associationDomain && params.associationDomain.trim()) {
+  if (params.associationDomain && params.associationDomain.trim() && params.associationDomain !== 'all') {
     conditions.push(`EXISTS (
       SELECT 1 FROM document_associations a
       WHERE a.institution_id = d.institution_id
@@ -130,7 +142,7 @@ export async function listDocumentsQuery(
     values.push(params.associationDomain.trim());
   }
 
-  if (params.retentionStatus && params.retentionStatus.trim()) {
+  if (params.retentionStatus && params.retentionStatus.trim() && params.retentionStatus !== 'all') {
     conditions.push(`EXISTS (
       SELECT 1 FROM document_retention_assignments r
       WHERE r.institution_id = d.institution_id
@@ -140,7 +152,7 @@ export async function listDocumentsQuery(
     values.push(params.retentionStatus.trim());
   }
 
-  if (params.holdStatus) {
+  if (params.holdStatus && params.holdStatus !== 'all') {
     if (params.holdStatus === 'active') {
       conditions.push(`EXISTS (
         SELECT 1 FROM document_retention_holds h
@@ -403,6 +415,7 @@ export async function listDocumentsQuery(
       docRow.status,
       currentVersion?.status ?? null,
       activeHolds.length,
+      docRetention?.retention_status ?? null,
       operationalAvailability,
     );
 
@@ -612,6 +625,7 @@ export async function getDocumentDetailQuery(
     docRow.status,
     currentVersion?.status ?? null,
     activeHolds.length,
+    docRetention?.retention_status ?? null,
     operationalAvailability,
   );
 

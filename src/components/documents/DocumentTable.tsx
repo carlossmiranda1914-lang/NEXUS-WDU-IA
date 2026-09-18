@@ -70,7 +70,7 @@ export default function DocumentTable({
   }
 
   if (!loading && documents.length === 0) {
-    const canUpload = operationalAvailability?.canUpload ?? false;
+    const canUpload = operationalAvailability?.canUpload !== false;
 
     return (
       <div
