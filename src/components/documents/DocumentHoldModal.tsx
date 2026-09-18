@@ -248,6 +248,18 @@ export default function DocumentHoldModal({
             </div>
           )}
 
+          {mode === 'place' && !document.retention && (
+            <div className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Política de Retenção Necessária</p>
+                <p className="mt-0.5">
+                  Este documento não possui política de retenção atribuída. A aplicação de bloqueios legais ou administrativos requer a vinculação prévia de um calendário de retenção governado.
+                </p>
+              </div>
+            </div>
+          )}
+
           {errorMessage && (
             <div className="p-3 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -270,7 +282,7 @@ export default function DocumentHoldModal({
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (mode === 'place' && (!document.retention || isHoldUnavailable))}
               className={`px-4 py-2 rounded-lg text-xs font-bold text-white transition-all cursor-pointer flex items-center gap-1.5 ${
                 mode === 'place'
                   ? 'bg-amber-600 hover:bg-amber-500'

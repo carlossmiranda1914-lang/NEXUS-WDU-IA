@@ -36,6 +36,11 @@ export default function DocumentDeletionModal({
 
   const activeHoldCount = document.activeHolds.length;
   const isBlockedByHold = activeHoldCount > 0;
+  const isRetentionExpired =
+    document.retention?.retentionStatus === 'expired' ||
+    document.retention?.retentionStatus === 'permanent';
+  const hasRetentionAssignment = document.retention != null;
+  const isBlockedByRetention = !hasRetentionAssignment || !isRetentionExpired;
 
   // Escape key closes modal (only when not actively executing)
   const handleKeyDown = useCallback(
@@ -197,14 +202,38 @@ export default function DocumentDeletionModal({
         </div>
 
         <div className="mt-5 space-y-4 text-xs leading-relaxed">
-          {isBlockedByHold && (
+          {stage === 'confirm' && isBlockedByHold && (
             <div className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-start gap-2.5">
               <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold">Eliminação Bloqueada por Regra Institucional</p>
+                <p className="font-bold">Eliminação Bloqueada por Bloqueio Ativo</p>
                 <p className="mt-0.5">
                   Este documento possui <strong>{activeHoldCount} bloqueio(s) de retenção ativo(s)</strong>.
                   Para proceder à eliminação, os bloqueios devem ser formalmente libertados pela respetiva autoridade.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {stage === 'confirm' && !hasRetentionAssignment && (
+            <div className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-start gap-2.5">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Eliminação Requer Política de Retenção</p>
+                <p className="mt-0.5">
+                  Este documento não possui política de retenção atribuída. Por imperativo de conformidade regulamentar, a eliminação governada é bloqueada na ausência de um calendário de retenção expirado.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {stage === 'confirm' && hasRetentionAssignment && !isRetentionExpired && (
+            <div className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-start gap-2.5">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Retenção Legal Ativa</p>
+                <p className="mt-0.5">
+                  Este documento encontra-se sob prazo de retenção ativo. A autorização de eliminação só pode ser concedida após a conclusão do período de conservação obrigatória.
                 </p>
               </div>
             </div>
@@ -275,7 +304,7 @@ export default function DocumentDeletionModal({
             <button
               type="button"
               onClick={handleAuthorize}
-              disabled={isBlockedByHold || loading || isDeleteUnavailable}
+              disabled={isBlockedByHold || isBlockedByRetention || loading || isDeleteUnavailable}
               className="px-4 py-2 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1.5"
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
