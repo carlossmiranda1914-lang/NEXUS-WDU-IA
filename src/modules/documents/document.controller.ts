@@ -150,12 +150,31 @@ export function rejectDomainError(res: Response, error: unknown): Response {
       msg.includes('ACTION_NOT_PERMITTED') ||
       msg.includes('HOLD_AUTHORITY_DENIED') ||
       msg.includes('DELETION_AUTHORITY_DENIED') ||
+      msg.includes('DELETION_AUTHORIZATION_DENIED') ||
       msg.includes('GRANT_GRANTEE_MISMATCH') ||
       msg.includes('MEMBERSHIP_REVOKED_OR_INACTIVE') ||
       msg.includes('POLICY_NO_LONGER_AUTHORIZED') ||
       msg.includes('ACCESS_DENIED_QUARANTINED')
     ) {
       return reject(res, 403, msg, 'AUTHORIZATION_DENIED');
+    }
+
+    // 422 Unprocessable Entity - Governance state blockers
+    if (msg.includes('RETENTION_ASSIGNMENT_MISSING')) {
+      return reject(
+        res,
+        422,
+        'Este documento ainda não possui uma política de retenção atribuída e, por isso, não pode ser eliminado.',
+        'RETENTION_ASSIGNMENT_MISSING',
+      );
+    }
+    if (msg.includes('RETENTION_ACTIVE') || msg.includes('RETENTION_PERIOD_ACTIVE')) {
+      return reject(
+        res,
+        422,
+        'O documento encontra-se sob prazo de retenção ativo e não pode ser eliminado.',
+        'RETENTION_ACTIVE',
+      );
     }
 
     // 404 Not Found
@@ -168,7 +187,6 @@ export function rejectDomainError(res: Response, error: unknown): Response {
       msg.includes('DELETION_AUTHORIZATION_NOT_FOUND') ||
       msg.includes('STORAGE_OBJECT_NOT_FOUND') ||
       msg.includes('STORAGE_REFERENCE_NOT_FOUND') ||
-      msg.includes('RETENTION_ASSIGNMENT_MISSING') ||
       msg.includes('document_associations_document_tenant_fk') ||
       msg.includes('violates foreign key constraint') ||
       (error as any)?.code === '23503'
@@ -201,15 +219,14 @@ export function rejectDomainError(res: Response, error: unknown): Response {
       return reject(res, 409, msg, 'CONFLICT');
     }
 
-    // 422 Unprocessable Entity
+    // 422 Unprocessable Entity - Other domain state blockers
     if (
       msg.includes('DECLARED_SIZE_EXCEEDS_POLICY') ||
       msg.includes('UPLOAD_AUTHORIZATION_EXPIRED') ||
       msg.includes('NOT_AVAILABLE_FOR_ACCESS') ||
       msg.includes('VERSION_DELETION_IN_PROGRESS') ||
       msg.includes('DELETION_AUTHORIZATION_STATUS_INVALID') ||
-      msg.includes('VERSION_NOT_ELIGIBLE_FOR_DELETION') ||
-      msg.includes('RETENTION_PERIOD_ACTIVE')
+      msg.includes('VERSION_NOT_ELIGIBLE_FOR_DELETION')
     ) {
       return reject(res, 422, msg, 'UNPROCESSABLE_STATE');
     }
