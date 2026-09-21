@@ -215,7 +215,7 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
   });
   app.get('/api/finance/documents/:id/artifacts', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'read'); if (!context) return;
-    const artifacts = await pool.query('SELECT id,document_id,render_version,template_version,generated_at,content_hash,media_type,byte_size FROM finance_financial_document_artifacts WHERE institution_id=$1 AND document_id=$2 ORDER BY generated_at DESC', [context.institutionId, req.params.id]);
+    const artifacts = await pool.query("SELECT id,document_id,render_version,template_version,generated_at,content_hash,media_type,byte_size FROM finance_financial_document_artifacts WHERE institution_id=$1 AND document_id=$2 ORDER BY CASE render_version WHEN 'renderer-2' THEN 0 WHEN 'renderer-1' THEN 1 ELSE 2 END, render_version ASC, template_version ASC, id ASC", [context.institutionId, req.params.id]);
     res.json({ items: artifacts.rows });
   });
   app.post('/api/finance/documents/:id/artifacts', auth, async (req: AuthRequest, res) => {

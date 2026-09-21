@@ -63,6 +63,9 @@ export function SelectedFinancialDocumentDetail({ selected, detail, artifacts, c
       onError('Não foi possível gerar o PDF oficial. O documento emitido permanece inalterado.');
     }
   };
+  const currentArtifact = artifacts.find(artifact => artifact.render_version === 'renderer-2')
+    ?? artifacts.find(artifact => artifact.render_version === 'renderer-1')
+    ?? null;
   const openArtifact = async (artifact: FinancialDocumentArtifactProjection) => {
     try {
       const bytes = await financialDocumentClient.artifactContent(artifact.id);
@@ -89,8 +92,9 @@ export function SelectedFinancialDocumentDetail({ selected, detail, artifacts, c
     </section>
     <section className={`mt-4 border-t pt-4 ${light ? 'border-[var(--color-border-default)]' : 'border-zinc-700'}`} aria-label="Ações do documento selecionado">
       {creditNoteReadiness?.status === 'ELIGIBLE' && <><button type="button" onClick={() => setCreditNoteFormOpen(true)} className="mr-2 rounded-md border px-3 py-1 text-sm">Criar Nota de Crédito</button>{creditNoteFormOpen && <div className="mt-3"><p className="text-sm">Montante da Nota de Crédito (máximo: {creditNoteReadiness.maximumAmount} {creditNoteReadiness.currency})</p><input aria-label="Montante da Nota de Crédito" value={creditNoteAmount} onChange={event => setCreditNoteAmount(event.target.value)} inputMode="decimal" className="mt-1 rounded border px-2 py-1" /><button type="button" onClick={createCreditNote} className="ml-2 rounded-md border px-3 py-1 text-sm">Emitir Nota de Crédito</button></div>}</>}
-      {artifacts.length === 0 && capabilities.issue && <button type="button" onClick={generateArtifact} className="mr-2 rounded-md border px-3 py-1 text-sm">Gerar PDF oficial</button>}
-      {artifacts.map(artifact => <button key={artifact.id} type="button" onClick={() => openArtifact(artifact)} className="mr-2 rounded-md border px-3 py-1 text-sm">Visualizar PDF oficial</button>)}
+      {!artifacts.some(artifact => artifact.render_version === 'renderer-2') && capabilities.issue && <button type="button" onClick={generateArtifact} className="mr-2 rounded-md border px-3 py-1 text-sm">Gerar PDF oficial atual</button>}
+      {currentArtifact && <button type="button" onClick={() => openArtifact(currentArtifact)} className="mr-2 rounded-md border px-3 py-1 text-sm">Visualizar PDF oficial atual ({currentArtifact.render_version})</button>}
+      {artifacts.filter(artifact => artifact.id !== currentArtifact?.id).map(artifact => <button key={artifact.id} type="button" onClick={() => openArtifact(artifact)} className="mr-2 rounded-md border px-3 py-1 text-sm">Visualizar PDF histórico ({artifact.render_version})</button>)}
     </section>
   </aside>;
 }

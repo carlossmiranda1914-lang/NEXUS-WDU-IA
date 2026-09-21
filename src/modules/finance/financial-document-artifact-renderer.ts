@@ -1,7 +1,7 @@
 import type { CanonicalFinancialDocumentPresentation } from './financial-document-presentation.ts';
 import { formatFinanceMoney } from './money-presentation.ts';
 
-export type FinancialDocumentRenderInput = Readonly<{ presentation: CanonicalFinancialDocumentPresentation }>;
+export type FinancialDocumentRenderInput = Readonly<{ presentation: CanonicalFinancialDocumentPresentation; renderVersion?: string }>;
 const pdfText = (value: unknown) => String(value ?? '').replace(/[\\()]/g, '\\$&');
 const money = (amount: string | null, currency: string) => amount === null ? '—' : formatFinanceMoney({ amount, currency });
 
@@ -42,9 +42,13 @@ export function renderFinancialDocumentPdf(input: FinancialDocumentRenderInput):
   const infoY = totalsY - 116;
   rule(54, infoY + 18, 541, infoY + 18); write(54, infoY, 'INFORMACAO DOCUMENTAL', 11);
   if (view.operation.reference) write(54, infoY - 18, `Referencia da obrigacao: ${view.operation.reference}`);
-  if (view.policy.taxTreatment) write(54, infoY - 34, `Tratamento fiscal: ${view.policy.taxTreatment}`);
-  if (view.policy.jurisdictionCode) write(54, infoY - 50, `Jurisdição: ${view.policy.jurisdictionCode}`);
-  let mentionY = infoY - 70; for (const mention of view.legalMentions) { write(54, mentionY, mention, 9); mentionY -= 14; }
+  // renderer-2 makes the correction relationship explicit while reading only
+  // the immutable documentary presentation; renderer-1 remains reproducible.
+  if (input.renderVersion === 'renderer-2' && view.correction?.originalOfficialNumber) write(54, infoY - 34, `Documento financeiro corrigido: ${view.correction.originalOfficialNumber}`);
+  const policyOffset = input.renderVersion === 'renderer-2' && view.correction?.originalOfficialNumber ? 16 : 0;
+  if (view.policy.taxTreatment) write(54, infoY - 34 - policyOffset, `Tratamento fiscal: ${view.policy.taxTreatment}`);
+  if (view.policy.jurisdictionCode) write(54, infoY - 50 - policyOffset, `Jurisdição: ${view.policy.jurisdictionCode}`);
+  let mentionY = infoY - 70 - policyOffset; for (const mention of view.legalMentions) { write(54, mentionY, mention, 9); mentionY -= 14; }
   rule(54, 54, 541, 54); write(54, 38, 'Documento apresentado a partir do registo documental imutavel.', 8); c.push('ET');
   const content = c.join('\n');
   const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${Buffer.byteLength(content, 'latin1')} >>\nstream\n${content}\nendstream`];

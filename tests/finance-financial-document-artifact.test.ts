@@ -57,3 +57,29 @@ test('F7-05 fails closed for missing or integrity-mismatched stored bytes', asyn
   const tampered = new FinancialDocumentArtifactService(pool, { put: async () => undefined, get: async () => Buffer.from('wrong') });
   await assert.rejects(() => tampered.retrieve({ institutionId: 'tenant-1', artifactId: row.id }), /INTEGRITY_MISMATCH/);
 });
+
+test('Task 7/8 preserves renderer-1 and adds renderer-2 for FR1, CN1 and CN2', async () => {
+  const storage = new InMemoryFinancialDocumentArtifactStorage();
+  const documents = new Map(['FR1', 'CN1', 'CN2'].map((id, index) => [id, { id, document_type: index ? 'credit_note' : 'receipt', sequence_number: String(index + 1), issued_at: new Date('2026-09-09T10:00:00.000Z'), documentary_snapshot: snapshot(), series_code: index ? 'NC' : 'FR' }]));
+  const artifacts = new Map<string, any>(); let nextId = 1;
+  const pool: any = { query: async (sql: string, values: any[]) => {
+    if (sql.includes('FROM finance_financial_documents d')) return { rows: [documents.get(values[1])] };
+    if (sql.includes('FROM finance_financial_document_artifacts') && sql.includes('document_id=$2')) return { rows: [...artifacts.values()].filter(row => row.document_id === values[1] && row.render_version === values[2] && row.template_version === values[3]) };
+    if (sql.includes('FROM finance_financial_document_artifacts') && sql.includes('id=$2')) return { rows: [[...artifacts.values()].find(row => row.id === values[1])].filter(Boolean) };
+    if (sql.includes('INSERT INTO finance_financial_document_artifacts')) { const row = { id: `artifact-${nextId++}`, document_id: values[1], render_version: values[2], template_version: values[3], generated_at: new Date(), content_hash: values[4], media_type: values[5], byte_size: values[6], storage_reference: values[7] }; artifacts.set(row.id, row); return { rows: [row] }; }
+    if (sql.includes('finance_audit_records') || sql.includes('finance_outbox')) return { rows: [] };
+    throw new Error(`Unexpected SQL: ${sql}`);
+  } };
+  const before = JSON.stringify([...documents.values()].map(document => document.documentary_snapshot));
+  const service = new FinancialDocumentArtifactService(pool, storage);
+  const fr1v2 = await service.generate({ institutionId: 'tenant-1', documentId: 'FR1', renderVersion: 'renderer-2', templateVersion: 'template-1' });
+  for (const id of ['CN1', 'CN2']) {
+    const v1 = await service.generate({ institutionId: 'tenant-1', documentId: id, renderVersion: 'renderer-1', templateVersion: 'template-1' });
+    const v2 = await service.generate({ institutionId: 'tenant-1', documentId: id, renderVersion: 'renderer-2', templateVersion: 'template-1' });
+    assert.notEqual(v1.id, v2.id); assert.equal(v1.renderVersion, 'renderer-1'); assert.equal(v2.renderVersion, 'renderer-2');
+    assert.equal((await service.retrieve({ institutionId: 'tenant-1', artifactId: v1.id })).subarray(0, 5).toString(), '%PDF-');
+    assert.equal((await service.retrieve({ institutionId: 'tenant-1', artifactId: v2.id })).subarray(0, 5).toString(), '%PDF-');
+  }
+  assert.equal((await service.retrieve({ institutionId: 'tenant-1', artifactId: fr1v2.id })).subarray(0, 5).toString(), '%PDF-');
+  assert.equal(JSON.stringify([...documents.values()].map(document => document.documentary_snapshot)), before, 'artifact generation must not mutate documentary snapshots');
+});
