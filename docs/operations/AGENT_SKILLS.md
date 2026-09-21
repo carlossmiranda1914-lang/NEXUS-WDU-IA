@@ -16,9 +16,28 @@ Use for evidence-based review of Nexus diffs/PRs/checkpoints, especially IAM, pe
 ### `.skills/nexus-ui-ux`
 Use for creation/change/review of application UI. It consolidates Nexus visual, interaction, accessibility and product-truth guardrails so the project does not accumulate competing design doctrines.
 
+### `.skills/nexus-frontend-implementation`
+Use when implementing or maturing an approved Nexus frontend surface. It forces `observe -> map -> plan -> approve -> implement -> verify -> Human UAT`, checks cross-entity information architecture before JSX/CSS, preserves domain meaning, prevents generic card/button proliferation, requires existing design-system reuse, and forbids frontend inventions for missing backend contracts.
+
+## External source audit
+
+The external repository `rtadewald/skills` was reviewed as a pattern source, not copied wholesale. Useful ideas adopted:
+- `plan-screen`: plan the screen/flow before implementation and use explicit approval gates;
+- `extract-ds`: treat a design system as reusable implementation truth rather than page-by-page styling;
+- `img-to-html`: implement in staged gates and compare/review before advancing.
+
+Ideas intentionally NOT adopted as Nexus defaults:
+- social-media-oriented visual spectacle;
+- mandatory three-concept exploration;
+- framework-independent static HTML reconstruction;
+- OpenRouter/image-generation dependencies;
+- project-specific external tooling assumptions.
+
+Nexus keeps its own product, architecture, security, accessibility and product-truth authority.
+
 ## Standard implementation flow
 
-`authorized mission/scope -> nexus-ui-ux when visual -> implementation -> nexus-code-review -> required tests/quality gate -> evidence -> DONE/BLOCKED`
+`authorized mission/scope -> nexus-ui-ux -> nexus-frontend-implementation -> implementation -> visual/behavioral gate -> nexus-code-review -> required tests/quality gate -> Human UAT -> evidence -> DONE/BLOCKED`
 
 Apply only the Skills relevant to the changed surface. Do not invoke every Skill mechanically.
 
@@ -30,7 +49,9 @@ Apply only the Skills relevant to the changed surface. Do not invoke every Skill
 - Update a Skill when repeated real usage proves a rule ambiguous, missing or harmful.
 - Review Skill changes like code: bounded scope, explicit rationale, no weakening of higher authorities.
 - Never store credentials, PII, environment secrets or production data in a Skill.
+- External Skills must be audited before adoption; do not vendor an external repository blindly.
+- Prefer adapting external workflow ideas into Nexus-specific Skills over importing conflicting execution assumptions.
 
-## First validation target
+## Validation target
 
-Use the IAM/permissions visual implementation as the first production-like validation of both Skills. Any refinement discovered there should remain generic enough to improve subsequent Nexus surfaces rather than encode one screen's accidental structure.
+Use the Finance coherence work as the next production-like validation of `nexus-frontend-implementation`. The first target is cross-entity traceability and information architecture across Obligation -> Invoice -> Payment -> Allocation -> Receipt -> Financial Document, without changing domain authority unless the read-contract gap is proven.
