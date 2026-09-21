@@ -45,9 +45,13 @@ function computeCapabilities(
   activeHoldsCount: number,
   retentionStatus?: string | null,
   operationalAvailability?: DocumentOperationalAvailability,
+  role?: string,
 ): FrontendSafeDocumentCapabilities {
   const isArchived = docStatus === 'archived';
   const isVersionAvailable = currentVersionStatus === 'available';
+
+  // Management roles
+  const isManager = !role || ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(role);
 
   // Read actions are safe advisory flags based strictly on factual availability and operational dependencies; backend remains authoritative.
   const isAccessAvailable = operationalAvailability?.canAccess !== false;
@@ -55,9 +59,9 @@ function computeCapabilities(
   const canDownload = !isArchived && isVersionAvailable && isAccessAvailable;
 
   // Management actions: advisory capability flags strictly aligned with factual operational availability, retention governance, and document state
-  const isUploadAvailable = operationalAvailability?.canUpload !== false;
-  const isHoldAvailable = operationalAvailability?.canHold !== false;
-  const isDeleteAvailable = operationalAvailability?.canDelete !== false;
+  const isUploadAvailable = operationalAvailability?.canUpload !== false && isManager;
+  const isHoldAvailable = operationalAvailability?.canHold !== false && isManager;
+  const isDeleteAvailable = operationalAvailability?.canDelete !== false && isManager;
 
   const canUploadVersion = !isArchived && isUploadAvailable;
   const hasRetentionPolicy = retentionStatus != null;
@@ -418,6 +422,7 @@ export async function listDocumentsQuery(
       activeHolds.length,
       docRetention?.retention_status ?? null,
       operationalAvailability,
+      context.role,
     );
 
     const originalFilename = currentVersion?.originalFilename || undefined;
@@ -628,6 +633,7 @@ export async function getDocumentDetailQuery(
     activeHolds.length,
     docRetention?.retention_status ?? null,
     operationalAvailability,
+    context.role,
   );
 
   const originalFilename = currentVersion?.originalFilename || undefined;

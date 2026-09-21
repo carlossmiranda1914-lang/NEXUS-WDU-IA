@@ -36,6 +36,7 @@ import {
   transitionAssociationStatusCommand,
 } from './document-association-command.ts';
 import {
+  assignRetentionCommand,
   placeHoldCommand,
   releaseHoldCommand,
   authorizeDeletionCommand,
@@ -332,6 +333,7 @@ export function registerDocumentRoutes(
         pool: docPool,
         storageProvider,
         malwareScanner,
+        retentionPolicyEngine: retentionPolicyEngine ?? undefined,
         storageBucket,
         gcpProjectId: process.env.GOOGLE_CLOUD_PROJECT || 'nexus-wdu-staging',
         trustedAuthority: {
@@ -1278,6 +1280,105 @@ export function registerDocumentRoutes(
         grantId: revokeRes.result.id,
         status: revokeRes.result.status,
         replayed: revokeRes.replayed,
+      });
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
+  // 11.1. POST /api/documents/:id/retention — Governed retention assignment
+  app.post(['/api/documents/:id/retention', '/api/documents/:id/retention/assign'], docAuth, async (req: AuthRequest, res: Response) => {
+    const context = req.institutionalContext;
+    if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    if (!retentionPolicyEngine) {
+      return rejectDomainError(res, new Error('RETENTION_POLICY_ENGINE_MISSING'));
+    }
+
+    const documentId = req.params.id;
+    if (!validUuid(documentId)) return reject(res, 400, 'Identificador de documento inválido.');
+
+    const {
+      versionId: rawVersionId,
+      category: rawCategory,
+      jurisdictionProfileId = 'DEFAULT_JURISDICTION',
+      purpose,
+      clockTriggerEventAt: rawClockTriggerEventAt,
+      policyId,
+    } = req.body || {};
+
+    try {
+      let versionId = rawVersionId;
+      if (!versionId) {
+        const vResult = await docPool.query<{ id: string }>(
+          `SELECT id FROM document_versions
+           WHERE institution_id = $1 AND document_id = $2
+           ORDER BY version_number DESC LIMIT 1`,
+          [context.institutionId, documentId],
+        );
+        if (vResult.rows.length === 0) return reject(res, 404, 'Nenhuma versão encontrada.');
+        versionId = vResult.rows[0].id;
+      } else if (!validUuid(versionId)) {
+        return reject(res, 400, 'versionId inválido.');
+      }
+
+      let category = rawCategory;
+      if (!category) {
+        const dResult = await docPool.query<{ category: string }>(
+          `SELECT category FROM documents
+           WHERE institution_id = $1 AND id = $2`,
+          [context.institutionId, documentId],
+        );
+        if (dResult.rows.length === 0) return reject(res, 404, 'Documento não encontrado.');
+        category = dResult.rows[0].category;
+      }
+
+      const clockTriggerEventAt = rawClockTriggerEventAt
+        ? new Date(rawClockTriggerEventAt)
+        : new Date();
+
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
+
+      const assignRes = await assignRetentionCommand({
+        pool: docPool,
+        context,
+        idempotencyKey,
+        policyEngine: retentionPolicyEngine,
+        input: {
+          documentId,
+          versionId,
+          jurisdictionProfileId: typeof jurisdictionProfileId === 'string' ? jurisdictionProfileId.trim() : 'DEFAULT_JURISDICTION',
+          category,
+          purpose: purpose || null,
+          clockTriggerEventAt,
+          policyId: policyId || undefined,
+          correlationId: req.header('x-correlation-id') || null,
+        },
+      });
+
+      const safeAssignment = {
+        id: assignRes.result.id,
+        documentId: assignRes.result.documentId,
+        versionId: assignRes.result.versionId,
+        policyId: assignRes.result.policyId,
+        policyVersion: assignRes.result.policyVersion,
+        jurisdictionProfileId: assignRes.result.jurisdictionProfileId,
+        category: assignRes.result.category,
+        purpose: assignRes.result.purpose,
+        retainUntil: assignRes.result.retainUntil.toISOString(),
+        retentionStatus: assignRes.result.retentionStatus,
+        clockTriggerType: assignRes.result.clockTriggerType,
+        clockTriggerEventAt: assignRes.result.clockTriggerEventAt.toISOString(),
+        assignedAt: assignRes.result.assignedAt.toISOString(),
+      };
+
+      assertNoInternalSecretsInDto(safeAssignment);
+
+      return res.status(201).json({
+        success: true,
+        retentionAssignment: safeAssignment,
+        replayed: assignRes.replayed,
       });
     } catch (error) {
       return rejectDomainError(res, error);

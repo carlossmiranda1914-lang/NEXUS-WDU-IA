@@ -61,10 +61,15 @@ describe('Real Local E2E Test Suite (Sections 6, 7 & 8)', () => {
     const storageBucket = 'nexus-uat-documents-bucket';
     const malwareScanner = new LocalUatMalwareScanner();
 
+    const config = resolveDocumentsOperationalConfig({
+      customStorageProvider: storageProvider,
+    });
+
     const verificationWorker = new DocumentVerificationWorker({
       pool,
       storageProvider,
       malwareScanner,
+      retentionPolicyEngine: config.retentionPolicyEngine!,
       storageBucket,
       gcpProjectId: 'local-uat-project',
       trustedAuthority: {
@@ -72,10 +77,6 @@ describe('Real Local E2E Test Suite (Sections 6, 7 & 8)', () => {
         workerId: 'local-uat-worker-01',
         workerName: 'Nexus Local UAT Worker',
       },
-    });
-
-    const config = resolveDocumentsOperationalConfig({
-      customStorageProvider: storageProvider,
     });
 
     const authMiddleware: any = (req: any, res: any, next: any) => {
@@ -328,12 +329,14 @@ describe('Real Local E2E Test Suite (Sections 6, 7 & 8)', () => {
   it('Steps 8-10: Canonical verification automatically reaches AVAILABLE and preserves filename', async () => {
     // 8 & 9. Canonical verification triggered automatically & clean file reaches AVAILABLE
     let verifiedVersion: any = null;
+    let verifiedDetail: any = null;
     for (let i = 0; i < 25; i++) {
       const detailRes = await request(`/api/documents/${documentId}`);
       if (detailRes.status === 200) {
         const detail = (await detailRes.json()) as any;
         if (detail.currentVersion?.status === 'available') {
           verifiedVersion = detail.currentVersion;
+          verifiedDetail = detail;
           break;
         }
       }
@@ -344,6 +347,11 @@ describe('Real Local E2E Test Suite (Sections 6, 7 & 8)', () => {
 
     // 10. Original filename preserved
     assert.equal(verifiedVersion.originalFilename, originalFilename, 'Step 10: Original filename must be preserved');
+
+    // Retention operationalization assertion: verified document receives retention assignment
+    assert.ok(verifiedDetail.retention, 'Retention must be assigned upon reaching available status');
+    assert.equal(verifiedDetail.retention.retentionStatus, 'retention_active');
+    assert.equal(verifiedDetail.capabilities.canPlaceHold, true, 'canPlaceHold must be enabled');
   });
 
   it('Steps 11-13: Associations persisted for Academic and Enrollment targets', async () => {

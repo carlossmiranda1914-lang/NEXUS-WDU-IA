@@ -7,6 +7,7 @@ import type {
   UploadSessionDto,
   DocumentVersionDto,
   HoldDto,
+  RetentionDto,
   DocumentTaxonomyDto,
 } from './types.ts';
 
@@ -373,6 +374,38 @@ export async function revokeAccess(
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(data.error || 'Não foi possível revogar a autorização de acesso.');
+  }
+  return data;
+}
+
+export async function assignRetention(
+  documentId: string,
+  params: {
+    versionId?: string;
+    category?: string;
+    jurisdictionProfileId?: string;
+    purpose?: string | null;
+    policyId?: string;
+  },
+  idempotencyKey: string,
+): Promise<{ success: boolean; retentionAssignment: RetentionDto; replayed: boolean }> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/documents/${documentId}/retention`, {
+    method: 'POST',
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey,
+    },
+    body: JSON.stringify({
+      ...params,
+      idempotencyKey,
+    }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Não foi possível atribuir a política de retenção governada.');
   }
   return data;
 }
