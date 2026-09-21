@@ -69,7 +69,6 @@ describe('Real Local E2E Test Suite (Sections 6, 7 & 8)', () => {
       pool,
       storageProvider,
       malwareScanner,
-      retentionPolicyEngine: config.retentionPolicyEngine!,
       storageBucket,
       gcpProjectId: 'local-uat-project',
       trustedAuthority: {
@@ -348,10 +347,10 @@ describe('Real Local E2E Test Suite (Sections 6, 7 & 8)', () => {
     // 10. Original filename preserved
     assert.equal(verifiedVersion.originalFilename, originalFilename, 'Step 10: Original filename must be preserved');
 
-    // Retention operationalization assertion: verified document receives retention assignment
-    assert.ok(verifiedDetail.retention, 'Retention must be assigned upon reaching available status');
-    assert.equal(verifiedDetail.retention.retentionStatus, 'retention_active');
-    assert.equal(verifiedDetail.capabilities.canPlaceHold, true, 'canPlaceHold must be enabled');
+    // Canonical governance truth: verification alone does NOT assign retention
+    assert.equal(verifiedDetail.retention, null, 'Clean verification must not automatically assign retention without governed trigger');
+    assert.equal(verifiedDetail.capabilities.canPlaceHold, false, 'canPlaceHold must be false without assigned retention policy');
+    assert.equal(verifiedDetail.capabilities.canAuthorizeDeletion, false, 'canAuthorizeDeletion must be false without assigned retention policy');
   });
 
   it('Steps 11-13: Associations persisted for Academic and Enrollment targets', async () => {

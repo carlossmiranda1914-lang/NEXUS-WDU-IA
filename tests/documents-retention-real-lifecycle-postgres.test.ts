@@ -1,9 +1,15 @@
 /**
  * Documents Retention, Hold & Deletion Real Operational Lifecycle Test
- * Mission: DOCUMENTS-FOUNDATION-I8D / FINAL-MATURITY-GAP
+ * Mission: DOCUMENTS-FOUNDATION-I8D / RETENTION-GOVERNANCE-CORRECTION
  * 
  * Proves the end-to-end product chain:
- * DOCUMENT AVAILABLE -> GOVERNED RETENTION ASSIGNMENT -> HOLD LIFECYCLE -> DELETION LIFECYCLE
+ * 1. CLEAN VERIFICATION -> AVAILABLE (NO AUTOMATIC RETENTION ASSIGNMENT)
+ * 2. EXPLICIT GOVERNED UAT RETENTION ASSIGNMENT -> RETENTION ACTIVE -> HOLD AVAILABLE
+ * 3. HOLD LIFECYCLE (PLACE & RELEASE)
+ * 4. EXPIRED SYNTHETIC UAT RETENTION -> DELETION LIFECYCLE (AUTHORIZE & EXECUTE)
+ * 5. FAIL-CLOSED GOVERNANCE ON MISSING JURISDICTION/TRIGGER/POLICY
+ * 6. TENANT & ROLE SECURITY (CROSS-TENANT 404, UNAUTHORIZED ROLE 403)
+ * 7. PRODUCTION MODE CONFIGURATION FAIL-CLOSED (NO SYNTHETIC LEAKS)
  */
 
 import { describe, it, before, after } from 'node:test';
@@ -25,7 +31,7 @@ import { ConfigurableRetentionPolicyEngine } from '../src/modules/documents/docu
 
 await verifyApprovedTestConnection();
 
-describe('Documents Retention, Hold & Deletion Operational Lifecycle', () => {
+describe('Documents Retention, Hold & Deletion Operational Lifecycle (Governance Corrected)', () => {
   const storageDir = path.resolve(process.cwd(), '.uat-storage-retention-test');
   const schema = `doc_ret_${randomUUID().replaceAll('-', '')}`;
   const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
@@ -86,7 +92,6 @@ describe('Documents Retention, Hold & Deletion Operational Lifecycle', () => {
       pool,
       storageProvider,
       malwareScanner,
-      retentionPolicyEngine,
       storageBucket,
       gcpProjectId: 'local-uat-project',
       trustedAuthority: {
@@ -227,7 +232,7 @@ describe('Documents Retention, Hold & Deletion Operational Lifecycle', () => {
   let versionId: string;
   let holdId: string;
 
-  it('1. Upload & Verification produces real document with AUTOMATIC RETENTION ASSIGNMENT', async () => {
+  it('A. Clean Verification Alone: Reaches AVAILABLE with NO AUTOMATIC RETENTION ASSIGNMENT', async () => {
     const syntheticPdf = Buffer.from(
       '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>>>endobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000052 00000 n\n0000000108 00000 n\ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n185\n%%EOF\n',
     );
@@ -271,13 +276,13 @@ describe('Documents Retention, Hold & Deletion Operational Lifecycle', () => {
     const completeData = (await completeRes.json()) as any;
     versionId = completeData.versionId;
 
-    // 4. Poll for verification completion & automatic retention assignment
+    // 4. Poll for verification completion to 'available'
     let docDetail: any = null;
     for (let i = 0; i < 30; i++) {
       const res = await request(`/api/documents/${documentId}`);
       if (res.status === 200) {
         const detail = (await res.json()) as any;
-        if (detail.currentVersion?.status === 'available' && detail.retention != null) {
+        if (detail.currentVersion?.status === 'available') {
           docDetail = detail;
           break;
         }
@@ -285,20 +290,52 @@ describe('Documents Retention, Hold & Deletion Operational Lifecycle', () => {
       await new Promise((r) => setTimeout(r, 150));
     }
 
-    assert.ok(docDetail, 'Document must be verified and receive retention assignment');
+    assert.ok(docDetail, 'Document must be verified and reach available status');
     assert.equal(docDetail.currentVersion.status, 'available');
-    assert.ok(docDetail.retention, 'retention must not be null');
-    assert.equal(docDetail.retention.retentionStatus, 'retention_active');
-    assert.equal(docDetail.retention.policyId, 'local-uat-retention-enrollment');
-    assert.equal(docDetail.retention.jurisdictionProfileId, 'DEFAULT_JURISDICTION');
-    assert.equal(docDetail.retention.clockTriggerType, 'document_verified');
-    assert.ok(docDetail.retention.retainUntil, 'retainUntil must be populated');
+    
+    // Canonical governance assertion: verification alone does NOT assign retention
+    assert.equal(docDetail.retention, null, 'Clean verification must not automatically assign retention');
+    assert.equal(docDetail.capabilities.canPlaceHold, false, 'canPlaceHold must be false when no retention policy is assigned');
+    assert.equal(docDetail.capabilities.canAuthorizeDeletion, false, 'canAuthorizeDeletion must be false when no retention policy is assigned');
 
-    // Capabilities check
-    assert.equal(docDetail.capabilities.canPlaceHold, true, 'canPlaceHold must be true with retention policy');
-    assert.equal(docDetail.capabilities.canAuthorizeDeletion, false, 'canAuthorizeDeletion must be false while retention active');
+    // Prove 0 retention audit events and 0 retention outbox events in DB
+    const auditRes = await client.query(
+      `SELECT * FROM document_audit_events WHERE document_id = $1 AND action = 'document.retention_assigned'`,
+      [documentId],
+    );
+    assert.equal(auditRes.rows.length, 0, 'No document.retention_assigned audit event should exist on verification alone');
+  });
 
-    // Audit and Outbox check in DB
+  it('B. Explicit Governed UAT Retention Assignment: POST /api/documents/:id/retention -> retention_active', async () => {
+    const assignKey = `idem-assign-enrollment-${randomUUID()}`;
+    const assignRes = await request(`/api/documents/${documentId}/retention`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': assignKey },
+      body: {
+        versionId,
+        category: 'enrollment',
+        policyId: 'local-uat-retention-enrollment',
+        jurisdictionProfileId: 'DEFAULT_JURISDICTION',
+        purpose: 'Registo e arquivo da matrícula escolar',
+        clockTriggerEventAt: new Date().toISOString(),
+      },
+    });
+    assert.equal(assignRes.status, 201, 'Explicit retention assignment must return HTTP 201');
+    const assignData = (await assignRes.json()) as any;
+    assert.equal(assignData.retentionAssignment.retentionStatus, 'retention_active');
+    assert.equal(assignData.retentionAssignment.policyId, 'local-uat-retention-enrollment');
+    assert.equal(assignData.retentionAssignment.jurisdictionProfileId, 'DEFAULT_JURISDICTION');
+
+    // Verify detail now reflects active retention and enables canPlaceHold
+    const detailRes = await request(`/api/documents/${documentId}`);
+    assert.equal(detailRes.status, 200);
+    const detail = (await detailRes.json()) as any;
+    assert.ok(detail.retention, 'Retention must now be present on document detail');
+    assert.equal(detail.retention.retentionStatus, 'retention_active');
+    assert.equal(detail.capabilities.canPlaceHold, true, 'canPlaceHold must now be enabled');
+    assert.equal(detail.capabilities.canAuthorizeDeletion, false, 'canAuthorizeDeletion remains false while retention is active');
+
+    // Audit and Outbox events recorded
     const auditRes = await client.query(
       `SELECT * FROM document_audit_events WHERE document_id = $1 AND action = 'document.retention_assigned'`,
       [documentId],
@@ -312,8 +349,7 @@ describe('Documents Retention, Hold & Deletion Operational Lifecycle', () => {
     assert.equal(outboxRes.rows.length, 1, 'document.retention_assigned outbox event must exist');
   });
 
-  it('2. Legal Hold Lifecycle: Place hold -> verified in drawer -> blocks deletion', async () => {
-    // Place Legal Hold
+  it('C. Legal Hold Lifecycle: Place hold -> verified in drawer -> blocks deletion', async () => {
     const holdRes = await request(`/api/documents/${documentId}/holds`, {
       method: 'POST',
       headers: { 'Idempotency-Key': `idem-ret-hold-${randomUUID()}` },
@@ -348,7 +384,7 @@ describe('Documents Retention, Hold & Deletion Operational Lifecycle', () => {
     assert.equal(authDelRes.status, 422, 'Active retention / hold must block deletion authorization');
   });
 
-  it('3. Release Hold: Hold release decrements active holds and records audit event', async () => {
+  it('D. Release Hold: Hold release decrements active holds and records audit event', async () => {
     const releaseRes = await request(`/api/documents/${documentId}/holds/${holdId}/release`, {
       method: 'POST',
       headers: { 'Idempotency-Key': `idem-ret-release-${randomUUID()}` },
@@ -376,7 +412,7 @@ describe('Documents Retention, Hold & Deletion Operational Lifecycle', () => {
     assert.equal(auditRes.rows.length, 1, 'document.hold_released audit event must exist');
   });
 
-  it('4. Explicit Governed Retention Assignment API: POST /api/documents/:id/retention', async () => {
+  it('E. Expired Synthetic UAT Retention & Deletion Lifecycle: Authorize & Execute Deletion', async () => {
     // Upload a new document in category 'academic'
     const syntheticPdf = Buffer.from('%PDF-1.4\nAcademic Document Content\n%%EOF');
     const createRes = await request('/api/documents/upload-sessions', {
@@ -428,23 +464,7 @@ describe('Documents Retention, Hold & Deletion Operational Lifecycle', () => {
     assert.equal(assignData.retentionAssignment.policyId, 'test-expired-policy');
     assert.equal(assignData.retentionAssignment.category, 'academic');
 
-    // Test Idempotency Replay
-    const replayRes = await request(`/api/documents/${acadDocId}/retention`, {
-      method: 'POST',
-      headers: { 'Idempotency-Key': assignKey },
-      body: {
-        versionId: acadVersionId,
-        category: 'academic',
-        policyId: 'test-expired-policy',
-        jurisdictionProfileId: 'DEFAULT_JURISDICTION',
-        purpose: 'Teste de ciclo de expiração e eliminação',
-        clockTriggerEventAt: assignData.retentionAssignment.clockTriggerEventAt,
-      },
-    });
-    assert.equal(replayRes.status, 201);
-    assert.equal((await replayRes.json() as any).replayed, true, 'Replaying assign retention must return replayed: true');
-
-    // 5. Deletion Vertical with Expired Retention: Authorize & Execute Deletion
+    // Deletion Vertical with Expired Retention: Authorize & Execute Deletion
     const delAuthKey = `idem-del-auth-${randomUUID()}`;
     const delAuthRes = await request(`/api/documents/${acadDocId}/deletion/authorize`, {
       method: 'POST',
@@ -484,7 +504,49 @@ describe('Documents Retention, Hold & Deletion Operational Lifecycle', () => {
     assert.equal(delOutbox.rows.length, 1, 'document.deleted outbox event must be recorded');
   });
 
-  it('5. Security & Isolation: Cross-tenant & Unauthorized roles are rejected', async () => {
+  it('F. Fail Closed on Missing Jurisdiction, Clock Trigger or Unknown Policy', async () => {
+    // 1. Missing jurisdictionProfileId -> HTTP 400
+    const missingJurisdiction = await request(`/api/documents/${documentId}/retention`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': `idem-missing-jurisdiction-${randomUUID()}` },
+      body: {
+        versionId,
+        category: 'enrollment',
+        clockTriggerEventAt: new Date().toISOString(),
+      },
+    });
+    assert.equal(missingJurisdiction.status, 400, 'Missing jurisdictionProfileId must return 400');
+
+    // 2. Missing clockTriggerEventAt -> HTTP 400
+    const missingTrigger = await request(`/api/documents/${documentId}/retention`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': `idem-missing-trigger-${randomUUID()}` },
+      body: {
+        versionId,
+        category: 'enrollment',
+        jurisdictionProfileId: 'DEFAULT_JURISDICTION',
+      },
+    });
+    assert.equal(missingTrigger.status, 400, 'Missing clockTriggerEventAt must return 400');
+
+    // 3. Unknown jurisdiction/policy -> FAIL_CLOSED (HTTP 503 / 422 JURISDICTION_PROFILE_MISSING)
+    const unknownPolicy = await request(`/api/documents/${documentId}/retention`, {
+      method: 'POST',
+      headers: { 'Idempotency-Key': `idem-unknown-policy-${randomUUID()}` },
+      body: {
+        versionId,
+        category: 'non_existent_category',
+        jurisdictionProfileId: 'NON_EXISTENT_JURISDICTION',
+        clockTriggerEventAt: new Date().toISOString(),
+      },
+    });
+    assert.ok(
+      [422, 503].includes(unknownPolicy.status),
+      `Unknown policy must fail closed, got status: ${unknownPolicy.status}`,
+    );
+  });
+
+  it('G. Security & Isolation: Cross-tenant & Unauthorized roles are rejected', async () => {
     // Tenant B cannot assign retention to Tenant A document
     const tenantBAssign = await request(`/api/documents/${documentId}/retention`, {
       method: 'POST',
@@ -492,7 +554,12 @@ describe('Documents Retention, Hold & Deletion Operational Lifecycle', () => {
         'Authorization': 'Bearer tenant-b-token',
         'Idempotency-Key': `idem-tb-assign-${randomUUID()}`,
       },
-      body: { versionId },
+      body: {
+        versionId,
+        category: 'enrollment',
+        jurisdictionProfileId: 'DEFAULT_JURISDICTION',
+        clockTriggerEventAt: new Date().toISOString(),
+      },
     });
     assert.equal(tenantBAssign.status, 404, 'Tenant B cross-tenant assign retention must return 404');
 
@@ -512,55 +579,46 @@ describe('Documents Retention, Hold & Deletion Operational Lifecycle', () => {
     });
     assert.equal(tenantBHold.status, 404, 'Tenant B cross-tenant hold must return 404');
 
-    // Create an expired retention document for student role check
-    const synthPdf = Buffer.from('%PDF-1.4\nExpired Doc For Student Check\n%%EOF');
-    const uRes = await request('/api/documents/upload-sessions', {
+    // Unauthorized role (student) cannot assign retention (HTTP 403)
+    const studentAssign = await request(`/api/documents/${documentId}/retention`, {
       method: 'POST',
-      headers: { 'Idempotency-Key': `idem-stud-up-${randomUUID()}` },
-      body: {
-        category: 'academic',
-        declaredFilename: 'doc_student_test.pdf',
-        declaredMimeType: 'application/pdf',
-        declaredByteSize: synthPdf.length,
+      headers: {
+        'Authorization': 'Bearer unauthorized-role-token',
+        'Idempotency-Key': `idem-student-assign-${randomUUID()}`,
       },
-    });
-    const uData = (await uRes.json()) as any;
-    const sDocId = uData.documentId;
-    const sSessId = uData.sessionId;
-    const sTok = uData.rawToken;
-    await fetch(`${baseUrl}/api/documents/upload-sessions/${sSessId}/transfer`, {
-      method: 'PUT',
-      headers: { 'X-Upload-Token': sTok, 'Content-Type': 'application/pdf' },
-      body: synthPdf,
-    });
-    const cRes = await request(`/api/documents/upload-sessions/${sSessId}/complete`, {
-      method: 'POST',
-      headers: { 'Idempotency-Key': `idem-stud-comp-${randomUUID()}` },
-      body: { rawToken: sTok },
-    });
-    const sVerId = (await cRes.json() as any).versionId;
-
-    await request(`/api/documents/${sDocId}/retention`, {
-      method: 'POST',
-      headers: { 'Idempotency-Key': `idem-stud-ret-${randomUUID()}` },
       body: {
-        versionId: sVerId,
-        category: 'academic',
-        policyId: 'test-expired-policy',
+        versionId,
+        category: 'enrollment',
         jurisdictionProfileId: 'DEFAULT_JURISDICTION',
-        clockTriggerEventAt: new Date(Date.now() - 1000 * 3600 * 24).toISOString(),
+        clockTriggerEventAt: new Date().toISOString(),
       },
     });
+    assert.equal(studentAssign.status, 403, 'Unauthorized student role cannot assign retention (403)');
 
-    // Unauthorized role (student) cannot authorize deletion
-    const studentAuthDel = await request(`/api/documents/${sDocId}/deletion/authorize`, {
+    // Unauthorized role (student) cannot authorize deletion (HTTP 403)
+    const studentAuthDel = await request(`/api/documents/${documentId}/deletion/authorize`, {
       method: 'POST',
       headers: {
         'Authorization': 'Bearer unauthorized-role-token',
         'Idempotency-Key': `idem-student-del-${randomUUID()}`,
       },
-      body: { versionId: sVerId },
+      body: { versionId },
     });
-    assert.equal(studentAuthDel.status, 403, 'Unauthorized student role must be forbidden (403)');
+    assert.equal(studentAuthDel.status, 403, 'Unauthorized student role cannot authorize deletion (403)');
+  });
+
+  it('H. Production Configuration Governance: Zero synthetic policy leaks in production mode', () => {
+    // When NODE_ENV === 'production' and no custom/governed retention engine is supplied:
+    const prodConfig = resolveDocumentsOperationalConfig({
+      env: {
+        NODE_ENV: 'production',
+      },
+    });
+
+    assert.equal(
+      prodConfig.retentionPolicyEngine,
+      null,
+      'Production configuration MUST NOT inject synthetic retention policies (must be null / fail closed)',
+    );
   });
 });

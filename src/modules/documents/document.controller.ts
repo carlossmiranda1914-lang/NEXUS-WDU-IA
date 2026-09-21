@@ -333,7 +333,6 @@ export function registerDocumentRoutes(
         pool: docPool,
         storageProvider,
         malwareScanner,
-        retentionPolicyEngine: retentionPolicyEngine ?? undefined,
         storageBucket,
         gcpProjectId: process.env.GOOGLE_CLOUD_PROJECT || 'nexus-wdu-staging',
         trustedAuthority: {
@@ -1291,6 +1290,12 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    // Enforce role authorization
+    const isManager = ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(context.role);
+    if (!isManager) {
+      return reject(res, 403, 'Apenas administradores podem atribuir políticas de retenção.', 'AUTHORIZATION_DENIED');
+    }
+
     if (!retentionPolicyEngine) {
       return rejectDomainError(res, new Error('RETENTION_POLICY_ENGINE_MISSING'));
     }
@@ -1301,11 +1306,24 @@ export function registerDocumentRoutes(
     const {
       versionId: rawVersionId,
       category: rawCategory,
-      jurisdictionProfileId = 'DEFAULT_JURISDICTION',
+      jurisdictionProfileId,
       purpose,
       clockTriggerEventAt: rawClockTriggerEventAt,
       policyId,
     } = req.body || {};
+
+    if (!jurisdictionProfileId || typeof jurisdictionProfileId !== 'string' || !jurisdictionProfileId.trim()) {
+      return reject(res, 400, 'jurisdictionProfileId é obrigatório e não pode ser vazio.');
+    }
+
+    if (!rawClockTriggerEventAt) {
+      return reject(res, 400, 'clockTriggerEventAt é obrigatório.');
+    }
+
+    const clockTriggerEventAt = new Date(rawClockTriggerEventAt);
+    if (Number.isNaN(clockTriggerEventAt.getTime())) {
+      return reject(res, 400, 'clockTriggerEventAt data inválida.');
+    }
 
     try {
       let versionId = rawVersionId;
@@ -1333,10 +1351,6 @@ export function registerDocumentRoutes(
         category = dResult.rows[0].category;
       }
 
-      const clockTriggerEventAt = rawClockTriggerEventAt
-        ? new Date(rawClockTriggerEventAt)
-        : new Date();
-
       const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
       if (idempotencyKey === null) return res;
 
@@ -1348,7 +1362,7 @@ export function registerDocumentRoutes(
         input: {
           documentId,
           versionId,
-          jurisdictionProfileId: typeof jurisdictionProfileId === 'string' ? jurisdictionProfileId.trim() : 'DEFAULT_JURISDICTION',
+          jurisdictionProfileId: jurisdictionProfileId.trim(),
           category,
           purpose: purpose || null,
           clockTriggerEventAt,
@@ -1389,6 +1403,11 @@ export function registerDocumentRoutes(
   app.post('/api/documents/:id/holds', docAuth, async (req: AuthRequest, res: Response) => {
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    const isManager = ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(context.role);
+    if (!isManager) {
+      return reject(res, 403, 'Apenas administradores podem colocar bloqueios.', 'AUTHORIZATION_DENIED');
+    }
 
     if (!retentionPolicyEngine) {
       return rejectDomainError(res, new Error('RETENTION_POLICY_ENGINE_MISSING'));
@@ -1468,6 +1487,11 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    const isManager = ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(context.role);
+    if (!isManager) {
+      return reject(res, 403, 'Apenas administradores podem libertar bloqueios.', 'AUTHORIZATION_DENIED');
+    }
+
     if (!retentionPolicyEngine) {
       return rejectDomainError(res, new Error('RETENTION_POLICY_ENGINE_MISSING'));
     }
@@ -1543,6 +1567,11 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    const isManager = ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(context.role);
+    if (!isManager) {
+      return reject(res, 403, 'Apenas administradores podem autorizar a eliminação.', 'AUTHORIZATION_DENIED');
+    }
+
     if (!retentionPolicyEngine) {
       return rejectDomainError(res, new Error('RETENTION_POLICY_ENGINE_MISSING'));
     }
@@ -1597,6 +1626,11 @@ export function registerDocumentRoutes(
   app.post('/api/documents/:id/deletion/execute', docAuth, async (req: AuthRequest, res: Response) => {
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    const isManager = ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(context.role);
+    if (!isManager) {
+      return reject(res, 403, 'Apenas administradores podem executar a eliminação.', 'AUTHORIZATION_DENIED');
+    }
 
     if (!deletionPseudonymizationKey) {
       return rejectDomainError(res, new Error('DELETION_PSEUDONYMIZATION_KEY_MISSING'));

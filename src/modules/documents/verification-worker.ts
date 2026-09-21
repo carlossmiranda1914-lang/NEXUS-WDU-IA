@@ -11,9 +11,6 @@ import { ClamAvMalwareScanner } from './clamav-malware-scanner.ts';
 import { ContentTypeDetector } from './content-type-detector.ts';
 import type { MalwareScanner } from './malware-scanner.ts';
 import type { ObjectStorageProvider } from './object-storage-provider.ts';
-import type { RetentionPolicyEngine } from './document-retention-policy.ts';
-import { assignRetentionCommand } from './document-retention-command.ts';
-import { PostgresDocumentRepository } from './document-repository.ts';
 
 export interface TrustedWorkerAuthority {
   readonly kind: 'trusted_system_worker';
@@ -35,7 +32,6 @@ export interface VerificationWorkerOptions {
   trustedAuthority: TrustedWorkerAuthority;
   storageProvider?: ObjectStorageProvider;
   malwareScanner?: MalwareScanner;
-  retentionPolicyEngine?: RetentionPolicyEngine;
   storageBucket?: string;
   gcpProjectId?: string;
   clamavHost?: string;
@@ -65,7 +61,6 @@ export class DocumentVerificationWorker {
   private readonly storageProvider: ObjectStorageProvider;
   private readonly malwareScanner: MalwareScanner;
   private readonly contentTypeDetector: ContentTypeDetector;
-  private readonly retentionPolicyEngine?: RetentionPolicyEngine;
 
   constructor(options: VerificationWorkerOptions) {
     if (
@@ -79,7 +74,6 @@ export class DocumentVerificationWorker {
     }
     this.trustedAuthority = options.trustedAuthority;
     this.pool = options.pool;
-    this.retentionPolicyEngine = options.retentionPolicyEngine;
 
     const bucket = options.storageBucket || process.env.DOCUMENTS_STORAGE_BUCKET;
     if (!bucket && !options.storageProvider) {
@@ -219,49 +213,6 @@ export class DocumentVerificationWorker {
         },
       },
     });
-
-    if (
-      pipelineResult.result.versionStatus === 'available' &&
-      this.retentionPolicyEngine
-    ) {
-      try {
-        const docRepo = new PostgresDocumentRepository();
-        const doc = await docRepo.getDocumentById(
-          this.pool as any,
-          job.institutionId,
-          job.documentId,
-        );
-        if (doc) {
-          await assignRetentionCommand({
-            pool: this.pool,
-            context: {
-              institutionId: inst.id,
-              institutionName: inst.name,
-              institutionSlug: inst.slug,
-              role: 'system',
-              personId,
-              identityEmail,
-              membershipId,
-            } as any,
-            idempotencyKey: `retention-assign:${job.institutionId}:${job.documentId}:${job.versionId}`,
-            policyEngine: this.retentionPolicyEngine,
-            input: {
-              documentId: job.documentId,
-              versionId: job.versionId,
-              jurisdictionProfileId: 'DEFAULT_JURISDICTION',
-              category: doc.category,
-              clockTriggerEventAt: new Date(),
-              correlationId: null,
-            },
-          });
-        }
-      } catch (retentionErr) {
-        console.warn(
-          `[RETENTION_ASSIGNMENT] Verification completed; retention assignment not applied:`,
-          (retentionErr as Error)?.message || retentionErr,
-        );
-      }
-    }
 
     return pipelineResult;
   }
