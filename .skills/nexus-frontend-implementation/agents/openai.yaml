@@ -1,0 +1,6 @@
+interface:
+  display_name: "Nexus Frontend Implementation"
+  short_description: "Implementa frontend Nexus com plano, contexto, gates e product truth."
+  default_prompt: "Use $nexus-frontend-implementation para implementar esta superfície Nexus sem fugir do plano aprovado."
+policy:
+  allow_implicit_invocation: true
