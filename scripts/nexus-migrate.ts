@@ -5,6 +5,10 @@ import pg from 'pg';
 import { discoverMigrations, runMigrations } from '../src/db/migration-runner.ts';
 
 dotenv.config();
+if (process.env.TEST_DATABASE_LOCAL_AUTHORIZED === 'true') {
+  const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
+  dotenv.config({ path: path.resolve(currentDirectory, '../.env.test.local'), override: true, quiet: true });
+}
 
 const targetArgument = process.argv.find((argument) => argument.startsWith('--target='));
 const targetName = targetArgument?.slice('--target='.length) || 'DATABASE_URL';

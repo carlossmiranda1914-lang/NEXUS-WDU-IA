@@ -6,6 +6,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
+import type { DocumentExecutionContext } from './verification-worker.ts';
 import type {
   DocumentTechnicalVerification,
   DocumentTechnicalAssessment,
@@ -76,7 +77,7 @@ const outboxRepo = new PostgresDocumentOutboxRepository();
 
 export async function startTechnicalVerificationCommand(params: {
   pool: Pool;
-  context: InstitutionalContext;
+  context: DocumentExecutionContext;
   idempotencyKey: string;
   input: StartVerificationInput;
 }): Promise<{ replayed: boolean; result: DocumentTechnicalVerification }> {
@@ -146,7 +147,7 @@ export async function startTechnicalVerificationCommand(params: {
 
 export async function recordTechnicalAssessmentCommand(params: {
   pool: Pool;
-  context: InstitutionalContext;
+  context: DocumentExecutionContext;
   idempotencyKey: string;
   input: RecordAssessmentInput;
 }): Promise<{ replayed: boolean; result: DocumentTechnicalAssessment }> {
@@ -322,7 +323,7 @@ export async function recordTechnicalAssessmentCommand(params: {
 
 export async function finalizeTechnicalVerificationCommand(params: {
   pool: Pool;
-  context: InstitutionalContext;
+  context: DocumentExecutionContext;
   idempotencyKey: string;
   input: FinalizeVerificationInput;
 }): Promise<{ replayed: boolean; result: { verification: DocumentTechnicalVerification; evaluation: VerificationEvaluationResult } }> {
@@ -569,7 +570,7 @@ export async function finalizeTechnicalVerificationCommand(params: {
  */
 export async function executeTechnicalVerificationPipelineCommand(params: {
   pool: Pool;
-  context: InstitutionalContext;
+  context: DocumentExecutionContext;
   idempotencyKey: string;
   input: ExecutePipelineInput;
 }): Promise<{ replayed: boolean; result: PipelineExecutionResult }> {

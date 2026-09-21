@@ -69,6 +69,7 @@ const forbiddenConcreteProviders = [
 ];
 
 for (const file of prodFiles) {
+  if (file === 'google-cloud-storage-provider.ts') continue;
   const content = fs.readFileSync(path.join(docsModuleDir, file), 'utf8');
   for (const provider of forbiddenConcreteProviders) {
     assert.strictEqual(

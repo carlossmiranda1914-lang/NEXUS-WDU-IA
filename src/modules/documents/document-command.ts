@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
+import type { DocumentExecutionContext } from './verification-worker.ts';
 import type {
   DocumentRecord,
   DocumentVersionRecord,
@@ -138,7 +139,7 @@ export function createAppendVersionFingerprint(
 
 export async function executeIdempotentDocumentsCommand<T>(input: {
   pool: Pool;
-  context: InstitutionalContext;
+  context: DocumentExecutionContext;
   identity: DocumentsCommandIdentity;
   execute: (client: PoolClient) => Promise<{ resultRef: string; result: T }>;
   loadResult: (client: PoolClient, resultRef: string) => Promise<T>;

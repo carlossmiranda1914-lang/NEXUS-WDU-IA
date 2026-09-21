@@ -155,7 +155,7 @@ async function generateContentWithRetry(
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Vite injects a small inline module to enable React Refresh in local
   // development. The production CSP remains enabled; only the development
@@ -541,6 +541,33 @@ async function startServer() {
       return res.status(500).json({ error: 'Não foi possível resolver os educandos autorizados.' });
     }
   });
+
+  // UAT Runtime Identity — LOCAL / DEV ONLY
+  // Registered ONLY when: NODE_ENV !== 'production' AND NEXUS_UAT_HARNESS_TOKEN is set.
+  // Purpose: allows the Local UAT Harness to prove that this runtime matches the
+  //          expected worktree + branch + HEAD before handing control to the Product Owner.
+  // Security: double-guarded; token compared with timingSafeEqual; no secrets exposed.
+  // Production: this block is entirely skipped — the route does not exist in production.
+  if (process.env.NODE_ENV !== 'production' && process.env.NEXUS_UAT_HARNESS_TOKEN) {
+    const _uatTokenBuf = Buffer.from(process.env.NEXUS_UAT_HARNESS_TOKEN, 'utf8');
+    app.get('/api/uat-identity', (req: any, res: any) => {
+      const supplied    = req.headers['x-nexus-uat-token'];
+      const suppliedBuf = Buffer.from(typeof supplied === 'string' ? supplied : '', 'utf8');
+      if (
+        suppliedBuf.length !== _uatTokenBuf.length ||
+        !crypto.timingSafeEqual(suppliedBuf, _uatTokenBuf)
+      ) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      return res.json({
+        worktree:   process.env.NEXUS_UAT_WORKTREE_PATH  ?? null,
+        branch:     process.env.NEXUS_UAT_BRANCH          ?? null,
+        head:       process.env.NEXUS_UAT_HEAD            ?? null,
+        nodeEnv:    process.env.NODE_ENV,
+        startedAt:  process.env.NEXUS_UAT_STARTED_AT      ?? null,
+      });
+    });
+  }
 
   // Real-time Platform Status DevOps API
   app.get('/api/platform-status', requireAuth, async (req, res) => {
@@ -2355,421 +2382,16 @@ async function startServer() {
     }
   });
 
-  // 8. Documents Storage & Intelligent OCR API
-  app.get('/api/documents', requireAuth, async (req: AuthRequest, res) => {
-    return res.status(503).json({ code: 'CANONICAL_DOCUMENT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de documentos ainda não está disponível.' });
-    try {
-      const role = req.user?.dbRole;
-      let records = await db.select().from(uploadedDocuments).orderBy(uploadedDocuments.id);
-      records = await scopeLegacyRecordsToInstitution(req, 'document', records);
-
-      // Enforce strict data isolation for documents in backend
-      if (role === 'student' || role === 'parent') {
-        // Legacy documents are not yet mapped to a person and institution.
-        // Empty is safer than exposing an unverified document.
-        records = [];
-      } else if (role === 'teacher') {
-        // Teachers see only pedagogical documents of students from their designated classes
-        const teacherProfile = await db.select().from(teachers).where(eq(teachers.email, req.user.email)).limit(1);
-        if (teacherProfile.length > 0 && Array.isArray(teacherProfile[0].classes)) {
-          const assignedClasses = teacherProfile[0].classes as string[];
-          const tStudents = await db.select().from(students);
-          const allowedStudentNames = tStudents
-            .filter(s => assignedClasses.includes(s.class))
-            .map(s => s.name.toLowerCase());
-          
-          records = records.filter(d => {
-            const nameLower = d.name.toLowerCase();
-            const isFinancial = d.category?.toLowerCase().includes('finança') || 
-                                d.category?.toLowerCase().includes('invoice') || 
-                                d.category?.toLowerCase().includes('recibo') ||
-                                d.category?.toLowerCase().includes('pagamento');
-            if (isFinancial) return false;
-
-            const detailsStr = d.extractedDetails ? JSON.stringify(d.extractedDetails).toLowerCase() : '';
-            return allowedStudentNames.some(sName => 
-              nameLower.includes(sName) || detailsStr.includes(sName)
-            ) || nameLower.includes('pauta') || nameLower.includes('horário') || nameLower.includes('aula');
-          });
-        } else {
-          // No verified teacher profile means no document visibility.
-          records = [];
-        }
-      } else if (role === 'financial') {
-        // Financial cannot visualize student grade reports or behavioral records
-        records = records.filter(d => 
-          !d.name.toLowerCase().includes('avaliação') && 
-          !d.name.toLowerCase().includes('pauta') && 
-          !d.name.toLowerCase().includes('diário') && 
-          !d.name.toLowerCase().includes('pedagógica')
-        );
-      } else if (role === 'secretariat') {
-        // Secretariat cannot see advanced financial sheets 
-        records = records.filter(d => 
-          !d.category?.toLowerCase().includes('balanço') && 
-          !d.name.toLowerCase().includes('demonstração de resultados') &&
-          !d.name.toLowerCase().includes('salários') &&
-          !d.name.toLowerCase().includes('lucro')
-        );
-      }
-
-      res.json(records);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post('/api/documents', requireAuth, authorizeRole(['admin', 'director', 'secretariat', 'financial']), async (req: AuthRequest, res) => {
-    return res.status(503).json({ code: 'CANONICAL_DOCUMENT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de documentos ainda não está disponível.' });
-    const { name, base64, size } = req.body;
-    if (!name) return res.status(400).json({ error: 'Falta o nome do ficheiro.' });
-
-    try {
-      // 1. Save document inside Postgres in 'Processing' status
-      const ext = name.split('.').pop() || 'unknown';
-      const type = ext.toUpperCase();
-
-      const inserted = await db.insert(uploadedDocuments).values({
-        name,
-        type,
-        size: size || '45 KB',
-        url: `/api/documents/download?file=${encodeURIComponent(name)}`,
-        status: 'Processing',
-        category: 'Indentificando...'
-      }).returning();
-
-      const docId = inserted[0].id;
-      await db.insert(institutionResourceOwnership).values({
-        institutionId: req.institutionalContext!.institutionId,
-        resourceType: 'document',
-        resourceId: String(docId),
-      });
-
-      // 2. Real OCR Analysis using Gemini AI (if available) with local fallback OCR engine!
-      let category = 'Unassigned';
-      let extractedDetails: any = {
-        student_name: 'Não Identificado',
-        class: 'Não Identificada',
-        guardian_name: 'Não Identificado',
-        contact: 'Não Identificado',
-        status: 'Review',
-        amount_paid: 0,
-        missing_docs: ['Contrato de Matrícula', 'CC do Aluno', 'Boletim de Vacinas']
-      };
-
-      if (ai) {
-        try {
-          const promptAnalysis = `Foco Escolar: Analise as metainformações, texto ou conteúdo deste ficheiro letivo. Nome do ficheiro: "${name}".
-          Determine a categoria correta do documento escolhendo EXATAMENTE uma das seguintes opções:
-          'Contrato de Matrícula', 'CC do Aluno', 'Boletim de Vacinas', 'CC do Responsável', 'Comprovativo de Pagamento', 'Outros'.
-          
-          Extraia de forma inteligente as seguintes chaves em formato JSON nítido (não inclua markdown de bloco do tipo \`\`\`json, apenas o JSON):
-          {
-            "category": "Contrato de Matrícula" ou outra das categorias acima,
-            "extractedDetails": {
-              "student_name": "Nome do aluno identificado (ex: 'Alice Siqueira', 'Bruno Medeiros' ou 'Eduarda Couto' caso detetado)",
-              "class": "Turma identificada (ex: '9º Ano A', '8º Ano B', '10º Ano A' ou 'Não identificada')",
-              "guardian_name": "Nome do encarregado de educação",
-              "contact": "Contacto telefónico extraído",
-              "status": "Approved" ou "Review",
-              "amount_paid": número com valor pago detectado se for comprovativo de pagamento (ex: 150),
-              "missing_docs": ["lista", "de", "documentos", "pendentes", "que", "faltam", "ao", "aluno"]
-            }
-          }`;
-
-          const parts: any[] = [];
-          if (base64) {
-            let mimeType = 'application/pdf';
-            let dataPart = base64;
-            if (base64.includes(';base64,')) {
-              const splitParts = base64.split(';base64,');
-              mimeType = splitParts[0].replace('data:', '');
-              dataPart = splitParts[1];
-            }
-            
-            // Check if MIME type is natively supported as inlineData by Gemini to avoid 400 Bad Request
-            const supportedPrefixes = ['image/', 'audio/', 'video/', 'text/'];
-            const supportedSpecific = [
-              'application/pdf',
-              'application/json',
-              'application/xml',
-              'application/x-javascript',
-              'application/javascript',
-            ];
-            const isSupported = supportedSpecific.includes(mimeType) || supportedPrefixes.some(pref => mimeType.startsWith(pref));
-
-            if (isSupported) {
-              parts.push({
-                inlineData: {
-                  mimeType,
-                  data: dataPart
-                }
-              });
-            } else {
-              console.log(`[GEMINI] Skipping inlineData payload for mimeType: ${mimeType} (Unsupported binary document type). Fallback to standard metadata evaluation using filenames and text prompt description.`);
-            }
-          }
-          parts.push({ text: promptAnalysis });
-
-          const response = await generateContentWithRetry(ai, {
-            model: 'gemini-2.5-flash',
-            contents: { parts },
-          });
-
-          const rawText = response.text || '{}';
-          const cleanJSONString = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-          try {
-            const parsed = JSON.parse(cleanJSONString);
-            category = parsed.category || 'Outros';
-            extractedDetails = {
-              ...extractedDetails,
-              ...parsed.extractedDetails
-            };
-          } catch (e) {
-            // regex fallback if json fails to parse
-            if (name.toLowerCase().includes('contrato')) {
-              category = 'Contrato de Matrícula';
-            } else if (name.toLowerCase().includes('vacina') || name.toLowerCase().includes('boletim')) {
-              category = 'Boletim de Vacinas';
-            } else if (name.toLowerCase().includes('comprovativo') || name.toLowerCase().includes('pagamento') || name.toLowerCase().includes('fat')) {
-              category = 'Comprovativo de Pagamento';
-            } else {
-              category = 'CC do Aluno';
-            }
-          }
-        } catch (gem_err) {
-          console.error('[OCR-AI-FAILURE] Real Gemini OCR analysis failed, using fallback rules:', gem_err);
-          // High-fidelity local smart routing as fallback
-          if (name.toLowerCase().includes('contrato')) {
-            category = 'Contrato de Matrícula';
-            extractedDetails = {
-              student_name: 'Alice Siqueira',
-              class: '9º Ano A',
-              guardian_name: 'Marcos Siqueira',
-              contact: '+351 912 345 678',
-              status: 'Approved',
-              amount_paid: 0,
-              missing_docs: ['CC do Aluno', 'Boletim de Vacinas']
-            };
-          } else if (name.toLowerCase().includes('vacina') || name.toLowerCase().includes('boletim')) {
-            category = 'Boletim de Vacinas';
-            extractedDetails = {
-              student_name: 'Bruno Medeiros',
-              class: '8º Ano B',
-              guardian_name: 'Sandra Medeiros',
-              contact: '+351 913 222 111',
-              status: 'Approved',
-              amount_paid: 0,
-              missing_docs: ['Contrato de Matrícula', 'CC do Aluno']
-            };
-          } else if (name.toLowerCase().includes('comprovativo') || name.toLowerCase().includes('pagamento') || name.toLowerCase().includes('fat')) {
-            category = 'Comprovativo de Pagamento';
-            extractedDetails = {
-              student_name: 'Alice Siqueira',
-              class: '9º Ano A',
-              guardian_name: 'Marcos Siqueira',
-              contact: '+351 912 345 678',
-              status: 'Approved',
-              amount_paid: 150,
-              missing_docs: []
-            };
-          } else {
-            category = 'CC do Aluno';
-            extractedDetails = {
-              student_name: 'Eduarda Couto',
-              class: '10º Ano A',
-              guardian_name: 'Margarida Couto',
-              contact: '+351 915 555 444',
-              status: 'Approved',
-              amount_paid: 0,
-              missing_docs: ['Boletim de Vacinas']
-            };
-          }
-        }
-      } else {
-        // High-fidelity self healing local parsing when no AI exists
-        if (name.toLowerCase().includes('contrato')) {
-          category = 'Contrato de Matrícula';
-          extractedDetails = {
-            student_name: 'Alice Siqueira',
-            class: '9º Ano A',
-            guardian_name: 'Marcos Siqueira',
-            contact: '+351 912 345 678',
-            status: 'Approved',
-            amount_paid: 0,
-            missing_docs: ['CC do Aluno', 'Boletim de Vacinas']
-          };
-        } else if (name.toLowerCase().includes('vacina') || name.toLowerCase().includes('boletim')) {
-          category = 'Boletim de Vacinas';
-          extractedDetails = {
-            student_name: 'Bruno Medeiros',
-            class: '8º Ano B',
-            guardian_name: 'Sandra Medeiros',
-            contact: '+351 913 222 111',
-            status: 'Approved',
-            amount_paid: 0,
-            missing_docs: ['Contrato de Matrícula', 'CC do Aluno']
-          };
-        } else if (name.toLowerCase().includes('comprovativo') || name.toLowerCase().includes('pagamento') || name.toLowerCase().includes('fat')) {
-          category = 'Comprovativo de Pagamento';
-          extractedDetails = {
-            student_name: 'Alice Siqueira',
-            class: '9º Ano A',
-            guardian_name: 'Marcos Siqueira',
-            contact: '+351 912 345 678',
-            status: 'Approved',
-            amount_paid: 150,
-            missing_docs: []
-          };
-        } else if (name.toLowerCase().includes('cc') || name.toLowerCase().includes('identid')) {
-          category = 'CC do Aluno';
-          extractedDetails = {
-            student_name: 'Eduarda Couto',
-            class: '10º Ano A',
-            guardian_name: 'Margarida Couto',
-            contact: '+351 915 555 444',
-            status: 'Approved',
-            amount_paid: 0,
-            missing_docs: ['Boletim de Vacinas']
-          };
-        } else {
-          category = 'Documento Geral';
-          extractedDetails = {
-            student_name: 'Alice Siqueira',
-            class: '9º Ano A',
-            guardian_name: 'Marcos Siqueira',
-            contact: '+351 912 345 678',
-            status: 'Approved',
-            amount_paid: 0,
-            missing_docs: []
-          };
-        }
-      }
-
-      // Automatically execute Payment settlement in Postgres if identified as a comprovativo
-      if (category === 'Comprovativo de Pagamento' && extractedDetails?.student_name) {
-        try {
-          const studentName = extractedDetails.student_name;
-          const matchingStudents = await db.select().from(students).where(eq(students.name, studentName)).limit(1);
-          if (matchingStudents.length > 0) {
-            const currentStudent = matchingStudents[0];
-            const pendingInvoices = await db.select()
-              .from(invoices)
-              .where(and(eq(invoices.studentId, currentStudent.id), eq(invoices.status, 'pending')))
-              .orderBy(invoices.dueDate)
-              .limit(1);
-            
-            if (pendingInvoices.length > 0) {
-              const targetInvoice = pendingInvoices[0];
-              await db.update(invoices).set({ status: 'paid' }).where(eq(invoices.id, targetInvoice.id));
-              
-              // Recalculate outstanding fees
-              const remainingPending = await db.select().from(invoices).where(and(eq(invoices.studentId, currentStudent.id), eq(invoices.status, 'pending')));
-              const totalOutstanding = remainingPending.reduce((sum, inv) => sum + inv.amount, 0);
-              await db.update(students).set({ outstandingFees: totalOutstanding }).where(eq(students.id, currentStudent.id));
-              
-              console.log(`[OCR-AUTO-PAY] Successfully settled Invoice ${targetInvoice.id} (${targetInvoice.amount}€) for ${studentName}`);
-            }
-          }
-        } catch (payErr) {
-          console.error('[OCR-AUTO-PAY-FAIL]', payErr);
-        }
-      }
-
-      // Update in Postgres as 'Analyzed'
-      await db.update(uploadedDocuments)
-        .set({
-          status: 'Analyzed',
-          category,
-          extractedDetails
-        })
-        .where(eq(uploadedDocuments.id, docId));
-
-      // Audit Log
-      await db.insert(operationalLogs).values({
-        userId: req.user.uid,
-        userName: req.user.dbName,
-        userRole: req.user.dbRole,
-        action: 'OCR_ANALYSIS',
-        details: `Processado OCR Inteligente para o ficheiro "${name}". Tipo detetado: ${category}. Identificado Aluno: ${extractedDetails?.student_name || 'Desconhecido'}`
-      });
-
-      // Update student document status if there's a student with that name matching
-      if (extractedDetails?.student_name) {
-        const matchingStudents = await db.select().from(students).where(eq(students.name, extractedDetails.student_name)).limit(1);
-        if (matchingStudents.length > 0) {
-          const s = matchingStudents[0];
-          const docsArray = Array.isArray(s.documents) ? s.documents : [];
-          const updatedDocs = docsArray.map((d: any) => {
-            if (d.name.toLowerCase() === category.toLowerCase() || (category.toLowerCase() === 'contrato de matrícula' && d.name.toLowerCase().includes('contrato'))) {
-              return { ...d, submitted: true, date: new Date().toISOString().split('T')[0] };
-            }
-            return d;
-          });
-          await db.update(students).set({ documents: updatedDocs }).where(eq(students.id, s.id));
-        }
-      }
-
-      const updatedDocResult = await db.select().from(uploadedDocuments).where(eq(uploadedDocuments.id, docId)).limit(1);
-      
-      broadcastToAll('NOTIFY', {
-        title: 'Documento Recebido e Analisado',
-        message: `Ficheiro "${name}" processado como "${category}" para o aluno "${extractedDetails?.student_name || 'Desconhecido'}".`,
-        alertType: 'success',
-        category: 'document_uploaded'
-      });
-      broadcastToAll('REFRESH_DATA', {});
-
-      res.status(201).json(updatedDocResult[0]);
-    } catch (err: any) {
-      console.error('[UPLOAD-DOC-FAIL]', err);
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // Delete uploaded document
-  app.delete('/api/documents/:id', requireAuth, authorizeRole(['admin', 'director', 'secretariat']), async (req: AuthRequest, res) => {
-    return res.status(503).json({ code: 'CANONICAL_DOCUMENT_AUTHORITY_REQUIRED', error: 'A autoridade institucional de documentos ainda não está disponível.' });
-    const id = parseInt(req.params.id);
-    if (!id || isNaN(id)) return res.status(400).json({ error: 'Falta parametrizar ID numérico.' });
-
-    try {
-      const ownedDocumentIds = await resolveInstitutionOwnedResourceIds(
-        pool,
-        req.institutionalContext!,
-        'document'
-      );
-      if (!isInstitutionOwned(String(id), ownedDocumentIds)) {
-        return res.status(404).json({ error: 'Documento não encontrado.' });
-      }
-
-      const targetDoc = await db.select().from(uploadedDocuments).where(eq(uploadedDocuments.id, id)).limit(1);
-      if (targetDoc.length === 0) return res.status(404).json({ error: 'Documento não encontrado.' });
-
-      await db.delete(uploadedDocuments).where(eq(uploadedDocuments.id, id));
-
-      // Audit Log
-      await db.insert(operationalLogs).values({
-        userId: req.user.uid,
-        userName: req.user.dbName,
-        userRole: req.user.dbRole,
-        action: 'DOCUMENT_DELETED',
-        details: `Documento de arquivo "${targetDoc[0].name}" rejeitado e removido do sistema pelo administrador.`
-      });
-
-      broadcastToAll('NOTIFY', {
-        title: 'Documento Removido',
-        message: `O documento de arquivo "${targetDoc[0].name}" foi rejeitado e removido pelo administrador.`,
-        alertType: 'warning',
-        category: 'document_deleted'
-      });
-      broadcastToAll('REFRESH_DATA', {});
-
-      res.json({ success: true });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
+  // 8. Legacy generic Documents routes are deliberately unmounted.
+  // Historical context: generic /api/documents routes previously returned 503 CANONICAL_DOCUMENT_AUTHORITY_REQUIRED
+  // pending the canonical Documents Foundation implementation.
+  // The canonical Documents Foundation controller registered via registerDocumentRoutes(app, resolveDocumentsOperationalConfig())
+  // is now the sole authoritative HTTP handler for all /api/documents* routes.
+  const _unmountedLegacyDocumentRoutes = {
+    get: async (_req: AuthRequest, _res: any) => undefined,
+    post: async (_req: AuthRequest, _res: any) => undefined,
+    delete: async (_req: AuthRequest, _res: any) => undefined,
+  };
 
   // --- MULTI-SOURCE SCHOOL DATA MIGRATION & AI ONBOARDING API ---
   app.post('/api/migration/analyze', requireAuth, authorizeRole(['admin']), async (req: AuthRequest, res) => {
@@ -6211,15 +5833,16 @@ Gerado em tempo real com base no balanço ativo das tabelas financeiras integrad
     });
   });
 
-  // Vite Middleware Setup
-  if (process.env.NODE_ENV !== 'production') {
+  // Static / Vite Middleware Setup
+  const distPath = path.join(process.cwd(), 'dist');
+  const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
+  if (process.env.NODE_ENV !== 'production' && !hasDist) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

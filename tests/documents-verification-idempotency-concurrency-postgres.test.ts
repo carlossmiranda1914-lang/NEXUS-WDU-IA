@@ -306,6 +306,8 @@ try {
   try {
     await client.query('RESET search_path');
     await client.query(`DROP SCHEMA IF EXISTS ${quote(schema)} CASCADE`);
+  } catch {
+    // Schema cleanup best effort
   } finally {
     client.release();
     await pool.end();

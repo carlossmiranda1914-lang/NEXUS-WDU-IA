@@ -19,7 +19,7 @@ export interface DocumentListQueryParams {
   technicalStatus?: string;
   associationDomain?: string;
   retentionStatus?: string;
-  holdStatus?: 'active' | 'released' | 'none';
+  holdStatus?: 'active' | 'released' | 'none' | 'all' | string;
   updatedFrom?: string;
   updatedTo?: string;
 }
@@ -43,26 +43,43 @@ function computeCapabilities(
   docStatus: DocumentStatus,
   currentVersionStatus: DocumentVersionStatus | null,
   activeHoldsCount: number,
+  retentionStatus?: string | null,
   operationalAvailability?: DocumentOperationalAvailability,
+  role?: string,
 ): FrontendSafeDocumentCapabilities {
   const isArchived = docStatus === 'archived';
   const isVersionAvailable = currentVersionStatus === 'available';
+
+  // Management roles
+  const isManager = !role || ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(role);
 
   // Read actions are safe advisory flags based strictly on factual availability and operational dependencies; backend remains authoritative.
   const isAccessAvailable = operationalAvailability?.canAccess !== false;
   const canOpen = !isArchived && isVersionAvailable && isAccessAvailable;
   const canDownload = !isArchived && isVersionAvailable && isAccessAvailable;
 
-  // Management actions: return conservative false. No API-local role matrix is used.
-  // Backend command endpoints enforce authoritative policy and role authorization.
+  // Management actions: advisory capability flags strictly aligned with factual operational availability, retention governance, and document state
+  const isUploadAvailable = operationalAvailability?.canUpload !== false && isManager;
+  const isHoldAvailable = operationalAvailability?.canHold !== false && isManager;
+  const isDeleteAvailable = operationalAvailability?.canDelete !== false && isManager;
+
+  const canUploadVersion = !isArchived && isUploadAvailable;
+  const hasRetentionPolicy = retentionStatus != null;
+  const canPlaceHold = !isArchived && isHoldAvailable && hasRetentionPolicy;
+  const canReleaseHold = activeHoldsCount > 0 && isHoldAvailable;
+  const isRetentionExpired =
+    retentionStatus === 'retention_expired' || retentionStatus === 'eligible_for_deletion';
+  const canAuthorizeDeletion = !isArchived && isDeleteAvailable && isRetentionExpired && activeHoldsCount === 0;
+  const canExecuteDeletion = false;
+
   return {
     canOpen,
     canDownload,
-    canUploadVersion: false,
-    canPlaceHold: false,
-    canReleaseHold: false,
-    canAuthorizeDeletion: false,
-    canExecuteDeletion: false,
+    canUploadVersion,
+    canPlaceHold,
+    canReleaseHold,
+    canAuthorizeDeletion,
+    canExecuteDeletion,
   };
 }
 
@@ -82,7 +99,7 @@ export async function listDocumentsQuery(
   const values: unknown[] = [context.institutionId];
   let paramIdx = 2;
 
-  if (params.category && params.category.trim()) {
+  if (params.category && params.category.trim() && params.category !== 'all') {
     conditions.push(`d.category = $${paramIdx++}`);
     values.push(params.category.trim());
   }
@@ -103,7 +120,7 @@ export async function listDocumentsQuery(
     paramIdx++;
   }
 
-  if (params.technicalStatus && params.technicalStatus.trim()) {
+  if (params.technicalStatus && params.technicalStatus.trim() && params.technicalStatus !== 'all') {
     conditions.push(`EXISTS (
       SELECT 1 FROM document_versions v
       WHERE v.institution_id = d.institution_id
@@ -119,7 +136,7 @@ export async function listDocumentsQuery(
     values.push(params.technicalStatus.trim());
   }
 
-  if (params.associationDomain && params.associationDomain.trim()) {
+  if (params.associationDomain && params.associationDomain.trim() && params.associationDomain !== 'all') {
     conditions.push(`EXISTS (
       SELECT 1 FROM document_associations a
       WHERE a.institution_id = d.institution_id
@@ -130,7 +147,7 @@ export async function listDocumentsQuery(
     values.push(params.associationDomain.trim());
   }
 
-  if (params.retentionStatus && params.retentionStatus.trim()) {
+  if (params.retentionStatus && params.retentionStatus.trim() && params.retentionStatus !== 'all') {
     conditions.push(`EXISTS (
       SELECT 1 FROM document_retention_assignments r
       WHERE r.institution_id = d.institution_id
@@ -140,7 +157,7 @@ export async function listDocumentsQuery(
     values.push(params.retentionStatus.trim());
   }
 
-  if (params.holdStatus) {
+  if (params.holdStatus && params.holdStatus !== 'all') {
     if (params.holdStatus === 'active') {
       conditions.push(`EXISTS (
         SELECT 1 FROM document_retention_holds h
@@ -218,8 +235,12 @@ export async function listDocumentsQuery(
 
   // Load associated metadata in batch
   const versionsQuery = `
-    SELECT v.id, v.document_id, v.version_number, v.mime_type, v.byte_size, v.sha256_hash, v.status, v.created_at
+    SELECT v.id, v.document_id, v.version_number, v.mime_type, v.byte_size, v.sha256_hash, v.status, v.created_at,
+           p.name AS created_by_person_name,
+           s.declared_filename AS original_filename
     FROM document_versions v
+    LEFT JOIN people p ON p.id = v.created_by_person_id
+    LEFT JOIN document_upload_sessions s ON s.institution_id = v.institution_id AND s.completed_version_id = v.id
     WHERE v.institution_id = $1 AND v.document_id = ANY($2::uuid[])
     ORDER BY v.document_id, v.version_number DESC
   `;
@@ -231,11 +252,19 @@ export async function listDocumentsQuery(
     byte_size: string;
     sha256_hash: string;
     status: DocumentVersionStatus;
+    created_by_person_name: string | null;
+    original_filename: string | null;
     created_at: Date;
   }>(versionsQuery, [context.institutionId, documentIds]);
 
   const associationsQuery = `
-    SELECT a.id, a.document_id, a.target_domain, a.target_resource_type, a.target_resource_id, a.purpose, a.status, a.pinned_version_id, a.created_at
+    SELECT a.id, a.document_id, a.target_domain, a.target_resource_type, a.target_resource_id, a.purpose, a.status, a.pinned_version_id, a.created_at,
+           CASE
+             WHEN a.target_domain = 'student' THEN (SELECT name FROM people WHERE id::text = a.target_resource_id LIMIT 1)
+             WHEN a.target_domain = 'enrollment' THEN (SELECT CONCAT(p.name, ' (', y.name, ')') FROM enrollment_applications e JOIN people p ON p.id = e.student_person_id JOIN academic_years y ON y.id = e.academic_year_id WHERE e.id::text = a.target_resource_id LIMIT 1)
+             WHEN a.target_domain = 'academic' THEN (SELECT name FROM academic_years WHERE id::text = a.target_resource_id LIMIT 1)
+             ELSE NULL
+           END AS target_entity_name
     FROM document_associations a
     WHERE a.institution_id = $1 AND a.document_id = ANY($2::uuid[])
     ORDER BY a.created_at DESC
@@ -246,6 +275,7 @@ export async function listDocumentsQuery(
     target_domain: string;
     target_resource_type: string;
     target_resource_id: string;
+    target_entity_name: string | null;
     purpose: string;
     status: string;
     pinned_version_id: string | null;
@@ -339,6 +369,9 @@ export async function listDocumentsQuery(
           byteSize: Number(latestVersionRow.byte_size),
           sha256Hash: latestVersionRow.sha256_hash,
           status: latestVersionRow.status,
+          originalFilename: latestVersionRow.original_filename || undefined,
+          declaredFilename: latestVersionRow.original_filename || undefined,
+          createdByPersonName: latestVersionRow.created_by_person_name,
           createdAt: new Date(latestVersionRow.created_at).toISOString(),
         }
       : null;
@@ -348,6 +381,7 @@ export async function listDocumentsQuery(
       targetDomain: a.target_domain,
       targetResourceType: a.target_resource_type,
       targetResourceId: a.target_resource_id,
+      targetEntityName: a.target_entity_name,
       purpose: a.purpose,
       status: a.status,
       pinnedVersionId: a.pinned_version_id,
@@ -386,8 +420,13 @@ export async function listDocumentsQuery(
       docRow.status,
       currentVersion?.status ?? null,
       activeHolds.length,
+      docRetention?.retention_status ?? null,
       operationalAvailability,
+      context.role,
     );
+
+    const originalFilename = currentVersion?.originalFilename || undefined;
+    const title = originalFilename || `${docRow.category.toUpperCase()} - DOC-${docRow.id.slice(0, 8).toUpperCase()}`;
 
     return {
       id: docRow.id,
@@ -395,6 +434,9 @@ export async function listDocumentsQuery(
       category: docRow.category,
       classification: docRow.classification,
       status: docRow.status,
+      originalFilename,
+      declaredFilename: originalFilename,
+      title,
       createdAt: new Date(docRow.created_at).toISOString(),
       updatedAt: new Date(docRow.updated_at).toISOString(),
       currentVersion,
@@ -449,12 +491,18 @@ export async function getDocumentDetailQuery(
     byte_size: string;
     sha256_hash: string;
     status: DocumentVersionStatus;
+    created_by_person_name: string | null;
+    original_filename: string | null;
     created_at: Date;
   }>(
-    `SELECT id, version_number, mime_type, byte_size, sha256_hash, status, created_at
-     FROM document_versions
-     WHERE institution_id = $1 AND document_id = $2
-     ORDER BY version_number DESC`,
+    `SELECT v.id, v.version_number, v.mime_type, v.byte_size, v.sha256_hash, v.status, v.created_at,
+            p.name AS created_by_person_name,
+            s.declared_filename AS original_filename
+     FROM document_versions v
+     LEFT JOIN people p ON p.id = v.created_by_person_id
+     LEFT JOIN document_upload_sessions s ON s.institution_id = v.institution_id AND s.completed_version_id = v.id
+     WHERE v.institution_id = $1 AND v.document_id = $2
+     ORDER BY v.version_number DESC`,
     [context.institutionId, documentId],
   );
 
@@ -463,15 +511,22 @@ export async function getDocumentDetailQuery(
     target_domain: string;
     target_resource_type: string;
     target_resource_id: string;
+    target_entity_name: string | null;
     purpose: string;
     status: string;
     pinned_version_id: string | null;
     created_at: Date;
   }>(
-    `SELECT id, target_domain, target_resource_type, target_resource_id, purpose, status, pinned_version_id, created_at
-     FROM document_associations
-     WHERE institution_id = $1 AND document_id = $2
-     ORDER BY created_at DESC`,
+    `SELECT a.id, a.target_domain, a.target_resource_type, a.target_resource_id, a.purpose, a.status, a.pinned_version_id, a.created_at,
+            CASE
+              WHEN a.target_domain = 'student' THEN (SELECT name FROM people WHERE id::text = a.target_resource_id LIMIT 1)
+              WHEN a.target_domain = 'enrollment' THEN (SELECT CONCAT(p.name, ' (', y.name, ')') FROM enrollment_applications e JOIN people p ON p.id = e.student_person_id JOIN academic_years y ON y.id = e.academic_year_id WHERE e.id::text = a.target_resource_id LIMIT 1)
+              WHEN a.target_domain = 'academic' THEN (SELECT name FROM academic_years WHERE id::text = a.target_resource_id LIMIT 1)
+              ELSE NULL
+            END AS target_entity_name
+     FROM document_associations a
+     WHERE a.institution_id = $1 AND a.document_id = $2
+     ORDER BY a.created_at DESC`,
     [context.institutionId, documentId],
   );
 
@@ -524,6 +579,9 @@ export async function getDocumentDetailQuery(
         byteSize: Number(latestVersionRow.byte_size),
         sha256Hash: latestVersionRow.sha256_hash,
         status: latestVersionRow.status,
+        originalFilename: latestVersionRow.original_filename || undefined,
+        declaredFilename: latestVersionRow.original_filename || undefined,
+        createdByPersonName: latestVersionRow.created_by_person_name,
         createdAt: new Date(latestVersionRow.created_at).toISOString(),
       }
     : null;
@@ -533,6 +591,7 @@ export async function getDocumentDetailQuery(
     targetDomain: a.target_domain,
     targetResourceType: a.target_resource_type,
     targetResourceId: a.target_resource_id,
+    targetEntityName: a.target_entity_name,
     purpose: a.purpose,
     status: a.status,
     pinnedVersionId: a.pinned_version_id,
@@ -572,8 +631,13 @@ export async function getDocumentDetailQuery(
     docRow.status,
     currentVersion?.status ?? null,
     activeHolds.length,
+    docRetention?.retention_status ?? null,
     operationalAvailability,
+    context.role,
   );
+
+  const originalFilename = currentVersion?.originalFilename || undefined;
+  const title = originalFilename || `${docRow.category.toUpperCase()} - DOC-${docRow.id.slice(0, 8).toUpperCase()}`;
 
   return {
     id: docRow.id,
@@ -581,6 +645,9 @@ export async function getDocumentDetailQuery(
     category: docRow.category,
     classification: docRow.classification,
     status: docRow.status,
+    originalFilename,
+    declaredFilename: originalFilename,
+    title,
     createdAt: new Date(docRow.created_at).toISOString(),
     updatedAt: new Date(docRow.updated_at).toISOString(),
     currentVersion,

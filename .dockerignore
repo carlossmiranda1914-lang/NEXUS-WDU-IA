@@ -1,0 +1,8 @@
+node_modules
+.git
+.gemini
+dist
+worktrees
+.env*
+!package.json
+!package-lock.json
