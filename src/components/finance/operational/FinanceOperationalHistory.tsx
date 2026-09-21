@@ -42,6 +42,15 @@ function methodLabel(method: string): string {
   }
 }
 
+function allocationLabel(position: 'unapplied' | 'partially_allocated' | 'fully_allocated' | undefined): string {
+  switch (position) {
+    case 'unapplied': return 'Não aplicado';
+    case 'partially_allocated': return 'Parcialmente aplicado';
+    case 'fully_allocated': return 'Aplicado';
+    default: return 'Estado de aplicação indisponível';
+  }
+}
+
 export function FinanceOperationalHistory({
   theme = 'light',
   history,
@@ -142,7 +151,7 @@ export function FinanceOperationalHistory({
                         {pay.paymentReference} · {methodLabel(pay.method)}
                       </p>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                        {formatDate(item.occurredAt)} · Confirmado (Não aplicado)
+                        {formatDate(item.occurredAt)} · Confirmado · Aplicação: {allocationLabel(pay.allocationPosition)}
                         {pay.payerPersonName ? ` · Pagador: ${pay.payerPersonName}` : ''}
                       </p>
                     </div>
