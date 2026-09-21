@@ -35,7 +35,10 @@ const forbiddenContextA: InstitutionalContext = { personId: ids.forbiddenActorA,
 try {
   const migrations = (await readdir(migrationsDir)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
   for (const filename of migrations) await pool.query(await readFile(path.join(migrationsDir, filename), 'utf8'));
-  assert(migrations.every((filename, index) => Number(filename.slice(0, 4)) === index + 1), 'S03 clean schema must contain the complete contiguous canonical migration ledger in order.');
+  const migrationOrders = migrations.map((filename) => Number(filename.slice(0, 4)));
+  assert(migrationOrders.every((order, index) => index === 0 || order > migrationOrders[index - 1]!), 'S03 clean schema must apply the canonical migration ledger in strict deterministic order.');
+  assert(new Set(migrationOrders).size === migrationOrders.length, 'S03 clean schema must reject ambiguous numeric migration authority.');
+  assert(migrations.includes('0035_documents_secure_content_access.sql') && migrations.includes('0100_finance_fee_catalogue.sql'), 'S03 clean schema must preserve the approved reserved forward range between Documents and Finance migrations.');
 
   await pool.query("INSERT INTO institutions (id,name,slug,status) VALUES ($1,'Escola A','escola-a','active'),($2,'Escola B','escola-b','active')", [ids.institutionA, ids.institutionB]);
   await pool.query("INSERT INTO people (id,name) VALUES ($1,'Secretaria A'),($2,'Secretaria B'),($3,'Responsável A'),($4,'Pessoa B'),($5,'Financeiro A'),($6,'Financeiro Assignee'),($7,'Secretaria Inativa')", [ids.actorA, ids.actorB, ids.assigneeA, ids.outsiderB, ids.forbiddenActorA, ids.forbiddenAssigneeA, ids.inactiveAssigneeA]);

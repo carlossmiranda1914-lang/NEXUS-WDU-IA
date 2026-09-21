@@ -1,0 +1,126 @@
+import { randomUUID } from 'node:crypto';
+import type { Pool, PoolClient } from 'pg';
+import type { InstitutionalContext } from '../../auth/institutional-context.ts';
+import { executeIdempotentFinanceCommand } from './finance-command.ts';
+import { PostgresJournalRepository } from './journal-repository.ts';
+import { Money } from './money.ts';
+import { deriveObligationFinancialPosition } from './obligation-financial-position.ts';
+import { deriveObligationCoveragePosition, derivePaymentAllocationPosition, type Allocation, type AllocationReversal, type ObligationCoveragePositionProjection, type PaymentAllocationPositionProjection } from './allocation-model.ts';
+import { AllocationCommandValidationError, createConfirmAllocationFingerprint, createReverseAllocationFingerprint, normalizeConfirmAllocationCommand, normalizeReverseAllocationCommand, type ConfirmAllocationCommand, type ReverseAllocationCommand } from './allocation-service.ts';
+
+export type AllocationFailurePoint = 'after_journal' | 'after_allocation';
+type AllocationRow = { id:string; institution_id:string; financial_account_id:string; payment_id:string; obligation_id:string; amount:string; currency:string; effective_at:Date|string; recorded_at:Date|string; actor_kind:'human'|'system'|'provider'; actor_person_id:string|null; journal_transaction_id:string; command_id?:string };
+type ReversalRow = { id:string; institution_id:string; original_allocation_id:string; amount:string; currency:string; reason:string; effective_at:Date|string; recorded_at:Date|string; actor_kind:'human'|'system'|'provider'; actor_person_id:string|null; journal_transaction_id:string };
+const toDate = (value: Date | string) => value instanceof Date ? value : new Date(value);
+const mapAllocation = (row: AllocationRow): Allocation => ({ id:row.id, institutionId:row.institution_id, financialAccountId:row.financial_account_id, paymentId:row.payment_id, obligationId:row.obligation_id, money:Money.parse(row.amount,row.currency), effectiveAt:toDate(row.effective_at), recordedAt:toDate(row.recorded_at), actorKind:row.actor_kind, actorPersonId:row.actor_person_id ?? undefined, journalTransactionId:row.journal_transaction_id, commandId:row.command_id ?? row.journal_transaction_id, status:'confirmed' });
+const mapReversal = (row: ReversalRow): AllocationReversal => ({ id:row.id, institutionId:row.institution_id, originalAllocationId:row.original_allocation_id, money:Money.parse(row.amount,row.currency), reason:row.reason, effectiveAt:toDate(row.effective_at), recordedAt:toDate(row.recorded_at), actorKind:row.actor_kind, actorPersonId:row.actor_person_id ?? undefined, journalTransactionId:row.journal_transaction_id, commandId:row.journal_transaction_id, status:'confirmed' });
+
+/**
+ * Canonical current settlement relationship. Consumers must use this instead
+ * of treating an historical allocation row as proof that settlement remains.
+ */
+export async function findCurrentAllocationRelation(
+  pool: Pick<Pool | PoolClient, 'query'>,
+  institutionId: string,
+  paymentId: string,
+  obligationId: string,
+) {
+  const result = await pool.query<{ id: string; payment_id: string; obligation_id: string }>(
+    `SELECT a.id,a.payment_id,a.obligation_id
+     FROM finance_allocations a
+     INNER JOIN finance_payments p ON p.institution_id=a.institution_id AND p.id=a.payment_id AND p.status='confirmed'
+     INNER JOIN finance_obligations o ON o.institution_id=a.institution_id AND o.id=a.obligation_id AND o.status='open'
+     WHERE a.institution_id=$1 AND a.payment_id=$2 AND a.obligation_id=$3
+       AND a.amount > COALESCE((
+         SELECT SUM(r.amount)
+         FROM finance_allocation_reversals r
+         WHERE r.institution_id=a.institution_id AND r.original_allocation_id=a.id
+       ),0)
+     FOR UPDATE OF a,p,o`,
+    [institutionId, paymentId, obligationId],
+  );
+  return result.rows[0];
+}
+
+export class PostgresAllocationRepository {
+  constructor(private readonly pool: Pool, private readonly failurePoint?: AllocationFailurePoint) {}
+
+  async confirmAllocationInCommand(actor: InstitutionalContext, rawInput: unknown, idempotencyKey: string) {
+    if (!idempotencyKey?.trim()) throw new AllocationCommandValidationError('Idempotency-Key is required');
+    const command = normalizeConfirmAllocationCommand(rawInput);
+    const result = await executeIdempotentFinanceCommand({ pool:this.pool, identity:{ institutionId:actor.institutionId, operationNamespace:'finance.allocation.confirm', idempotencyKey:idempotencyKey.trim(), canonicalFingerprint:createConfirmAllocationFingerprint(actor.institutionId,command) }, execute: async (client) => { const allocations=await this.confirmInTransaction(client,actor,command,idempotencyKey.trim()); return { resultRef:allocations[0]!.journalTransactionId, result:allocations }; }, loadResult:(client,resultRef) => this.listForJournal(actor.institutionId,resultRef,client) });
+    return { allocations:result.result, replayed:result.replayed, paymentPosition:await this.getPaymentPosition(actor,command.paymentId) };
+  }
+
+  async reverseAllocationInCommand(actor: InstitutionalContext, rawInput: unknown, idempotencyKey: string) {
+    if (!idempotencyKey?.trim()) throw new AllocationCommandValidationError('Idempotency-Key is required');
+    const command=normalizeReverseAllocationCommand(rawInput);
+    const result=await executeIdempotentFinanceCommand({ pool:this.pool, identity:{ institutionId:actor.institutionId, operationNamespace:'finance.allocation.reverse', idempotencyKey:idempotencyKey.trim(), canonicalFingerprint:createReverseAllocationFingerprint(actor.institutionId,command) }, execute:async(client)=>{ const reversal=await this.reverseInTransaction(client,actor,command,idempotencyKey.trim()); return {resultRef:reversal.id,result:reversal}; }, loadResult:(client,resultRef)=>this.getReversalById(actor.institutionId,resultRef,client) });
+    return { reversal:result.result, replayed:result.replayed };
+  }
+
+  private async confirmInTransaction(client:PoolClient, actor:InstitutionalContext, command:ConfirmAllocationCommand, commandId:string):Promise<Allocation[]> {
+    const payment=await client.query<{id:string;financial_account_id:string|null;amount:string;currency:string;status:string;financial_profile_version:number}>(`SELECT id,financial_account_id,amount::text,currency,status,financial_profile_version FROM finance_payments WHERE institution_id=$1 AND id=$2 FOR UPDATE`,[actor.institutionId,command.paymentId]);
+    const pay=payment.rows[0]; if (!pay || pay.status!=='confirmed' || !pay.financial_account_id) throw new AllocationCommandValidationError('Confirmed Payment with Financial Account is required');
+    const ids=command.lines.map(line=>line.obligationId); const obligations=await client.query<{id:string;financial_account_id:string;amount:string;currency:string;status:string}>(`SELECT id,financial_account_id,amount::text,currency,status FROM finance_obligations WHERE institution_id=$1 AND id = ANY($2::uuid[]) ORDER BY id FOR UPDATE`,[actor.institutionId,ids]);
+    if (obligations.rowCount!==ids.length) throw new AllocationCommandValidationError('Eligible Obligation is required');
+    const allocated=await client.query<{amount:string}>(`SELECT (COALESCE(SUM(a.amount),0)-COALESCE(SUM(r.amount),0))::text AS amount FROM finance_allocations a LEFT JOIN LATERAL (SELECT SUM(amount) amount FROM finance_allocation_reversals r WHERE r.institution_id=a.institution_id AND r.original_allocation_id=a.id) r ON true WHERE a.institution_id=$1 AND a.payment_id=$2`,[actor.institutionId,pay.id]);
+    const already=Money.parse(allocated.rows[0]?.amount ?? '0',pay.currency); let requested=Money.parse('0',pay.currency);
+    for (const line of command.lines) {
+      if(line.amount.currency!==pay.currency) throw new AllocationCommandValidationError('Allocation currency must match Payment');
+      requested=requested.add(line.amount);
+      const obligation=obligations.rows.find(row=>row.id===line.obligationId)!;
+      if(obligation.financial_account_id!==pay.financial_account_id || obligation.currency!==pay.currency || obligation.status!=='open') throw new AllocationCommandValidationError('Obligation must be eligible in the same Financial Account and currency');
+      const adjustments=await client.query<{direction:'increase'|'decrease';amount:string}>(`SELECT direction,amount::text FROM finance_obligation_adjustments WHERE institution_id=$1 AND obligation_id=$2 ORDER BY recorded_at,id FOR UPDATE`,[actor.institutionId,obligation.id]);
+      const discounts=await client.query<{id:string;amount:string}>(`SELECT id,amount::text FROM finance_obligation_discounts WHERE institution_id=$1 AND obligation_id=$2 ORDER BY applied_at,id FOR UPDATE`,[actor.institutionId,obligation.id]);
+      const discountRevocations=await client.query<{original_discount_id:string;amount:string}>(`SELECT r.original_discount_id,r.amount::text FROM finance_obligation_discount_revocations r JOIN finance_obligation_discounts d ON d.institution_id=r.institution_id AND d.id=r.original_discount_id WHERE r.institution_id=$1 AND d.obligation_id=$2 ORDER BY r.revoked_at,r.id FOR UPDATE`,[actor.institutionId,obligation.id]);
+      const covered=await client.query<{amount:string}>(`SELECT (COALESCE(SUM(a.amount),0)-COALESCE((SELECT SUM(r.amount) FROM finance_allocation_reversals r JOIN finance_allocations a2 ON a2.institution_id=r.institution_id AND a2.id=r.original_allocation_id WHERE r.institution_id=$1 AND a2.obligation_id=$2),0))::text amount FROM finance_allocations a WHERE a.institution_id=$1 AND a.obligation_id=$2`,[actor.institutionId,obligation.id]);
+      const position=deriveObligationFinancialPosition({
+        original:Money.parse(obligation.amount,pay.currency),
+        adjustments:adjustments.rows.map(row=>({direction:row.direction,amount:Money.parse(row.amount,pay.currency)})),
+        discounts:discounts.rows.map(row=>({id:row.id,amount:Money.parse(row.amount,pay.currency)})),
+        discountRevocations:discountRevocations.rows.map(row=>({originalDiscountId:row.original_discount_id,amount:Money.parse(row.amount,pay.currency)})),
+        allocations:[Money.parse(covered.rows[0]?.amount??'0',pay.currency)],
+        allocationReversals:[]
+      });
+      if(line.amount.compare(position.remainingCoverable)>0) throw new AllocationCommandValidationError('Allocation exceeds Obligation remaining coverable value');
+    }
+    if(requested.compare(Money.parse(pay.amount,pay.currency).subtract(already))>0) throw new AllocationCommandValidationError('Allocation exceeds Payment remaining allocatable value');
+    const journal=await new PostgresJournalRepository(client).confirmInTransaction(client,{institutionId:actor.institutionId,commandId,journalType:'payment_allocation',effectiveAt:command.effectiveAt,entries:command.lines.map(line=>({positionType:'allocated_value',money:line.amount,sourceRef:`${pay.id}:${line.obligationId}`})),actorKind:'human',actorPersonId:actor.personId,financialProfileVersion:pay.financial_profile_version}); this.fail('after_journal');
+    const allocations:Allocation[]=[]; for(const line of command.lines){ const insert=await client.query<AllocationRow>(`INSERT INTO finance_allocations (id,institution_id,financial_account_id,payment_id,obligation_id,amount,currency,journal_transaction_id,effective_at,actor_kind,actor_person_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'human',$10) RETURNING *`,[randomUUID(),actor.institutionId,pay.financial_account_id,pay.id,line.obligationId,line.amount.canonicalAmount(),line.amount.currency,journal.transactionId,command.effectiveAt,actor.personId]); allocations.push(mapAllocation(insert.rows[0]!)); } this.fail('after_allocation'); return allocations;
+  }
+
+  private async reverseInTransaction(client:PoolClient, actor:InstitutionalContext, command:ReverseAllocationCommand, commandId:string):Promise<AllocationReversal> { const candidate=(await client.query<AllocationRow>(`SELECT * FROM finance_allocations WHERE institution_id=$1 AND id=$2`,[actor.institutionId,command.originalAllocationId])).rows[0]; if(!candidate) throw new AllocationCommandValidationError('Original Allocation is required'); const account=await client.query(`SELECT id FROM finance_financial_accounts WHERE institution_id=$1 AND id=$2 FOR UPDATE`,[actor.institutionId,candidate.financial_account_id]); if(!account.rows[0]) throw new AllocationCommandValidationError('Original Allocation resources are required'); const obligation=await client.query<{id:string}>(`SELECT id FROM finance_obligations WHERE institution_id=$1 AND id=$2 FOR UPDATE`,[actor.institutionId,candidate.obligation_id]); const original=await client.query<AllocationRow>(`SELECT * FROM finance_allocations WHERE institution_id=$1 AND id=$2 FOR UPDATE`,[actor.institutionId,command.originalAllocationId]); const allocation=original.rows[0]; if(!allocation || !obligation.rows[0]) throw new AllocationCommandValidationError('Original Allocation resources are required'); if(command.amount.currency!==allocation.currency) throw new AllocationCommandValidationError('Allocation reversal currency must match original Allocation'); const payment=await client.query<{financial_profile_version:number}>(`SELECT financial_profile_version FROM finance_payments WHERE institution_id=$1 AND id=$2 FOR UPDATE`,[actor.institutionId,allocation.payment_id]); if(!payment.rows[0]) throw new AllocationCommandValidationError('Original Allocation resources are required'); const prior=await client.query<{amount:string}>(`SELECT COALESCE(SUM(amount),0)::text amount FROM finance_allocation_reversals WHERE institution_id=$1 AND original_allocation_id=$2`,[actor.institutionId,allocation.id]); if(command.amount.compare(Money.parse(allocation.amount,allocation.currency).subtract(Money.parse(prior.rows[0]?.amount ?? '0',allocation.currency)))>0) throw new AllocationCommandValidationError('Allocation reversal exceeds remaining reversible value'); const journal=await new PostgresJournalRepository(client).confirmInTransaction(client,{institutionId:actor.institutionId,commandId,journalType:'allocation_reversal',effectiveAt:command.effectiveAt,entries:[{positionType:'released_value',money:command.amount,sourceRef:allocation.id}],reason:command.reason,actorKind:'human',actorPersonId:actor.personId,financialProfileVersion:payment.rows[0].financial_profile_version}); this.fail('after_journal'); const insert=await client.query<ReversalRow>(`INSERT INTO finance_allocation_reversals (id,institution_id,original_allocation_id,amount,currency,reason,journal_transaction_id,effective_at,actor_kind,actor_person_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'human',$9) RETURNING *`,[randomUUID(),actor.institutionId,allocation.id,command.amount.canonicalAmount(),command.amount.currency,command.reason,journal.transactionId,command.effectiveAt,actor.personId]); this.fail('after_allocation'); return mapReversal(insert.rows[0]!); }
+  async getById(actor:{institutionId:string},id:string,client:Pool|PoolClient=this.pool){const result=await client.query<AllocationRow>(`SELECT * FROM finance_allocations WHERE institution_id=$1 AND id=$2`,[actor.institutionId,id]); if(!result.rows[0]) throw new AllocationCommandValidationError('Allocation not found'); return mapAllocation(result.rows[0]);}
+  async listForPayment(actor:{institutionId:string},paymentId:string,client:Pool|PoolClient=this.pool){const result=await client.query<AllocationRow>(`SELECT * FROM finance_allocations WHERE institution_id=$1 AND payment_id=$2 ORDER BY recorded_at,id`,[actor.institutionId,paymentId]);return result.rows.map(mapAllocation);}
+  async listForObligation(actor:{institutionId:string},obligationId:string,client:Pool|PoolClient=this.pool){const result=await client.query<AllocationRow>(`SELECT * FROM finance_allocations WHERE institution_id=$1 AND obligation_id=$2 ORDER BY recorded_at,id`,[actor.institutionId,obligationId]);return result.rows.map(mapAllocation);}
+  private async listForJournal(institutionId:string,journalId:string,client:PoolClient){const result=await client.query<AllocationRow>(`SELECT * FROM finance_allocations WHERE institution_id=$1 AND journal_transaction_id=$2 ORDER BY obligation_id`,[institutionId,journalId]);return result.rows.map(mapAllocation);}
+  private async getReversalById(institutionId:string,id:string,client:PoolClient){const result=await client.query<ReversalRow>(`SELECT * FROM finance_allocation_reversals WHERE institution_id=$1 AND id=$2`,[institutionId,id]);if(!result.rows[0])throw new AllocationCommandValidationError('Allocation reversal not found');return mapReversal(result.rows[0]);}
+  async getPaymentPosition(actor:{institutionId:string},paymentId:string,client:Pool|PoolClient=this.pool):Promise<PaymentAllocationPositionProjection>{const r=await client.query<{amount:string;currency:string;allocated:string}>(`SELECT p.amount::text,p.currency,(COALESCE(SUM(a.amount),0)-COALESCE((SELECT SUM(r.amount) FROM finance_allocation_reversals r JOIN finance_allocations a2 ON a2.institution_id=r.institution_id AND a2.id=r.original_allocation_id WHERE r.institution_id=p.institution_id AND a2.payment_id=p.id),0))::text allocated FROM finance_payments p LEFT JOIN finance_allocations a ON a.institution_id=p.institution_id AND a.payment_id=p.id WHERE p.institution_id=$1 AND p.id=$2 GROUP BY p.id`,[actor.institutionId,paymentId]);if(!r.rows[0])throw new AllocationCommandValidationError('Payment not found');return derivePaymentAllocationPosition(r.rows[0].amount,r.rows[0].allocated,r.rows[0].currency);}
+  async getObligationPosition(actor:{institutionId:string},obligationId:string,client:Pool|PoolClient=this.pool):Promise<ObligationCoveragePositionProjection>{
+    const r=await client.query<{amount:string;currency:string;covered:string;adjustments:string;gross_discounts:string;revoked_discounts:string}>(
+      `SELECT o.amount::text,o.currency,
+         COALESCE((SELECT SUM(a.amount)-COALESCE(SUM(r.amount),0) FROM finance_allocations a LEFT JOIN finance_allocation_reversals r ON r.institution_id=a.institution_id AND r.original_allocation_id=a.id WHERE a.institution_id=o.institution_id AND a.obligation_id=o.id),0)::text covered,
+         COALESCE((SELECT SUM(CASE WHEN direction='increase' THEN amount ELSE -amount END) FROM finance_obligation_adjustments WHERE institution_id=o.institution_id AND obligation_id=o.id),0)::text adjustments,
+         COALESCE((SELECT SUM(d.amount) FROM finance_obligation_discounts d WHERE d.institution_id=o.institution_id AND d.obligation_id=o.id),0)::text gross_discounts,
+         COALESCE((SELECT SUM(r.amount) FROM finance_obligation_discount_revocations r JOIN finance_obligation_discounts d ON d.institution_id=r.institution_id AND d.id=r.original_discount_id WHERE r.institution_id=o.institution_id AND d.obligation_id=o.id),0)::text revoked_discounts
+       FROM finance_obligations o WHERE o.institution_id=$1 AND o.id=$2`,
+      [actor.institutionId,obligationId]
+    );
+    if(!r.rows[0])throw new AllocationCommandValidationError('Obligation not found');
+    const row=r.rows[0];
+    const net=Money.parse(row.adjustments,row.currency);
+    const grossDisc=Money.parse(row.gross_discounts,row.currency);
+    const revDisc=Money.parse(row.revoked_discounts,row.currency);
+    const position=deriveObligationFinancialPosition({
+      original:Money.parse(row.amount,row.currency),
+      adjustments:net.compare(Money.parse('0',row.currency))===0?[]:[{direction:net.compare(Money.parse('0',row.currency))>0?'increase':'decrease',amount:Money.parse(net.canonicalAmount().replace('-',''),row.currency)}],
+      discounts:grossDisc.compare(Money.parse('0',row.currency))===0?[]:[{id:'gross',amount:grossDisc}],
+      discountRevocations:revDisc.compare(Money.parse('0',row.currency))===0?[]:[{originalDiscountId:'gross',amount:revDisc}],
+      allocations:[Money.parse(row.covered,row.currency)],
+      allocationReversals:[]
+    });
+    return deriveObligationCoveragePosition(position.effectiveDue.canonicalAmount(),position.netCovered.canonicalAmount(),row.currency);
+  }
+  private fail(point:AllocationFailurePoint){if(this.failurePoint===point)throw new Error(`Injected allocation failure: ${point}`);}
+}

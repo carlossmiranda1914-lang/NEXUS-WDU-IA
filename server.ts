@@ -66,6 +66,23 @@ import { multiTenantMiddleware } from './src/middleware/multi-tenant.ts';
 import { adminAuth } from './src/lib/firebase-admin.ts';
 import { resolveInstitutionalContext } from './src/auth/institutional-context.ts';
 import { resolveAuthorizedStudents } from './src/auth/authorized-students.ts';
+import { registerFeeCatalogueRoutes } from './src/modules/finance/fee-catalogue-http.ts';
+import { registerFeeTypeRoutes } from './src/modules/finance/fee-type-http.ts';
+import { registerFinancialAccountRoutes } from './src/modules/finance/financial-account-http.ts';
+import { registerFinancialObligationRoutes } from './src/modules/finance/financial-obligation-http.ts';
+import { registerPaymentRoutes } from './src/modules/finance/payment-http.ts';
+import { registerPaymentWebhookRoutes } from './src/modules/finance/payment-webhook-http.ts';
+import { registerPaymentProviderRoutes } from './src/modules/finance/payment-provider-http.ts';
+import { registerFinanceAllocationRoutes } from './src/modules/finance/allocation-http.ts';
+import { registerObligationAdjustmentRoutes } from './src/modules/finance/obligation-adjustment-http.ts';
+import { registerDiscountPolicyRoutes } from './src/modules/finance/discount-policy-http.ts';
+import { registerObligationDiscountRoutes } from './src/modules/finance/obligation-discount-http.ts';
+import { registerFinanceOperationalContextRoutes } from './src/modules/finance/finance-operational-context-http.ts';
+import { registerFinancialDocumentRoutes } from './src/modules/finance/financial-document-http.ts';
+import { registerFinanceReadinessRoutes } from './src/modules/finance/finance-readiness-http.ts';
+import { registerInstitutionConfigurationRoutes } from './src/modules/institution/institution-configuration-http.ts';
+import { runtimeFiscalAdapterRegistry } from './src/modules/finance/fiscal-adapter-registry.ts';
+import type { FinancialProfileStore } from './src/modules/finance/financial-context.ts';
 import { isInstitutionOwned, resolveInstitutionOwnedResourceIds } from './src/auth/institution-resource-ownership.ts';
 import { eq, desc, sql, and, ne, inArray } from 'drizzle-orm';
 
@@ -153,7 +170,7 @@ async function generateContentWithRetry(
   }
 }
 
-async function startServer() {
+export async function startServer() {
   const app = express();
   const PORT = 3000;
 
@@ -313,6 +330,43 @@ async function startServer() {
 
   // Initialize Database self-healing and seeding immediately on startup
   await initializeDatabase();
+  const financialProfiles: FinancialProfileStore = {
+    async resolveEffective(institutionId, at = new Date()) {
+      const effectiveDate = at instanceof Date && !Number.isNaN(at.getTime()) ? at : new Date(at || Date.now());
+      const result = await pool.query(
+        `SELECT institution_id,version,effective_from,effective_to,primary_jurisdiction,functional_currency,financial_timezone,monetary_policy_version,enabled_currencies FROM finance_profile_versions WHERE institution_id=$1 AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2) ORDER BY version DESC LIMIT 1`,
+        [institutionId, effectiveDate],
+      );
+      const row = result.rows[0];
+      return row ? {
+        institutionId: row.institution_id,
+        version: row.version,
+        effectiveFrom: row.effective_from instanceof Date ? row.effective_from.toISOString() : String(row.effective_from),
+        effectiveTo: row.effective_to ? (row.effective_to instanceof Date ? row.effective_to.toISOString() : String(row.effective_to)) : null,
+        primaryJurisdiction: row.primary_jurisdiction,
+        functionalCurrency: row.functional_currency,
+        financialTimezone: row.financial_timezone,
+        monetaryPolicyVersion: row.monetary_policy_version,
+        enabledCurrencies: row.enabled_currencies,
+      } : null;
+    },
+  };
+  registerFeeCatalogueRoutes(app, pool, financialProfiles);
+  registerFeeTypeRoutes(app, pool);
+  registerFinancialAccountRoutes(app, pool);
+  registerFinancialObligationRoutes(app, pool, financialProfiles);
+  registerPaymentRoutes(app, pool, financialProfiles);
+  registerFinanceAllocationRoutes(app, pool);
+  registerObligationAdjustmentRoutes(app, pool);
+  registerDiscountPolicyRoutes(app, pool);
+  registerObligationDiscountRoutes(app, pool);
+  registerPaymentWebhookRoutes(app, pool);
+  registerPaymentProviderRoutes(app, pool);
+  registerFinanceOperationalContextRoutes(app, pool);
+  const fiscalAdapters = runtimeFiscalAdapterRegistry();
+  registerFinancialDocumentRoutes(app, pool, undefined, fiscalAdapters);
+  registerFinanceReadinessRoutes(app, pool, undefined, fiscalAdapters);
+  registerInstitutionConfigurationRoutes(app, pool);
 
   console.log('[SERVER] Servidor iniciado. Base de dados pronta para uso operacional.');
 
@@ -6231,4 +6285,4 @@ Gerado em tempo real com base no balanço ativo das tabelas financeiras integrad
   });
 }
 
-startServer();
+if (process.env.NEXUS_SERVER_MANAGED_STARTUP !== 'true') void startServer();

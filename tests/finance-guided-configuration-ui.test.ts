@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const workspace = fs.readFileSync(path.join(root, 'src/components/finance/configuration/FinanceConfigurationWorkspace.tsx'), 'utf8');
+const client = fs.readFileSync(path.join(root, 'src/modules/finance/finance-readiness-client.ts'), 'utf8');
+const finance = fs.readFileSync(path.join(root, 'src/components/finance/FinanceWorkspace.tsx'), 'utf8');
+const payments = fs.readFileSync(path.join(root, 'src/components/finance/payments/FinancePaymentsWorkspace.tsx'), 'utf8');
+
+assert.match(workspace, /Configuração necessária/, 'guided Finance setup must explain incomplete readiness');
+assert.match(workspace, /Perfil jurídico institucional/, 'guided Finance setup must name the legal-profile prerequisite');
+assert.match(workspace, /Perfil financeiro institucional/, 'guided Finance setup must name the financial-profile prerequisite');
+assert.match(workspace, /Configurar perfil jurídico/, 'the canonical setup surface must name the legal-profile remediation');
+assert.match(workspace, /Configurar perfil financeiro/, 'the canonical setup surface must name the financial-profile remediation');
+assert.match(workspace, /canManageConfiguration/, 'mutation presentation must come from server-derived capabilities');
+assert.match(workspace, /readinessClient\.get\(\)/, 'the workspace must refresh readiness from the backend after mutation');
+assert.doesNotMatch(workspace, /institutionId|nextSequenceNumber/, 'guided UX must not expose browser tenant or sequence authority');
+assert.match(workspace, /actionableRequirement/, 'guided setup must resolve one actionable local prerequisite at a time');
+assert.match(workspace, /JURISDICTION_POLICY_UNAVAILABLE/, 'unsupported jurisdiction must be an explicit blocked state');
+assert.doesNotMatch(workspace, /adapterKey|NEXUS_TEST|core/, 'normal configuration must not expose synthetic adapter internals');
+assert.match(client, /\/api\/institution\/legal-profile/, 'guided configuration must reuse the canonical legal-profile route');
+assert.match(client, /\/api\/finance\/profile/, 'guided configuration must reuse the canonical financial-profile route');
+assert.doesNotMatch(client, /adapterKey:\s*'core'/, 'normal client must never post the synthetic adapter');
+assert.match(finance, /finance-tab-configuration/, 'Finance must expose one canonical configuration destination');
+assert.match(payments, /onOpenFinanceConfiguration/, 'Payments remediation must navigate to the canonical Finance configuration surface');
+assert.match(payments, /hasLocallyActionableConfiguration/, 'Payments must distinguish locally actionable profile gaps from unavailable configuration resources');
+assert.match(payments, /INSTITUTION_LEGAL_PROFILE.*FINANCIAL_PROFILE/, 'the CTA may only target the two profile flows implemented by the destination');
+assert.match(finance, /Visão Geral/, 'Finance navigation must visibly group its overview');
+assert.match(finance, /Operação/, 'Finance navigation must visibly group operational destinations');
+assert.match(finance, /Configuração/, 'Finance navigation must visibly group configuration destinations');
+assert.doesNotMatch(finance, /overflow-x-auto/, 'primary Finance navigation must not depend on horizontal scrolling');
+assert.match(payments, /readiness\?\.status === 'READY'/, 'receipt issuance must be hidden while authoritative module readiness is incomplete');
+assert.match(payments, /receiptDocumentReadiness\?\.status === 'READY'/, 'configured module state must not expose issuance without per-document server readiness');
+assert.match(payments, /AGT_ONBOARDING_REQUIRED/, 'blocked official issuance must explain the factual external prerequisite');
+console.log('FINANCE_GUIDED_CONFIGURATION_UI=PASS');

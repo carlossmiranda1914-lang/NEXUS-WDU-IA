@@ -1,3 +1,4 @@
+import type { Pool, PoolClient } from 'pg';
 import { canonicalCurrencyRegistry } from './currency-registry.ts';
 
 export interface InstitutionFinancialProfileVersion {
@@ -13,7 +14,80 @@ export interface InstitutionFinancialProfileVersion {
 }
 
 export interface FinancialProfileStore {
-  resolveEffective(institutionId: string, at: Date): Promise<InstitutionFinancialProfileVersion | null>;
+  resolveEffective(institutionId: string, at?: Date): Promise<InstitutionFinancialProfileVersion | null>;
+}
+
+export interface FinancialContext {
+  institutionId: string;
+  financialProfileVersion: number;
+  functionalCurrency: string;
+  enabledCurrencies: readonly string[];
+  financialTimezone: string;
+}
+
+export class PostgresFinancialProfileStore implements FinancialProfileStore {
+  constructor(private readonly pool: Pool | PoolClient) {}
+
+  async resolveEffective(institutionId: string, at: Date = new Date()): Promise<InstitutionFinancialProfileVersion | null> {
+    const res = await this.pool.query<{
+      institution_id: string;
+      version: number;
+      effective_from: string | Date;
+      effective_to: string | Date | null;
+      primary_jurisdiction: string;
+      functional_currency: string;
+      financial_timezone: string;
+      monetary_policy_version: string;
+      enabled_currencies: string[] | string;
+    }>(
+      `SELECT institution_id, version, effective_from, effective_to, primary_jurisdiction,
+              functional_currency, financial_timezone, monetary_policy_version, enabled_currencies
+       FROM finance_profile_versions
+       WHERE institution_id = $1 AND effective_from <= $2 AND (effective_to IS NULL OR effective_to > $2)
+       ORDER BY version DESC LIMIT 1`,
+      [institutionId, at]
+    );
+
+    if (!res.rows[0]) return null;
+    const r = res.rows[0];
+    return {
+      institutionId: String(r.institution_id),
+      version: Number(r.version),
+      effectiveFrom: r.effective_from instanceof Date ? r.effective_from.toISOString() : String(r.effective_from),
+      effectiveTo: r.effective_to ? (r.effective_to instanceof Date ? r.effective_to.toISOString() : String(r.effective_to)) : null,
+      primaryJurisdiction: String(r.primary_jurisdiction),
+      functionalCurrency: String(r.functional_currency),
+      financialTimezone: String(r.financial_timezone),
+      monetaryPolicyVersion: String(r.monetary_policy_version),
+      enabledCurrencies: Array.isArray(r.enabled_currencies) ? r.enabled_currencies : JSON.parse(String(r.enabled_currencies)),
+    };
+  }
+
+  /** The public command owns its transaction; callers never pass a client. */
+  async createVersion(input: Omit<InstitutionFinancialProfileVersion, 'version' | 'effectiveTo'> & { effectiveTo?: string | null }): Promise<InstitutionFinancialProfileVersion> {
+    if (!input.institutionId || !input.primaryJurisdiction || !input.functionalCurrency || !input.financialTimezone || !input.monetaryPolicyVersion || !Array.isArray(input.enabledCurrencies) || input.enabledCurrencies.length === 0) throw new Error('FINANCIAL_PROFILE_INVALID');
+    const effectiveFrom = new Date(input.effectiveFrom);
+    if (Number.isNaN(effectiveFrom.getTime())) throw new Error('FINANCIAL_PROFILE_INVALID');
+    if (!('connect' in this.pool)) throw new Error('FINANCIAL_PROFILE_TRANSACTION_OWNER_REQUIRED');
+    const transactionPool = this.pool as Pool;
+    const client = await transactionPool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT id FROM institutions WHERE id=$1 FOR UPDATE', [input.institutionId]);
+      const current = await client.query<{ effective_from: Date }>('SELECT effective_from FROM finance_profile_versions WHERE institution_id=$1 AND effective_to IS NULL ORDER BY version DESC LIMIT 1 FOR UPDATE', [input.institutionId]);
+      if (current.rows[0] && effectiveFrom <= current.rows[0].effective_from) throw new Error('FINANCIAL_PROFILE_EFFECTIVE_OVERLAP');
+      await client.query('UPDATE finance_profile_versions SET effective_to=$2 WHERE institution_id=$1 AND effective_to IS NULL AND effective_from < $2', [input.institutionId, effectiveFrom]);
+      const created = await client.query<{ institution_id: string; version: number; effective_from: Date; effective_to: Date | null; primary_jurisdiction: string; functional_currency: string; financial_timezone: string; monetary_policy_version: string; enabled_currencies: string[] }>(
+        `INSERT INTO finance_profile_versions(institution_id,version,effective_from,primary_jurisdiction,functional_currency,financial_timezone,monetary_policy_version,enabled_currencies)
+         VALUES($1,(SELECT COALESCE(MAX(version),0)+1 FROM finance_profile_versions WHERE institution_id=$1),$2,$3,$4,$5,$6,$7)
+         RETURNING institution_id,version,effective_from,effective_to,primary_jurisdiction,functional_currency,financial_timezone,monetary_policy_version,enabled_currencies`,
+        [input.institutionId, effectiveFrom, input.primaryJurisdiction, input.functionalCurrency, input.financialTimezone, input.monetaryPolicyVersion, JSON.stringify(input.enabledCurrencies)],
+      );
+      await client.query('COMMIT');
+      const row = created.rows[0]!;
+      return { institutionId: row.institution_id, version: Number(row.version), effectiveFrom: row.effective_from.toISOString(), effectiveTo: row.effective_to?.toISOString() ?? null, primaryJurisdiction: row.primary_jurisdiction, functionalCurrency: row.functional_currency, financialTimezone: row.financial_timezone, monetaryPolicyVersion: row.monetary_policy_version, enabledCurrencies: row.enabled_currencies };
+    } catch (error) { await client.query('ROLLBACK').catch(() => undefined); throw error; } finally { client.release(); }
+  }
 }
 
 export async function requireFinancialContext(input: {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const app = fs.readFileSync('src/App.tsx', 'utf8');
+const financeWorkspace = fs.readFileSync('src/components/finance/FinanceWorkspace.tsx', 'utf8');
 const enrollmentChecklist = fs.readFileSync('src/components/EnrollmentDocumentChecklist.tsx', 'utf8');
 const enrollmentController = fs.readFileSync('src/modules/enrollments/enrollment-document.controller.ts', 'utf8');
 const genericFence = fs.readFileSync('tests/fnd03-document-storage-fence.test.ts', 'utf8');
@@ -9,7 +10,11 @@ const genericFence = fs.readFileSync('tests/fnd03-document-storage-fence.test.ts
 assert.match(app, /Arquivo documental genérico indisponível/);
 assert.match(app, /Assinaturas digitais indisponíveis/);
 assert.match(app, /Integração Google Sheets indisponível/);
-assert.match(app, /Operações financeiras indisponíveis/);
+assert.match(app, /const FinanceWorkspace = lazy\(\(\) => import\('\.\/components\/finance\/FinanceWorkspace'\)\)/);
+assert.match(app, /activeTab === 'financials'[\s\S]{0,500}<FinanceWorkspace/);
+assert.doesNotMatch(app, /activeTab === 'financials' && \(\s*<FactualUnavailablePanel/);
+assert.match(financeWorkspace, /<FinancePaymentsWorkspace/);
+assert.match(financeWorkspace, /<FinancialDocumentsWorkspace/);
 assert.doesNotMatch(app, /activeTab === 'sheets'[\s\S]{0,500}<GoogleSheetsCenter/);
 assert.doesNotMatch(app, /activeTab === 'financials'[\s\S]{0,500}<FinancialPanel/);
 
