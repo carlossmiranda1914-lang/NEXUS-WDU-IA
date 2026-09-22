@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-Updated: 2026-09-12
+Updated: 2026-09-22
 
 ## Integrated baseline
 
@@ -51,9 +51,22 @@ Accepted outcome:
 
 The former Integration Sync Gate is closed. Do not rerun it and do not treat `codex/finance-foundation-01` as active implementation authority.
 
+## Finance F7 capability state — canonical integrated baseline
+
+Canonical baseline: `codex/nexus-integrated-portal-v1 @ 47ad75d549bebfa5aa3409965800ca225f39e218`.
+
+- Finance Foundation and F1–F6: `PROVEN`.
+- Finance F7 capability: `PROVEN`.
+- Task 7 — Factura-Recibo from Obligation + Payment + valid Settlement Relationship: `PROVEN` / `CLOSED`.
+- Task 8 — Evidence-Backed Nota de Crédito: `PROVEN` / `CLOSED`.
+- Task 9 — Nota de Débito from explicit policy semantics: `PARTIAL` / `ACTIVE`; its separate issuance, artifact and Human-UAT closure remains governed by `docs/superpowers/plans/2026-09-17-finance-f7-task9-debit-event-basis.md` and `docs/superpowers/specs/2026-09-17-finance-f7-task9-debit-event-basis-design.md`.
+- H1 payment-allocation projection: `FIXED`.
+- H2 obligation/allocation read-model coherence, H3 payment-to-financial-document discoverability, and H4 relationship/context wiring: `DEFERRED_DEBT`. They do not retroactively reopen Task 7 or Task 8.
+
+Existing Finance evidence includes the F7 coherence plan (`docs/superpowers/plans/2026-09-16-finance-f7-coherence-solidification.md`), the Task 9 design/specification, and the Task 7/8 closure references in `docs/operations/NEXUS_EXECUTION_CONTRACT_PILOT.md`.
+
 ## Deferred / Planned stages
 
-- **Finance F1**: `PLANNING` / `NOT STARTED` — upper-Finance functional vertical from integrated Foundation awaiting approved contract.
 - **Documents I9**: `NOT AUTHORIZED` / `NOT STARTED`.
 
 ## Protected domain invariants

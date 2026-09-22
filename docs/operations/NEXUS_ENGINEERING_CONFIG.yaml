@@ -5,29 +5,28 @@ project:
   name: Nexus Edu IA
   repository: carlossmiranda1914-lang/NEXUS-WDU-IA
   integrated_baseline:
-    branch: main
-    sha: 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc
+    branch: codex/nexus-integrated-portal-v1
+    sha: 47ad75d549bebfa5aa3409965800ca225f39e218
 
 active_work:
   program: FINANCE
-  mission: FINANCE-F1-PREPARATION
-  mission_branch: null
-  durable_remote_checkpoint: 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc
-  activity: F1_PREPARATION
-  task: DEFINE_FIRST_FUNCTIONAL_VERTICAL
-  task_name: Define and approve the first upper-Finance functional vertical from the integrated Finance Foundation
-  state: PLANNING
+  mission: 2026-09-17-finance-f7-task9-debit-event-basis
+  mission_branch: codex/nexus-integrated-portal-v1
+  durable_remote_checkpoint: 47ad75d549bebfa5aa3409965800ca225f39e218
+  activity: TASK9_DEBIT_EVENT_BASIS_CLOSURE
+  task: TASK_9_NOTA_DE_DEBITO
+  task_name: Nota de Débito from explicit policy semantics
+  state: PARTIAL
   owner: Product Owner
   write_owner: NONE
   reviewer: NONE
   reviewer_mode: NOT_APPLICABLE
   risk: HIGH
   resume_rule: >-
-    Finance Foundation is integrated in main. Do not rerun the completed Integration Sync Gate and do not
-    reopen Tasks 1 through 8 without concrete regression evidence. F1 implementation is not authorized yet.
-    Resume with bounded F1 product/architecture preparation from the integrated main baseline; define and
-    approve the first functional vertical and its mission/implementation contract before creating an F1
-    implementation branch or writing production code.
+    Finance Foundation and F1 through F7 capability are proven on the canonical integrated baseline. Task 7
+    (Factura-Recibo) and Task 8 (Evidence-Backed Nota de Crédito) are proven and must not be reopened without
+    concrete regression evidence. Task 9 remains partial: its Nota de Débito closure requires its own issuance,
+    artifact and Human-UAT evidence under the approved Task 9 plan.
 
 execution:
   one_code_owner_per_unit: true
@@ -37,13 +36,10 @@ execution:
 
 scope:
   authorized:
-    - bounded F1 product and architecture preparation
-    - inspect integrated Finance Foundation and canonical roadmap evidence needed to define F1
-    - define the first functional vertical, invariants, proof requirements and implementation mission
-    - governance and planning documentation required to authorize that mission
+    - Task 9 closure evidence governed by the approved Task 9 plan
+    - governance and planning documentation required by that closure
   forbidden:
-    - F1 production implementation before explicit Product Owner approval of the F1 mission
-    - reopen Finance Foundation Tasks 1 through 8 without concrete regression evidence
+    - reopen Finance Foundation, Task 7 or Task 8 without concrete regression evidence
     - rerun the completed Finance Foundation Integration Sync Gate
     - alter accepted Journal Money financial-context idempotency reversal projection outbox or tenant semantics without a new authorized mission
     - force push or published-history rebase
@@ -53,6 +49,9 @@ scope:
 
 protected_invariants:
   - Finance Foundation Tasks 1 through 8 remain integrated and accepted with P0 0 and P1 0
+  - Finance F1 through F7 capability are proven on the canonical integrated baseline
+  - Task 7 Factura-Recibo and Task 8 Evidence-Backed Nota de Crédito remain proven
+  - H2 H3 and H4 are deferred product/read-model debt and do not retroactively reopen Task 7 or Task 8
   - Journal remains canonical economic truth
   - projection remains confirmed-only rebuildable read authority
   - legacy outstandingFees remains non-canonical Finance authority
@@ -63,22 +62,34 @@ protected_invariants:
 
 gates:
   finance_foundation_integrated: true
-  finance_foundation_merge_commit: 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc
+  canonical_finance_baseline: 47ad75d549bebfa5aa3409965800ca225f39e218
   accepted_finance_review_head: 74d575a574bb4e3dd3cf9652327c6f1c665f393b
   accepted_unresolved_p0: 0
   accepted_unresolved_p1: 0
   legacy_http_e2e_residual_risk_adjudicated: true
-  f1_design_approved: false
-  f1_mission_pack_exists: false
-  f1_implementation_authorized: false
+  finance_foundation: PROVEN
+  f1: PROVEN
+  f2: PROVEN
+  f3: PROVEN
+  f4: PROVEN
+  f5: PROVEN
+  f6: PROVEN
+  f7_capability: PROVEN
+  task7: PROVEN
+  task8: PROVEN
+  task9: PARTIAL
+  h1: FIXED
+  h2: DEFERRED_DEBT
+  h3: DEFERRED_DEBT
+  h4: DEFERRED_DEBT
 
 next_program:
   program: FINANCE
   roadmap_priority: 6
-  state: F1_PREPARATION
-  authorized_phase: PRODUCT_ARCHITECTURE_PREPARATION
-  implementation_authorized: false
-  authorization_scope: DEFINE_AND_APPROVE_FIRST_F1_FUNCTIONAL_VERTICAL
+  state: TASK9_PARTIAL
+  authorized_phase: TASK9_CLOSURE_EVIDENCE
+  implementation_authorized: true
+  authorization_scope: APPROVED_TASK9_PLAN_ONLY
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
@@ -92,11 +103,13 @@ resource_policy:
     - required_quality_gates
 
 integration:
-  finance_foundation: INTEGRATED
-  finance_foundation_main_commit: 3636c5054ce98a1f4f7990a5f7aafdde1ff22bcc
+  finance_foundation: PROVEN
+  canonical_integrated_branch: codex/nexus-integrated-portal-v1
+  canonical_integrated_head: 47ad75d549bebfa5aa3409965800ca225f39e218
   integration_sync_gate: COMPLETE
-  f1: NOT_STARTED
-  f1_implementation_authorized: false
+  task7: PROVEN
+  task8: PROVEN
+  task9: PARTIAL
   dirty_worktree_allowed: false
 
 recovery:
