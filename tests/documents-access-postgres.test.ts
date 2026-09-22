@@ -297,6 +297,75 @@ try {
     assert.ok(grantedEvent, 'Granted audit event must exist');
     assert.ok(openedEvent, 'Stream opened audit event must exist');
 
+    // 1B. AVAILABLE metadata MUST NOT override missing physical storage.
+    const { doc: docMissing, version: verMissing, session: sessionMissing } = await createAndVerifyDocument(
+      'identification',
+      'missing-object.pdf',
+      'application/pdf',
+      cleanPdf,
+      'v-missing-object',
+    );
+    const authMissing = await authorizeContentAccessCommand({
+      pool,
+      context: teacherContext,
+      idempotencyKey: 'idemp-auth-missing-object',
+      policyEngine,
+      accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
+      input: { documentId: docMissing.id, versionId: verMissing.id, action: 'open' },
+    });
+    await storageProvider.deleteObject({
+      storageBucket: sessionMissing.storageBucket,
+      storageKey: sessionMissing.storageKey,
+    });
+    await assert.rejects(
+      () =>
+        exchangeGrantForContentStreamCommand({
+          pool,
+          context: teacherContext,
+          policyEngine,
+          storageProvider,
+          input: { rawAccessToken: authMissing.result.rawAccessToken! },
+        }),
+      /STORAGE_INTEGRITY_INCIDENT: Physical object missing/,
+      'AVAILABLE metadata with missing physical bytes must be rejected as an integrity incident',
+    );
+
+    // 1C. AVAILABLE metadata MUST NOT override divergent physical bytes/hash.
+    const { doc: docTampered, version: verTampered, session: sessionTampered } = await createAndVerifyDocument(
+      'identification',
+      'tampered-object.pdf',
+      'application/pdf',
+      cleanPdf,
+      'v-tampered-object',
+    );
+    const authTampered = await authorizeContentAccessCommand({
+      pool,
+      context: teacherContext,
+      idempotencyKey: 'idemp-auth-tampered-object',
+      policyEngine,
+      accessGrantTokenKey: TEST_ACCESS_GRANT_TOKEN_KEY,
+      input: { documentId: docTampered.id, versionId: verTampered.id, action: 'open' },
+    });
+    const tamperedBytes = Buffer.from('%PDF-1.4 physically divergent content');
+    await storageProvider.simulateDirectUpload({
+      storageBucket: sessionTampered.storageBucket,
+      storageKey: sessionTampered.storageKey,
+      content: tamperedBytes,
+      mimeType: 'application/pdf',
+    });
+    await assert.rejects(
+      () =>
+        exchangeGrantForContentStreamCommand({
+          pool,
+          context: teacherContext,
+          policyEngine,
+          storageProvider,
+          input: { rawAccessToken: authTampered.result.rawAccessToken! },
+        }),
+      /STORAGE_INTEGRITY_INCIDENT: Physical object (size|hash) does not match canonical metadata/,
+      'AVAILABLE metadata with divergent physical bytes must be rejected as an integrity incident',
+    );
+
     // 2. INELIGIBLE_VERSION_STATES: content_received and quarantined
     const { doc: docReceived, version: verReceived } = await createAndVerifyDocument(
       'identification',
