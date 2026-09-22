@@ -1,8 +1,13 @@
 import type { Application, RequestHandler, Response } from 'express';
+import { Readable } from 'node:stream';
 import { pool } from '../../db/index.ts';
 import { requireAuth, type AuthRequest } from '../../middleware/auth.ts';
 import type { InstitutionalContext } from '../../auth/institutional-context.ts';
 import type { ObjectStorageProvider } from './object-storage-provider.ts';
+import { DocumentVerificationWorker } from './verification-worker.ts';
+import { ClamAvMalwareScanner } from './clamav-malware-scanner.ts';
+import { LocalUatMalwareScanner } from './local-uat-malware-scanner.ts';
+import type { MalwareScanner } from './malware-scanner.ts';
 import type { DocumentAccessPolicyEngine } from './document-access-policy.ts';
 import type { RetentionPolicyEngine } from './document-retention-policy.ts';
 import { PostgresDocumentRepository } from './document-repository.ts';
@@ -27,6 +32,11 @@ import {
   revokeContentAccessGrantCommand,
 } from './document-access-command.ts';
 import {
+  createDocumentAssociationCommand,
+  transitionAssociationStatusCommand,
+} from './document-association-command.ts';
+import {
+  assignRetentionCommand,
   placeHoldCommand,
   releaseHoldCommand,
   authorizeDeletionCommand,
@@ -141,12 +151,31 @@ export function rejectDomainError(res: Response, error: unknown): Response {
       msg.includes('ACTION_NOT_PERMITTED') ||
       msg.includes('HOLD_AUTHORITY_DENIED') ||
       msg.includes('DELETION_AUTHORITY_DENIED') ||
+      msg.includes('DELETION_AUTHORIZATION_DENIED') ||
       msg.includes('GRANT_GRANTEE_MISMATCH') ||
       msg.includes('MEMBERSHIP_REVOKED_OR_INACTIVE') ||
       msg.includes('POLICY_NO_LONGER_AUTHORIZED') ||
       msg.includes('ACCESS_DENIED_QUARANTINED')
     ) {
       return reject(res, 403, msg, 'AUTHORIZATION_DENIED');
+    }
+
+    // 422 Unprocessable Entity - Governance state blockers
+    if (msg.includes('RETENTION_ASSIGNMENT_MISSING')) {
+      return reject(
+        res,
+        422,
+        'Este documento ainda não possui uma política de retenção atribuída e, por isso, não pode ser eliminado.',
+        'RETENTION_ASSIGNMENT_MISSING',
+      );
+    }
+    if (msg.includes('RETENTION_ACTIVE') || msg.includes('RETENTION_PERIOD_ACTIVE')) {
+      return reject(
+        res,
+        422,
+        'O documento encontra-se sob prazo de retenção ativo e não pode ser eliminado.',
+        'RETENTION_ACTIVE',
+      );
     }
 
     // 404 Not Found
@@ -159,7 +188,9 @@ export function rejectDomainError(res: Response, error: unknown): Response {
       msg.includes('DELETION_AUTHORIZATION_NOT_FOUND') ||
       msg.includes('STORAGE_OBJECT_NOT_FOUND') ||
       msg.includes('STORAGE_REFERENCE_NOT_FOUND') ||
-      msg.includes('RETENTION_ASSIGNMENT_MISSING')
+      msg.includes('document_associations_document_tenant_fk') ||
+      msg.includes('violates foreign key constraint') ||
+      (error as any)?.code === '23503'
     ) {
       return reject(res, 404, 'O recurso solicitado não foi encontrado no tenant.', 'NOT_FOUND');
     }
@@ -189,15 +220,14 @@ export function rejectDomainError(res: Response, error: unknown): Response {
       return reject(res, 409, msg, 'CONFLICT');
     }
 
-    // 422 Unprocessable Entity
+    // 422 Unprocessable Entity - Other domain state blockers
     if (
       msg.includes('DECLARED_SIZE_EXCEEDS_POLICY') ||
       msg.includes('UPLOAD_AUTHORIZATION_EXPIRED') ||
       msg.includes('NOT_AVAILABLE_FOR_ACCESS') ||
       msg.includes('VERSION_DELETION_IN_PROGRESS') ||
       msg.includes('DELETION_AUTHORIZATION_STATUS_INVALID') ||
-      msg.includes('VERSION_NOT_ELIGIBLE_FOR_DELETION') ||
-      msg.includes('RETENTION_PERIOD_ACTIVE')
+      msg.includes('VERSION_NOT_ELIGIBLE_FOR_DELETION')
     ) {
       return reject(res, 422, msg, 'UNPROCESSABLE_STATE');
     }
@@ -232,6 +262,8 @@ export interface DocumentRouteDependencies {
   retentionPolicyEngine?: RetentionPolicyEngine;
   accessGrantTokenKey?: string;
   deletionPseudonymizationKey?: string;
+  verificationWorker?: DocumentVerificationWorker | null;
+  malwareScanner?: MalwareScanner | null;
 }
 
 export function registerDocumentRoutes(
@@ -269,6 +301,50 @@ export function registerDocumentRoutes(
   const storageProvider: ObjectStorageProvider | null = dependencies.storageProvider || null;
   const storageBucket: string | null =
     dependencies.storageBucket || process.env.DOCUMENTS_STORAGE_BUCKET || null;
+
+  let verificationWorker: DocumentVerificationWorker | null =
+    dependencies.verificationWorker !== undefined
+      ? dependencies.verificationWorker
+      : null;
+
+  if (dependencies.verificationWorker === undefined && storageProvider && storageBucket) {
+    try {
+      let malwareScanner = dependencies.malwareScanner;
+      if (!malwareScanner) {
+        if (
+          (storageProvider.providerName === 'local_uat' ||
+            process.env.DOCUMENTS_STORAGE_PROVIDER === 'local_uat' ||
+            process.env.DOCUMENTS_MALWARE_SCANNER === 'local_uat') &&
+          process.env.NODE_ENV !== 'production'
+        ) {
+          malwareScanner = new LocalUatMalwareScanner();
+        } else {
+          const clamavUrl =
+            process.env.CLAMAV_SERVICE_URL || 'https://nexus-clamav-staging-oihjcxwo5a-ew.a.run.app';
+          malwareScanner = new ClamAvMalwareScanner({
+            serviceUrl: clamavUrl,
+            host: process.env.CLAMAV_HOST || '127.0.0.1',
+            port: Number(process.env.CLAMAV_PORT || 3310),
+          });
+        }
+      }
+
+      verificationWorker = new DocumentVerificationWorker({
+        pool: docPool,
+        storageProvider,
+        malwareScanner,
+        storageBucket,
+        gcpProjectId: process.env.GOOGLE_CLOUD_PROJECT || 'nexus-wdu-staging',
+        trustedAuthority: {
+          kind: 'trusted_system_worker',
+          workerId: 'deployed-staging-verification-worker-01',
+          workerName: 'Nexus Cloud Run Verification Worker',
+        },
+      });
+    } catch (workerErr) {
+      console.error('[DOCUMENTS-CONTROLLER] Verification worker initialization failed:', workerErr);
+    }
+  }
 
   const operationalAvailability: DocumentOperationalAvailability = {
     canAccess: Boolean(storageProvider && policyEngine && accessGrantTokenKey),
@@ -368,12 +444,18 @@ export function registerDocumentRoutes(
         byte_size: string;
         sha256_hash: string;
         status: string;
+        created_by_person_name: string | null;
+        original_filename: string | null;
         created_at: Date;
       }>(
-        `SELECT id, document_id, version_number, mime_type, byte_size, sha256_hash, status, created_at
-           FROM document_versions
-          WHERE institution_id = $1 AND document_id = $2
-          ORDER BY version_number DESC`,
+        `SELECT v.id, v.document_id, v.version_number, v.mime_type, v.byte_size, v.sha256_hash, v.status, v.created_at,
+                p.name AS created_by_person_name,
+                s.declared_filename AS original_filename
+           FROM document_versions v
+           LEFT JOIN people p ON p.id = v.created_by_person_id
+           LEFT JOIN document_upload_sessions s ON s.institution_id = v.institution_id AND s.completed_version_id = v.id
+          WHERE v.institution_id = $1 AND v.document_id = $2
+          ORDER BY v.version_number DESC`,
         [context.institutionId, documentId],
       );
 
@@ -384,11 +466,171 @@ export function registerDocumentRoutes(
         byteSize: Number(r.byte_size),
         sha256Hash: r.sha256_hash,
         status: r.status as any,
+        originalFilename: r.original_filename || undefined,
+        declaredFilename: r.original_filename || undefined,
+        createdByPersonName: r.created_by_person_name,
         createdAt: r.created_at.toISOString(),
       }));
 
       assertNoInternalSecretsInDto(items);
       return res.json({ items });
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
+  // 2.2. GET /api/documents/association-targets/search — Search same-tenant targets
+  app.get('/api/documents/association-targets/search', docAuth, async (req: AuthRequest, res: Response) => {
+    const context = req.institutionalContext;
+    if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    const domain = (req.query.domain as string) || 'enrollment';
+    const searchQuery = ((req.query.q as string) || '').trim();
+
+    try {
+      if (domain === 'enrollment' || domain === 'student') {
+        const query = `
+          SELECT e.id, p.name AS student_name, y.name AS academic_year_name, o.name AS offer_name, e.status, p.national_id_number
+          FROM enrollment_applications e
+          JOIN people p ON p.id = e.student_person_id
+          JOIN academic_years y ON y.id = e.academic_year_id
+          JOIN enrollment_offers o ON o.id = e.offer_id
+          WHERE e.institution_id = $1
+            AND ($2 = '' OR p.name ILIKE $3 OR y.name ILIKE $3 OR o.name ILIKE $3 OR (p.national_id_number IS NOT NULL AND p.national_id_number ILIKE $3))
+          ORDER BY e.updated_at DESC
+          LIMIT 25
+        `;
+        const result = await docPool.query(query, [
+          context.institutionId,
+          searchQuery,
+          `%${searchQuery}%`,
+        ]);
+        const targets = result.rows.map((r: any) => ({
+          id: r.id,
+          name: `${r.student_name} (${r.academic_year_name})`,
+          domain: 'enrollment',
+          resourceType: 'enrollment_application',
+          detail: `Oferta: ${r.offer_name} | Estado: ${r.status}${r.national_id_number ? ` | NIF/BI: ${r.national_id_number}` : ''}`,
+        }));
+        return res.json({ targets });
+      } else if (domain === 'academic') {
+        const query = `
+          SELECT y.id, y.name, y.status, y.starts_on, y.ends_on
+          FROM academic_years y
+          WHERE y.institution_id = $1
+            AND ($2 = '' OR y.name ILIKE $3)
+          ORDER BY y.starts_on DESC
+          LIMIT 25
+        `;
+        const result = await docPool.query(query, [
+          context.institutionId,
+          searchQuery,
+          `%${searchQuery}%`,
+        ]);
+        const targets = result.rows.map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          domain: 'academic',
+          resourceType: 'academic_year',
+          detail: `Ano Letivo | Estado: ${r.status}`,
+        }));
+        return res.json({ targets });
+      } else {
+        return reject(res, 400, 'Domínio de associação inválido (deve ser "enrollment" ou "academic").');
+      }
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
+  // 2.3. POST /api/documents/:id/associations — Create canonical association
+  app.post('/api/documents/:id/associations', docAuth, async (req: AuthRequest, res: Response) => {
+    const context = req.institutionalContext;
+    if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    const documentId = req.params.id;
+    if (!validUuid(documentId)) {
+      return reject(res, 400, 'Identificador de documento inválido.');
+    }
+
+    const { targetDomain, targetResourceType, targetResourceId, purpose, pinnedVersionId } = req.body || {};
+    if (!targetDomain || typeof targetDomain !== 'string') {
+      return reject(res, 400, 'targetDomain é obrigatório.');
+    }
+    if (!targetResourceType || typeof targetResourceType !== 'string') {
+      return reject(res, 400, 'targetResourceType é obrigatório.');
+    }
+    if (!targetResourceId || typeof targetResourceId !== 'string') {
+      return reject(res, 400, 'targetResourceId é obrigatório.');
+    }
+    if (!purpose || typeof purpose !== 'string') {
+      return reject(res, 400, 'purpose é obrigatório.');
+    }
+    if (pinnedVersionId !== undefined && pinnedVersionId !== null && !validUuid(pinnedVersionId)) {
+      return reject(res, 400, 'pinnedVersionId inválido.');
+    }
+
+    try {
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
+
+      const assocRes = await createDocumentAssociationCommand({
+        pool: docPool,
+        context,
+        idempotencyKey,
+        input: {
+          documentId,
+          pinnedVersionId: pinnedVersionId || null,
+          targetDomain,
+          targetResourceType,
+          targetResourceId,
+          purpose,
+          correlationId: req.header('x-correlation-id') || null,
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        association: assocRes.result,
+        replayed: assocRes.replayed,
+      });
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
+  // 2.4. DELETE /api/documents/:id/associations/:assocId — Withdraw association
+  app.delete('/api/documents/:id/associations/:assocId', docAuth, async (req: AuthRequest, res: Response) => {
+    const context = req.institutionalContext;
+    if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    const documentId = req.params.id;
+    const assocId = req.params.assocId;
+    if (!validUuid(documentId) || !validUuid(assocId)) {
+      return reject(res, 400, 'Identificadores inválidos.');
+    }
+
+    try {
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
+
+      const result = await transitionAssociationStatusCommand({
+        pool: docPool,
+        context,
+        idempotencyKey,
+        input: {
+          associationId: assocId,
+          targetStatus: 'withdrawn',
+          reason: (req.body?.reason as string) || 'Associação retirada pelo utilizador',
+          correlationId: req.header('x-correlation-id') || null,
+        },
+      });
+
+      return res.json({
+        success: true,
+        association: result.result,
+        replayed: result.replayed,
+      });
     } catch (error) {
       return rejectDomainError(res, error);
     }
@@ -676,49 +918,38 @@ export function registerDocumentRoutes(
       const declaredSize = Number(row.declared_byte_size);
 
       // 5. Stream transfer through storageProvider
+      let inputStream: Readable = req;
+      if (req.readableEnded && (req as any).body !== undefined) {
+        const body = (req as any).body;
+        const bodyBuf = Buffer.isBuffer(body)
+          ? body
+          : typeof body === 'string'
+            ? Buffer.from(body)
+            : Buffer.from(JSON.stringify(body));
+        inputStream = Readable.from(bodyBuf);
+      }
+
+      const requestContentType = req.header('content-type');
+      const effectiveMimeType =
+        requestContentType && requestContentType !== 'application/octet-stream'
+          ? requestContentType
+          : row.declared_mime_type;
+
       let transferResult: { byteSize: number; sha256Hash: string; mimeType: string };
       if (typeof storageProvider.writeObjectStream === 'function') {
         transferResult = await storageProvider.writeObjectStream({
           institutionId: context.institutionId,
           storageBucket: row.storage_bucket,
           storageKey: row.storage_key,
-          stream: req,
+          stream: inputStream,
           declaredByteSize: declaredSize,
-          mimeType: req.header('content-type') || row.declared_mime_type,
+          mimeType: effectiveMimeType,
         });
         if (transferResult.byteSize > effectiveLimit) {
           return reject(res, 422, `DECLARED_SIZE_EXCEEDS_POLICY: Tamanho do ficheiro excede o limite efetivo de ${effectiveLimit} bytes.`);
         }
       } else {
-        const chunks: Buffer[] = [];
-        let totalBytes = 0;
-        for await (const chunk of req) {
-          const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-          totalBytes += buf.length;
-          if (totalBytes > effectiveLimit) {
-            return reject(res, 422, `DECLARED_SIZE_EXCEEDS_POLICY: Tamanho do ficheiro excede o limite efetivo de ${effectiveLimit} bytes.`);
-          }
-          chunks.push(buf);
-        }
-        const fullBuffer = Buffer.concat(chunks);
-        if (fullBuffer.length > effectiveLimit) {
-          return reject(res, 422, `DECLARED_SIZE_EXCEEDS_POLICY: Tamanho do ficheiro excede o limite efetivo.`);
-        }
-        if (typeof (storageProvider as any).simulateDirectUpload === 'function') {
-          const simulated = await (storageProvider as any).simulateDirectUpload({
-            storageBucket: row.storage_bucket,
-            storageKey: row.storage_key,
-            content: fullBuffer,
-            mimeType: req.header('content-type') || row.declared_mime_type,
-          });
-          transferResult = {
-            byteSize: simulated.byteSize,
-            sha256Hash: simulated.sha256Hash,
-            mimeType: simulated.mimeType,
-          };
-        } else {
-          throw new Error('STORAGE_PROVIDER_STREAM_NOT_SUPPORTED');
-        }
+        throw new Error('STORAGE_PROVIDER_STREAM_NOT_SUPPORTED');
       }
 
       // 6. Confirm object presence in storage
@@ -795,6 +1026,25 @@ export function registerDocumentRoutes(
 
       assertNoInternalSecretsInDto(safeSession);
       assertNoInternalSecretsInDto(safeVersion);
+
+      // Autonomous async verification execution on deployed worker
+      if (verificationWorker && !completeRes.replayed) {
+        const institutionId = context.institutionId;
+        const documentId = completeRes.result.session.documentId;
+        const versionId = completeRes.result.version.id;
+        const actorPersonId = context.personId;
+
+        setImmediate(() => {
+          verificationWorker!.processVerificationJob({
+            institutionId,
+            documentId,
+            versionId,
+            actorPersonId,
+          }).catch((workerErr) => {
+            console.error(`[DEPLOYED_ASYNC_VERIFICATION_ERROR] Doc ${documentId} Ver ${versionId}:`, workerErr);
+          });
+        });
+      }
 
       return res.json({
         success: true,
@@ -1035,10 +1285,129 @@ export function registerDocumentRoutes(
     }
   });
 
+  // 11.1. POST /api/documents/:id/retention — Governed retention assignment
+  app.post(['/api/documents/:id/retention', '/api/documents/:id/retention/assign'], docAuth, async (req: AuthRequest, res: Response) => {
+    const context = req.institutionalContext;
+    if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    // Enforce role authorization
+    const isManager = ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(context.role);
+    if (!isManager) {
+      return reject(res, 403, 'Apenas administradores podem atribuir políticas de retenção.', 'AUTHORIZATION_DENIED');
+    }
+
+    if (!retentionPolicyEngine) {
+      return rejectDomainError(res, new Error('RETENTION_POLICY_ENGINE_MISSING'));
+    }
+
+    const documentId = req.params.id;
+    if (!validUuid(documentId)) return reject(res, 400, 'Identificador de documento inválido.');
+
+    const {
+      versionId: rawVersionId,
+      category: rawCategory,
+      jurisdictionProfileId,
+      purpose,
+      clockTriggerEventAt: rawClockTriggerEventAt,
+      policyId,
+    } = req.body || {};
+
+    if (!jurisdictionProfileId || typeof jurisdictionProfileId !== 'string' || !jurisdictionProfileId.trim()) {
+      return reject(res, 400, 'jurisdictionProfileId é obrigatório e não pode ser vazio.');
+    }
+
+    if (!rawClockTriggerEventAt) {
+      return reject(res, 400, 'clockTriggerEventAt é obrigatório.');
+    }
+
+    const clockTriggerEventAt = new Date(rawClockTriggerEventAt);
+    if (Number.isNaN(clockTriggerEventAt.getTime())) {
+      return reject(res, 400, 'clockTriggerEventAt data inválida.');
+    }
+
+    try {
+      let versionId = rawVersionId;
+      if (!versionId) {
+        const vResult = await docPool.query<{ id: string }>(
+          `SELECT id FROM document_versions
+           WHERE institution_id = $1 AND document_id = $2
+           ORDER BY version_number DESC LIMIT 1`,
+          [context.institutionId, documentId],
+        );
+        if (vResult.rows.length === 0) return reject(res, 404, 'Nenhuma versão encontrada.');
+        versionId = vResult.rows[0].id;
+      } else if (!validUuid(versionId)) {
+        return reject(res, 400, 'versionId inválido.');
+      }
+
+      let category = rawCategory;
+      if (!category) {
+        const dResult = await docPool.query<{ category: string }>(
+          `SELECT category FROM documents
+           WHERE institution_id = $1 AND id = $2`,
+          [context.institutionId, documentId],
+        );
+        if (dResult.rows.length === 0) return reject(res, 404, 'Documento não encontrado.');
+        category = dResult.rows[0].category;
+      }
+
+      const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+      if (idempotencyKey === null) return res;
+
+      const assignRes = await assignRetentionCommand({
+        pool: docPool,
+        context,
+        idempotencyKey,
+        policyEngine: retentionPolicyEngine,
+        input: {
+          documentId,
+          versionId,
+          jurisdictionProfileId: jurisdictionProfileId.trim(),
+          category,
+          purpose: purpose || null,
+          clockTriggerEventAt,
+          policyId: policyId || undefined,
+          correlationId: req.header('x-correlation-id') || null,
+        },
+      });
+
+      const safeAssignment = {
+        id: assignRes.result.id,
+        documentId: assignRes.result.documentId,
+        versionId: assignRes.result.versionId,
+        policyId: assignRes.result.policyId,
+        policyVersion: assignRes.result.policyVersion,
+        jurisdictionProfileId: assignRes.result.jurisdictionProfileId,
+        category: assignRes.result.category,
+        purpose: assignRes.result.purpose,
+        retainUntil: assignRes.result.retainUntil.toISOString(),
+        retentionStatus: assignRes.result.retentionStatus,
+        clockTriggerType: assignRes.result.clockTriggerType,
+        clockTriggerEventAt: assignRes.result.clockTriggerEventAt.toISOString(),
+        assignedAt: assignRes.result.assignedAt.toISOString(),
+      };
+
+      assertNoInternalSecretsInDto(safeAssignment);
+
+      return res.status(201).json({
+        success: true,
+        retentionAssignment: safeAssignment,
+        replayed: assignRes.replayed,
+      });
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
   // 12. POST /api/documents/:id/holds — Place hold
   app.post('/api/documents/:id/holds', docAuth, async (req: AuthRequest, res: Response) => {
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    const isManager = ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(context.role);
+    if (!isManager) {
+      return reject(res, 403, 'Apenas administradores podem colocar bloqueios.', 'AUTHORIZATION_DENIED');
+    }
 
     if (!retentionPolicyEngine) {
       return rejectDomainError(res, new Error('RETENTION_POLICY_ENGINE_MISSING'));
@@ -1118,6 +1487,11 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    const isManager = ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(context.role);
+    if (!isManager) {
+      return reject(res, 403, 'Apenas administradores podem libertar bloqueios.', 'AUTHORIZATION_DENIED');
+    }
+
     if (!retentionPolicyEngine) {
       return rejectDomainError(res, new Error('RETENTION_POLICY_ENGINE_MISSING'));
     }
@@ -1193,6 +1567,11 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    const isManager = ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(context.role);
+    if (!isManager) {
+      return reject(res, 403, 'Apenas administradores podem autorizar a eliminação.', 'AUTHORIZATION_DENIED');
+    }
+
     if (!retentionPolicyEngine) {
       return rejectDomainError(res, new Error('RETENTION_POLICY_ENGINE_MISSING'));
     }
@@ -1247,6 +1626,11 @@ export function registerDocumentRoutes(
   app.post('/api/documents/:id/deletion/execute', docAuth, async (req: AuthRequest, res: Response) => {
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    const isManager = ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(context.role);
+    if (!isManager) {
+      return reject(res, 403, 'Apenas administradores podem executar a eliminação.', 'AUTHORIZATION_DENIED');
+    }
 
     if (!deletionPseudonymizationKey) {
       return rejectDomainError(res, new Error('DELETION_PSEUDONYMIZATION_KEY_MISSING'));

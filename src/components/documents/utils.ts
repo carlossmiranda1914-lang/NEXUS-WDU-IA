@@ -43,17 +43,17 @@ export function getCategoryLabel(category: string | null | undefined): string {
     case 'academic':
     case 'academico':
     case 'académico':
-      return 'Académicos';
+      return 'Académico';
     case 'administrative':
     case 'administrativo':
     case 'administrativos':
-      return 'Administrativos';
+      return 'Administrativo';
     case 'administrative_financial':
       return 'Administrativo / Financeiro';
     case 'financial':
     case 'financeiro':
     case 'financeiros':
-      return 'Financeiros';
+      return 'Financeiro';
     case 'identity_enrollment':
       return 'Identidade / Matrícula';
     case 'absence_justification':
@@ -68,7 +68,35 @@ export function getCategoryLabel(category: string | null | undefined): string {
     case 'enrollment':
     case 'matricula':
     case 'matrícula':
-      return 'Matrículas';
+      return 'Matrícula';
+    default:
+      return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).replace(/_/g, ' ');
+  }
+}
+
+export function getClassificationLabel(classification: string | null | undefined): string {
+  if (!classification) return '—';
+  const trimmed = classification.trim();
+  const lower = trimmed.toLowerCase();
+  switch (lower) {
+    case 'internal':
+    case 'uso_interno':
+    case 'uso interno':
+      return 'Uso interno';
+    case 'standard':
+    case 'padrao':
+    case 'padrão':
+      return 'Padrão';
+    case 'confidential':
+    case 'confidencial':
+      return 'Confidencial';
+    case 'restricted':
+    case 'restrito':
+      return 'Restrito';
+    case 'public':
+    case 'publico':
+    case 'público':
+      return 'Público';
     default:
       return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).replace(/_/g, ' ');
   }
@@ -173,6 +201,7 @@ export function getRetentionStatusPresentation(
   }
 
   switch (retentionStatus.toLowerCase()) {
+    case 'retention_active':
     case 'active':
     case 'in_force':
       return {
@@ -180,23 +209,37 @@ export function getRetentionStatusPresentation(
         tone: 'emerald',
         description: 'Prazo legal de conservação em vigor.',
       };
+    case 'retention_expired':
     case 'expired':
       return {
         label: 'Prazo Expirado',
         tone: 'amber',
         description: 'Período legal de retenção concluído. Elegível para revisão ou eliminação.',
       };
+    case 'eligible_for_deletion':
+      return {
+        label: 'Elegível para Eliminação',
+        tone: 'amber',
+        description: 'Retenção concluída e elegível para autorização de eliminação governada.',
+      };
+    case 'deletion_authorized':
+      return {
+        label: 'Eliminação Autorizada',
+        tone: 'rose',
+        description: 'Eliminação autorizada por custodiante governado.',
+      };
+    case 'deleted':
+    case 'disposed':
+      return {
+        label: 'Eliminado',
+        tone: 'zinc',
+        description: 'Conteúdo eliminado com base no calendário de retenção.',
+      };
     case 'permanent':
       return {
         label: 'Conservação Permanente',
         tone: 'blue',
         description: 'Documento de arquivo institucional perpétuo.',
-      };
-    case 'disposed':
-      return {
-        label: 'Expurgado',
-        tone: 'zinc',
-        description: 'Conteúdo eliminado com base no calendário de retenção.',
       };
     default:
       return {
@@ -228,6 +271,30 @@ export function getBadgeClasses(tone: 'emerald' | 'amber' | 'rose' | 'blue' | 'z
         ? 'border-blue-200 bg-blue-50 text-blue-800'
         : 'border-blue-500/30 bg-blue-500/10 text-blue-300';
     case 'zinc':
+    default:
+      return isLight
+        ? 'border-zinc-200 bg-zinc-100 text-zinc-700'
+        : 'border-white/10 bg-zinc-800 text-zinc-300';
+  }
+}
+
+export function getClassificationBadgeClass(classification: string | null | undefined, theme: Theme): string {
+  const isLight = theme === 'light';
+  const lower = (classification || '').toLowerCase();
+  switch (lower) {
+    case 'confidential':
+    case 'confidencial':
+    case 'restricted':
+    case 'restrito':
+      return isLight
+        ? 'border-amber-200 bg-amber-50 text-amber-800'
+        : 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+    case 'public':
+    case 'publico':
+    case 'público':
+      return isLight
+        ? 'border-blue-200 bg-blue-50 text-blue-800'
+        : 'border-blue-500/30 bg-blue-500/10 text-blue-300';
     default:
       return isLight
         ? 'border-zinc-200 bg-zinc-100 text-zinc-700'

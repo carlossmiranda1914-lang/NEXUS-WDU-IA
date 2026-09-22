@@ -148,6 +148,7 @@ try {
     accessGrantTokenKey,
     deletionPseudonymizationKey,
     uploadPolicyConfig,
+    verificationWorker: null,
   });
 
   server = await new Promise<http.Server>((resolve) => {
@@ -257,7 +258,7 @@ try {
   const versionId = completeData.versionId;
 
   // Transition version status to 'available' to simulate passing verification
-  await pool.query(
+  await client.query(
     `UPDATE document_versions SET status = 'available' WHERE id = $1`,
     [versionId],
   );
