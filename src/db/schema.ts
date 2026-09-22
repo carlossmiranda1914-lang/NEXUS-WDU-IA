@@ -139,7 +139,7 @@ export const studentProfiles = pgTable('student_profiles', {
   personId: uuid('person_id').notNull().references(() => people.id, { onDelete: 'restrict' }),
   // Opaque server-generated route handle. This is not a Person identifier and
   // is safe to resolve only alongside the server-owned institution context.
-  publicRef: text('public_ref').notNull().default(sql`'stu_' || translate(rtrim(encode(public.gen_random_bytes(16), 'base64'), '='), '+/', '-_')`),
+  publicRef: text('public_ref').notNull().default(sql`'stu_' || translate(rtrim(encode(gen_random_bytes(16), 'base64'), '='), '+/', '-_')`),
   studentNumber: text('student_number'),
   // Transitional link to the legacy SIS record. It is intentionally nullable:
   // no profile receives access to legacy data until an administrator maps it.
