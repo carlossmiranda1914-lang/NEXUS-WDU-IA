@@ -68,10 +68,13 @@ const syntheticUatAdapter: FiscalAdapter = {
   key: 'core',
   supportedJurisdictions: ['NEXUS_TEST'],
   policy: {
-    version: 'core-1', supportedDocumentTypes: ['receipt', 'credit_note', 'invoice', 'invoice_receipt'],
+    version: 'core-1', supportedDocumentTypes: ['receipt', 'credit_note', 'debit_note', 'invoice', 'invoice_receipt'],
     documentary: {
       receipt: { taxTreatment: 'not_applicable', legalMentions: [] },
       credit_note: { taxTreatment: 'not_applicable', legalMentions: [] },
+      // Test/UAT policy only. Production AO remains fail-closed in the
+      // production registry until its external requirements are present.
+      debit_note: { taxTreatment: 'zero_tax_liquidation', legalMentions: ['AO-RJF-DOC-080', 'AO-RJF-DEBIT-083'] },
       invoice: { taxTreatment: 'not_applicable', legalMentions: [] },
       invoice_receipt: { taxTreatment: 'not_applicable', legalMentions: [] },
     },

@@ -10,6 +10,7 @@ import { FinanceAllocationCreateView } from './FinanceAllocationCreateView.tsx';
 import { FinanceAllocationReverseView } from './FinanceAllocationReverseView.tsx';
 import { allocationClient } from '../../../modules/finance/allocation-client.ts';
 import { obligationAdjustmentClient } from '../../../modules/finance/obligation-adjustment-client.ts';
+import { financialDocumentClient } from '../../../modules/finance/financial-document-client.ts';
 import { obligationDiscountClient } from '../../../modules/finance/obligation-discount-client.ts';
 import { FinanceObligationAdjustmentView } from './FinanceObligationAdjustmentView.tsx';
 import { FinanceObligationDiscountView } from './FinanceObligationDiscountView.tsx';
@@ -19,6 +20,7 @@ export interface FinanceOperationalContextWorkspaceProps {
   theme?: string;
   initialFinancialAccountId?: string;
   initialContextQuery?: { financialAccountId?: string; studentRef?: string; enrollmentId?: string } | null;
+  onOpenFinancialDocument?: (documentId: string) => void;
 }
 
 const client = new FinanceOperationalContextClient();
@@ -27,6 +29,7 @@ export function FinanceOperationalContextWorkspace({
   theme = 'light',
   initialFinancialAccountId,
   initialContextQuery,
+  onOpenFinancialDocument,
 }: FinanceOperationalContextWorkspaceProps) {
   const isLight = theme === 'light';
 
@@ -56,6 +59,16 @@ export function FinanceOperationalContextWorkspace({
     mode: 'apply' | 'revoke';
   } | null>(null);
   const [paymentSuccessNotice, setPaymentSuccessNotice] = useState<string | null>(null);
+  const [eligibleDebitNoteAdjustmentIds, setEligibleDebitNoteAdjustmentIds] = useState<ReadonlySet<string>>(new Set());
+  const [issuedDebitNote, setIssuedDebitNote] = useState<{ id: string; documentType: 'debit_note'; sequenceNumber: number; adjustmentId: string; replayed: boolean } | null>(null);
+
+  useEffect(() => {
+    const adjustments = context?.history.filter((item): item is Extract<NonNullable<FinanceOperationalContext>['history'][number], { kind: 'adjustment' }> => item.kind === 'adjustment') ?? [];
+    let current = true;
+    Promise.all(adjustments.map(async item => ({ id: item.id, readiness: await financialDocumentClient.debitNoteReadiness(item.id).catch(() => ({ status: 'BLOCKED' as const })) })))
+      .then(results => { if (current) setEligibleDebitNoteAdjustmentIds(new Set(results.filter(result => result.readiness.status === 'ELIGIBLE').map(result => result.id))); });
+    return () => { current = false; };
+  }, [context]);
 
   // 1. Server-side bounded account search
   const performSearch = useCallback(async (q: string) => {
@@ -451,7 +464,19 @@ export function FinanceOperationalContextWorkspace({
             theme={theme}
             history={context.history}
             onReverse={setReversalAllocation}
+            eligibleDebitNoteAdjustmentIds={eligibleDebitNoteAdjustmentIds}
+            onIssueDebitNote={async (adjustment) => {
+              const readiness = await financialDocumentClient.debitNoteReadiness(adjustment.id);
+              if (readiness.status !== 'ELIGIBLE' || !window.confirm('Confirmar emissão da Nota de Débito?')) return;
+              const issued = await financialDocumentClient.issueDebitNote({ adjustmentId: adjustment.id, seriesId: readiness.seriesId, idempotencyKey: `debit-note-${crypto.randomUUID()}` });
+              setIssuedDebitNote(issued);
+              await loadContext(selectedAccountId);
+            }}
           />
+          {issuedDebitNote && <section data-testid="debit-note-issued-success" className="mt-4 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm">
+            <strong>Nota de Débito emitida com sucesso.</strong><p>Documento {issuedDebitNote.id} · sequência {issuedDebitNote.sequenceNumber}{issuedDebitNote.replayed ? ' (operação recuperada sem duplicação)' : ''}.</p>
+            <button type="button" data-testid="open-issued-debit-note" onClick={() => onOpenFinancialDocument?.(issuedDebitNote.id)} className="mt-2 rounded-md border px-3 py-1">Abrir Nota de Débito emitida</button>
+          </section>}
         </>
       )}
       {adjustmentObligationId && (

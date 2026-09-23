@@ -59,8 +59,20 @@ export type CreditNoteDocumentarySnapshotV5 = Readonly<{
   tax: InvoiceDocumentarySnapshotV3['tax']; jurisdiction: InvoiceDocumentarySnapshotV3['jurisdiction']; legalMentions: readonly string[];
   policyProvenance: DocumentarySnapshotV2['policyProvenance'];
 }>;
-export type DocumentarySnapshot = DocumentarySnapshotV1 | DocumentarySnapshotV2 | InvoiceDocumentarySnapshotV3 | InvoiceReceiptDocumentarySnapshotV4 | CreditNoteDocumentarySnapshotV5;
-export type DecodedDocumentarySnapshot = Readonly<{ snapshotVersion: 1 | 2 | 3 | 4 | 5; snapshot: DocumentarySnapshot }>;
+/** A Nota de Débito freezes the authoritative debit-event adjustment, never a payment correction. */
+export type DebitNoteDocumentarySnapshotV6 = Readonly<{
+  snapshotVersion: 6;
+  document: Readonly<{ type: 'debit_note'; issuedAt: string; currency: string }>;
+  issuer: DocumentarySnapshotV1['issuer']; recipient: DocumentaryPartySnapshot; billingParty: DocumentaryPartySnapshot;
+  obligation: Readonly<{ authorityId: string; reference: string; currency: string }>;
+  debitEvent: Readonly<{ adjustmentId: string; obligationId: string; amount: string; currency: string; reason: string; basisType: 'debit_event'; journalTransactionId: string }>;
+  payment: null; totals: Readonly<{ documentTotal: string; currency: string }>;
+  tax: Readonly<{ treatment: 'zero_tax_liquidation'; amount: '0' }>;
+  jurisdiction: InvoiceDocumentarySnapshotV3['jurisdiction']; legalMentions: readonly string[];
+  policyProvenance: DocumentarySnapshotV2['policyProvenance'];
+}>;
+export type DocumentarySnapshot = DocumentarySnapshotV1 | DocumentarySnapshotV2 | InvoiceDocumentarySnapshotV3 | InvoiceReceiptDocumentarySnapshotV4 | CreditNoteDocumentarySnapshotV5 | DebitNoteDocumentarySnapshotV6;
+export type DecodedDocumentarySnapshot = Readonly<{ snapshotVersion: 1 | 2 | 3 | 4 | 5 | 6; snapshot: DocumentarySnapshot }>;
 
 const freeze = <T>(value: T): Readonly<T> => Object.freeze(value);
 const deepFreeze = <T>(value: T): Readonly<T> => {
@@ -207,6 +219,22 @@ export function composeInvoiceReceiptDocumentarySnapshotV4(input: {
   }) as InvoiceReceiptDocumentarySnapshotV4;
 }
 
+export function composeDebitNoteDocumentarySnapshotV6(input: {
+  issuedAt: Date; issuer: DocumentarySnapshotV1['issuer']; recipient: DocumentaryPartySnapshot; billingParty: DocumentaryPartySnapshot;
+  obligation: { authorityId: string; reference: string; currency: string };
+  debitEvent: { adjustmentId: string; obligationId: string; amount: string; currency: string; reason: string; journalTransactionId: string };
+  jurisdictionCode: string; policyVersion: string; financialProfileVersion: number; fiscalConfigurationVersion: number; seriesId: string; adapterKey: string; legalMentions: readonly string[];
+}): DebitNoteDocumentarySnapshotV6 {
+  if (input.debitEvent.currency !== input.obligation.currency) throw new Error('DEBIT_NOTE_CURRENCY_MISMATCH');
+  if (Money.parse(input.debitEvent.amount, input.debitEvent.currency).compare(Money.parse('0', input.debitEvent.currency)) <= 0) throw new Error('DEBIT_NOTE_AMOUNT_INVALID');
+  if (!input.legalMentions.includes('AO-RJF-DOC-080') || !input.legalMentions.includes('AO-RJF-DEBIT-083')) throw new Error('DEBIT_NOTE_POLICY_EVIDENCE_REQUIRED');
+  return deepFreeze({ snapshotVersion: 6 as const, document: { type: 'debit_note' as const, issuedAt: input.issuedAt.toISOString(), currency: input.debitEvent.currency }, issuer: input.issuer, recipient: input.recipient, billingParty: input.billingParty,
+    obligation: { ...input.obligation }, debitEvent: { ...input.debitEvent, basisType: 'debit_event' as const }, payment: null,
+    totals: { documentTotal: Money.parse(input.debitEvent.amount, input.debitEvent.currency).canonicalAmount(), currency: input.debitEvent.currency }, tax: { treatment: 'zero_tax_liquidation' as const, amount: '0' as const },
+    jurisdiction: { code: input.jurisdictionCode, policyVersion: input.policyVersion }, legalMentions: [...input.legalMentions], policyProvenance: { financialProfileVersion: input.financialProfileVersion, fiscalConfigurationVersion: input.fiscalConfigurationVersion, seriesId: input.seriesId, adapterKey: input.adapterKey, policyVersion: input.policyVersion },
+  }) as DebitNoteDocumentarySnapshotV6;
+}
+
 /** Explicit discriminator: legacy rows are recognized solely by their stored V1 schema marker. */
 export function decodeDocumentarySnapshot(value: unknown): DecodedDocumentarySnapshot {
   if (!value || typeof value !== 'object') throw new Error('DOCUMENTARY_SNAPSHOT_INVALID');
@@ -215,6 +243,7 @@ export function decodeDocumentarySnapshot(value: unknown): DecodedDocumentarySna
   if (snapshot.snapshotVersion === 3) return { snapshotVersion: 3, snapshot: value as InvoiceDocumentarySnapshotV3 };
   if (snapshot.snapshotVersion === 4) return { snapshotVersion: 4, snapshot: value as InvoiceReceiptDocumentarySnapshotV4 };
   if (snapshot.snapshotVersion === 5) return { snapshotVersion: 5, snapshot: value as CreditNoteDocumentarySnapshotV5 };
+  if (snapshot.snapshotVersion === 6) return { snapshotVersion: 6, snapshot: value as DebitNoteDocumentarySnapshotV6 };
   if (snapshot.schemaVersion === 1) return { snapshotVersion: 1, snapshot: value as DocumentarySnapshotV1 };
   throw new Error('DOCUMENTARY_SNAPSHOT_VERSION_UNSUPPORTED');
 }

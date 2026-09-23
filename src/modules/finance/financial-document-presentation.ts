@@ -1,5 +1,5 @@
 import { productTerm, type ProductTermKey } from '../../lib/product-terminology.ts';
-import type { CreditNoteDocumentarySnapshotV5, DocumentarySnapshot, InvoiceDocumentarySnapshotV3, InvoiceReceiptDocumentarySnapshotV4 } from './documentary-snapshot.ts';
+import type { CreditNoteDocumentarySnapshotV5, DebitNoteDocumentarySnapshotV6, DocumentarySnapshot, InvoiceDocumentarySnapshotV3, InvoiceReceiptDocumentarySnapshotV4 } from './documentary-snapshot.ts';
 
 export type CanonicalFinancialDocumentPresentation = Readonly<{
   document: Readonly<{ typeLabel: string; officialNumber: string; issueDate: string; dueDate: string | null; currency: string; statusLabel: string }>;
@@ -31,13 +31,14 @@ const documentTermKey = (documentType: string): ProductTermKey => {
 
 const isInvoiceDocumentarySnapshot = (snapshot: DocumentarySnapshot): snapshot is InvoiceDocumentarySnapshotV3 | InvoiceReceiptDocumentarySnapshotV4 => 'snapshotVersion' in snapshot && (snapshot.snapshotVersion === 3 || snapshot.snapshotVersion === 4);
 const isCreditNoteDocumentarySnapshot = (snapshot: DocumentarySnapshot): snapshot is CreditNoteDocumentarySnapshotV5 => 'snapshotVersion' in snapshot && snapshot.snapshotVersion === 5;
+const isDebitNoteDocumentarySnapshot = (snapshot: DocumentarySnapshot): snapshot is DebitNoteDocumentarySnapshotV6 => 'snapshotVersion' in snapshot && snapshot.snapshotVersion === 6;
 
 /** Pure presentation adapter: it receives immutable issued evidence and never queries or recalculates Finance. */
 export function buildFinancialDocumentPresentation(input: { document: IssuedDocumentRecord; snapshot: DocumentarySnapshot; terminology?: typeof productTerm }): CanonicalFinancialDocumentPresentation {
   const term = input.terminology ?? productTerm;
   const documentLabel = term(documentTermKey(input.document.documentType)).label;
   const invoiceSnapshot = isInvoiceDocumentarySnapshot(input.snapshot) ? input.snapshot : null;
-  const operationReference = isCreditNoteDocumentarySnapshot(input.snapshot) ? input.snapshot.original.officialNumber : isInvoiceDocumentarySnapshot(input.snapshot) ? input.snapshot.obligation.reference : input.snapshot.operation.reference;
+  const operationReference = isCreditNoteDocumentarySnapshot(input.snapshot) ? input.snapshot.original.officialNumber : isDebitNoteDocumentarySnapshot(input.snapshot) ? input.snapshot.obligation.reference : isInvoiceDocumentarySnapshot(input.snapshot) ? input.snapshot.obligation.reference : input.snapshot.operation.reference;
   const operationLines = isInvoiceDocumentarySnapshot(input.snapshot)
     ? input.snapshot.lines.map(line => Object.freeze({ description: line.description, quantity: line.quantity, unitPrice: line.unitPrice, discount: line.discount, tax: line.tax, netAmount: line.netAmount, totalAmount: line.totalAmount, currency: line.currency }))
     : [];
@@ -47,10 +48,10 @@ export function buildFinancialDocumentPresentation(input: { document: IssuedDocu
     recipient: Object.freeze({ name: input.snapshot.recipient.name, taxIdentifier: null, addressLines: Object.freeze([]), operationalReference: operationReference }),
     operation: Object.freeze({ reference: operationReference, lines: Object.freeze(operationLines) }),
     totals: Object.freeze({ subtotal: invoiceSnapshot?.totals.subtotal ?? null, discountTotal: invoiceSnapshot?.totals.discountTotal ?? null, taxTotal: invoiceSnapshot?.totals.taxTotal ?? null, documentTotal: input.snapshot.totals.documentTotal, currency: input.snapshot.totals.currency }),
-    policy: Object.freeze({ taxTreatment: invoiceSnapshot?.tax.treatment ?? (isCreditNoteDocumentarySnapshot(input.snapshot) ? input.snapshot.tax.treatment : null), jurisdictionCode: invoiceSnapshot?.jurisdiction.code ?? (isCreditNoteDocumentarySnapshot(input.snapshot) ? input.snapshot.jurisdiction.code : null), legalMentions: Object.freeze('snapshotVersion' in input.snapshot && (input.snapshot.snapshotVersion === 2 || input.snapshot.snapshotVersion === 3 || input.snapshot.snapshotVersion === 4 || input.snapshot.snapshotVersion === 5) ? [...input.snapshot.legalMentions] : []) }),
+    policy: Object.freeze({ taxTreatment: invoiceSnapshot?.tax.treatment ?? ((isCreditNoteDocumentarySnapshot(input.snapshot) || isDebitNoteDocumentarySnapshot(input.snapshot)) ? input.snapshot.tax.treatment : null), jurisdictionCode: invoiceSnapshot?.jurisdiction.code ?? ((isCreditNoteDocumentarySnapshot(input.snapshot) || isDebitNoteDocumentarySnapshot(input.snapshot)) ? input.snapshot.jurisdiction.code : null), legalMentions: Object.freeze('snapshotVersion' in input.snapshot && (input.snapshot.snapshotVersion === 2 || input.snapshot.snapshotVersion === 3 || input.snapshot.snapshotVersion === 4 || input.snapshot.snapshotVersion === 5 || input.snapshot.snapshotVersion === 6) ? [...input.snapshot.legalMentions] : []) }),
     payment: input.snapshot.payment ? Object.freeze({ reference: input.snapshot.payment.reference, amount: input.snapshot.payment.amount, currency: input.snapshot.payment.currency }) : null,
     correction: isCreditNoteDocumentarySnapshot(input.snapshot) ? Object.freeze({ originalOfficialNumber: input.snapshot.original.officialNumber }) : null,
-    legalMentions: Object.freeze('snapshotVersion' in input.snapshot && (input.snapshot.snapshotVersion === 2 || input.snapshot.snapshotVersion === 3 || input.snapshot.snapshotVersion === 4 || input.snapshot.snapshotVersion === 5) ? [...input.snapshot.legalMentions] : []),
+    legalMentions: Object.freeze('snapshotVersion' in input.snapshot && (input.snapshot.snapshotVersion === 2 || input.snapshot.snapshotVersion === 3 || input.snapshot.snapshotVersion === 4 || input.snapshot.snapshotVersion === 5 || input.snapshot.snapshotVersion === 6) ? [...input.snapshot.legalMentions] : []),
     verification: Object.freeze([]),
   });
 }

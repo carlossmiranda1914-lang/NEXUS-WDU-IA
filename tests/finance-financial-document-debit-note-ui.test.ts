@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import React from 'react';
+import { act, create } from 'react-test-renderer';
+import { fileURLToPath } from 'node:url';
+import { FinanceOperationalHistory } from '../src/components/finance/operational/FinanceOperationalHistory.tsx';
+
+const adjustment = (id: string, basisType: 'debit_event' | 'general') => ({ kind: 'adjustment', id, occurredAt: '2026-09-23T10:00:00.000Z', adjustment: { obligationId: 'obligation-1', obligationDescription: 'Serviço', direction: 'increase', basisType, amount: { amount: '40.00', currency: 'EUR' }, reason: 'Evento factual' } });
+let issued: string | undefined;
+let renderer!: ReturnType<typeof create>;
+await act(async () => { renderer = create(React.createElement(FinanceOperationalHistory, { history: [adjustment('eligible', 'debit_event'), adjustment('general', 'general')] as any, eligibleDebitNoteAdjustmentIds: new Set(['eligible']), onIssueDebitNote: value => { issued = value.id; } })); });
+assert.equal(renderer.root.findAllByProps({ 'data-testid': 'debit-note-action-eligible' }).length, 1);
+assert.equal(renderer.root.findAllByProps({ 'data-testid': 'debit-note-action-general' }).length, 0);
+await act(async () => { renderer.root.findByProps({ 'data-testid': 'debit-note-action-eligible' }).props.onClick(); });
+assert.equal(issued, 'eligible');
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const workspace = fs.readFileSync(path.join(root, 'src/components/finance/operational/FinanceOperationalContextWorkspace.tsx'), 'utf8');
+const financeWorkspace = fs.readFileSync(path.join(root, 'src/components/finance/FinanceWorkspace.tsx'), 'utf8');
+const documents = fs.readFileSync(path.join(root, 'src/components/finance/documents/FinancialDocumentsWorkspace.tsx'), 'utf8');
+const detail = fs.readFileSync(path.join(root, 'src/components/finance/documents/SelectedFinancialDocumentDetail.tsx'), 'utf8');
+assert.match(workspace, /financialDocumentClient\.debitNoteReadiness\(item\.id\)/);
+assert.match(workspace, /readiness\.status === 'ELIGIBLE'/);
+assert.match(workspace, /window\.confirm\('Confirmar emissão da Nota de Débito\?'\)/);
+assert.match(workspace, /financialDocumentClient\.issueDebitNote/);
+assert.match(workspace, /setIssuedDebitNote\(issued\)/);
+assert.match(workspace, /data-testid="debit-note-issued-success"/);
+assert.match(workspace, /issuedDebitNote\.id/);
+assert.match(workspace, /data-testid="open-issued-debit-note"/);
+assert.match(workspace, /onOpenFinancialDocument\?\.\(issuedDebitNote\.id\)/);
+assert.match(workspace, /await loadContext\(selectedAccountId\)/);
+assert.match(financeWorkspace, /setSelectedDocumentId\(documentId\); setActiveTab\('documents'\)/);
+assert.match(documents, /financialDocumentClient\.detail/);
+assert.match(detail, /financialDocumentClient\.listArtifacts/);
+assert.match(detail, /financialDocumentClient\.artifactContent/);
+assert.doesNotMatch(workspace, /taxTreatment|institutionId:.*req\.body|next_sequence/);
+console.log('FINANCE_FINANCIAL_DOCUMENT_DEBIT_NOTE_UI=PASS');

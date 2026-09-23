@@ -113,6 +113,7 @@ export type FinanceOperationalHistoryItem =
         direction: 'increase' | 'decrease';
         amount: FinanceMoneyAmount;
         reason: string;
+        basisType: 'general' | 'debit_event';
         compensatesAdjustmentId?: string;
       };
     }

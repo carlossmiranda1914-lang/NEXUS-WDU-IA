@@ -607,7 +607,7 @@ export class PostgresFinanceOperationalContextRepository {
       row.fee_item_name ? `${row.fee_item_name} (${row.fee_item_code})` : String(row.fee_item_code),
     ]));
     const adjustmentsRes = await client.query<AdjustmentHistoryRow>(
-      `SELECT id, obligation_id, direction, amount, currency, reason, compensates_adjustment_id, recorded_at
+      `SELECT id, obligation_id, direction, amount, currency, reason, basis_type, compensates_adjustment_id, recorded_at
        FROM finance_obligation_adjustments
        WHERE institution_id = $1 AND financial_account_id = $2
        ORDER BY recorded_at DESC, id DESC`,
@@ -627,6 +627,7 @@ export class PostgresFinanceOperationalContextRepository {
           direction: adjustment.direction,
           amount: Money.parse(String(adjustment.amount), String(adjustment.currency)).serialize(),
           reason: String(adjustment.reason),
+          basisType: adjustment.basis_type === 'debit_event' ? 'debit_event' : 'general',
           compensatesAdjustmentId: adjustment.compensates_adjustment_id ?? undefined,
         },
       });

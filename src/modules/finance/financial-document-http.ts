@@ -213,6 +213,20 @@ export function registerFinancialDocumentRoutes(app: Express, pool: Pool, auth =
       res.status(result.replayed ? 200 : 201).json(result);
     } catch (error) { handleCommand(res, error); }
   });
+  // Task 9 has a source-specific route. It deliberately does not share the
+  // payment/original-document correction route used by Credit Notes.
+  app.get('/api/finance/obligation-adjustments/:id/debit-note-readiness', auth, async (req: AuthRequest, res) => {
+    const context = actor(req, res, 'read'); if (!context) return;
+    const source = await pool.query<{ id: string }>("SELECT id FROM finance_obligation_adjustments WHERE institution_id=$1 AND id=$2 AND direction='increase' AND basis_type='debit_event'", [context.institutionId, req.params.id]);
+    if (!source.rows[0]) return void res.json({ status: 'BLOCKED', reasonCode: 'DEBIT_NOTE_SOURCE_NOT_ELIGIBLE' });
+    const series = await pool.query<{ id: string }>("SELECT id FROM finance_financial_document_series WHERE institution_id=$1 AND document_type='debit_note' AND status='active' AND effective_from<=now() AND (effective_to IS NULL OR effective_to>now()) ORDER BY code LIMIT 1", [context.institutionId]);
+    if (!series.rows[0]) return void res.json({ status: 'BLOCKED', reasonCode: 'DEBIT_NOTE_SERIES_NOT_EFFECTIVE' });
+    res.json({ status: 'ELIGIBLE', seriesId: series.rows[0].id });
+  });
+  app.post('/api/finance/debit-notes', auth, async (req: AuthRequest, res) => {
+    const context = actor(req, res, 'issue'); const idempotencyKey = key(req, res); if (!context || !idempotencyKey) return;
+    try { const result = await new PostgresFinancialDocumentRepository(pool as Pool, fiscalAdapters).issueDebitNote({ institutionId: context.institutionId, adjustmentId: req.body?.adjustmentId, seriesId: req.body?.seriesId, idempotencyKey }); res.status(result.replayed ? 200 : 201).json({ ...result, documentType: 'debit_note' }); } catch (error) { handleCommand(res, error); }
+  });
   app.get('/api/finance/documents/:id/artifacts', auth, async (req: AuthRequest, res) => {
     const context = actor(req, res, 'read'); if (!context) return;
     const artifacts = await pool.query("SELECT id,document_id,render_version,template_version,generated_at,content_hash,media_type,byte_size FROM finance_financial_document_artifacts WHERE institution_id=$1 AND document_id=$2 ORDER BY CASE render_version WHEN 'renderer-2' THEN 0 WHEN 'renderer-1' THEN 1 ELSE 2 END, render_version ASC, template_version ASC, id ASC", [context.institutionId, req.params.id]);

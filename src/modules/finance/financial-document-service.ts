@@ -6,7 +6,7 @@ import { resolveInvoiceEligibility, resolveReceiptEligibility } from './financia
 import { FiscalAdapterRegistry, productionFiscalAdapterRegistry, resolveDocumentaryPolicy } from './fiscal-adapter-registry.ts';
 import { resolveEffectiveInstitutionLegalProfile } from '../institution/institution-legal-profile.ts';
 import { resolveDocumentParties, resolveDocumentaryPartySnapshot } from './document-party-resolution.ts';
-import { composeInvoiceDocumentarySnapshotV3, composeInvoiceReceiptDocumentarySnapshotV4, composeReceiptDocumentarySnapshotV2, decodeDocumentarySnapshot } from './documentary-snapshot.ts';
+import { composeDebitNoteDocumentarySnapshotV6, composeInvoiceDocumentarySnapshotV3, composeInvoiceReceiptDocumentarySnapshotV4, composeReceiptDocumentarySnapshotV2, decodeDocumentarySnapshot } from './documentary-snapshot.ts';
 import { composeCreditNoteDocumentarySnapshotV5 } from './financial-document-credit-note.ts';
 import { Money } from './money.ts';
 import { captureReceiptSettlement } from './documentary-settlement-capture.ts';
@@ -47,6 +47,7 @@ export type CreditNoteIssuanceCommand = Readonly<{
   currency: string;
   idempotencyKey: string;
 }>;
+export type DebitNoteIssuanceCommand = Readonly<{ institutionId: string; adjustmentId: string; seriesId: string; idempotencyKey: string }>;
 
 export type InvoiceIssuanceCommand = Readonly<{
   institutionId: string;
@@ -371,6 +372,45 @@ export class PostgresFinancialDocumentRepository {
         if (!row.rows[0]) throw new Error('FINANCIAL_DOCUMENT_CREDIT_NOTE_RESULT_MISSING');
         return { id, sequenceNumber: Number(row.rows[0].sequence_number), originalDocumentId: row.rows[0].corrects_document_id };
       },
+    });
+    return { ...commandResult.result, replayed: commandResult.replayed };
+  }
+
+  /** Task 9: a debit note has its own economic source and never reuses a credit-note correction. */
+  async issueDebitNote(command: DebitNoteIssuanceCommand) {
+    const commandResult = await executeIdempotentFinanceCommand({
+      pool: this.pool,
+      identity: { institutionId: command.institutionId, operationNamespace: 'financial_document_debit_note', idempotencyKey: command.idempotencyKey, canonicalFingerprint: createCanonicalFinanceFingerprint(command) },
+      execute: async client => {
+        const source = await client.query<{ id:string; obligation_id:string; amount:string; currency:string; reason:string; journal_transaction_id:string; reference:string; financial_account_id:string; financial_profile_version:number }>(
+          "SELECT a.id,a.obligation_id,a.amount::text,a.currency,a.reason,a.journal_transaction_id,o.source_ref AS reference,o.financial_account_id,o.financial_profile_version FROM finance_obligation_adjustments a JOIN finance_obligations o ON o.institution_id=a.institution_id AND o.id=a.obligation_id WHERE a.institution_id=$1 AND a.id=$2 AND a.direction='increase' AND a.basis_type='debit_event' FOR UPDATE", [command.institutionId, command.adjustmentId],
+        );
+        const adjustment = source.rows[0]; if (!adjustment) throw new Error('DEBIT_NOTE_SOURCE_NOT_ELIGIBLE');
+        const fiscal = await client.query<{id:string;version:number;adapter_key:string}>("SELECT id,version,adapter_key FROM finance_fiscal_configuration_versions WHERE institution_id=$1 AND effective_from<=now() AND (effective_to IS NULL OR effective_to>now()) ORDER BY version DESC LIMIT 1 FOR SHARE", [command.institutionId]);
+        if (!fiscal.rows[0]) throw new Error('FISCAL_CONFIGURATION_NOT_EFFECTIVE');
+        const profile = await client.query<{primary_jurisdiction:string}>('SELECT primary_jurisdiction FROM finance_profile_versions WHERE institution_id=$1 AND version=$2', [command.institutionId, adjustment.financial_profile_version]);
+        if (!profile.rows[0]) throw new Error('FINANCIAL_PROFILE_NOT_FOUND');
+        const adapter = this.fiscalAdapters.select({ primaryJurisdiction: profile.rows[0].primary_jurisdiction }, { adapterKey: fiscal.rows[0].adapter_key });
+        const policy = resolveDocumentaryPolicy(adapter, 'debit_note');
+        if (policy.taxTreatment !== 'zero_tax_liquidation' || !policy.legalMentions.includes('AO-RJF-DOC-080') || !policy.legalMentions.includes('AO-RJF-DEBIT-083')) throw new Error('DEBIT_NOTE_POLICY_NOT_PROVEN');
+        const series = await client.query<{next_sequence_number:string}>("SELECT next_sequence_number FROM finance_financial_document_series WHERE institution_id=$1 AND id=$2 AND document_type='debit_note' AND status='active' AND effective_from<=now() AND (effective_to IS NULL OR effective_to>now()) FOR UPDATE", [command.institutionId, command.seriesId]);
+        if (!series.rows[0]) throw new Error('DEBIT_NOTE_SERIES_NOT_EFFECTIVE');
+        const issuedAt = (await client.query<{ issued_at: Date }>('SELECT clock_timestamp() issued_at')).rows[0]!.issued_at;
+        const issuer = await resolveEffectiveInstitutionLegalProfile(client, command.institutionId, issuedAt); if (!issuer) throw new Error('INSTITUTION_LEGAL_PROFILE_REQUIRED');
+        const parties = await resolveDocumentParties(client, { institutionId: command.institutionId, financialAccountId: adjustment.financial_account_id, obligationId: adjustment.obligation_id });
+        const recipient = await resolveDocumentaryPartySnapshot(client, parties.recipient);
+        const snapshot = composeDebitNoteDocumentarySnapshotV6({ issuedAt, issuer: { legalName: issuer.legalName, taxIdentifier: issuer.taxIdentifier, address: { countryCode: issuer.registeredAddress.countryCode, line1: issuer.registeredAddress.line1 } }, recipient: { name: recipient.name, authorityId: recipient.authorityId }, billingParty: { name: recipient.name, authorityId: recipient.authorityId }, obligation: { authorityId: adjustment.obligation_id, reference: adjustment.reference, currency: adjustment.currency }, debitEvent: { adjustmentId: adjustment.id, obligationId: adjustment.obligation_id, amount: adjustment.amount, currency: adjustment.currency, reason: adjustment.reason, journalTransactionId: adjustment.journal_transaction_id }, jurisdictionCode: adapter.key, policyVersion: adapter.policy.version, financialProfileVersion: adjustment.financial_profile_version, fiscalConfigurationVersion: fiscal.rows[0].version, seriesId: command.seriesId, adapterKey: adapter.key, legalMentions: policy.legalMentions });
+        const id = randomUUID(); const sequenceNumber = Number(series.rows[0].next_sequence_number);
+        await client.query('UPDATE finance_financial_document_series SET next_sequence_number=$3 WHERE institution_id=$1 AND id=$2', [command.institutionId, command.seriesId, sequenceNumber + 1]);
+        const sourceSnapshot = { sourceType: 'obligation_adjustment_debit_event', adjustmentId: adjustment.id, obligationId: adjustment.obligation_id, amount: snapshot.debitEvent.amount, currency: snapshot.debitEvent.currency, basisType: 'debit_event' };
+        const fiscalPolicySnapshot = { adapterKey: adapter.key, documentType: 'debit_note', policyVersion: adapter.policy.version, ruleIds: ['AO-RJF-DOC-080', 'AO-RJF-DEBIT-083'], taxLiquidation: 'zero' };
+        await client.query("INSERT INTO finance_financial_documents(id,institution_id,document_type,status,series_id,sequence_number,source_snapshot,documentary_snapshot,documentary_snapshot_schema_version,fiscal_configuration_id,fiscal_adapter_key,fiscal_policy_version,fiscal_policy_snapshot,jurisdiction_extension_data,issued_at) VALUES($1,$2,'debit_note','issued',$3,$4,$5,$6,6,$7,$8,$9,$10,$11,now())", [id, command.institutionId, command.seriesId, sequenceNumber, sourceSnapshot, snapshot, fiscal.rows[0].id, adapter.key, adapter.policy.version, fiscalPolicySnapshot, {}]);
+        await client.query('INSERT INTO finance_financial_document_sources(institution_id,document_id,source_type,source_id,snapshot) VALUES($1,$2,$3,$4,$5)', [command.institutionId, id, 'obligation_adjustment', adjustment.id, { obligationId: adjustment.obligation_id, basisType: 'debit_event', journalTransactionId: adjustment.journal_transaction_id }]);
+        await client.query("INSERT INTO finance_audit_records(institution_id,event_type,metadata) VALUES($1,'financial_document_issued',$2)", [command.institutionId, { documentId: id, documentType: 'debit_note', adjustmentId: adjustment.id, seriesId: command.seriesId, sequenceNumber }]);
+        await client.query("INSERT INTO finance_outbox(institution_id,topic,aggregate_id,payload) VALUES($1,'financial_document_issued',$2,$3)", [command.institutionId, id, { documentId: id, documentType: 'debit_note', adjustmentId: adjustment.id, seriesId: command.seriesId, sequenceNumber }]);
+        return { resultRef: id, result: { id, sequenceNumber, adjustmentId: adjustment.id } };
+      },
+      loadResult: async (client, id) => { const row = await client.query<{sequence_number:string}>('SELECT sequence_number FROM finance_financial_documents WHERE institution_id=$1 AND id=$2 AND document_type=\'debit_note\'', [command.institutionId, id]); if (!row.rows[0]) throw new Error('FINANCIAL_DOCUMENT_DEBIT_NOTE_RESULT_MISSING'); return { id, sequenceNumber: Number(row.rows[0].sequence_number), adjustmentId: command.adjustmentId }; },
     });
     return { ...commandResult.result, replayed: commandResult.replayed };
   }

@@ -5,6 +5,8 @@ export interface FinanceOperationalHistoryProps {
   theme?: string;
   history: FinanceOperationalHistoryItem[];
   onReverse?: (allocation: Extract<FinanceOperationalHistoryItem, { kind: 'allocation' }>['allocation']) => void;
+  onIssueDebitNote?: (adjustment: Extract<FinanceOperationalHistoryItem, { kind: 'adjustment' }>['adjustment'] & { id: string }) => void;
+  eligibleDebitNoteAdjustmentIds?: ReadonlySet<string>;
 }
 
 function formatMoney(amount: string, currency: string): string {
@@ -55,6 +57,8 @@ export function FinanceOperationalHistory({
   theme = 'light',
   history,
   onReverse,
+  onIssueDebitNote,
+  eligibleDebitNoteAdjustmentIds = new Set(),
 }: FinanceOperationalHistoryProps) {
   const isLight = theme === 'light';
 
@@ -242,11 +246,13 @@ export function FinanceOperationalHistory({
                       <p className="mt-1.5 text-sm font-medium">{adjustment.obligationDescription} · {direction}</p>
                       <p className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>{formatDate(item.occurredAt)} · Motivo: {adjustment.reason}</p>
                       {adjustment.compensatesAdjustmentId && <p className={`mt-1 text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>Compensa uma correção anterior.</p>}
+                      {adjustment.basisType === 'debit_event' && <p className="mt-1 text-xs font-semibold text-violet-700">Evento de débito sujeito a validação documental.</p>}
                     </div>
                     <strong className={`shrink-0 text-sm font-mono ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
                       {adjustment.direction === 'increase' ? '+' : '-'}{formatMoney(adjustment.amount.amount, adjustment.amount.currency)}
                     </strong>
                   </div>
+                  {eligibleDebitNoteAdjustmentIds.has(item.id) && onIssueDebitNote && <button type="button" data-testid={`debit-note-action-${item.id}`} onClick={() => onIssueDebitNote({ ...adjustment, id: item.id })} className="mt-2 rounded-md border px-3 py-1.5 text-xs font-medium">Emitir Nota de Débito</button>}
                 </article>
               );
             }
