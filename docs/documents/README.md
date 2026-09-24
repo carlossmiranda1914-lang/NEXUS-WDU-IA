@@ -1,8 +1,22 @@
 # Documents Foundation — Canonical Documentation Index
 
 **Specification:** v1.0  
-**Status:** APPROVED / FROZEN V1  
-**Implementation authorization:** NO
+**Status:** APPROVED / FROZEN V1; I1–I8 IMPLEMENTATION INTEGRATED
+**Implementation authorization:** Historical pre-I1 gate closed; no new Documents scope is authorized by this index.
+
+## Current implementation truth
+
+The v1 package remains the normative authority for Documents boundaries and
+invariants. Its original "implementation authorization: NO" language was the
+pre-I1 planning gate; it is historical context, not the current status.
+
+- Documents Foundation I1–I8 is integrated: core model, associations, upload
+  and verification, secure access, retention/deletion, events, API, and UI.
+- Technical code/tests and PostgreSQL migrations are implementation evidence;
+  they do **not** by themselves prove Human UAT or production operation.
+- I8C GCP storage capability is implemented in the repository, but production
+  credentials/bucket deployment evidence and Human UAT remain pending.
+- Office/M365/SharePoint integration remains deferred.
 
 ## Authority order
 
@@ -39,17 +53,17 @@ CONCEPTUAL_P1_OPEN=0
 DOCUMENTATION_STATUS=APPROVED
 SPECIFICATION_STATUS=FROZEN_V1
 DOCUMENTATION_FIRST=SATISFIED
-IMPLEMENTATION_AUTHORIZED=NO
-ANTIGRAVITY_PRODUCTION_CODE_WRITE=BLOCKED
+I1_I8_IMPLEMENTATION=INTEGRATED
+HUMAN_UAT=NOT_YET_EVIDENCED
+PRODUCTION_OPERATIONAL=NOT_YET_EVIDENCED
+NEW_DOCUMENTS_SCOPE=REQUIRES_EXPLICIT_AUTHORIZATION
 ```
 
 ## Next gate
 
-No production implementation is authorized by this package. Before I1 code:
-
-1. confirm current `main` SHA;
-2. audit actual PostgreSQL schema/migration baseline;
-3. reconcile legacy Documents surfaces and PR #92;
-4. create/reconcile I1 mission pack against v1;
-5. pass I1 DoR with P0=0/P1=0;
-6. obtain explicit Product Owner approval and `IMPLEMENTATION_AUTHORIZED=YES`.
+No new Documents scope is authorized by this package. Before an I9 or other
+new Documents mission, reconcile against the current canonical branch/schema,
+confirm the legacy-surface boundary, establish the required operational/UAT
+evidence, and obtain explicit Product Owner authorization. PR #92 remains
+historical preparation evidence only and must not be treated as a live
+implementation authorization.

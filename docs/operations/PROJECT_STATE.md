@@ -12,17 +12,29 @@ Documents Foundation Tasks I1–I8 are integrated in `main` through PR #102.
 
 - Integration merge commit: `4dfaf8ef3a9d0deea681af89bdc29f5e7cf4b7b9`
 - Scope completed: Core data model, multi-entity association, upload & verification engine, events & activity log, API layer, and UI Workspace.
-- Status: CLOSED
+- Status: IMPLEMENTATION INTEGRATED. This is not, by itself, a claim of
+  completed Human UAT or production operation.
+- Authority: Documents owns document identity/version/provenance, technical
+  state, storage references, retention metadata, and technical audit evidence.
+  IAM owns identity/access context; Enrollment owns enrollment decisions and
+  existing `enrollment_documents`; Finance owns fiscal-document semantics and
+  financial truth.
+- Transitional boundary: generic `uploaded_documents`, AI direct generation,
+  and browser/local-storage document behavior remain legacy/transitional with
+  no new consumers. M365/SharePoint remains deferred.
 
-## Current active mission — Documents Foundation I8C
+## Documents Foundation I8C — implementation evidence, operational gate open
 
 - Program: `DOCUMENTS`
 - Mission: `DOCUMENTS-FOUNDATION-I8C` (`DOCUMENTS_OPERATIONAL_INFRASTRUCTURE_ENABLEMENT`)
-- State: `IMPLEMENTATION_COMPLETE`
+- State: `IMPLEMENTATION_COMPLETE`; `PRODUCTION_OPERATIONAL=NOT_YET_EVIDENCED`;
+  `HUMAN_UAT=NOT_YET_EVIDENCED`.
 - Active PR: `PR #103` (`feature/documents-foundation-i8c-gcp-operational`)
 - Baseline: `4dfaf8ef3a9d0deea681af89bdc29f5e7cf4b7b9`
 - Current I8C HEAD: `3ec6848777478a0933e819392975e5cb7d78b3ba`
 - Scope: Production GCP runtime integration using official `@google-cloud/storage` SDK (v8.1.0) with Application Default Credentials (ADC), server-mediated streaming, SHA-256 roundtrip persistence via GCS custom metadata, and fail-closed runtime configuration resolution.
+- GCP capability is code-level implementation evidence, not proof that an ADC
+  identity, bucket, deployment, or production runtime has been validated.
 - Next Phase (I9): `NOT AUTHORIZED`
 
 ## Finance Foundation — closed
