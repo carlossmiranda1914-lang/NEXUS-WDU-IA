@@ -8,6 +8,8 @@ import { PostgresFeeCatalogueRepository } from '../src/modules/finance/fee-catal
 import { PostgresFinancialObligationRepository } from '../src/modules/finance/financial-obligation-repository.ts';
 import { PostgresPaymentRepository } from '../src/modules/finance/payment-repository.ts';
 import { PostgresAllocationRepository } from '../src/modules/finance/allocation-repository.ts';
+import { PostgresObligationAdjustmentRepository } from '../src/modules/finance/obligation-adjustment-repository.ts';
+import { Money } from '../src/modules/finance/money.ts';
 import { PostgresFinanceOperationalContextRepository } from '../src/modules/finance/finance-operational-context-repository.ts';
 import { InstitutionLegalProfileRepository } from '../src/modules/institution/institution-legal-profile.ts';
 import { FinancialDocumentEligibilityService } from '../src/modules/finance/financial-document-eligibility.ts';
@@ -28,6 +30,11 @@ if (!uatFirebaseUid || !/^[A-Za-z0-9_-]{1,128}$/.test(uatFirebaseUid)) {
   throw new Error('NEXUS_UAT_FIREBASE_UID is required to resolve the active local UAT institution.');
 }
 const angolaPreviewMode = process.argv.includes('--angola-preview');
+const task9DebitEvent = {
+  amount: '10.00',
+  reason: 'LOCAL-UAT Task 9 debit event increase for human debit-note issuance verification',
+  idempotencyKey: 'local-uat-finance-task9-debit-event-v1',
+};
 const fixture = {
   accountName: angolaPreviewMode ? 'UAT AO — Finance Adjustment 100-40-60' : 'UAT — Finance Adjustment 100-40-60',
   feeName: angolaPreviewMode ? 'UAT AO — Recibo pré-emissão 100 AOA' : 'UAT — Correção Financeira 100 EUR',
@@ -136,9 +143,35 @@ async function ensureDocumentaryUatConfiguration(actor: InstitutionalContext): P
      ON CONFLICT (institution_id,code) DO NOTHING`,
     [actor.institutionId, fiscalConfigurationId],
   );
+  await ensureDebitNoteSeries(actor, fiscalConfigurationId);
 }
 
-async function verifyFixture(actor: InstitutionalContext, accountId: string, obligationId: string, paymentReference: string): Promise<void> {
+async function ensureDebitNoteSeries(actor: InstitutionalContext, fiscalConfigurationId: string): Promise<{ id: string; code: string }> {
+  const existing = await pool.query<{ id: string; code: string; document_type: string; status: string; fiscal_configuration_id: string }>(
+    `SELECT id,code,document_type,status,fiscal_configuration_id FROM finance_financial_document_series
+     WHERE institution_id=$1 AND code='000-UAT-DN'`,
+    [actor.institutionId],
+  );
+  if (existing.rows.length > 1) throw new Error('Multiple local UAT debit-note series exist.');
+  if (!existing.rows[0]) {
+    await pool.query(
+      `INSERT INTO finance_financial_document_series (institution_id,code,document_type,status,effective_from,fiscal_configuration_id)
+       VALUES($1,'000-UAT-DN','debit_note','active',now(),$2)`,
+      [actor.institutionId, fiscalConfigurationId],
+    );
+  }
+  const series = (await pool.query<{ id: string; code: string; document_type: string; status: string; fiscal_configuration_id: string }>(
+    `SELECT id,code,document_type,status,fiscal_configuration_id FROM finance_financial_document_series
+     WHERE institution_id=$1 AND code='000-UAT-DN'`,
+    [actor.institutionId],
+  )).rows;
+  if (series.length !== 1 || series[0]?.document_type !== 'debit_note' || series[0]?.status !== 'active' || series[0]?.fiscal_configuration_id !== fiscalConfigurationId) {
+    throw new Error('Local UAT debit-note series is incompatible with the resolved fiscal configuration.');
+  }
+  return { id: series[0].id, code: series[0].code };
+}
+
+async function verifyBaseFixture(actor: InstitutionalContext, accountId: string, obligationId: string, paymentReference: string): Promise<void> {
   const context = await new PostgresFinanceOperationalContextRepository(pool).getByFinancialAccountId(actor, accountId);
   const position = context.openObligations.find((item) => item.id === obligationId);
   const adjustmentCount = await pool.query<{ count: string }>('SELECT count(*)::text AS count FROM finance_obligation_adjustments WHERE institution_id = $1 AND obligation_id = $2', [actor.institutionId, obligationId]);
@@ -146,6 +179,62 @@ async function verifyFixture(actor: InstitutionalContext, accountId: string, obl
     throw new Error('Canonical Finance UAT fixture verification failed.');
   }
   console.log(JSON.stringify({ fixture: angolaPreviewMode ? 'FINANCE_G02_AO_PREVIEW_100_40_60_READY' : 'FINANCE_UAT_100_40_60_READY', accountId, obligationId, paymentReference, original: position.original.amount, covered: position.covered.amount, remaining: position.remainingCoverable.amount, currency: fixture.currency }));
+}
+
+async function ensureTask9DebitEvent(actor: InstitutionalContext, obligationId: string): Promise<{ id: string; direction: string; basisType: string; amount: string; currency: string }> {
+  const existing = await pool.query<{ id: string; direction: string; basis_type: string; amount: string; currency: string; reason: string }>(
+    `SELECT id,direction,basis_type,amount::text,currency,reason FROM finance_obligation_adjustments
+     WHERE institution_id=$1 AND obligation_id=$2 AND basis_type='debit_event' ORDER BY recorded_at`,
+    [actor.institutionId, obligationId],
+  );
+  if (existing.rows.length > 1) throw new Error('More than one debit-event adjustment exists for the local UAT obligation.');
+  const currency = (await pool.query<{ currency: string }>(
+    `SELECT currency FROM finance_obligations WHERE institution_id=$1 AND id=$2`,
+    [actor.institutionId, obligationId],
+  )).rows[0]?.currency;
+  if (!currency) throw new Error('Local UAT obligation is unavailable for Task 9 provisioning.');
+  if (existing.rows[0]) {
+    const adjustment = existing.rows[0];
+    const matchesExpectedAmount = Money.parse(adjustment.amount, adjustment.currency).equals(Money.parse(task9DebitEvent.amount, currency));
+    if (adjustment.direction !== 'increase' || adjustment.basis_type !== 'debit_event' || !matchesExpectedAmount || adjustment.currency !== currency || adjustment.reason !== task9DebitEvent.reason) {
+      throw new Error('Existing local UAT debit-event adjustment is incompatible.');
+    }
+    return { id: adjustment.id, direction: adjustment.direction, basisType: adjustment.basis_type, amount: adjustment.amount, currency: adjustment.currency };
+  }
+  const result = await new PostgresObligationAdjustmentRepository(pool).recordAdjustment(actor, {
+    obligationId, direction: 'increase', basisType: 'debit_event', amount: task9DebitEvent.amount, currency, reason: task9DebitEvent.reason,
+  }, task9DebitEvent.idempotencyKey);
+  return { id: result.adjustment.id, direction: result.adjustment.direction, basisType: result.adjustment.basisType, amount: result.adjustment.amount.canonicalAmount(), currency: result.adjustment.currency };
+}
+
+async function verifyTask9UatFixture(actor: InstitutionalContext, obligationId: string): Promise<void> {
+  const adjustment = await ensureTask9DebitEvent(actor, obligationId);
+  await verifyTask9AdjustedFixture(actor, obligationId);
+  const series = await pool.query<{ id: string; code: string; count: string }>(
+    `SELECT id,code,count(*) OVER ()::text AS count FROM finance_financial_document_series
+     WHERE institution_id=$1 AND document_type='debit_note' AND status='active' AND effective_from<=now() AND (effective_to IS NULL OR effective_to>now())`,
+    [actor.institutionId],
+  );
+  const debitNoteSeries = series.rows.find((item) => item.code === '000-UAT-DN');
+  if (!debitNoteSeries || Number(debitNoteSeries.count) < 1) throw new Error('No active local UAT debit-note series is available.');
+  console.log(JSON.stringify({
+    fixture: 'FINANCE_TASK9_UAT_READY', obligationId, task9AdjustmentId: adjustment.id,
+    task9AdjustmentDirection: adjustment.direction, task9AdjustmentBasis: adjustment.basisType,
+    task9AdjustmentAmount: adjustment.amount, task9AdjustmentCurrency: adjustment.currency,
+    debitEventIncreaseCount: 1, debitNoteSeriesId: debitNoteSeries.id, debitNoteSeriesCode: debitNoteSeries.code,
+    activeDebitNoteSeriesCount: Number(debitNoteSeries.count), task9CandidateEligible: true, humanUatReady: true,
+  }));
+}
+
+async function verifyTask9AdjustedFixture(actor: InstitutionalContext, obligationId: string): Promise<void> {
+  const position = await new PostgresObligationAdjustmentRepository(pool).getPosition(actor.institutionId, obligationId);
+  const expectedEffectiveDue = Money.parse('100', fixture.currency).add(Money.parse(task9DebitEvent.amount, fixture.currency));
+  const expectedCovered = Money.parse('40', fixture.currency);
+  const expectedRemaining = expectedEffectiveDue.subtract(expectedCovered);
+  if (!position.effectiveDue.equals(expectedEffectiveDue) || !position.netCovered.equals(expectedCovered) || !position.remainingCoverable.equals(expectedRemaining)) {
+    throw new Error('Task 9 adjusted Finance UAT fixture verification failed.');
+  }
+  console.log(JSON.stringify({ fixture: 'FINANCE_TASK9_ADJUSTED_UAT_READY', obligationId, effectiveDue: position.effectiveDue.canonicalAmount(), covered: position.netCovered.canonicalAmount(), remainingCoverable: position.remainingCoverable.canonicalAmount(), currency: position.effectiveDue.currency }));
 }
 
 async function ensureReceiptEligiblePayment(actor: InstitutionalContext, accountId: string): Promise<{ id: string; reference: string }> {
@@ -185,10 +274,18 @@ async function provision(): Promise<void> {
     [actor.institutionId, fixture.accountName, fixture.obligationRef],
   );
   if (existing.rows[0]) {
-    await verifyFixture(actor, existing.rows[0].account_id, existing.rows[0].obligation_id, existing.rows[0].payment_reference);
+    const adjustmentCount = await pool.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM finance_obligation_adjustments WHERE institution_id=$1 AND obligation_id=$2`,
+      [actor.institutionId, existing.rows[0].obligation_id],
+    );
+    if (adjustmentCount.rows[0]?.count !== '0' && adjustmentCount.rows[0]?.count !== '1') {
+      throw new Error('Local UAT obligation has unexpected adjustments before Task 9 provisioning.');
+    }
+    if (adjustmentCount.rows[0]?.count === '0') await verifyBaseFixture(actor, existing.rows[0].account_id, existing.rows[0].obligation_id, existing.rows[0].payment_reference);
     const receiptPayment = angolaPreviewMode
       ? { id: '', reference: existing.rows[0].payment_reference }
       : await ensureReceiptEligiblePayment(actor, existing.rows[0].account_id);
+    if (!angolaPreviewMode) await verifyTask9UatFixture(actor, existing.rows[0].obligation_id);
     console.log(JSON.stringify({ fixture: angolaPreviewMode ? 'FINANCE_G02_AO_PREVIEW_SOURCE_READY' : 'FINANCE_UAT_RECEIPT_SOURCE_READY', paymentReference: receiptPayment.reference, receiptEligibility: !angolaPreviewMode, jurisdiction: angolaPreviewMode ? 'AO' : 'NEXUS_TEST', externalIssuance: angolaPreviewMode ? 'BLOCKED' : undefined }));
     return;
   }
@@ -208,10 +305,11 @@ async function provision(): Promise<void> {
   const payment = (await payments.confirmPaymentInCommand(actor, { sourceType: 'manual_offline', method: 'cash', amount: '40.00', currency: fixture.currency, financialAccountId: account.id, payerPersonId: actor.personId, notes: fixture.obligationRef, effectiveAt: fixture.effectiveAt }, fixture.keys.payment, profiles)).payment;
   await allocations.confirmAllocationInCommand(actor, { paymentId: payment.id, effectiveAt: fixture.effectiveAt, lines: [{ obligationId: obligation.id, amount: '40.00', currency: fixture.currency }] }, fixture.keys.allocation);
 
-  await verifyFixture(actor, account.id, obligation.id, payment.paymentReference);
+  await verifyBaseFixture(actor, account.id, obligation.id, payment.paymentReference);
   const receiptPayment = angolaPreviewMode
     ? { id: payment.id, reference: payment.paymentReference }
     : await ensureReceiptEligiblePayment(actor, account.id);
+  if (!angolaPreviewMode) await verifyTask9UatFixture(actor, obligation.id);
   console.log(JSON.stringify({ fixture: angolaPreviewMode ? 'FINANCE_G02_AO_PREVIEW_SOURCE_READY' : 'FINANCE_UAT_RECEIPT_SOURCE_READY', paymentReference: receiptPayment.reference, receiptEligibility: !angolaPreviewMode, jurisdiction: angolaPreviewMode ? 'AO' : 'NEXUS_TEST', externalIssuance: angolaPreviewMode ? 'BLOCKED' : undefined }));
 }
 

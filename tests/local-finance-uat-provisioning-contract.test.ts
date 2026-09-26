@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { Money } from '../src/modules/finance/money.ts';
 
 const source = await readFile(new URL('../scripts/provision-local-finance-uat.ts', import.meta.url), 'utf8');
 
@@ -32,4 +33,10 @@ assert.match(source, /externalIssuance: angolaPreviewMode \? 'BLOCKED'/, 'the AO
 assert.match(source, /NEXUS_UAT_FIREBASE_UID/, 'The provisioner must target the authenticated local UAT identity rather than a hard-coded unrelated institution.');
 assert.match(source, /identities[\s\S]*provider_subject = \$1/, 'The provisioner must resolve its institution through the configured local UAT identity.');
 assert.equal(source.includes("WHERE i.slug = 'nexus-local-iam-uat'"), false, 'The provisioner must not hard-code a finance fixture tenant that the authenticated UAT identity cannot access.');
+assert.equal(Money.parse('10.000000000000', 'EUR').equals(Money.parse('10.00', 'EUR')), true, 'Equivalent exact monetary values must compare equal.');
+assert.equal(Money.parse('10.010000000000', 'EUR').equals(Money.parse('10.00', 'EUR')), false, 'Distinct exact monetary values must not compare equal.');
+assert.match(source, /Money\.parse\(adjustment\.amount, adjustment\.currency\)\.equals\(Money\.parse\(task9DebitEvent\.amount, currency\)\)/, 'Task 9 fixture reuse must compare persisted and expected amounts with Money equality.');
+assert.match(source, /verifyBaseFixture/, 'The provisioner must retain an explicit pristine base-fixture verifier.');
+assert.match(source, /verifyTask9AdjustedFixture/, 'The provisioner must separately verify the Task 9 adjusted rerun state.');
+assert.match(source, /getPosition\(actor\.institutionId, obligationId\)/, 'The adjusted state must use the canonical obligation position authority.');
 console.log('Local Finance UAT provisioning contract: PASS.');
