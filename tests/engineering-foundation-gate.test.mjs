@@ -26,10 +26,24 @@ try {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /CROSS_DOMAIN_INFRASTRUCTURE_IMPORT/);
 
-  await writeFile(path.join(root, 'src/modules/finance/service.ts'), "import x from '../../legacy/outstandingFees.ts';\n");
+  await writeFile(path.join(root, 'src/modules/finance/service.ts'), "import { users } from '../../db/schema.ts';\n");
   result = run();
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /LEGACY_CONSUMER/);
+
+  await writeFile(path.join(root, 'src/modules/finance/service.ts'), "import { students as learnerRows } from '../../db/schema.ts';\n");
+  result = run();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /LEGACY_CONSUMER/);
+
+  await writeFile(path.join(root, 'src/modules/finance/service.ts'), "import {\n invoices\n} from '../../db/schema.ts';\n");
+  result = run();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /LEGACY_CONSUMER/);
+
+  await writeFile(path.join(root, 'src/modules/finance/service.ts'), "import { schoolTasks } from '../../db/schema.ts';\n");
+  result = run();
+  assert.equal(result.status, 0, result.stderr);
 } finally { await rm(root, { recursive: true, force: true }); }
 
 console.log('[NEXUS] engineering foundation gate contract: PASS.');
