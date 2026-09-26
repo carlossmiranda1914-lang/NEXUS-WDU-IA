@@ -124,7 +124,6 @@ async function main() {
     NEXUS_UAT_HEAD:                head,
     NEXUS_UAT_HARNESS_TOKEN:       harnessToken,
     NEXUS_UAT_STARTED_AT:          startedAt,
-    NEXUS_SERVER_MANAGED_STARTUP:  'true',
     TEST_DATABASE_LOCAL_AUTHORIZED: 'true',
   };
   // Use TEST_DATABASE_URL as DATABASE_URL when available (finance / .env.test.local worktrees).
