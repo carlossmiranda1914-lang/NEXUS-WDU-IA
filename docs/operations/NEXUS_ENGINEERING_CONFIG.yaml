@@ -9,24 +9,28 @@ project:
     sha: 47ad75d549bebfa5aa3409965800ca225f39e218
 
 active_work:
-  program: FINANCE
-  mission: 2026-09-17-finance-f7-task9-debit-event-basis
+  program: ENGINEERING_FOUNDATION
+  mission: NEXUS-ENGINEERING-FOUNDATION-V1-IMPLEMENTATION
   mission_branch: codex/nexus-integrated-portal-v1
   durable_remote_checkpoint: 47ad75d549bebfa5aa3409965800ca225f39e218
-  activity: TASK9_DEBIT_EVENT_BASIS_CLOSURE
-  task: TASK_9_NOTA_DE_DEBITO
-  task_name: Nota de Débito from explicit policy semantics
-  state: PARTIAL
+  activity: FOUNDATION_V1_IMPLEMENTATION
+  task: ENGINEERING_GOVERNANCE_FOUNDATION
+  task_name: Engineering governance, architecture guardrails and deterministic gate
+  state: AUTHORIZED
   owner: Product Owner
-  write_owner: NONE
+  write_owner: CODEX_PRIMARY_EXECUTOR
   reviewer: NONE
   reviewer_mode: NOT_APPLICABLE
   risk: HIGH
+  execution_mode: SINGLE_PRIMARY_AGENT
+  subagents_allowed: false
+  application_domain_rewrite_allowed: false
+  big_bang_refactor_allowed: false
+  proven_authority_rewrite_allowed: false
+  unrelated_work_allowed: false
   resume_rule: >-
-    Finance Foundation and F1 through F7 capability are proven on the canonical integrated baseline. Task 7
-    (Factura-Recibo) and Task 8 (Evidence-Backed Nota de Crédito) are proven and must not be reopened without
-    concrete regression evidence. Task 9 remains partial: its Nota de Débito closure requires its own issuance,
-    artifact and Human-UAT evidence under the approved Task 9 plan.
+    Foundation V1 is a temporary governance priority. Finance Task 9 remains paused without reset or alteration
+    and resumes after Foundation V1 approval/review from its Human-UAT real UI issuance defect state.
 
 execution:
   one_code_owner_per_unit: true
@@ -36,18 +40,26 @@ execution:
 
 scope:
   authorized:
-    - Task 9 closure evidence governed by the approved Task 9 plan
-    - governance and planning documentation required by that closure
+    - engineering governance
+    - architecture guardrails
+    - executor contract
+    - deterministic engineering gate
   forbidden:
     - reopen Finance Foundation, Task 7 or Task 8 without concrete regression evidence
     - rerun the completed Finance Foundation Integration Sync Gate
     - alter accepted Journal Money financial-context idempotency reversal projection outbox or tenant semantics without a new authorized mission
     - force push or published-history rebase
+    - application domain rewrite
+    - big-bang refactor
+    - proven authority rewrite
     - unrelated IAM Enrollment ALUNOS refactor
     - parallel writer on the same authority unit
     - CI or safety-gate weakening
 
 protected_invariants:
+  - Finance Task 9 is paused for Engineering Foundation without cancellation, reset or evidence alteration
+  - Finance Task 9 technical implementation is PROVEN, Fixture 09B is READY_FOR_HUMAN_UAT and UAT runtime is READY
+  - Finance Task 9 Human UAT is BLOCKED_BY_REAL_UI_ISSUANCE_DEFECT
   - Finance Foundation Tasks 1 through 8 remain integrated and accepted with P0 0 and P1 0
   - Finance F1 through F7 capability are proven on the canonical integrated baseline
   - Task 7 Factura-Recibo and Task 8 Evidence-Backed Nota de Crédito remain proven
@@ -86,10 +98,10 @@ gates:
 next_program:
   program: FINANCE
   roadmap_priority: 6
-  state: TASK9_PARTIAL
-  authorized_phase: TASK9_CLOSURE_EVIDENCE
-  implementation_authorized: true
-  authorization_scope: APPROVED_TASK9_PLAN_ONLY
+  state: PAUSED_FOR_ENGINEERING_FOUNDATION
+  authorized_phase: RESUME_FINANCE_TASK9_HUMAN_UAT_ISSUANCE_DEFECT
+  implementation_authorized: false
+  authorization_scope: RESUME_AFTER_FOUNDATION_V1_APPROVAL_REVIEW
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS

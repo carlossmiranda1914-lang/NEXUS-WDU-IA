@@ -110,6 +110,10 @@ Rules:
 
 If the smallest correct change requires material scope expansion, classify it and stop for the applicable authority decision.
 
+### Engineering Foundation execution contract
+
+Use `LOCATE → NARROW → READ → CHANGE → VERIFY`. Work is `SINGLE_AGENT_BY_DEFAULT`; do not perform speculative refactors or implementation by assumption. Before a cross-layer change, record `CROSS_LAYER_CHANGE_REQUIRED=YES` and `AFFECTED_LAYERS=`. Before a new authority, record `NEW_AUTHORITY_REQUIRED=YES` and `WHY_EXISTING_AUTHORITY_INSUFFICIENT=`. Preserve proven authority, introduce no new legacy consumers, and report out-of-scope findings rather than fixing them.
+
 ## 9. Discovery classification
 
 Classify implementation discoveries as:

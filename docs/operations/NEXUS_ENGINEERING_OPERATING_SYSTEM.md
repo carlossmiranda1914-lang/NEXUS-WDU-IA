@@ -161,4 +161,18 @@ One code or authority unit has one `WRITE_OWNER` at a time. The reviewer begins 
 
 Every independent review is bound to the exact `REVIEWED_HEAD` and records `MERGE_SAFE=YES|NO`. A correction creates a new head and requires review of that head before merge eligibility can be claimed.
 
+## 9. Engineering Foundation policy v1
+
+`POLICY_VERSION=1`. `NO_IMPLEMENTATION_BY_ASSUMPTION`, `PRESERVE_PROVEN_AUTHORITY`, `NO_NEW_SERVER_INLINE_ROUTES`, `NO_NEW_LEGACY_CONSUMERS`, `CROSS_LAYER_CHANGE_REQUIRES_DECLARATION`, `NEW_AUTHORITY_REQUIRES_DECLARATION`, `TENANT_AUTHORITY_SERVER_SIDE`, `CRITICAL_MUTATION_SAFETY_POLICY_REQUIRED`, `NEW_BINARY_STORAGE_OBJECT_STORAGE_DIRECTION`, `LONG_RUNNING_WORK_ASYNC_DIRECTION`, `ARCHITECTURAL_INFRASTRUCTURE_CHANGE_REQUIRES_DECISION`, and `TRUTHFUL_COMPLETION_STATUS_REQUIRED` are canonical rules.
+
+Status taxonomy: `ENFORCE_NOW`, `ENFORCE_FOR_NEW_CODE`, `PRESERVE_PROVEN_AUTHORITY`, `MIGRATE_INCREMENTALLY`, `LEGACY_NO_NEW_CONSUMERS`, `REQUIRES_ARCHITECTURAL_DECISION`, `REQUIRES_CAPACITY_VALIDATION`.
+
+New tenant-bound persistence requires server-derived InstitutionalContext, explicit institution authority, a negative tenant-isolation test, no browser authority and no global unscoped institutional access. These are mandatory review gates; the architecture gate automates only safe structural fences. Every new critical mutation declares its idempotency/concurrency strategy (key, fingerprint, optimistic version, unique constraint, transactional lock, or combination). Existing module mechanisms remain authoritative.
+
+PgBouncer and read replicas are `REQUIRES_CAPACITY_VALIDATION`; Redis/BullMQ, RLS and worker fleets are `REQUIRES_ARCHITECTURAL_DECISION`; new binary storage is `ENFORCE_FOR_NEW_CODE`; existing Finance artifact migration is `MIGRATE_INCREMENTALLY`.
+
+Truthful completion states are `IMPLEMENTED`, `DETERMINISTIC_TESTED`, `INTEGRATION_PROVEN`, `HUMAN_UAT_PROVEN`, `PRODUCTION_PROVEN`; they are not interchangeable.
+
+Capacity targets are defined, not proven: benchmark 1,000+ students per institution, 1,000-record imports, 100 concurrent uploads, document batches, concurrent grade and Finance mutations, multi-user activity, and dashboard reads. Capture throughput, p50/p95/p99, error rate, DB saturation, lock contention, CPU, memory and queue depth where applicable. `CAPACITY_TARGET_DEFINED=YES`; `CAPACITY_PROVEN=NO`.
+
 For critical-path work, `MERGE_SAFE=YES` requires applicable quality gates, current-head review, zero unresolved P0/P1 findings, adjudicated P2 findings, and stateful behavioral proof where the risk is stateful. An unresolved review-thread finding concerning product integrity, authority, security, data or governance is a critical merge gate until adjudicated; CI green alone never establishes merge safety.
