@@ -45,8 +45,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workspace = fs.readFileSync(path.join(root, 'src/components/finance/FinanceWorkspace.tsx'), 'utf8');
 const operational = fs.readFileSync(path.join(root, 'src/components/finance/operational/FinanceOperationalContextWorkspace.tsx'), 'utf8');
 assert.match(workspace, /operationsReturnContext/);
-assert.match(workspace, /data-testid="return-to-financial-situation"/);
-assert.match(workspace, /Voltar à situação financeira — \{operationsReturnContext\.label\}/);
+assert.match(workspace, /returnFromObligationDetail/);
+assert.match(workspace, /originLabel=\{origin\?\.businessReference \?\? null\}/);
 assert.match(workspace, /initialPaymentId=\{selectedPaymentId\}/);
 assert.match(operational, /onOpenObligation\?\.\(obligationId, \{ id: context\.financialAccount\.id, label:/);
 assert.match(operational, /onOpenPayment\?\.\(paymentId, \{ id: context\.financialAccount\.id, label:/);
@@ -93,8 +93,8 @@ try {
   let obligationWorkspace!: ReturnType<typeof create>;
   await act(async () => { obligationWorkspace = create(React.createElement(FinanceWorkspace, { initialFinancialAccountId: 'account-1' })); await Promise.resolve(); });
   await act(async () => { obligationWorkspace.root.findByProps({ 'data-testid': 'open-obligation-obligation-1' }).props.onClick(); });
-  assert.equal(obligationWorkspace.root.findByType(FinancialObligationsWorkspace).props.initialObligationId, obligation.id);
-  assert.match(obligationWorkspace.root.findByProps({ 'data-testid': 'return-to-financial-situation' }).children.join(''), /CTA-000001.*Conta da Ana/);
+  assert.equal(obligationWorkspace.root.findByType(FinancialObligationsWorkspace).props.selectedObligationId, obligation.id);
+  assert.match(obligationWorkspace.root.findByProps({ 'data-testid': 'return-from-obligation-detail' }).children.join(''), /CTA-000001.*Conta da Ana/);
 
   let paymentWorkspace!: ReturnType<typeof create>;
   await act(async () => { paymentWorkspace = create(React.createElement(FinanceWorkspace, { initialFinancialAccountId: 'account-1' })); await Promise.resolve(); });

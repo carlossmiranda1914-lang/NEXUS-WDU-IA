@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   financialObligationClient,
   type FinancialObligationRecord,
@@ -10,22 +10,19 @@ export interface FinancialObligationsListViewProps {
   refreshTrigger: number;
   onOpenCreate: () => void;
   onOpenAccounts: () => void;
-  onPreviewInvoice: (obligation: FinancialObligationRecord) => void;
-  initialObligationId?: string | null;
+  onSelectObligation: (obligationId: string) => void;
 }
 
 export function FinancialObligationsListView({
   refreshTrigger,
   onOpenCreate,
   onOpenAccounts,
-  onPreviewInvoice,
-  initialObligationId,
+  onSelectObligation,
 }: FinancialObligationsListViewProps) {
   const [items, setItems] = useState<FinancialObligationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const openedInitialObligation = useRef<string | null>(null);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -43,15 +40,6 @@ export function FinancialObligationsListView({
   useEffect(() => {
     void loadItems();
   }, [loadItems, refreshTrigger]);
-
-  useEffect(() => {
-    if (!initialObligationId || openedInitialObligation.current === initialObligationId) return;
-    const obligation = items.find((item) => item.id === initialObligationId);
-    if (obligation) {
-      openedInitialObligation.current = initialObligationId;
-      onPreviewInvoice(obligation);
-    }
-  }, [initialObligationId, items, onPreviewInvoice]);
 
   const filteredItems = (items || []).filter((item) => {
     if (!search.trim()) return true;
@@ -208,7 +196,7 @@ export function FinancialObligationsListView({
                       </span>
                     </td>
                     <td className="py-3.5 px-4">
-                      {item.status === 'open' && <button type="button" data-testid={`invoice-preview-${item.id}`} onClick={() => onPreviewInvoice(item)} className="rounded-md border border-zinc-600 px-3 py-1.5 text-xs font-semibold text-zinc-100 hover:bg-zinc-800">Pré-visualizar fatura</button>}
+                      <button type="button" data-testid={`open-obligation-${item.id}`} onClick={() => onSelectObligation(item.id)} className="rounded-md border border-zinc-600 px-3 py-1.5 text-xs font-semibold text-zinc-100 hover:bg-zinc-800">Abrir obrigação</button>
                     </td>
                   </tr>
                 ))}

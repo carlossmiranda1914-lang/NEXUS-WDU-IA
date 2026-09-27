@@ -39,7 +39,7 @@ try {
   await act(async () => { obligationFlow = create(React.createElement(FinanceWorkspace, { initialTab: 'documents' })); await Promise.resolve(); });
   await act(async () => { obligationFlow.root.findAllByType('button').find(button => button.children.join('') === 'Visualizar')!.props.onClick(); await Promise.resolve(); });
   await act(async () => { obligationFlow.root.findAllByType('button').find(button => button.children.join('') === 'Abrir obrigação')!.props.onClick(); });
-  assert.equal(obligationFlow.root.findByType(FinancialObligationsWorkspace).props.initialObligationId, 'obligation-1', 'document relationship must open the authoritative obligation ID');
+  assert.equal(obligationFlow.root.findByType(FinancialObligationsWorkspace).props.selectedObligationId, 'obligation-1', 'document relationship must open the authoritative obligation ID');
   await act(async () => { obligationFlow.root.findByProps({ 'data-testid': 'return-to-financial-document' }).props.onClick(); });
   assert.equal(obligationFlow.root.findByType(FinancialDocumentsWorkspace).props.selectedDocumentId, 'document-1', 'return from obligation must restore the exact document origin');
 } finally {

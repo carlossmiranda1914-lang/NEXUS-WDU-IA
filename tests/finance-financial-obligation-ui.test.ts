@@ -113,7 +113,7 @@ test('FinancialObligationsWorkspace renders list of obligations with correct dat
   // Check obligation code, amount, status
   const jsonStr = JSON.stringify(tree);
   assert.ok(jsonStr.includes('PROP-000001'), 'Fee code displayed');
-  assert.ok(jsonStr.includes('120.00'), 'Obligation amount displayed');
+  assert.ok(jsonStr.includes('120,00 EUR'), 'Obligation amount displayed');
   assert.ok(jsonStr.includes('FA-2026-000001'), 'Account number displayed');
   assert.ok(jsonStr.includes('João Pedro Silva (Aluno)'), 'Beneficiary displayed');
   assert.ok(jsonStr.includes('Emissão Manual'), 'Operational source type displayed');
