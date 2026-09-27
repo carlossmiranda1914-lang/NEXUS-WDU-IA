@@ -24,6 +24,11 @@ assert.match(workspace, /financialDocumentClient\.debitNoteReadiness\(item\.id\)
 assert.match(workspace, /readiness\.status === 'ELIGIBLE'/);
 assert.match(workspace, /window\.confirm\('Confirmar emissão da Nota de Débito\?'\)/);
 assert.match(workspace, /financialDocumentClient\.issueDebitNote/);
+assert.match(workspace, /setDebitNoteIssuing\(true\)/);
+assert.match(workspace, /setDebitNoteError\(/);
+assert.match(workspace, /catch \(error\)/);
+assert.match(workspace, /data-testid="debit-note-issue-error"/);
+assert.match(workspace, /debitNoteIssuing \? undefined/);
 assert.match(workspace, /setIssuedDebitNote\(issued\)/);
 assert.match(workspace, /data-testid="debit-note-issued-success"/);
 assert.match(workspace, /issuedDebitNote\.id/);

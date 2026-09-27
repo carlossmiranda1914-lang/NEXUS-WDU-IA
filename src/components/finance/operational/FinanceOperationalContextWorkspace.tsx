@@ -61,6 +61,8 @@ export function FinanceOperationalContextWorkspace({
   const [paymentSuccessNotice, setPaymentSuccessNotice] = useState<string | null>(null);
   const [eligibleDebitNoteAdjustmentIds, setEligibleDebitNoteAdjustmentIds] = useState<ReadonlySet<string>>(new Set());
   const [issuedDebitNote, setIssuedDebitNote] = useState<{ id: string; documentType: 'debit_note'; sequenceNumber: number; adjustmentId: string; replayed: boolean } | null>(null);
+  const [debitNoteIssuing, setDebitNoteIssuing] = useState(false);
+  const [debitNoteError, setDebitNoteError] = useState<string | null>(null);
 
   useEffect(() => {
     const adjustments = context?.history.filter((item): item is Extract<NonNullable<FinanceOperationalContext>['history'][number], { kind: 'adjustment' }> => item.kind === 'adjustment') ?? [];
@@ -465,14 +467,21 @@ export function FinanceOperationalContextWorkspace({
             history={context.history}
             onReverse={setReversalAllocation}
             eligibleDebitNoteAdjustmentIds={eligibleDebitNoteAdjustmentIds}
-            onIssueDebitNote={async (adjustment) => {
-              const readiness = await financialDocumentClient.debitNoteReadiness(adjustment.id);
-              if (readiness.status !== 'ELIGIBLE' || !window.confirm('Confirmar emissão da Nota de Débito?')) return;
-              const issued = await financialDocumentClient.issueDebitNote({ adjustmentId: adjustment.id, seriesId: readiness.seriesId, idempotencyKey: `debit-note-${crypto.randomUUID()}` });
-              setIssuedDebitNote(issued);
-              await loadContext(selectedAccountId);
+            onIssueDebitNote={debitNoteIssuing ? undefined : async (adjustment) => {
+              try {
+                const readiness = await financialDocumentClient.debitNoteReadiness(adjustment.id);
+                if (readiness.status !== 'ELIGIBLE' || !window.confirm('Confirmar emissão da Nota de Débito?')) return;
+                setDebitNoteIssuing(true); setDebitNoteError(null);
+                const issued = await financialDocumentClient.issueDebitNote({ adjustmentId: adjustment.id, seriesId: readiness.seriesId, idempotencyKey: `debit-note-${crypto.randomUUID()}` });
+                setIssuedDebitNote(issued); setDebitNoteError(null);
+                await loadContext(selectedAccountId);
+              } catch (error) {
+                setDebitNoteError(error instanceof Error ? error.message : 'Não foi possível emitir a Nota de Débito.');
+              } finally { setDebitNoteIssuing(false); }
             }}
           />
+          {debitNoteIssuing && <p data-testid="debit-note-issuing" className="mt-2 text-sm">A emitir Nota de Débito…</p>}
+          {debitNoteError && <p data-testid="debit-note-issue-error" role="alert" className="mt-2 text-sm text-red-700">{debitNoteError}</p>}
           {issuedDebitNote && <section data-testid="debit-note-issued-success" className="mt-4 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm">
             <strong>Nota de Débito emitida com sucesso.</strong><p>Documento {issuedDebitNote.id} · sequência {issuedDebitNote.sequenceNumber}{issuedDebitNote.replayed ? ' (operação recuperada sem duplicação)' : ''}.</p>
             <button type="button" data-testid="open-issued-debit-note" onClick={() => onOpenFinancialDocument?.(issuedDebitNote.id)} className="mt-2 rounded-md border px-3 py-1">Abrir Nota de Débito emitida</button>
