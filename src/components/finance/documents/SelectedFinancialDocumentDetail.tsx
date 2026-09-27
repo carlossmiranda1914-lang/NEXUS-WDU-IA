@@ -75,8 +75,13 @@ export function SelectedFinancialDocumentDetail({ selected, detail, artifacts, c
     }
   };
 
+  const reference = selected.presentation?.document.officialNumber ?? `${selected.seriesCode}/${selected.sequenceNumber}`;
+  const typeLabel = selected.presentation?.document.typeLabel ?? documentTypeLabel(selected.type);
+  const statusLabel = selected.presentation?.document.statusLabel ?? 'Emitido';
+  const amount = selected.presentation ? formatFinanceMoney({ amount: selected.presentation.totals.documentTotal, currency: selected.presentation.totals.currency }) : null;
   return <aside data-testid="selected-financial-document-detail" className={`min-w-0 rounded-lg border p-4 ${light ? 'bg-[var(--color-surface-raised)] border-[var(--color-border-default)]' : 'bg-zinc-800 border-zinc-700'}`}>
-    <button type="button" onClick={onBack} className="mb-3 rounded-md border px-3 py-1 text-sm lg:hidden">Voltar aos documentos</button>
+    <button type="button" data-testid="return-to-financial-documents-collection" onClick={onBack} className="mb-3 rounded-md border px-3 py-1 text-sm">Voltar aos documentos</button>
+    <header data-testid="financial-document-identity" className="mb-4 rounded-lg border p-3 text-sm"><strong>{typeLabel}</strong><p className="mt-1 font-semibold">{reference}</p><p className="mt-1 text-zinc-600">{statusLabel}{amount ? ` · ${amount}` : ''} · Emissão: {new Date(selected.issuedAt).toLocaleDateString('pt-PT')}</p></header>
     {selected.type === 'invoice' && selected.presentation ? <InvoiceDocumentSurface model={{ mode: 'issued', status: selected.presentation.document.statusLabel, seriesNumber: selected.presentation.document.officialNumber, issueDate: selected.presentation.document.issueDate, dueDate: selected.presentation.document.dueDate, issuer: { legalName: selected.presentation.issuer.legalName, taxIdentifier: selected.presentation.issuer.taxIdentifier, address: selected.presentation.issuer.addressLines[0] ?? null }, recipient: { name: selected.presentation.recipient.name, taxIdentifier: selected.presentation.recipient.taxIdentifier, address: selected.presentation.recipient.addressLines[0] ?? null }, reference: selected.presentation.operation.reference, lines: selected.presentation.operation.lines, totals: selected.presentation.totals, taxTreatment: selected.presentation.policy.taxTreatment, legalMentions: selected.presentation.legalMentions }} /> : <section>
       <h3 className="font-semibold">Documento emitido</h3>
       <p>{selected.presentation?.document.officialNumber ?? `${selected.seriesCode}/${selected.sequenceNumber}`} · {selected.presentation?.document.typeLabel ?? documentTypeLabel(selected.type)}</p>

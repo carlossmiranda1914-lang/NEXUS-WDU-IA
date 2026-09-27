@@ -5,6 +5,11 @@ import { act, create } from 'react-test-renderer';
 import { FinancialDocumentsWorkspace } from '../src/components/finance/documents/FinancialDocumentsWorkspace.tsx';
 import { financialDocumentClient, type FinancialDocumentProjection } from '../src/modules/finance/financial-document-client.ts';
 
+function DocumentsHarness(props: any) {
+  const [selectedDocumentId, setSelectedDocumentId] = React.useState<string | null>(null);
+  return React.createElement(FinancialDocumentsWorkspace, { ...props, mode: selectedDocumentId ? 'detail' : 'collection', selectedDocumentId, onSelectDocument: setSelectedDocumentId, onReturnToCollection: () => setSelectedDocumentId(null) });
+}
+
 function issuedDocument(id: string, type: 'invoice_receipt' | 'credit_note' = 'invoice_receipt'): FinancialDocumentProjection {
   return {
     id,
@@ -29,7 +34,7 @@ function issuedDocument(id: string, type: 'invoice_receipt' | 'credit_note' = 'i
   };
 }
 
-test('keeps a selected first document in an operational detail region when the list contains 1,000 documents', async () => {
+test('replaces a large documents collection with the selected document detail', async () => {
   const original = {
     list: financialDocumentClient.list,
     capabilities: financialDocumentClient.capabilities,
@@ -45,14 +50,15 @@ test('keeps a selected first document in an operational detail region when the l
 
   try {
     let renderer: any;
-    await act(async () => { renderer = create(React.createElement(FinancialDocumentsWorkspace)); });
+    await act(async () => { renderer = create(React.createElement(DocumentsHarness)); });
     const firstAction = renderer.root.findAllByType('button').find((button: any) => button.children.join('') === 'Visualizar');
     assert.ok(firstAction);
     await act(async () => { firstAction.props.onClick(); });
 
     const detail = renderer.root.findByProps({ 'data-testid': 'selected-financial-document-detail' });
     assert.match(JSON.stringify(renderer.toJSON()), /FR-UAT\/doc-1/);
-    assert.ok(renderer.root.findByProps({ 'data-testid': 'financial-document-list' }));
+    assert.equal(renderer.root.findAllByProps({ 'data-testid': 'financial-document-list' }).length, 0);
+    assert.ok(renderer.root.findByProps({ 'data-testid': 'financial-document-detail-view' }));
   } finally {
     financialDocumentClient.list = original.list;
     financialDocumentClient.capabilities = original.capabilities;
@@ -84,7 +90,7 @@ test('shows original and correction relationships in the selected detail while k
 
   try {
     let renderer: any;
-    await act(async () => { renderer = create(React.createElement(FinancialDocumentsWorkspace)); });
+    await act(async () => { renderer = create(React.createElement(DocumentsHarness)); });
     const actions = renderer.root.findAllByType('button').filter((button: any) => button.children.join('') === 'Visualizar');
     await act(async () => { actions[0].props.onClick(); });
     let detailText = JSON.stringify(renderer.toJSON());
@@ -93,12 +99,14 @@ test('shows original and correction relationships in the selected detail while k
     assert.match(detailText, /Gerar PDF oficial/);
     assert.doesNotMatch(detailText, /Visualizar PDF oficial/);
 
-    await act(async () => { actions[1].props.onClick(); });
+    await act(async () => { renderer.root.findByProps({ 'data-testid': 'return-to-financial-documents-collection' }).props.onClick(); });
+    const currentActions = renderer.root.findAllByType('button').filter((button: any) => button.children.join('') === 'Visualizar');
+    await act(async () => { currentActions[1].props.onClick(); });
     detailText = JSON.stringify(renderer.toJSON());
     assert.match(detailText, /Documento corrigido[\s\S]*FR-UAT\/1/);
     assert.doesNotMatch(detailText, /Criar Nota de Crédito/);
     assert.match(detailText, /Visualizar PDF oficial/);
-    assert.doesNotMatch(detailText, /Gerar PDF oficial/);
+    assert.match(detailText, /Gerar PDF oficial/);
     assert.doesNotMatch(detailText, /Imprimir/);
   } finally {
     financialDocumentClient.list = original.list;
@@ -120,7 +128,7 @@ test('opens a selected correction from its original and returns from the credit 
   financialDocumentClient.creditNoteReadiness = async () => ({ status: 'BLOCKED', reasonCode: 'CREDIT_NOTE_ALREADY_CORRECTED' });
   try {
     let renderer: any;
-    await act(async () => { renderer = create(React.createElement(FinancialDocumentsWorkspace)); });
+    await act(async () => { renderer = create(React.createElement(DocumentsHarness)); });
     const documents = renderer.root.findAllByType('button').filter((button: any) => button.children.join('') === 'Visualizar');
     await act(async () => { documents[0].props.onClick(); });
     const correctionAction = renderer.root.findAllByType('button').find((button: any) => button.children.join('') === 'Abrir Nota de crédito');
@@ -146,7 +154,7 @@ test('uses the authoritative obligation source ID instead of its display referen
   const opened: string[] = [];
   try {
     let renderer: any;
-    await act(async () => { renderer = create(React.createElement(FinancialDocumentsWorkspace, { onOpenObligation: (id: string) => opened.push(id) })); });
+    await act(async () => { renderer = create(React.createElement(DocumentsHarness, { onOpenObligation: (id: string) => opened.push(id) })); });
     const action = renderer.root.findAllByType('button').find((button: any) => button.children.join('') === 'Visualizar');
     await act(async () => { action.props.onClick(); });
     const obligationAction = renderer.root.findAllByType('button').find((button: any) => button.children.join('') === 'Abrir obrigação');
@@ -174,7 +182,7 @@ test('does not expose the credit-note action for an invoice receipt the server m
 
   try {
     let renderer: any;
-    await act(async () => { renderer = create(React.createElement(FinancialDocumentsWorkspace)); });
+    await act(async () => { renderer = create(React.createElement(DocumentsHarness)); });
     const action = renderer.root.findAllByType('button').find((button: any) => button.children.join('') === 'Visualizar');
     await act(async () => { action.props.onClick(); });
     assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /Criar Nota de Crédito/);

@@ -7,6 +7,8 @@ import { FinancialDocumentsWorkspace } from './documents/FinancialDocumentsWorks
 import { FinanceConfigurationWorkspace } from './configuration/FinanceConfigurationWorkspace.tsx';
 
 export type FinanceTab = 'operations' | 'catalogue' | 'obligations' | 'recebimentos' | 'documents' | 'configuration';
+export type FinancePrimaryView = 'FINANCIAL_SITUATION' | 'COLLECTION_DOCUMENTS' | 'COLLECTION_OBLIGATIONS' | 'COLLECTION_PAYMENTS' | 'DETAIL_FINANCIAL_DOCUMENT' | 'DETAIL_OBLIGATION' | 'DETAIL_PAYMENT' | 'FEE_CATALOGUE' | 'CONFIGURATION';
+type FinanceImmediateOrigin = { view: FinancePrimaryView; entityId?: string; businessReference?: string } | null;
 
 export interface FinanceWorkspaceProps {
   theme?: string;
@@ -15,20 +17,24 @@ export interface FinanceWorkspaceProps {
   initialContextQuery?: { financialAccountId?: string; studentRef?: string; enrollmentId?: string } | null;
 }
 
+const initialPrimaryView = (tab: FinanceTab): FinancePrimaryView => ({ operations: 'FINANCIAL_SITUATION', catalogue: 'FEE_CATALOGUE', obligations: 'COLLECTION_OBLIGATIONS', recebimentos: 'COLLECTION_PAYMENTS', documents: 'COLLECTION_DOCUMENTS', configuration: 'CONFIGURATION' })[tab];
+const activeTabForView = (view: FinancePrimaryView): FinanceTab => ({ FINANCIAL_SITUATION: 'operations', FEE_CATALOGUE: 'catalogue', COLLECTION_OBLIGATIONS: 'obligations', DETAIL_OBLIGATION: 'obligations', COLLECTION_PAYMENTS: 'recebimentos', DETAIL_PAYMENT: 'recebimentos', COLLECTION_DOCUMENTS: 'documents', DETAIL_FINANCIAL_DOCUMENT: 'documents', CONFIGURATION: 'configuration' })[view];
+
 export function FinanceWorkspace({ theme = 'light', initialTab = 'operations', initialFinancialAccountId, initialContextQuery }: FinanceWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<FinanceTab>(initialTab);
+  const [primaryView, setPrimaryView] = useState<FinancePrimaryView>(() => initialPrimaryView(initialTab));
+  const [origin, setOrigin] = useState<FinanceImmediateOrigin>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
   const [selectedPaymentReference, setSelectedPaymentReference] = useState<string | null>(null);
   const [selectedObligationId, setSelectedObligationId] = useState<string | null>(null);
   const [operationsReturnContext, setOperationsReturnContext] = useState<{ id: string; label: string } | null>(null);
+  const activeTab = activeTabForView(primaryView);
   const inactive = theme === 'light' ? 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100';
   const destination = (tab: FinanceTab) => `w-full rounded-lg px-3 py-2 text-left text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)] ${activeTab === tab ? 'bg-[var(--color-action-primary)] text-white shadow-sm' : inactive}`;
-  const destinationProps = (tab: FinanceTab) => ({
-    className: destination(tab),
-    'aria-current': activeTab === tab ? 'page' as const : undefined,
-    onClick: () => setActiveTab(tab),
-  });
+  const enterCollection = (tab: FinanceTab) => { setPrimaryView(initialPrimaryView(tab)); setOrigin(null); };
+  const destinationProps = (tab: FinanceTab) => ({ className: destination(tab), 'aria-current': activeTab === tab ? 'page' as const : undefined, onClick: () => enterCollection(tab) });
+  const openDocumentDetail = (documentId: string, nextOrigin: FinanceImmediateOrigin) => { setSelectedDocumentId(documentId); setOrigin(nextOrigin); setPrimaryView('DETAIL_FINANCIAL_DOCUMENT'); };
+  const returnToDocumentDetail = () => { if (origin?.view === 'DETAIL_FINANCIAL_DOCUMENT' && origin.entityId) { setSelectedDocumentId(origin.entityId); setPrimaryView('DETAIL_FINANCIAL_DOCUMENT'); } };
 
   return <div className="aurora-finance-surface mx-auto grid w-full max-w-[1700px] gap-4 md:grid-cols-[12rem_minmax(0,1fr)]">
     <nav aria-label="Navegação de Finanças e Contas" className={`self-start rounded-xl border p-2 shadow-sm md:sticky md:top-6 ${theme === 'light' ? 'border-[var(--color-border-default)] bg-[var(--color-surface-raised)]' : 'border-zinc-800 bg-zinc-900/95'}`}>
@@ -39,13 +45,15 @@ export function FinanceWorkspace({ theme = 'light', initialTab = 'operations', i
       </div>
     </nav>
     <main aria-label="Área de trabalho financeira" className="min-w-0">
-      {operationsReturnContext && (activeTab === 'obligations' || activeTab === 'recebimentos') && <button type="button" data-testid="return-to-financial-situation" onClick={() => setActiveTab('operations')} className="mb-4 rounded-md border px-3 py-1 text-sm">Voltar à situação financeira — {operationsReturnContext.label}</button>}
-      {activeTab === 'operations' && <FinanceOperationalContextWorkspace theme={theme} initialFinancialAccountId={operationsReturnContext?.id ?? initialFinancialAccountId} initialContextQuery={initialContextQuery} onOpenFinancialDocument={(documentId) => { setSelectedDocumentId(documentId); setActiveTab('documents'); }} onOpenObligation={(obligationId, financialAccount) => { setSelectedObligationId(obligationId); setOperationsReturnContext(financialAccount); setActiveTab('obligations'); }} onOpenPayment={(paymentId, financialAccount) => { setSelectedPaymentId(paymentId); setOperationsReturnContext(financialAccount); setActiveTab('recebimentos'); }} />}
-      {activeTab === 'catalogue' && <FinanceFeeCatalogueWorkspace theme={theme} />}
-      {activeTab === 'obligations' && <FinancialObligationsWorkspace initialObligationId={selectedObligationId} onOpenFinancialDocument={(documentId) => { setSelectedDocumentId(documentId); setActiveTab('documents'); }} />}
-      {activeTab === 'recebimentos' && <FinancePaymentsWorkspace theme={theme} initialPaymentId={selectedPaymentId} initialPaymentReference={selectedPaymentReference} onOpenFinanceConfiguration={() => setActiveTab('configuration')} onOpenFinancialDocuments={(documentId) => { setSelectedDocumentId(documentId); setActiveTab('documents'); }} />}
-      {activeTab === 'documents' && <FinancialDocumentsWorkspace theme={theme} initialDocumentId={selectedDocumentId} onOpenPayment={(paymentReference) => { setSelectedPaymentId(null); setSelectedPaymentReference(paymentReference); setActiveTab('recebimentos'); }} onOpenObligation={(obligationId) => { setSelectedObligationId(obligationId); setActiveTab('obligations'); }} />}
-      {activeTab === 'configuration' && <FinanceConfigurationWorkspace />}
+      {(primaryView === 'DETAIL_OBLIGATION' || primaryView === 'DETAIL_PAYMENT') && origin?.view === 'DETAIL_FINANCIAL_DOCUMENT' && <button type="button" data-testid="return-to-financial-document" onClick={returnToDocumentDetail} className="mb-4 rounded-md border px-3 py-1 text-sm">Voltar ao documento financeiro — {origin.businessReference ?? 'documento selecionado'}</button>}
+      {(primaryView === 'DETAIL_OBLIGATION' || primaryView === 'DETAIL_PAYMENT') && origin?.view === 'FINANCIAL_SITUATION' && <button type="button" data-testid="return-to-financial-situation" onClick={() => setPrimaryView('FINANCIAL_SITUATION')} className="mb-4 rounded-md border px-3 py-1 text-sm">Voltar à situação financeira — {origin.businessReference}</button>}
+      {primaryView === 'FINANCIAL_SITUATION' && <FinanceOperationalContextWorkspace theme={theme} initialFinancialAccountId={operationsReturnContext?.id ?? initialFinancialAccountId} initialContextQuery={initialContextQuery} onOpenFinancialDocument={documentId => openDocumentDetail(documentId, { view: 'FINANCIAL_SITUATION', entityId: operationsReturnContext?.id, businessReference: operationsReturnContext?.label })} onOpenObligation={(obligationId, financialAccount) => { setSelectedObligationId(obligationId); setOperationsReturnContext(financialAccount); setOrigin({ view: 'FINANCIAL_SITUATION', entityId: financialAccount.id, businessReference: financialAccount.label }); setPrimaryView('DETAIL_OBLIGATION'); }} onOpenPayment={(paymentId, financialAccount) => { setSelectedPaymentId(paymentId); setOrigin({ view: 'FINANCIAL_SITUATION', entityId: financialAccount.id, businessReference: financialAccount.label }); setPrimaryView('DETAIL_PAYMENT'); }} />}
+      {primaryView === 'FEE_CATALOGUE' && <FinanceFeeCatalogueWorkspace theme={theme} />}
+      {(primaryView === 'COLLECTION_OBLIGATIONS' || primaryView === 'DETAIL_OBLIGATION') && <FinancialObligationsWorkspace initialObligationId={selectedObligationId} onOpenFinancialDocument={documentId => openDocumentDetail(documentId, { view: primaryView, entityId: selectedObligationId ?? undefined })} />}
+      {(primaryView === 'COLLECTION_PAYMENTS' || primaryView === 'DETAIL_PAYMENT') && <FinancePaymentsWorkspace theme={theme} initialPaymentId={selectedPaymentId} initialPaymentReference={selectedPaymentReference} onOpenFinanceConfiguration={() => enterCollection('configuration')} onOpenFinancialDocuments={documentId => openDocumentDetail(documentId, { view: primaryView, entityId: selectedPaymentId ?? undefined, businessReference: selectedPaymentReference ?? undefined })} />}
+      {primaryView === 'COLLECTION_DOCUMENTS' && <FinancialDocumentsWorkspace theme={theme} mode="collection" onSelectDocument={documentId => openDocumentDetail(documentId, { view: 'COLLECTION_DOCUMENTS' })} />}
+      {primaryView === 'DETAIL_FINANCIAL_DOCUMENT' && selectedDocumentId && <FinancialDocumentsWorkspace theme={theme} mode="detail" selectedDocumentId={selectedDocumentId} onReturnToCollection={() => { setPrimaryView('COLLECTION_DOCUMENTS'); setOrigin(null); }} onOpenPayment={(paymentReference, originDocumentId, originReference) => { setSelectedPaymentId(null); setSelectedPaymentReference(paymentReference); setOrigin({ view: 'DETAIL_FINANCIAL_DOCUMENT', entityId: originDocumentId, businessReference: originReference }); setPrimaryView('DETAIL_PAYMENT'); }} onOpenObligation={(obligationId, originDocumentId, originReference) => { setSelectedObligationId(obligationId); setOrigin({ view: 'DETAIL_FINANCIAL_DOCUMENT', entityId: originDocumentId, businessReference: originReference }); setPrimaryView('DETAIL_OBLIGATION'); }} />}
+      {primaryView === 'CONFIGURATION' && <FinanceConfigurationWorkspace />}
     </main>
   </div>;
 }
