@@ -140,7 +140,8 @@ export function FinanceOperationalTruthPanels({
                         Coberto: {formatMoney(ob.covered.amount, ob.covered.currency)} · Por cobrir: {formatMoney(ob.uncovered.amount, ob.uncovered.currency)}
                       </span>
                     )}
-                    {(onRegisterAdjustment || onApplyDiscount || onRevokeDiscount || onOpenObligation) && (
+                    {onOpenObligation && <button type="button" data-testid={`open-obligation-${ob.id}`} onClick={() => onOpenObligation(ob.id)} className="mt-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">Abrir obrigação</button>}
+                    {(onRegisterAdjustment || onApplyDiscount || onRevokeDiscount) && (
                       <div className="relative mt-2 inline-block">
                         <button
                           type="button"
@@ -169,8 +170,6 @@ export function FinanceOperationalTruthPanels({
                             <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-100 dark:border-zinc-800 mb-1">
                               Operações da Cobrança
                             </div>
-                            {onOpenObligation && <button type="button" role="menuitem" data-testid={`open-obligation-${ob.id}`} onClick={() => { setOpenMenuId(null); onOpenObligation(ob.id); }} className="w-full rounded-lg px-2.5 py-2 text-left text-xs font-semibold hover:bg-zinc-100 dark:hover:bg-zinc-800">Abrir obrigação</button>}
-
                             {!ob.activeDiscount && onApplyDiscount && (
                               <button
                                 type="button"
@@ -327,8 +326,8 @@ export function FinanceOperationalTruthPanels({
                       Valor recebido: +{formatMoney((pay.received || pay.amount).amount, (pay.received || pay.amount).currency)}
                     </span>
                     {pay.allocated && pay.unapplied && <span className="block text-xs text-zinc-500">Já associado: {formatMoney(pay.allocated.amount, pay.allocated.currency)} · Por associar: {formatMoney(pay.unapplied.amount, pay.unapplied.currency)}</span>}
-                    {pay.status === 'confirmed' && (pay.unapplied || pay.amount).amount !== '0' && onAllocatePayment && <button type="button" data-testid={`allocate-payment-${pay.id}`} onClick={() => onAllocatePayment(pay.id)} className="mt-2 text-xs font-semibold text-emerald-700">Associar recebimento</button>}
-                    {onOpenPayment && <button type="button" data-testid={`open-payment-${pay.id}`} onClick={() => onOpenPayment(pay.id)} className="ml-3 mt-2 text-xs font-semibold text-emerald-700">Abrir pagamento</button>}
+                    {onOpenPayment && <button type="button" data-testid={`open-payment-${pay.id}`} onClick={() => onOpenPayment(pay.id)} className="mt-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">Abrir pagamento</button>}
+                    {pay.status === 'confirmed' && (pay.unapplied || pay.amount).amount !== '0' && onAllocatePayment && <button type="button" data-testid={`allocate-payment-${pay.id}`} onClick={() => onAllocatePayment(pay.id)} className="ml-3 mt-2 text-xs font-semibold text-zinc-600 underline">Associar recebimento</button>}
                   </div>
                 </div>
               ))

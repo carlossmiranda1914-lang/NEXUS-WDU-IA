@@ -65,6 +65,8 @@ export function FinanceOperationalHistory({
   onOpenPayment,
 }: FinanceOperationalHistoryProps) {
   const isLight = theme === 'light';
+  const paymentReferences = new Map(history.filter((item): item is Extract<FinanceOperationalHistoryItem, { kind: 'payment' }> => item.kind === 'payment').map(item => [item.payment.id, item.payment.paymentReference]));
+  const obligationReferences = new Map(history.filter((item): item is Extract<FinanceOperationalHistoryItem, { kind: 'obligation' }> => item.kind === 'obligation').map(item => [item.obligation.id, item.obligation.description]));
 
   return (
     <div
@@ -135,7 +137,7 @@ export function FinanceOperationalHistory({
                     <span className={`text-sm font-semibold font-mono ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
                       {formatMoney(ob.amount.amount, ob.amount.currency)}
                     </span>
-                    {onOpenObligation && <button type="button" data-testid={`history-open-obligation-${ob.id}`} onClick={() => onOpenObligation(ob.id)} className="ml-3 text-xs font-semibold text-emerald-700">Abrir obrigação</button>}
+                    {onOpenObligation && <button type="button" data-testid={`history-open-obligation-${ob.id}`} onClick={() => onOpenObligation(ob.id)} className="ml-3 rounded-md border px-2 py-1 text-xs font-semibold text-emerald-700">Abrir obrigação</button>}
                   </div>
                 </div>
               );
@@ -169,7 +171,7 @@ export function FinanceOperationalHistory({
                     <span className="text-sm font-semibold font-mono text-emerald-600 dark:text-emerald-400">
                       +{formatMoney(pay.amount.amount, pay.amount.currency)}
                     </span>
-                    {onOpenPayment && <button type="button" data-testid={`history-open-payment-${pay.id}`} onClick={() => onOpenPayment(pay.id)} className="ml-3 text-xs font-semibold text-emerald-700">Abrir pagamento</button>}
+                    {onOpenPayment && <button type="button" data-testid={`history-open-payment-${pay.id}`} onClick={() => onOpenPayment(pay.id)} className="ml-3 rounded-md border px-2 py-1 text-xs font-semibold text-emerald-700">Abrir pagamento</button>}
                   </div>
                 </div>
               );
@@ -224,7 +226,7 @@ export function FinanceOperationalHistory({
                       Reverter associação
                     </button>
                   )}
-                  {(onOpenPayment || onOpenObligation) && <div className="mt-3 flex gap-3 text-xs font-semibold text-emerald-700">{onOpenPayment && <button type="button" data-testid={`allocation-open-payment-${allocation.id}`} onClick={() => onOpenPayment(allocation.paymentId)}>Abrir pagamento</button>}{onOpenObligation && <button type="button" data-testid={`allocation-open-obligation-${allocation.id}`} onClick={() => onOpenObligation(allocation.obligationId)}>Abrir obrigação</button>}</div>}
+                  {(onOpenPayment || onOpenObligation) && <div data-testid={`allocation-relationship-${allocation.id}`} className="mt-3 rounded-md bg-sky-50 p-3 text-xs text-sky-950"><p><strong>Pagamento {paymentReferences.get(allocation.paymentId) ?? 'associado'}</strong> → associado à obrigação <strong>{obligationReferences.get(allocation.obligationId) ?? 'registada'}</strong></p><div className="mt-2 flex gap-3 font-semibold">{onOpenPayment && <button type="button" data-testid={`allocation-open-payment-${allocation.id}`} onClick={() => onOpenPayment(allocation.paymentId)} className="underline">Abrir pagamento</button>}{onOpenObligation && <button type="button" data-testid={`allocation-open-obligation-${allocation.id}`} onClick={() => onOpenObligation(allocation.obligationId)} className="underline">Abrir obrigação</button>}</div></div>}
                 </article>
               );
             }

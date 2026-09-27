@@ -21,8 +21,8 @@ export interface FinanceOperationalContextWorkspaceProps {
   initialFinancialAccountId?: string;
   initialContextQuery?: { financialAccountId?: string; studentRef?: string; enrollmentId?: string } | null;
   onOpenFinancialDocument?: (documentId: string) => void;
-  onOpenObligation?: (obligationId: string, financialAccountId: string) => void;
-  onOpenPayment?: (paymentId: string, financialAccountId: string) => void;
+  onOpenObligation?: (obligationId: string, financialAccount: { id: string; label: string }) => void;
+  onOpenPayment?: (paymentId: string, financialAccount: { id: string; label: string }) => void;
 }
 
 const client = new FinanceOperationalContextClient();
@@ -464,16 +464,16 @@ export function FinanceOperationalContextWorkspace({
             onRegisterAdjustment={(obligation) => setAdjustmentObligationId(obligation.id)}
             onApplyDiscount={(obligation) => setDiscountObligation({ obligation, mode: 'apply' })}
             onRevokeDiscount={(obligation) => setDiscountObligation({ obligation, mode: 'revoke' })}
-            onOpenObligation={(obligationId) => onOpenObligation?.(obligationId, context.financialAccount.id)}
-            onOpenPayment={(paymentId) => onOpenPayment?.(paymentId, context.financialAccount.id)}
+            onOpenObligation={(obligationId) => onOpenObligation?.(obligationId, { id: context.financialAccount.id, label: `${context.financialAccount.accountNumber} — ${context.financialAccount.name}` })}
+            onOpenPayment={(paymentId) => onOpenPayment?.(paymentId, { id: context.financialAccount.id, label: `${context.financialAccount.accountNumber} — ${context.financialAccount.name}` })}
           />
 
           <FinanceOperationalHistory
             theme={theme}
             history={context.history}
             onReverse={setReversalAllocation}
-            onOpenObligation={(obligationId) => onOpenObligation?.(obligationId, context.financialAccount.id)}
-            onOpenPayment={(paymentId) => onOpenPayment?.(paymentId, context.financialAccount.id)}
+            onOpenObligation={(obligationId) => onOpenObligation?.(obligationId, { id: context.financialAccount.id, label: `${context.financialAccount.accountNumber} — ${context.financialAccount.name}` })}
+            onOpenPayment={(paymentId) => onOpenPayment?.(paymentId, { id: context.financialAccount.id, label: `${context.financialAccount.accountNumber} — ${context.financialAccount.name}` })}
             eligibleDebitNoteAdjustmentIds={eligibleDebitNoteAdjustmentIds}
             onIssueDebitNote={debitNoteIssuing ? undefined : async (adjustment) => {
               try {
