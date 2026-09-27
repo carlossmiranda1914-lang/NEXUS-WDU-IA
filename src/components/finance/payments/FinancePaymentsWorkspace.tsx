@@ -11,11 +11,15 @@ import { financeReadinessClient, type FinanceReadinessDto } from '../../../modul
 import { ReceiptDocumentSurface } from '../documents/ReceiptDocumentSurface.tsx';
 import { InvoiceReceiptDocumentSurface } from '../documents/InvoiceReceiptDocumentSurface.tsx';
 import { formatFinanceMoney } from '../../../modules/finance/money-presentation.ts';
+import { SelectedFinancialPaymentDetail } from './SelectedFinancialPaymentDetail.tsx';
 
 export type PaymentSubView = 'list' | 'create' | 'providers';
 
 export interface FinancePaymentsWorkspaceProps {
   theme?: string;
+  mode?: 'collection' | 'detail';
+  onSelectPayment?: (paymentId: string) => void;
+  onReturn?: () => void;
   onOpenFinanceConfiguration?: () => void;
   onOpenFinancialDocuments?: (documentId: string) => void;
   initialPaymentId?: string | null;
@@ -106,7 +110,7 @@ export function receiptReadinessPresentation(
   };
 }
 
-export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfiguration, onOpenFinancialDocuments, initialPaymentId, initialPaymentReference }: FinancePaymentsWorkspaceProps) {
+export function FinancePaymentsWorkspace({ theme = 'light', mode = 'collection', onSelectPayment, onReturn, onOpenFinanceConfiguration, onOpenFinancialDocuments, initialPaymentId, initialPaymentReference }: FinancePaymentsWorkspaceProps) {
   const [view, setView] = useState<PaymentSubView>('list');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -122,6 +126,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   const [issuedDocumentId, setIssuedDocumentId] = useState<string | null>(null);
   const [previewReadiness, setPreviewReadiness] = useState<ReceiptPreissuePreview | null>(null);
   const [invoiceReceiptPreview, setInvoiceReceiptPreview] = useState<InvoiceReceiptPreissuePreview | null>(null);
+  const [detailPayment, setDetailPayment] = useState<Payment | null>(null);
   const receiptReadinessState = receiptReadinessPresentation(readiness, receiptDocumentReadiness);
 
   const loadPayments = useCallback(async () => {
@@ -141,10 +146,11 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
     loadPayments();
   }, [loadPayments]);
   useEffect(() => {
+    if (mode !== 'detail') return;
     if (!initialPaymentId && !initialPaymentReference) return;
     const payment = payments.find(candidate => candidate.id === initialPaymentId || candidate.paymentReference === initialPaymentReference);
-    if (payment) setPreviewPayment(payment);
-  }, [initialPaymentId, initialPaymentReference, payments]);
+    if (payment) setDetailPayment(payment);
+  }, [initialPaymentId, initialPaymentReference, mode, payments]);
   useEffect(() => { financialDocumentClient.capabilities().then(capabilities => setCanIssueDocument(capabilities.issue)).catch(() => setCanIssueDocument(false)); }, []);
   useEffect(() => { financeReadinessClient.get().then(setReadiness).catch(() => setReadiness(null)); }, []);
   useEffect(() => { financialDocumentClient.documentReadiness('receipt').then(setReceiptDocumentReadiness).catch(() => setReceiptDocumentReadiness(null)); }, []);
@@ -196,7 +202,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
   return (
     <div className="w-full">
       {receiptReadinessState && <section data-testid="receipt-readiness-state" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><strong>{receiptReadinessState.kind === 'LOCAL_ACTIONABLE' ? 'Configuração necessária' : receiptReadinessState.kind === 'LOCAL_NON_ACTIONABLE' ? 'Configuração local pendente' : 'Emissão oficial indisponível'}</strong><p>{receiptReadinessState.primary}</p>{receiptReadinessState.secondary && <p className="mt-1 text-zinc-700">{receiptReadinessState.secondary}</p>}{receiptReadinessState.showConfigurationCta && <button type="button" onClick={onOpenFinanceConfiguration} className="mt-2 rounded-md border px-3 py-1">Concluir configuração</button>}</section>}
-      {view === 'list' && <>
+      {mode === 'collection' && view === 'list' && <>
         <FinancePaymentsListView
           payments={payments}
           loading={loading}
@@ -205,6 +211,7 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
           onRefresh={loadPayments}
           onOpenCreate={() => setView('create')}
           onOpenProviders={() => setView('providers')}
+          onSelectPayment={onSelectPayment}
           onIssueReceipt={readiness?.status === 'READY' && receiptDocumentReadiness?.status === 'READY' && canIssueDocument ? issueReceipt : undefined}
           onIssueInvoiceReceipt={readiness?.status === 'READY' && invoiceReceiptDocumentReadiness?.status === 'READY' && canIssueDocument ? issueInvoiceReceipt : undefined}
           onPreviewReceipt={setPreviewPayment}
@@ -213,9 +220,9 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
           canIssueInvoiceReceipt={payment => invoiceReceiptEligibility[payment.id]?.eligible === true}
           receiptBlockReason={payment => receiptEligibilityMessage(receiptEligibility[payment.id]?.reason, canIssueDocument)}
       />
-      {previewPayment && <section data-testid="receipt-pre-issue-preview" className="mt-4 space-y-4"><header data-testid="selected-payment-context" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm"><strong>A visualizar pagamento</strong><p className="mt-1">{previewPayment.paymentReference} · {formatFinanceMoney(previewPayment)} · {new Date(previewPayment.effectiveAt).toLocaleDateString('pt-PT')}</p></header>{previewReadiness ? <><ReceiptDocumentSurface model={{ mode: 'preview', status: previewReadiness.payment.confirmationState === 'CONFIRMED' ? 'Confirmado' : 'Não confirmado', payment: previewReadiness.payment, issuer: previewReadiness.issuer, payer: previewReadiness.parties.payer, recipient: previewReadiness.parties.recipient, settlement: previewReadiness.settlement }} /><section data-testid="receipt-preview-readiness" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><h3 className="font-semibold">Estado de emissão</h3><p>{previewReadiness.sourceEligibility === 'ELIGIBLE' ? 'Fonte elegível para emissão.' : 'A fonte ainda não está elegível para emissão.'}</p><p className="mt-1 text-zinc-700">{previewReadiness.readiness.status === 'READY' && previewReadiness.sourceEligibility === 'ELIGIBLE' ? 'A emissão oficial pode ser confirmada.' : receiptPreviewBlockMessage(previewReadiness.blockingReason ?? previewReadiness.readiness.reasonCode)}</p></section></> : <div className="rounded-lg border p-4 text-sm">A carregar a pré-visualização autorizada do recibo.</div>}</section>}
-      {invoiceReceiptPreview && <section data-testid="invoice-receipt-pre-issue-preview" className="mt-4 space-y-4"><InvoiceReceiptDocumentSurface model={invoiceReceiptPreview} /><section data-testid="invoice-receipt-preview-readiness" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"><h3 className="font-semibold">Estado de emissão</h3><p>{invoiceReceiptPreview.readiness.status === 'READY' ? 'A emissão oficial pode ser confirmada.' : receiptPreviewBlockMessage(invoiceReceiptPreview.blockingReason ?? invoiceReceiptPreview.readiness.reasonCode)}</p></section></section>}
       </>}
+
+      {mode === 'detail' && (initialPaymentId || detailPayment) && <><SelectedFinancialPaymentDetail paymentId={detailPayment?.id ?? initialPaymentId!} onBack={onReturn ?? (() => {})} onLoaded={setDetailPayment} />{detailPayment && <section aria-label="Ações do pagamento" className="mx-auto max-w-5xl rounded-xl border p-5"><h2 className="font-bold">Ações</h2><p className="mt-1 text-sm text-zinc-500">Recibos e Facturas-Recibo são documentos distintos; nenhuma relação de retorno é inferida.</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" data-testid={`preview-receipt-${detailPayment.id}`} onClick={() => setPreviewPayment(detailPayment)} className="rounded border px-3 py-1.5 text-sm">Pré-visualizar recibo</button><button type="button" data-testid={`preview-invoice-receipt-${detailPayment.id}`} onClick={() => void previewInvoiceReceipt(detailPayment)} className="rounded border px-3 py-1.5 text-sm">Pré-visualizar Factura-Recibo</button>{readiness?.status === 'READY' && invoiceReceiptDocumentReadiness?.status === 'READY' && canIssueDocument && invoiceReceiptEligibility[detailPayment.id]?.eligible && <button type="button" data-testid={`issue-invoice-receipt-${detailPayment.id}`} onClick={() => void issueInvoiceReceipt(detailPayment)} className="rounded border px-3 py-1.5 text-sm">Emitir Factura-Recibo</button>}{readiness?.status === 'READY' && receiptDocumentReadiness?.status === 'READY' && canIssueDocument && receiptEligibility[detailPayment.id]?.eligible && <button type="button" onClick={() => void issueReceipt(detailPayment)} className="rounded border px-3 py-1.5 text-sm">Emitir recibo oficial</button>}</div></section>}{previewPayment && <section data-testid="receipt-pre-issue-preview" className="mx-auto max-w-5xl space-y-4"><header data-testid="selected-payment-context" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm"><strong>A visualizar pagamento</strong><p className="mt-1">{previewPayment.paymentReference} · {formatFinanceMoney(previewPayment)} · {new Date(previewPayment.effectiveAt).toLocaleDateString('pt-PT')}</p></header>{previewReadiness ? <ReceiptDocumentSurface model={{ mode: 'preview', status: previewReadiness.payment.confirmationState === 'CONFIRMED' ? 'Confirmado' : 'Não confirmado', payment: previewReadiness.payment, issuer: previewReadiness.issuer, payer: previewReadiness.parties.payer, recipient: previewReadiness.parties.recipient, settlement: previewReadiness.settlement }} /> : <div className="rounded-lg border p-4 text-sm">A carregar a pré-visualização autorizada do recibo.</div>}</section>}{invoiceReceiptPreview && <section data-testid="invoice-receipt-pre-issue-preview" className="mx-auto max-w-5xl space-y-4"><InvoiceReceiptDocumentSurface model={invoiceReceiptPreview} /></section>}</>}
 
       {issuanceNotice && <div data-testid="financial-document-issuance-notice" className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><p>{issuanceNotice}</p>{onOpenFinancialDocuments && issuedDocumentId && <button type="button" onClick={() => onOpenFinancialDocuments(issuedDocumentId)} className="rounded-md border border-emerald-300 bg-white px-3 py-1 font-semibold text-emerald-800">Abrir documento financeiro</button>}</div>}
 

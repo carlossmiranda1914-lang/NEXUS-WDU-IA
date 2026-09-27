@@ -278,6 +278,7 @@ test('FinanceWorkspace switches to Recebimentos tab and renders FinancePaymentsW
 
 test('an enabled Factura-Recibo action invokes the canonical client with the selected payment, allocation, series and persistent intent', async () => {
   const originalListPayments = paymentClient.listPayments;
+  const originalGetPayment = paymentClient.getPayment;
   const originalCapabilities = financialDocumentClient.capabilities;
   const originalDocumentReadiness = financialDocumentClient.documentReadiness;
   const originalSeries = financialDocumentClient.listActiveInvoiceReceiptSeries;
@@ -288,6 +289,7 @@ test('an enabled Factura-Recibo action invokes the canonical client with the sel
   const calls: Array<{ paymentId: string; obligationId: string; seriesId: string; idempotencyKey: string }> = [];
 
   paymentClient.listPayments = async () => samplePayments;
+  paymentClient.getPayment = async () => samplePayments[0];
   financialDocumentClient.capabilities = async () => ({ issue: true, correct: false });
   financialDocumentClient.documentReadiness = async () => ({ documentType: 'invoice_receipt', status: 'READY', prerequisites: {} });
   financialDocumentClient.listActiveInvoiceReceiptSeries = async () => [{ id: 'series-001', code: 'FR-UAT', document_type: 'invoice_receipt', status: 'active' }];
@@ -299,7 +301,7 @@ test('an enabled Factura-Recibo action invokes the canonical client with the sel
   try {
     let renderer: any;
     await act(async () => {
-      renderer = create(React.createElement(FinancePaymentsWorkspace));
+      renderer = create(React.createElement(FinancePaymentsWorkspace, { mode: 'detail', initialPaymentId: 'pay-001' }));
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
@@ -316,6 +318,7 @@ test('an enabled Factura-Recibo action invokes the canonical client with the sel
     assert.match(calls[0]?.idempotencyKey ?? '', /^document-invoice-receipt-/);
   } finally {
     paymentClient.listPayments = originalListPayments;
+    paymentClient.getPayment = originalGetPayment;
     financialDocumentClient.capabilities = originalCapabilities;
     financialDocumentClient.documentReadiness = originalDocumentReadiness;
     financialDocumentClient.listActiveInvoiceReceiptSeries = originalSeries;

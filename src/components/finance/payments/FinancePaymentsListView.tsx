@@ -10,6 +10,7 @@ export interface FinancePaymentsListViewProps {
   onRefresh: () => void;
   onOpenCreate: () => void;
   onOpenProviders: () => void;
+  onSelectPayment?: (paymentId: string) => void;
   onIssueReceipt?: (payment: Payment) => void;
   onIssueInvoiceReceipt?: (payment: Payment) => void;
   onPreviewReceipt?: (payment: Payment) => void;
@@ -27,6 +28,7 @@ export function FinancePaymentsListView({
   onRefresh,
   onOpenCreate,
   onOpenProviders,
+  onSelectPayment,
   onIssueReceipt,
   onIssueInvoiceReceipt,
   onPreviewReceipt,
@@ -129,7 +131,7 @@ export function FinancePaymentsListView({
                   <th className="px-6 py-3">Montante</th>
                   <th className="px-6 py-3">Data Efetiva</th>
                   <th className="px-6 py-3">Estado</th>
-                  <th className="px-6 py-3">Aplicação</th><th className="px-6 py-3">Documento</th>
+                  <th className="px-6 py-3">Aplicação</th><th className="px-6 py-3">Ação</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -168,7 +170,7 @@ export function FinancePaymentsListView({
                         {allocation(p.allocationStatus).label}
                       </span>
                     </td>
-                    <td className="px-6 py-4 space-y-2">{p.status === 'confirmed' && <button type="button" data-testid={`preview-receipt-${p.id}`} onClick={() => onPreviewReceipt?.(p)} className="block rounded-md border px-2 py-1 text-xs font-semibold">Pré-visualizar recibo</button>}{p.status === 'confirmed' && <button type="button" data-testid={`preview-invoice-receipt-${p.id}`} onClick={() => onPreviewInvoiceReceipt?.(p)} className="block rounded-md border px-2 py-1 text-xs font-semibold">Pré-visualizar Factura-Recibo</button>}{p.status === 'confirmed' && onIssueInvoiceReceipt && (canIssueInvoiceReceipt?.(p) ?? true) && <button type="button" data-testid={`issue-invoice-receipt-${p.id}`} onClick={() => onIssueInvoiceReceipt(p)} className="block rounded-md border px-2 py-1 text-xs font-semibold">Emitir Factura-Recibo</button>}{p.status === 'confirmed' && onIssueReceipt && (canIssueReceipt?.(p) ?? true) ? <button type="button" data-testid={`issue-receipt-${p.id}`} onClick={() => onIssueReceipt(p)} className="block rounded-md border px-2 py-1 text-xs font-semibold">Emitir recibo oficial</button> : <span className="block text-xs text-zinc-500">{receiptBlockReason?.(p) ?? 'Emissão não autorizada'}</span>}</td>
+                    <td className="px-6 py-4"><button type="button" data-testid={`open-payment-${p.id}`} onClick={() => onSelectPayment?.(p.id)} className="rounded-md border px-2 py-1 text-xs font-semibold">Abrir pagamento</button></td>
                   </tr>
                 ))}
               </tbody>

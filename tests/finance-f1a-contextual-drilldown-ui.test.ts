@@ -101,6 +101,8 @@ try {
   await act(async () => { paymentWorkspace.root.findByProps({ 'data-testid': 'open-payment-payment-1' }).props.onClick(); });
   assert.equal(paymentWorkspace.root.findByType(FinancePaymentsWorkspace).props.initialPaymentId, payment.id);
   assert.match(paymentWorkspace.root.findByProps({ 'data-testid': 'return-to-financial-situation' }).children.join(''), /CTA-000001.*Conta da Ana/);
+  await act(async () => { paymentWorkspace.root.findByProps({ 'data-testid': 'return-to-financial-situation' }).props.onClick(); await Promise.resolve(); });
+  assert.equal(paymentWorkspace.root.findByType(FinanceOperationalContextWorkspace).props.initialFinancialAccountId, 'account-1', 'payment return must restore the exact financial-account context');
 } finally {
   FinanceOperationalContextClient.prototype.getByFinancialAccountId = originalContextLoad;
 }
