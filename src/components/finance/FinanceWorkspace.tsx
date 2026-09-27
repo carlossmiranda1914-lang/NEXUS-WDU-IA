@@ -18,8 +18,10 @@ export interface FinanceWorkspaceProps {
 export function FinanceWorkspace({ theme = 'light', initialTab = 'operations', initialFinancialAccountId, initialContextQuery }: FinanceWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<FinanceTab>(initialTab);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
   const [selectedPaymentReference, setSelectedPaymentReference] = useState<string | null>(null);
   const [selectedObligationId, setSelectedObligationId] = useState<string | null>(null);
+  const [operationsReturnAccountId, setOperationsReturnAccountId] = useState<string | null>(null);
   const inactive = theme === 'light' ? 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100';
   const destination = (tab: FinanceTab) => `w-full rounded-lg px-3 py-2 text-left text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)] ${activeTab === tab ? 'bg-[var(--color-action-primary)] text-white shadow-sm' : inactive}`;
   const destinationProps = (tab: FinanceTab) => ({
@@ -37,11 +39,12 @@ export function FinanceWorkspace({ theme = 'light', initialTab = 'operations', i
       </div>
     </nav>
     <main aria-label="Área de trabalho financeira" className="min-w-0">
-      {activeTab === 'operations' && <FinanceOperationalContextWorkspace theme={theme} initialFinancialAccountId={initialFinancialAccountId} initialContextQuery={initialContextQuery} onOpenFinancialDocument={(documentId) => { setSelectedDocumentId(documentId); setActiveTab('documents'); }} />}
+      {operationsReturnAccountId && (activeTab === 'obligations' || activeTab === 'recebimentos') && <button type="button" data-testid="return-to-financial-situation" onClick={() => setActiveTab('operations')} className="mb-4 rounded-md border px-3 py-1 text-sm">Voltar à situação financeira</button>}
+      {activeTab === 'operations' && <FinanceOperationalContextWorkspace theme={theme} initialFinancialAccountId={operationsReturnAccountId ?? initialFinancialAccountId} initialContextQuery={initialContextQuery} onOpenFinancialDocument={(documentId) => { setSelectedDocumentId(documentId); setActiveTab('documents'); }} onOpenObligation={(obligationId, financialAccountId) => { setSelectedObligationId(obligationId); setOperationsReturnAccountId(financialAccountId); setActiveTab('obligations'); }} onOpenPayment={(paymentId, financialAccountId) => { setSelectedPaymentId(paymentId); setOperationsReturnAccountId(financialAccountId); setActiveTab('recebimentos'); }} />}
       {activeTab === 'catalogue' && <FinanceFeeCatalogueWorkspace theme={theme} />}
       {activeTab === 'obligations' && <FinancialObligationsWorkspace initialObligationId={selectedObligationId} onOpenFinancialDocument={(documentId) => { setSelectedDocumentId(documentId); setActiveTab('documents'); }} />}
-      {activeTab === 'recebimentos' && <FinancePaymentsWorkspace theme={theme} initialPaymentReference={selectedPaymentReference} onOpenFinanceConfiguration={() => setActiveTab('configuration')} onOpenFinancialDocuments={(documentId) => { setSelectedDocumentId(documentId); setActiveTab('documents'); }} />}
-      {activeTab === 'documents' && <FinancialDocumentsWorkspace theme={theme} initialDocumentId={selectedDocumentId} onOpenPayment={(paymentReference) => { setSelectedPaymentReference(paymentReference); setActiveTab('recebimentos'); }} onOpenObligation={(obligationId) => { setSelectedObligationId(obligationId); setActiveTab('obligations'); }} />}
+      {activeTab === 'recebimentos' && <FinancePaymentsWorkspace theme={theme} initialPaymentId={selectedPaymentId} initialPaymentReference={selectedPaymentReference} onOpenFinanceConfiguration={() => setActiveTab('configuration')} onOpenFinancialDocuments={(documentId) => { setSelectedDocumentId(documentId); setActiveTab('documents'); }} />}
+      {activeTab === 'documents' && <FinancialDocumentsWorkspace theme={theme} initialDocumentId={selectedDocumentId} onOpenPayment={(paymentReference) => { setSelectedPaymentId(null); setSelectedPaymentReference(paymentReference); setActiveTab('recebimentos'); }} onOpenObligation={(obligationId) => { setSelectedObligationId(obligationId); setActiveTab('obligations'); }} />}
       {activeTab === 'configuration' && <FinanceConfigurationWorkspace />}
     </main>
   </div>;

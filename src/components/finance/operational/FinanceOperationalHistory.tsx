@@ -7,6 +7,8 @@ export interface FinanceOperationalHistoryProps {
   onReverse?: (allocation: Extract<FinanceOperationalHistoryItem, { kind: 'allocation' }>['allocation']) => void;
   onIssueDebitNote?: (adjustment: Extract<FinanceOperationalHistoryItem, { kind: 'adjustment' }>['adjustment'] & { id: string }) => void;
   eligibleDebitNoteAdjustmentIds?: ReadonlySet<string>;
+  onOpenObligation?: (obligationId: string) => void;
+  onOpenPayment?: (paymentId: string) => void;
 }
 
 function formatMoney(amount: string, currency: string): string {
@@ -59,6 +61,8 @@ export function FinanceOperationalHistory({
   onReverse,
   onIssueDebitNote,
   eligibleDebitNoteAdjustmentIds = new Set(),
+  onOpenObligation,
+  onOpenPayment,
 }: FinanceOperationalHistoryProps) {
   const isLight = theme === 'light';
 
@@ -131,6 +135,7 @@ export function FinanceOperationalHistory({
                     <span className={`text-sm font-semibold font-mono ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
                       {formatMoney(ob.amount.amount, ob.amount.currency)}
                     </span>
+                    {onOpenObligation && <button type="button" data-testid={`history-open-obligation-${ob.id}`} onClick={() => onOpenObligation(ob.id)} className="ml-3 text-xs font-semibold text-emerald-700">Abrir obrigação</button>}
                   </div>
                 </div>
               );
@@ -164,6 +169,7 @@ export function FinanceOperationalHistory({
                     <span className="text-sm font-semibold font-mono text-emerald-600 dark:text-emerald-400">
                       +{formatMoney(pay.amount.amount, pay.amount.currency)}
                     </span>
+                    {onOpenPayment && <button type="button" data-testid={`history-open-payment-${pay.id}`} onClick={() => onOpenPayment(pay.id)} className="ml-3 text-xs font-semibold text-emerald-700">Abrir pagamento</button>}
                   </div>
                 </div>
               );
@@ -218,6 +224,7 @@ export function FinanceOperationalHistory({
                       Reverter associação
                     </button>
                   )}
+                  {(onOpenPayment || onOpenObligation) && <div className="mt-3 flex gap-3 text-xs font-semibold text-emerald-700">{onOpenPayment && <button type="button" data-testid={`allocation-open-payment-${allocation.id}`} onClick={() => onOpenPayment(allocation.paymentId)}>Abrir pagamento</button>}{onOpenObligation && <button type="button" data-testid={`allocation-open-obligation-${allocation.id}`} onClick={() => onOpenObligation(allocation.obligationId)}>Abrir obrigação</button>}</div>}
                 </article>
               );
             }

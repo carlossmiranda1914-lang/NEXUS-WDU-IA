@@ -17,6 +17,7 @@ export interface FinancePaymentsWorkspaceProps {
   theme?: string;
   onOpenFinanceConfiguration?: () => void;
   onOpenFinancialDocuments?: (documentId: string) => void;
+  initialPaymentId?: string | null;
   initialPaymentReference?: string | null;
 }
 
@@ -104,7 +105,7 @@ export function receiptReadinessPresentation(
   };
 }
 
-export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfiguration, onOpenFinancialDocuments, initialPaymentReference }: FinancePaymentsWorkspaceProps) {
+export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfiguration, onOpenFinancialDocuments, initialPaymentId, initialPaymentReference }: FinancePaymentsWorkspaceProps) {
   const [view, setView] = useState<PaymentSubView>('list');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,10 +140,10 @@ export function FinancePaymentsWorkspace({ theme = 'light', onOpenFinanceConfigu
     loadPayments();
   }, [loadPayments]);
   useEffect(() => {
-    if (!initialPaymentReference) return;
-    const payment = payments.find(candidate => candidate.paymentReference === initialPaymentReference);
+    if (!initialPaymentId && !initialPaymentReference) return;
+    const payment = payments.find(candidate => candidate.id === initialPaymentId || candidate.paymentReference === initialPaymentReference);
     if (payment) setPreviewPayment(payment);
-  }, [initialPaymentReference, payments]);
+  }, [initialPaymentId, initialPaymentReference, payments]);
   useEffect(() => { financialDocumentClient.capabilities().then(capabilities => setCanIssueDocument(capabilities.issue)).catch(() => setCanIssueDocument(false)); }, []);
   useEffect(() => { financeReadinessClient.get().then(setReadiness).catch(() => setReadiness(null)); }, []);
   useEffect(() => { financialDocumentClient.documentReadiness('receipt').then(setReceiptDocumentReadiness).catch(() => setReceiptDocumentReadiness(null)); }, []);
