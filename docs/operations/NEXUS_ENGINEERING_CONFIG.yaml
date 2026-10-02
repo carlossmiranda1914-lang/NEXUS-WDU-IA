@@ -47,7 +47,7 @@ scope:
     - Outbox/Audit logging of association events
     - Multi-tenant isolation verification
   forbidden:
-    - Alter Finance product files while Documents holds write authority
+    - Alter Finance product files outside the explicitly authorized parallel payment-destination scope
     - Execute or modify Retention, Hold or Delete in Gate 2
     - Parallel writer on the same authority unit
     - CI or safety-gate weakening
@@ -107,6 +107,27 @@ next_program:
   implementation_authorized: true
   authorization_scope: Real synthetic document association through UI, API, persistence across restart, detail view presentation, audit, and tenant isolation
   resumption_action: Iniciar Gate 2 — Associação documental real sem iniciar Hold/Delete
+
+parallel_authorized_work:
+  - program: FINANCE
+    mission: FINANCE-MANUAL-PAYMENT-ACCOUNT-SELECTION
+    task: Finance manual payment destination selection and alternate confirmation guard
+    state: AUTHORIZED
+    executor: Codex
+    authorization_reconciled_on: 2026-10-02
+    scope:
+      - Frontend selection of an explicitly chosen active financial account for new manual payment confirmation
+      - Preserve and display the contextual financial account when the flow starts from that account
+      - Block review and confirmation when the account is missing, unavailable, or failed to load
+      - Preserve amount, currency, method, date, idempotency, non-allocation, and contextual return behavior
+      - Minimal backend guard in payment-service.ts for new manual_offline confirmations
+      - Equivalent minimal backend guard in confirmPaymentInCommand in payment-repository.ts
+      - Focused tests for both confirmation paths and the associated frontend flow
+    forbidden:
+      - Backend changes other than the manual_offline account guards in payment-service.ts and confirmPaymentInCommand in payment-repository.ts
+      - API, schema, migrations, fixtures, data changes, or automatic allocation
+      - Finance Task 9 or new Finance capabilities
+      - Documents files, Documents gates, Documents ownership, or Documents scope
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS

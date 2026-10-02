@@ -77,6 +77,15 @@ Canonical baseline: `codex/nexus-integrated-portal-v1 @ 47ad75d549bebfa5aa340996
 
 Existing Finance evidence includes the F7 coherence plan (`docs/superpowers/plans/2026-09-16-finance-f7-coherence-solidification.md`), the Task 9 design/specification, and the Task 7/8 closure references in `docs/operations/NEXUS_EXECUTION_CONTRACT_PILOT.md`.
 
+## Finance manual payment destination — unintegrated worktree checkpoint
+
+This is a bounded correction checkpoint, not an update to the integrated baseline.
+
+- Scope: new `manual_offline` confirmations require an active financial account of the active institution before financial writes in `payment-service.ts` and `confirmPaymentInCommand` in `payment-repository.ts`.
+- Authorization reconciliation (2026-10-02): recorded after the existing correction; it covers only those two guards, the associated frontend flow, and directly affected tests. It is not technical approval, integration approval, or UAT.
+- Existing idempotent historical replay, nullable historical reads, and provider-origin treatment remain preserved.
+- `INDEPENDENT_REVIEW=PENDING`; `HUMAN_UAT_GREEN=BLOCKED` until the isolated checkpoint is reviewed and formal-UAT conditions are satisfied.
+
 ## Deferred / Planned stages
 
 - **Documents I9**: `NOT AUTHORIZED` / `NOT STARTED`.

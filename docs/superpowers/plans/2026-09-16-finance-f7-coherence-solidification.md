@@ -12,6 +12,8 @@
 
 **Canonical parent plan:** `docs/superpowers/plans/2026-09-12-finance-f7-g02-angola-production-jurisdiction.md`
 
+The manual-payment destination correction is a narrow, unintegrated checkpoint. On 2026-10-02, authorization was reconciled after the existing correction to cover only the `payment-service.ts` new-manual guard, the equivalent `confirmPaymentInCommand` guard, the contextual/explicit frontend account flow, and directly affected tests. It is not technical approval or integration and does not alter this plan's frozen-authority boundaries.
+
 ## Global Constraints
 
 - `PRODUCT_MODE=SOLIDIFICATION`.

@@ -191,7 +191,19 @@ try {
 
     const paymentId = resCreate.body.payment.id;
 
-    // 6. 200 Replay with same Idempotency-Key
+    // 6. New manual receipt without an account is rejected before persistence.
+    const resMissingAccount = await makeRequest('token-admin-a', '/api/finance/payments/manual', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': 'idemp-http-missing-account' },
+      body: { method: 'cash', amount: '50.00', currency: 'EUR' },
+    });
+    assert.equal(resMissingAccount.status, 422);
+    assert.equal(resMissingAccount.body.code, 'PAYMENT_VALIDATION_ERROR');
+    assert.match(resMissingAccount.body.error, /selecionar uma conta financeira ativa/i);
+    const missingAccountWrites = await client.query(`SELECT count(*)::int AS count FROM finance_payments WHERE institution_id=$1`, [institutionA]);
+    assert.equal(missingAccountWrites.rows[0].count, 1);
+
+    // 7. 200 Replay with same Idempotency-Key
     const resReplay = await makeRequest('token-admin-a', '/api/finance/payments/manual', {
       method: 'POST',
       headers: { 'Idempotency-Key': 'idemp-http-001' },
@@ -210,7 +222,7 @@ try {
     assert.equal(resReplay.body.replayed, true);
     assert.equal(resReplay.body.payment.id, paymentId);
 
-    // 7. 409 Conflict with same key but different amount
+    // 8. 409 Conflict with same key but different amount
     const resConflict = await makeRequest('token-admin-a', '/api/finance/payments/manual', {
       method: 'POST',
       headers: { 'Idempotency-Key': 'idemp-http-001' },
@@ -223,7 +235,7 @@ try {
     });
     assert.equal(resConflict.status, 409);
 
-    // 8. GET /api/finance/payments/:id (success for Inst A, 404 for Inst B)
+    // 9. GET /api/finance/payments/:id (success for Inst A, 404 for Inst B)
     const resGetA = await makeRequest('token-admin-a', `/api/finance/payments/${paymentId}`);
     assert.equal(resGetA.status, 200);
     assert.equal(resGetA.body.id, paymentId);
@@ -231,7 +243,7 @@ try {
     const resGetB = await makeRequest('token-admin-b', `/api/finance/payments/${paymentId}`);
     assert.equal(resGetB.status, 404);
 
-    // 9. GET /api/finance/payments list
+    // 10. GET /api/finance/payments list
     const resListB = await makeRequest('token-admin-b', '/api/finance/payments');
     assert.equal(resListB.status, 200);
     assert.equal(resListB.body.length, 0);

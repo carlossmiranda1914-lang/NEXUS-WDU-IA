@@ -11,6 +11,7 @@ import { paymentClient } from '../src/modules/finance/payment-client.ts';
 import { allocationClient } from '../src/modules/finance/allocation-client.ts';
 import { financialDocumentClient } from '../src/modules/finance/financial-document-client.ts';
 import { financeReadinessClient } from '../src/modules/finance/finance-readiness-client.ts';
+import { FinanceOperationalContextClient } from '../src/modules/finance/finance-operational-context-client.ts';
 import type { Payment } from '../src/modules/finance/payment-model.ts';
 import type { PaymentProviderConfigPublicProjection } from '../src/modules/finance/payment-provider-model.ts';
 
@@ -159,6 +160,7 @@ test('FinancePaymentCreateView allows validating input and reviewing before subm
           theme: 'light',
           defaultCurrency: 'AOA',
           currencyOptions: ['AOA', 'USD'],
+          financialAccount: { id: 'account-contextual', accountNumber: 'CTA-000001', name: 'Conta contextual' },
           onSuccess: (p) => { createdPayment = p; },
           onCancel: () => {},
         })
@@ -189,6 +191,75 @@ test('FinancePaymentCreateView allows validating input and reviewing before subm
     assert.equal((createdPayment as Payment).amount, '250.00');
   } finally {
     paymentClient.confirmManualPayment = origConfirm;
+  }
+});
+
+test('FinancePaymentCreateView requires an explicit active account from the menu flow', async () => {
+  const originalList = FinanceOperationalContextClient.prototype.listFinancialAccounts;
+  const originalConfirm = paymentClient.confirmManualPayment;
+  let submittedAccountId: string | undefined;
+  FinanceOperationalContextClient.prototype.listFinancialAccounts = async () => [
+    { id: 'account-active', institutionId: 'inst-001', accountNumber: 'CTA-000010', name: 'Conta ativa', status: 'active', createdAt: '', updatedAt: '' },
+    { id: 'account-inactive', institutionId: 'inst-001', accountNumber: 'CTA-000011', name: 'Conta inativa', status: 'inactive', createdAt: '', updatedAt: '' },
+  ];
+  paymentClient.confirmManualPayment = async (input) => {
+    submittedAccountId = input.financialAccountId;
+    return { payment: samplePayments[0], replayed: false };
+  };
+
+  try {
+    let renderer: any;
+    await act(async () => {
+      renderer = create(React.createElement(FinancePaymentCreateView, {
+        defaultCurrency: 'EUR', currencyOptions: ['EUR'], onSuccess: () => {}, onCancel: () => {},
+      }));
+      await Promise.resolve();
+    });
+    const root = renderer.root;
+    const accountSelect = root.findByProps({ 'data-testid': 'finance-payment-account-select' });
+    assert.equal(accountSelect.props.value, '', 'The menu flow must not select the first account automatically');
+    assert.equal(accountSelect.props.children.length, 2, 'Only the active account is offered');
+    await act(async () => { root.findByProps({ 'data-testid': 'finance-payment-amount-input' }).props.onChange({ target: { value: '25.00' } }); });
+    await act(async () => { root.findByType('form').props.onSubmit({ preventDefault: () => {} }); });
+    assert.match(JSON.stringify(renderer.toJSON()), /Selecione a conta financeira de destino/);
+    await act(async () => { accountSelect.props.onChange({ target: { value: 'account-active' } }); });
+    await act(async () => { root.findByType('form').props.onSubmit({ preventDefault: () => {} }); });
+    assert.match(JSON.stringify(renderer.toJSON()), /CTA-000010.*Conta ativa/);
+    await act(async () => { root.findByProps({ 'data-testid': 'finance-payment-confirm-btn' }).props.onClick(); });
+    assert.equal(submittedAccountId, 'account-active');
+  } finally {
+    FinanceOperationalContextClient.prototype.listFinancialAccounts = originalList;
+    paymentClient.confirmManualPayment = originalConfirm;
+  }
+});
+
+test('FinancePaymentCreateView blocks review when active accounts cannot be loaded', async () => {
+  const originalList = FinanceOperationalContextClient.prototype.listFinancialAccounts;
+  const originalConfirm = paymentClient.confirmManualPayment;
+  let confirmations = 0;
+  FinanceOperationalContextClient.prototype.listFinancialAccounts = async () => { throw new Error('network unavailable'); };
+  paymentClient.confirmManualPayment = async () => {
+    confirmations += 1;
+    return { payment: samplePayments[0], replayed: false };
+  };
+
+  try {
+    let renderer: any;
+    await act(async () => {
+      renderer = create(React.createElement(FinancePaymentCreateView, {
+        defaultCurrency: 'EUR', currencyOptions: ['EUR'], onSuccess: () => {}, onCancel: () => {},
+      }));
+      await Promise.resolve();
+    });
+    const root = renderer.root;
+    assert.ok(root.findByProps({ 'data-testid': 'finance-payment-account-load-error' }));
+    await act(async () => { root.findByProps({ 'data-testid': 'finance-payment-amount-input' }).props.onChange({ target: { value: '25.00' } }); });
+    await act(async () => { root.findByType('form').props.onSubmit({ preventDefault: () => {} }); });
+    assert.match(JSON.stringify(renderer.toJSON()), /Não é possível avançar enquanto as contas financeiras ativas não estiverem disponíveis/);
+    assert.equal(confirmations, 0);
+  } finally {
+    FinanceOperationalContextClient.prototype.listFinancialAccounts = originalList;
+    paymentClient.confirmManualPayment = originalConfirm;
   }
 });
 

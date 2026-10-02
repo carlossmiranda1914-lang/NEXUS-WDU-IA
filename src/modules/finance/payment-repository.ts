@@ -269,20 +269,6 @@ export class PostgresPaymentRepository {
     };
     const intent = normalizeConfirmIncomingPaymentIntent(rawInput, context, actor.personId);
 
-    // If financial account is specified, verify tenant ownership and active status
-    if (intent.financialAccountId) {
-      const accRes = await this.pool.query<{ id: string; status: string }>(
-        `SELECT id, status FROM finance_financial_accounts WHERE institution_id = $1 AND id = $2`,
-        [actor.institutionId, intent.financialAccountId]
-      );
-      if (!accRes.rows[0]) {
-        throw new PaymentValidationError('Conta financeira não encontrada ou não pertence à instituição.');
-      }
-      if (accRes.rows[0].status !== 'active') {
-        throw new PaymentValidationError('A conta financeira selecionada está inativa.');
-      }
-    }
-
     const commandResult = await executeIdempotentFinanceCommand<Payment>({
       pool: this.pool,
       identity: {
@@ -292,6 +278,25 @@ export class PostgresPaymentRepository {
         canonicalFingerprint: createPaymentConfirmationFingerprint(intent),
       },
       execute: async (client) => {
+        // Existing commands are replayed before this point. New manual
+        // confirmations must have an active account before any financial write.
+        if (intent.sourceType === 'manual_offline' && !intent.financialAccountId) {
+          throw new PaymentValidationError('É necessário selecionar uma conta financeira ativa para confirmar um recebimento manual.');
+        }
+
+        if (intent.financialAccountId) {
+          const accRes = await client.query<{ id: string; status: string }>(
+            `SELECT id, status FROM finance_financial_accounts WHERE institution_id = $1 AND id = $2`,
+            [actor.institutionId, intent.financialAccountId]
+          );
+          if (!accRes.rows[0]) {
+            throw new PaymentValidationError('Conta financeira não encontrada ou não pertence à instituição.');
+          }
+          if (accRes.rows[0].status !== 'active') {
+            throw new PaymentValidationError('A conta financeira selecionada está inativa.');
+          }
+        }
+
         const payment = await this.confirmInTransaction(client, intent, idempotencyKey);
         return {
           resultRef: payment.id,
