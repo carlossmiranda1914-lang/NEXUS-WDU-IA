@@ -1,0 +1,73 @@
+name: Finance Payment Destination Candidate
+
+on:
+  push:
+    branches:
+      - codex/finance-payment-destination-review-candidate
+
+permissions:
+  contents: read
+
+concurrency:
+  group: finance-payment-destination-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  payment-destination-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nexus_ci_runner
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nexus_ci_fnd06
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nexus_ci_runner -d nexus_ci_fnd06"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql://nexus_ci_runner:postgres@127.0.0.1:5432/nexus_ci_fnd06
+      TEST_DATABASE_CONFIRMATION: NEXUS_TEST_DATABASE
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Record tested revision
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "Tested commit: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Nexus preflight
+        run: npm run nexus:preflight
+
+      - name: Confirm isolated test target
+        run: npm run nexus:preflight:db:test:safety
+
+      - name: Finance manual payment PostgreSQL validation
+        run: npx tsx tests/finance-payment-postgres.test.ts
+
+      - name: Finance manual payment HTTP validation
+        run: npx tsx tests/finance-payment-http.test.ts
+
+      - name: Finance operational context PostgreSQL validation
+        run: npx tsx tests/finance-operational-context-postgres.test.ts
