@@ -63,6 +63,34 @@ jobs:
       - name: Confirm isolated test target
         run: npm run nexus:preflight:db:test:safety
 
+      - name: Prepare pgcrypto in public schema
+        run: |
+          node --input-type=module <<'NODE'
+          import pg from 'pg';
+
+          const client = new pg.Client({ connectionString: process.env.TEST_DATABASE_URL });
+          try {
+            await client.connect();
+            await client.query('CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public');
+            const result = await client.query(`
+              SELECT EXISTS (
+                SELECT 1
+                FROM pg_proc AS procedure
+                JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
+                WHERE namespace.nspname = 'public'
+                  AND procedure.proname = 'gen_random_bytes'
+                  AND pg_get_function_identity_arguments(procedure.oid) = 'integer'
+              ) AS available
+            `);
+            if (result.rows[0]?.available !== true) {
+              throw new Error('public.gen_random_bytes(integer) is unavailable after pgcrypto bootstrap.');
+            }
+            console.log('[CI-DB-BOOTSTRAP] PASS public.gen_random_bytes(integer) is available.');
+          } finally {
+            await client.end().catch(() => undefined);
+          }
+          NODE
+
       - name: Finance manual payment PostgreSQL validation
         run: npx tsx tests/finance-payment-postgres.test.ts
 
