@@ -11,7 +11,6 @@
 
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import pg from 'pg';
@@ -44,7 +43,7 @@ import type { InstitutionalContext } from '../src/auth/institutional-context.ts'
 
 // ─── 1. FRONTEND UTILS / PRESENTATION CONTRACT ───────────────────────────────
 
-test('Retention Status Presentation: Canonical status mapping', () => {
+{
   // retention_active
   const activePres = getRetentionStatusPresentation('retention_active');
   assert.equal(activePres.tone, 'emerald');
@@ -78,7 +77,7 @@ test('Retention Status Presentation: Canonical status mapping', () => {
   const unassignedPres = getRetentionStatusPresentation(null);
   assert.equal(unassignedPres.tone, 'zinc');
   assert.equal(unassignedPres.label, 'Sem Política Atribuída');
-});
+}
 
 // ─── 2. POSTGRES & BACKEND GOVERNANCE PROOFS ────────────────────────────────
 
@@ -166,6 +165,12 @@ try {
      VALUES ($1, 'Colégio Nexus Contract Test', 'nexus-contract-test', 'active')`,
     [institutionId],
   );
+  for (const pid of [adminPersonId, teacherPersonId]) {
+    await client.query(
+      `INSERT INTO people (id, name) VALUES ($1, $2)`,
+      [pid, `Person ${pid.slice(-2)}`],
+    );
+  }
 
   async function createTestDoc(category: string, filename: string): Promise<{ documentId: string; versionId: string }> {
     const docRepo = new PostgresDocumentRepository();
