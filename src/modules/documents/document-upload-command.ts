@@ -27,6 +27,11 @@ import {
 import { PostgresDocumentUploadRepository } from './document-upload-repository.ts';
 import type { ObjectStorageProvider } from './object-storage-provider.ts';
 import { executeIdempotentDocumentsCommand } from './document-command.ts';
+import type { DocumentAuthorizationAuthority } from './document-authorization-policy.ts';
+import {
+  DefaultDocumentAuthorizationAuthority,
+  createDefaultDocumentAuthorizationRules,
+} from './document-authorization-policy.ts';
 
 export interface CreateUploadSessionCommandInput {
   documentId: string;
@@ -160,6 +165,7 @@ export async function createUploadSessionCommand(input: {
   context: InstitutionalContext;
   idempotencyKey: string;
   input: CreateUploadSessionCommandInput;
+  authorizationAuthority?: DocumentAuthorizationAuthority;
 }): Promise<{ replayed: boolean; result: CreateUploadSessionResult }> {
   const { pool, context, idempotencyKey, input: cmdInput } = input;
 
@@ -203,6 +209,29 @@ export async function createUploadSessionCommand(input: {
       if (!doc) {
         throw new Error(
           `Document ${cmdInput.documentId} not found in institution ${context.institutionId}`,
+        );
+      }
+
+      // Central H1 Authorization Authority enforcement at command boundary
+      const authAuthority =
+        input.authorizationAuthority ??
+        new DefaultDocumentAuthorizationAuthority({
+          rules: createDefaultDocumentAuthorizationRules(),
+        });
+
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'upload_version',
+        documentId: doc.id,
+        documentCategory: doc.category,
+        documentStatus: doc.status,
+      });
+
+      if (!authDecision.allowed) {
+        throw new Error(
+          `AUTHORIZATION_DENIED: Action upload_version is not permitted for role ${context.role} (${authDecision.reasonCode})`,
         );
       }
 

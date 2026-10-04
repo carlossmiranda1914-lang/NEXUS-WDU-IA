@@ -57,6 +57,7 @@ import {
   type FrontendSafeDocumentVersionDto,
 } from './document-dto.ts';
 import {
+  type DocumentRecord,
   CANONICAL_DOCUMENT_CATEGORIES,
   CANONICAL_DOCUMENT_CLASSIFICATIONS,
   CANONICAL_SUPPORTED_MIME_TYPES,
@@ -135,6 +136,7 @@ export function rejectDomainError(res: Response, error: unknown): Response {
     // 400 Bad Request
     if (
       msg.includes('Invalid document category') ||
+      msg.includes('INVALID_CATEGORY') ||
       msg.includes('Invalid mime type') ||
       msg.includes('Invalid SHA-256') ||
       msg.includes('Invalid byte size') ||
@@ -804,6 +806,66 @@ export function registerDocumentRoutes(
     }
   });
 
+  // 3.1. POST /api/documents — Direct document creation
+  app.post('/api/documents', docAuth, async (req: AuthRequest, res: Response) => {
+    const context = req.institutionalContext;
+    if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
+
+    const { category, classification } = req.body || {};
+    const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
+    if (idempotencyKey === null) return res;
+
+    if (!category || typeof category !== 'string' || !isCanonicalCategory(category.trim())) {
+      return reject(
+        res,
+        400,
+        `Invalid document category: "${category}". Category is not governed in canonical taxonomy.`,
+        'INVALID_CATEGORY',
+      );
+    }
+
+    const canonicalCategory = normalizeDocumentCategory(category.trim());
+
+    // Controller authorization enforcement: CREATE_DOCUMENT
+    const createAuth = authAuthority.authorize({
+      institutionId: context.institutionId,
+      personId: context.personId,
+      role: context.role,
+      action: 'create_document',
+      documentCategory: canonicalCategory,
+    });
+
+    if (!createAuth.allowed) {
+      return reject(res, 403, 'Acesso não autorizado para criação de documento.', 'AUTHORIZATION_DENIED');
+    }
+
+    try {
+      const docRes = await createDocumentCommand({
+        pool: docPool,
+        context,
+        idempotencyKey,
+        authorizationAuthority: authAuthority,
+        input: {
+          category: canonicalCategory,
+          classification:
+            classification && typeof classification === 'string' ? classification.trim() : null,
+          provenance: {
+            sourceDomain: 'portal.documents',
+            method: 'direct_create_doc',
+            correlationId: req.header('x-correlation-id') || null,
+          },
+        },
+      });
+
+      return res.status(201).json({
+        document: docRes.result,
+        replayed: docRes.replayed,
+      });
+    } catch (error) {
+      return rejectDomainError(res, error);
+    }
+  });
+
   // 4. POST /api/documents/upload-sessions — Create new document or session
   app.post('/api/documents/upload-sessions', docAuth, async (req: AuthRequest, res: Response) => {
     const context = req.institutionalContext;
@@ -841,8 +903,11 @@ export function registerDocumentRoutes(
       const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
       if (idempotencyKey === null) return res;
 
+      let resolvedDoc: DocumentRecord | null = null;
+
       if (!documentId) {
-        if (category && typeof category === 'string' && !isCanonicalCategory(category.trim())) {
+        const rawCategory = category && typeof category === 'string' ? category.trim() : 'general';
+        if (!isCanonicalCategory(rawCategory)) {
           return reject(
             res,
             400,
@@ -850,14 +915,29 @@ export function registerDocumentRoutes(
             'INVALID_CATEGORY',
           );
         }
+        const canonicalCategory = normalizeDocumentCategory(rawCategory);
+
+        // Controller authorization enforcement: CREATE_DOCUMENT
+        const createAuth = authAuthority.authorize({
+          institutionId: context.institutionId,
+          personId: context.personId,
+          role: context.role,
+          action: 'create_document',
+          documentCategory: canonicalCategory,
+        });
+
+        if (!createAuth.allowed) {
+          return reject(res, 403, 'Acesso não autorizado para criação de documento.', 'AUTHORIZATION_DENIED');
+        }
 
         // Canonical I1/I7 document creation command: domain fact, audit, outbox event intent, idempotency
         const docCreationRes = await createDocumentCommand({
           pool: docPool,
           context,
           idempotencyKey: `doc-${idempotencyKey}`,
+          authorizationAuthority: authAuthority,
           input: {
-            category: category && typeof category === 'string' ? normalizeDocumentCategory(category) : 'general',
+            category: canonicalCategory,
             classification:
               classification && typeof classification === 'string' ? classification.trim() : null,
             provenance: {
@@ -868,14 +948,39 @@ export function registerDocumentRoutes(
           },
         });
         documentId = docCreationRes.result.id;
-      } else if (!validUuid(documentId)) {
-        return reject(res, 400, 'documentId inválido.');
+        resolvedDoc = docCreationRes.result;
+      } else {
+        if (!validUuid(documentId)) {
+          return reject(res, 400, 'documentId inválido.');
+        }
+        const docRepo = new PostgresDocumentRepository();
+        const existingDoc = await docRepo.getDocumentById(docPool, context.institutionId, documentId);
+        if (!existingDoc) {
+          return reject(res, 404, 'Documento não encontrado no tenant.', 'NOT_FOUND');
+        }
+        resolvedDoc = existingDoc;
+      }
+
+      // Controller authorization enforcement: UPLOAD_VERSION
+      const uploadAuth = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'upload_version',
+        documentId: resolvedDoc.id,
+        documentCategory: resolvedDoc.category,
+        documentStatus: resolvedDoc.status,
+      });
+
+      if (!uploadAuth.allowed) {
+        return reject(res, 403, 'Acesso não autorizado para upload de versão.', 'AUTHORIZATION_DENIED');
       }
 
       const sessionResult = await createUploadSessionCommand({
         pool: docPool,
         context,
         idempotencyKey,
+        authorizationAuthority: authAuthority,
         input: {
           documentId,
           targetVersionNumber: targetVersionNumber ? Number(targetVersionNumber) : null,
@@ -927,6 +1032,27 @@ export function registerDocumentRoutes(
       return reject(res, 400, 'Identificador de documento inválido.');
     }
 
+    const docRepo = new PostgresDocumentRepository();
+    const existingDoc = await docRepo.getDocumentById(docPool, context.institutionId, documentId);
+    if (!existingDoc) {
+      return reject(res, 404, 'Documento não encontrado no tenant.', 'NOT_FOUND');
+    }
+
+    // Controller authorization enforcement: UPLOAD_VERSION
+    const uploadAuth = authAuthority.authorize({
+      institutionId: context.institutionId,
+      personId: context.personId,
+      role: context.role,
+      action: 'upload_version',
+      documentId: existingDoc.id,
+      documentCategory: existingDoc.category,
+      documentStatus: existingDoc.status,
+    });
+
+    if (!uploadAuth.allowed) {
+      return reject(res, 403, 'Acesso não autorizado para upload de versão.', 'AUTHORIZATION_DENIED');
+    }
+
     const {
       declaredFilename,
       declaredMimeType,
@@ -951,6 +1077,7 @@ export function registerDocumentRoutes(
         pool: docPool,
         context,
         idempotencyKey,
+        authorizationAuthority: authAuthority,
         input: {
           documentId,
           targetVersionNumber: targetVersionNumber ? Number(targetVersionNumber) : null,

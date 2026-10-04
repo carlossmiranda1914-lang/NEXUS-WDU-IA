@@ -8,7 +8,16 @@ import type {
   StorageObjectReferenceRecord,
   ProvenanceOriginType,
 } from './document-model.ts';
-import { createCanonicalDocumentsFingerprint } from './document-model.ts';
+import {
+  createCanonicalDocumentsFingerprint,
+  isCanonicalCategory,
+  normalizeDocumentCategory,
+} from './document-model.ts';
+import type { DocumentAuthorizationAuthority } from './document-authorization-policy.ts';
+import {
+  DefaultDocumentAuthorizationAuthority,
+  createDefaultDocumentAuthorizationRules,
+} from './document-authorization-policy.ts';
 import {
   PostgresDocumentRepository,
 } from './document-repository.ts';
@@ -509,11 +518,44 @@ export async function createDocumentCommand(input: {
   context: InstitutionalContext;
   idempotencyKey: string;
   input: CreateDocumentCommandInput;
+  authorizationAuthority?: DocumentAuthorizationAuthority;
 }): Promise<{ replayed: boolean; result: DocumentRecord }> {
   const { pool, context, idempotencyKey, input: creationInput } = input;
+
+  const rawCategory = creationInput.category?.trim();
+  if (!rawCategory || !isCanonicalCategory(rawCategory)) {
+    throw new Error(
+      `INVALID_CATEGORY: Document category "${creationInput.category}" is not governed in canonical taxonomy.`,
+    );
+  }
+  const canonicalCategory = normalizeDocumentCategory(rawCategory);
+
+  const authAuthority =
+    input.authorizationAuthority ??
+    new DefaultDocumentAuthorizationAuthority({
+      rules: createDefaultDocumentAuthorizationRules(),
+    });
+
+  const authDecision = authAuthority.authorize({
+    institutionId: context.institutionId,
+    personId: context.personId,
+    role: context.role,
+    action: 'create_document',
+    documentCategory: canonicalCategory,
+  });
+
+  if (!authDecision.allowed) {
+    throw new Error(
+      `AUTHORIZATION_DENIED: Action create_document is not permitted for role ${context.role} (${authDecision.reasonCode})`,
+    );
+  }
+
   const canonicalFingerprint = createDocumentFingerprint(
     context.institutionId,
-    creationInput,
+    {
+      ...creationInput,
+      category: canonicalCategory,
+    },
     context.personId,
   );
 
@@ -532,7 +574,7 @@ export async function createDocumentCommand(input: {
     execute: async (client) => {
       const doc = await repo.createDocument(client, {
         institutionId: context.institutionId,
-        category: creationInput.category,
+        category: canonicalCategory,
         classification: creationInput.classification ?? null,
         createdByPersonId: context.personId,
       });
@@ -576,4 +618,3 @@ export async function createDocumentCommand(input: {
     },
   });
 }
-
