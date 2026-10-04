@@ -533,19 +533,31 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    // Authorization enforcement: SEARCH_ASSOCIATION_TARGET (evaluated BEFORE any target query)
+    const authDecision = authAuthority.authorize({
+      institutionId: context.institutionId,
+      personId: context.personId,
+      role: context.role,
+      action: 'search_association_target',
+    });
+
+    if (!authDecision.allowed) {
+      return reject(res, 403, 'Acesso não autorizado.', 'AUTHORIZATION_DENIED');
+    }
+
     const domain = (req.query.domain as string) || 'enrollment';
     const searchQuery = ((req.query.q as string) || '').trim();
 
     try {
       if (domain === 'enrollment' || domain === 'student') {
         const query = `
-          SELECT e.id, p.name AS student_name, y.name AS academic_year_name, o.name AS offer_name, e.status, p.national_id_number
+          SELECT e.id, p.name AS student_name, y.name AS academic_year_name, o.name AS offer_name, e.status
           FROM enrollment_applications e
           JOIN people p ON p.id = e.student_person_id
           JOIN academic_years y ON y.id = e.academic_year_id
           JOIN enrollment_offers o ON o.id = e.offer_id
           WHERE e.institution_id = $1
-            AND ($2 = '' OR p.name ILIKE $3 OR y.name ILIKE $3 OR o.name ILIKE $3 OR (p.national_id_number IS NOT NULL AND p.national_id_number ILIKE $3))
+            AND ($2 = '' OR p.name ILIKE $3 OR y.name ILIKE $3 OR o.name ILIKE $3)
           ORDER BY e.updated_at DESC
           LIMIT 25
         `;
@@ -559,7 +571,7 @@ export function registerDocumentRoutes(
           name: `${r.student_name} (${r.academic_year_name})`,
           domain: 'enrollment',
           resourceType: 'enrollment_application',
-          detail: `Oferta: ${r.offer_name} | Estado: ${r.status}${r.national_id_number ? ` | NIF/BI: ${r.national_id_number}` : ''}`,
+          detail: `Oferta: ${r.offer_name} | Estado: ${r.status}`,
         }));
         return res.json({ targets });
       } else if (domain === 'academic') {
