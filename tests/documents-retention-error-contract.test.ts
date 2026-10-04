@@ -8,11 +8,11 @@ import { MemoryObjectStorageProvider } from './support/memory-object-storage-pro
 import { DeterministicTestMalwareScanner } from './support/deterministic-test-malware-scanner.ts';
 import {
   ConfigurableRetentionPolicyEngine,
+  type RetentionPolicyConfig,
 } from '../src/modules/documents/document-retention-policy.ts';
-import type { RetentionPolicyRecord } from '../src/modules/documents/document-retention-model.ts';
 import {
   ConfigurableDocumentAccessPolicyEngine,
-  type AccessPolicyRule,
+  type DocumentAccessPolicyRule,
 } from '../src/modules/documents/document-access-policy.ts';
 import type { InstitutionalContext } from '../src/auth/institutional-context.ts';
 
@@ -89,7 +89,7 @@ try {
         personName: 'Viewer A',
         identityEmail: 'viewer.a@nexus.test',
         membershipId: randomUUID(),
-        role: 'institution_viewer',
+        role: 'student',
       } as InstitutionalContext;
     } else if (authHeader === 'Bearer token-admin-b') {
       req.institutionalContext = {
@@ -113,23 +113,22 @@ try {
     next();
   };
 
-  const sampleRetentionPolicy: RetentionPolicyRecord = {
-    id: 'pol-student-record-5y',
-    institutionId: institutionAId,
-    category: 'identification',
+  const sampleRetentionPolicy: RetentionPolicyConfig = {
+    policyId: 'pol-student-record-5y',
+    policyVersion: 'v1.0',
     jurisdictionProfileId: 'ao-rgpd-std',
-    legalBasis: 'regulatory_compliance',
-    retentionDurationMonths: 60,
-    actionOnExpiry: 'destroy_file_preserve_metadata',
-    authorizedRolesForDeletion: ['institution_admin'],
-    isImmutable: false,
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    jurisdictionProfileVersion: 'v1.0',
+    category: 'identification',
+    clockTriggerType: 'uploaded_at',
+    retentionDurationDays: 1825,
+    allowedHoldTypes: ['legal', 'administrative'],
+    allowedDeletionAuthorityScopePatterns: ['institution_admin', 'director'],
   };
 
-  const sampleAccessPolicy: AccessPolicyRule = {
+  const sampleAccessPolicy: DocumentAccessPolicyRule = {
+    role: 'institution_admin',
     category: 'identification',
-    allowedRoles: ['institution_admin', 'institution_viewer'],
+    allowedActions: ['view_metadata', 'open_content', 'download_content'],
   };
 
   const retentionPolicyEngine = new ConfigurableRetentionPolicyEngine([sampleRetentionPolicy]);
