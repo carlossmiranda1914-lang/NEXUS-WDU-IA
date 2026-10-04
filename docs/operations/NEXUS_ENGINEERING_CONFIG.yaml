@@ -6,22 +6,23 @@ project:
   repository: carlossmiranda1914-lang/NEXUS-WDU-IA
   integrated_baseline:
     branch: codex/nexus-integrated-portal-v1
-    sha: 47ad75d549bebfa5aa3409965800ca225f39e218
+    sha: 7b9bb1fdde01e977a1c0e0304a0dcd37981d6800
 
 active_work:
   program: DOCUMENTS
-  mission: DOCUMENTS-GATE2-REAL-ASSOCIATION
+  mission: DOCUMENTS-AUTHORIZATION-HARDENING-H1
   mission_branch: codex/nexus-integrated-portal-v1
-  durable_remote_checkpoint: 47ad75d549bebfa5aa3409965800ca225f39e218
-  activity: GATE2_REAL_ASSOCIATION_EXECUTION
-  task: DOCUMENTS_GATE2_REAL_ASSOCIATION
-  task_name: Documents Gate 2 Real Association Execution and Adjudication
+  durable_remote_checkpoint: 7b9bb1fdde01e977a1c0e0304a0dcd37981d6800
+  current_local_checkpoint: 3b88b2445cc7b8613b5d8512b763355decf55dae
+  activity: DOCUMENTS_H1_AUTHORIZATION_ENFORCEMENT
+  task: DOCUMENTS_H1_CHECKPOINT_RECONCILIATION
+  task_name: Documents H1 Authorization Hardening and Canonical Reconciliation
   state: AUTHORIZED
   owner: Antigravity
   write_owner: ANTIGRAVITY_PRIMARY_EXECUTOR
   reviewer: Codex
   reviewer_mode: INDEPENDENT_AUDIT
-  risk: MEDIUM
+  risk: HIGH
   execution_mode: SINGLE_PRIMARY_AGENT
   subagents_allowed: false
   application_domain_rewrite_allowed: false
@@ -29,7 +30,7 @@ active_work:
   proven_authority_rewrite_allowed: false
   unrelated_work_allowed: false
   resume_rule: >-
-    Gate 1 is PASS. Gate 2 Real Association is authorized: real synthetic document association via UI, API confirmation, persistence across restart, detail presentation, audit, and tenant isolation. Retention, Hold, and Delete are out of scope. DOCUMENTS_CLOSED=NO and DOCUMENTS_FROZEN=NO.
+    H1-01 central authorization authority is implemented, verified, and atomically checkpointed at 3b88b24. H1-02A metadata authorization enforcement is implemented locally and pending atomic checkpoint. H1-02B and further subtasks remain NOT_AUTHORIZED. Teacher document visibility remains fail-closed DENY. Finance modifications remain forbidden and preserved. DOCUMENTS_CLOSED=NO until global closure.
 
 execution:
   one_code_owner_per_unit: true
@@ -39,31 +40,33 @@ execution:
 
 scope:
   authorized:
-    - Real synthetic document association through UI
-    - Target entity search and linkage (enrollment/academic students)
-    - Association API confirmation and idempotency
-    - Detail drawer presentation of associations and pinned version
-    - Database persistence across service restart
-    - Outbox/Audit logging of association events
-    - Multi-tenant isolation verification
+    - Engineering config selector reconciliation for Documents H1
+    - Verification and atomic checkpointing of H1-02A metadata authorization enforcement
   forbidden:
-    - Alter Finance product files while Documents holds write authority
-    - Execute or modify Retention, Hold or Delete in Gate 2
+    - Modify Finance outside the explicitly authorized parallel payment-destination frontend scope
     - Parallel writer on the same authority unit
     - CI or safety-gate weakening
-    - DOCUMENTS_CLOSED=YES before all gates are completed
+    - DOCUMENTS_CLOSED=YES before global closure
+    - Personal documents or silent DEFAULT_JURISDICTION
+    - Teacher document visibility without approved canonical roster policy
+    - Client-side or browser-owned authorization
+    - Cross-tenant data or existence disclosure
+    - Anti-enumeration weakening
+    - H2 performance work or H3 runtime work
+    - H1-02B implementation until authorized
 
 protected_invariants:
   - Foundation V1 is approved and adopted engineering policy
   - Finance F1A is closed and preserved
   - Finance Slice 1 is closed and preserved
-  - Finance Slice 2 is preserved intact without product changes
+  - Finance Slice 2 is closed and preserved
+  - Finance Slice 3 is closed and preserved
   - Financial Situation remains explicitly pending
   - Finance F1C remains explicitly pending
   - Finance Task 9 remains explicitly pending (PAUSED_PENDING_HUMAN_UAT)
   - Documents Gate 1 (Storage Truth & Access) is adjudicated and PASS
-  - Gate 2 (Associação documental real) is the next authorized mission
-  - Hold and Delete operations remain forbidden until Gate 2 is complete
+  - Documents Gate 2 and Gate 3 executed sequentially under canonical governance
+  - Hold and Delete operations restricted to explicit governed UAT profiles
   - DOCUMENTS_CLOSED=NO and DOCUMENTS_FROZEN=NO
 
 gates:
@@ -78,7 +81,7 @@ gates:
   f1a: PROVEN
   slice1: PROVEN
   slice2: PROVEN
-  slice3: PAUSED_FOR_DOCUMENTS_GATES
+  slice3: PROVEN
   financial_situation: PENDING
   f1c: PENDING
   f2: PROVEN
@@ -95,18 +98,48 @@ gates:
   h3: DEFERRED_DEBT
   h4: DEFERRED_DEBT
   documents_gate1: PASS
-  documents_gate2_association: PENDING_NEXT_MISSION
-  documents_uat: PENDING_ADJUDICATION
+  documents_gate2_association: PARTIAL
+  documents_gate3_lifecycle: PASS
+  documents_uat: PENDING_FINAL_CLOSURE
   documents_scale_gcs_rollout: PENDING
+  documents_h1_01: IMPLEMENTED_AND_CHECKPOINTED
+  documents_h1_02a: IMPLEMENTED_LOCALLY_NOT_YET_ATOMIC_CHECKPOINTED
+  documents_h1_02b_plus: NOT_AUTHORIZED
 
 next_program:
-  program: DOCUMENTS
-  roadmap_priority: 6
-  state: GATE2_ASSOCIATION_NEXT
-  authorized_phase: GATE_2_REAL_ASSOCIATION
-  implementation_authorized: true
-  authorization_scope: Real synthetic document association through UI, API, persistence across restart, detail view presentation, audit, and tenant isolation
-  resumption_action: Iniciar Gate 2 — Associação documental real sem iniciar Hold/Delete
+  program: FINANCE
+  roadmap_priority: 7
+  state: PAUSED_FOR_DOCUMENTS_GATES
+  authorized_phase: NONE
+  implementation_authorized: false
+  authorization_scope: NONE
+  resumption_action: Retomar Finance Financial Situation account truth adjudication após fecho dos gates de Documents
+
+parallel_authorized_work:
+  - program: FINANCE
+    mission: FINANCE-MANUAL-PAYMENT-ACCOUNT-SELECTION
+    task: Finance manual payment destination selection and alternate confirmation guard
+    state: AUTHORIZED
+    executor: Codex
+    authorization_reconciled_on: 2026-10-02
+    scope:
+      - Frontend-only selection of an explicitly chosen active financial account for new manual payment confirmation
+      - Preserve and display the contextual financial account when the flow starts from that account
+      - Use the existing tenant-authoritative financial-account read client and endpoint
+      - Block review and confirmation when the account is missing, unavailable, or failed to load
+      - Preserve amount, currency, method, date, idempotency, non-allocation, and contextual return behavior
+      - Minimal backend guard in payment-service.ts for new manual_offline confirmations
+      - Equivalent minimal backend guard in confirmPaymentInCommand in payment-repository.ts
+      - Focused tests for both confirmation paths and the associated frontend flow
+    backend_status: Manual payment account validation is implemented and pending independent review and closure
+    forbidden:
+      - Backend changes other than the manual_offline account guards in payment-service.ts and confirmPaymentInCommand in payment-repository.ts
+      - API, schema, migrations, fixtures, data changes, or automatic allocation
+      - Finance Task 9 or new Finance capabilities
+      - Documents files, Documents gates, Documents ownership, or Documents scope
+    evidence:
+      - Focused frontend contract verification
+      - Runtime visual verification without confirming a payment
 
 resource_policy:
   mode: EFFICIENT_WITHOUT_RIGOR_LOSS
