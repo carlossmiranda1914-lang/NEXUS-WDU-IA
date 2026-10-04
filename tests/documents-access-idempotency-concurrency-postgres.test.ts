@@ -61,10 +61,10 @@ const teacherContext: InstitutionalContext = {
   institutionName: 'Nexus Test Academy',
   institutionSlug: 'nexus-test-academy',
   personId: teacherPersonId,
-  personName: 'Teacher Person',
-  identityEmail: 'teacher@nexus.edu',
+  personName: 'Director Person',
+  identityEmail: 'director@nexus.edu',
   membershipId: '00000000-0000-0000-0000-000000000011',
-  role: 'teacher',
+  role: 'director',
 };
 
 const detector = new ContentTypeDetector({
@@ -81,7 +81,7 @@ const policyEngine = new ConfigurableDocumentAccessPolicyEngine([
     allowedActions: ['view_metadata', 'open_content', 'download_content'],
   },
   {
-    role: 'teacher',
+    role: 'director',
     category: '*',
     allowedActions: ['view_metadata', 'open_content', 'download_content'],
   },
@@ -110,13 +110,13 @@ try {
       INSERT INTO people (id, name)
       VALUES
         ('${adminPersonId}', 'Admin Person'),
-        ('${teacherPersonId}', 'Teacher Person')
+        ('${teacherPersonId}', 'Director Person')
       ON CONFLICT (id) DO NOTHING;
 
       INSERT INTO memberships (id, institution_id, person_id, role, status)
       VALUES
         ('${adminContext.membershipId}', '${institutionId}', '${adminPersonId}', 'institution_admin', 'active'),
-        ('${teacherContext.membershipId}', '${institutionId}', '${teacherPersonId}', 'teacher', 'active')
+        ('${teacherContext.membershipId}', '${institutionId}', '${teacherPersonId}', 'director', 'active')
       ON CONFLICT (id) DO NOTHING;
     `);
 

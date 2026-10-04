@@ -153,6 +153,7 @@ export function rejectDomainError(res: Response, error: unknown): Response {
 
     // 403 Forbidden
     if (
+      msg.includes('AUTHORIZATION_DENIED') ||
       msg.includes('POLICY_DENIED') ||
       msg.includes('ACTION_NOT_PERMITTED') ||
       msg.includes('HOLD_AUTHORITY_DENIED') ||
@@ -1305,11 +1306,23 @@ export function registerDocumentRoutes(
     }
 
     try {
+      // Verify document existence and category in tenant
+      const docCheck = await docPool.query<{ id: string; category: string; status: string }>(
+        `SELECT id, category, status FROM documents WHERE institution_id = $1 AND id = $2`,
+        [context.institutionId, documentId],
+      );
+      if (docCheck.rows.length === 0) {
+        return reject(res, 404, 'Documento não encontrado no tenant.');
+      }
+      const documentCategory = docCheck.rows[0].category;
+      const documentStatus = docCheck.rows[0].status as any;
+
       let versionId = rawVersionId;
+      let versionStatus: any = undefined;
       if (!versionId) {
         // Resolve latest version
-        const vResult = await docPool.query<{ id: string }>(
-          `SELECT id FROM document_versions
+        const vResult = await docPool.query<{ id: string; status: string }>(
+          `SELECT id, status FROM document_versions
            WHERE institution_id = $1 AND document_id = $2
            ORDER BY version_number DESC LIMIT 1`,
           [context.institutionId, documentId],
@@ -1318,8 +1331,36 @@ export function registerDocumentRoutes(
           return reject(res, 404, 'Nenhuma versão encontrada para este documento.');
         }
         versionId = vResult.rows[0].id;
+        versionStatus = vResult.rows[0].status;
       } else if (!validUuid(versionId)) {
         return reject(res, 400, 'versionId inválido.');
+      } else {
+        const vCheck = await docPool.query<{ id: string; status: string }>(
+          `SELECT id, status FROM document_versions
+           WHERE institution_id = $1 AND document_id = $2 AND id = $3`,
+          [context.institutionId, documentId, versionId],
+        );
+        if (vCheck.rows.length === 0) {
+          return reject(res, 404, 'Versão não encontrada para este documento no tenant.');
+        }
+        versionStatus = vCheck.rows[0].status;
+      }
+
+      // Controller authorization enforcement: open_content | download_content
+      const accessAction = action === 'open' ? 'open_content' : 'download_content';
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: accessAction,
+        documentId,
+        documentCategory,
+        documentStatus,
+        versionStatus,
+      });
+
+      if (!authDecision.allowed) {
+        return reject(res, 403, 'Acesso não autorizado.', 'AUTHORIZATION_DENIED');
       }
 
       const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
@@ -1330,6 +1371,7 @@ export function registerDocumentRoutes(
         idempotencyKey,
         policyEngine,
         accessGrantTokenKey,
+        authorizationAuthority: authAuthority,
         input: {
           documentId,
           versionId,
@@ -1408,12 +1450,46 @@ export function registerDocumentRoutes(
     }
 
     try {
+      // Verify grant exists in tenant
+      const grantCheck = await docPool.query<{ id: string; document_id: string }>(
+        `SELECT id, document_id FROM document_content_access_grants WHERE institution_id = $1 AND id = $2`,
+        [context.institutionId, grantId],
+      );
+      if (grantCheck.rows.length === 0) {
+        return reject(res, 404, 'Concessão de acesso não encontrada no tenant.');
+      }
+      const documentId = grantCheck.rows[0].document_id;
+
+      // Verify document in tenant
+      const docCheck = await docPool.query<{ id: string; category: string; status: string }>(
+        `SELECT id, category, status FROM documents WHERE institution_id = $1 AND id = $2`,
+        [context.institutionId, documentId],
+      );
+      const docCategory = docCheck.rows[0]?.category;
+      const docStatus = docCheck.rows[0]?.status as any;
+
+      // Controller authorization enforcement: revoke_grant
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'revoke_grant',
+        documentId,
+        documentCategory: docCategory,
+        documentStatus: docStatus,
+      });
+
+      if (!authDecision.allowed) {
+        return reject(res, 403, 'Acesso não autorizado.', 'AUTHORIZATION_DENIED');
+      }
+
       const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
       if (idempotencyKey === null) return res;
       const revokeRes = await revokeContentAccessGrantCommand({
         pool: docPool,
         context,
         idempotencyKey,
+        authorizationAuthority: authAuthority,
         input: {
           grantId,
           reason: reason.trim(),

@@ -36,6 +36,11 @@ import { PostgresDocumentOutboxRepository } from './document-event-repository.ts
 import { ObjectStorageProvider } from './object-storage-provider.ts';
 import { createCanonicalDocumentsFingerprint } from './document-model.ts';
 import { executeIdempotentDocumentsCommand } from './document-command.ts';
+import {
+  type DocumentAuthorizationAuthority,
+  DefaultDocumentAuthorizationAuthority,
+  createDefaultDocumentAuthorizationRules,
+} from './document-authorization-policy.ts';
 
 // Minimum key length for HMAC secret (256 bits = 64 hex chars, or 32 raw bytes)
 const MIN_TOKEN_KEY_LENGTH = 32;
@@ -134,6 +139,7 @@ export async function authorizeContentAccessCommand(params: {
   policyEngine: DocumentAccessPolicyEngine;
   accessGrantTokenKey: string;
   input: AuthorizeContentAccessCommandInput;
+  authorizationAuthority?: DocumentAuthorizationAuthority;
 }): Promise<{ replayed: boolean; result: ContentAccessAuthorizationPayload }> {
   const { pool, context, idempotencyKey, policyEngine, accessGrantTokenKey, input } = params;
 
@@ -201,8 +207,50 @@ export async function authorizeContentAccessCommand(params: {
         );
       }
 
-      // 2. Evaluate Policy (trusted dependency — not caller-supplied)
+      // 2. Central H1 Authorization Authority enforcement (Defense in depth at command boundary)
       const accessAction = input.action === 'open' ? 'open_content' : 'download_content';
+      const authAuthority =
+        params.authorizationAuthority ??
+        new DefaultDocumentAuthorizationAuthority({
+          rules: createDefaultDocumentAuthorizationRules(),
+        });
+
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: accessAction,
+        documentId: doc.id,
+        documentCategory: doc.category,
+        documentStatus: doc.status,
+        versionStatus: version.status,
+      });
+
+      if (!authDecision.allowed) {
+        // Record factual denial audit event
+        await auditRepo.recordAuditEvent(client, {
+          institutionId: context.institutionId,
+          documentId: doc.id,
+          versionId: version.id,
+          actorPersonId: context.personId,
+          action: `document.content_access_denied.${input.action}`,
+          outcome: 'denied',
+          correlationId: input.correlationId || null,
+          details: {
+            reason: authDecision.reasonCode,
+            role: context.role,
+            category: doc.category,
+            action: input.action,
+            versionStatus: version.status,
+          },
+        });
+
+        throw new Error(
+          `AUTHORIZATION_DENIED: ${accessAction} is not permitted for role ${context.role} (${authDecision.reasonCode})`,
+        );
+      }
+
+      // 3. Evaluate Delegated Access Policy (trusted dependency — not caller-supplied)
       const evalParams: EvaluateAccessParams = {
         institutionId: context.institutionId,
         personId: context.personId,
@@ -236,7 +284,7 @@ export async function authorizeContentAccessCommand(params: {
         throw new Error(evalResult.reason || 'POLICY_DENIED: Access to document content is denied');
       }
 
-      // 3. Create Access Grant (only tokenHash persisted — raw token never at rest)
+      // 4. Create Access Grant (only tokenHash persisted — raw token never at rest)
       const expiresAt = new Date(Date.now() + CONTENT_ACCESS_GRANT_TTL_SECONDS * 1000);
       const grant = await accessRepo.createAccessGrant(client, {
         institutionId: context.institutionId,
@@ -522,6 +570,7 @@ export async function revokeContentAccessGrantCommand(params: {
   context: InstitutionalContext;
   idempotencyKey: string;
   input: RevokeGrantCommandInput;
+  authorizationAuthority?: DocumentAuthorizationAuthority;
 }): Promise<{ replayed: boolean; result: DocumentContentAccessGrant }> {
   const { pool, context, idempotencyKey, input } = params;
 
@@ -545,6 +594,52 @@ export async function revokeContentAccessGrantCommand(params: {
       if (!grant) {
         throw new Error(
           `GRANT_NOT_FOUND: Access grant ${input.grantId} not found in institution ${context.institutionId}`,
+        );
+      }
+
+      // Load referenced document for policy context & tenant boundary
+      const doc = await docRepo.getDocumentById(client, context.institutionId, grant.documentId);
+      if (!doc) {
+        throw new Error(
+          `DOCUMENT_NOT_FOUND: Document ${grant.documentId} not found in institution ${context.institutionId}`,
+        );
+      }
+
+      // Central H1 Authorization Authority enforcement (Defense in depth at command boundary)
+      const authAuthority =
+        params.authorizationAuthority ??
+        new DefaultDocumentAuthorizationAuthority({
+          rules: createDefaultDocumentAuthorizationRules(),
+        });
+
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'revoke_grant',
+        documentId: doc.id,
+        documentCategory: doc.category,
+        documentStatus: doc.status,
+      });
+
+      if (!authDecision.allowed) {
+        await auditRepo.recordAuditEvent(client, {
+          institutionId: context.institutionId,
+          documentId: doc.id,
+          versionId: grant.versionId,
+          actorPersonId: context.personId,
+          action: 'document.content_access_revoke_denied',
+          outcome: 'denied',
+          correlationId: input.correlationId || null,
+          details: {
+            grantId: grant.id,
+            reason: authDecision.reasonCode,
+            role: context.role,
+          },
+        });
+
+        throw new Error(
+          `AUTHORIZATION_DENIED: revoke_grant is not permitted for role ${context.role} (${authDecision.reasonCode})`,
         );
       }
 

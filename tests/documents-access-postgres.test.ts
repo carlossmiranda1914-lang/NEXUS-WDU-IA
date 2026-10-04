@@ -67,10 +67,10 @@ const teacherContext: InstitutionalContext = {
   institutionName: 'Nexus Test Academy',
   institutionSlug: 'nexus-test-academy',
   personId: teacherPersonId,
-  personName: 'Teacher Person',
-  identityEmail: 'teacher@nexus.edu',
+  personName: 'Director Person',
+  identityEmail: 'director@nexus.edu',
   membershipId: '00000000-0000-0000-0000-000000000011',
-  role: 'teacher',
+  role: 'director',
 };
 
 const detector = new ContentTypeDetector({
@@ -87,12 +87,12 @@ const syntheticRules: DocumentAccessPolicyRule[] = [
     allowedActions: ['view_metadata', 'open_content', 'download_content'],
   },
   {
-    role: 'teacher',
+    role: 'director',
     category: 'academic_transcript',
     allowedActions: ['view_metadata', 'open_content'], // open allowed, download denied
   },
   {
-    role: 'teacher',
+    role: 'director',
     category: 'identification',
     allowedActions: ['view_metadata', 'open_content', 'download_content'],
   },
@@ -137,7 +137,7 @@ try {
       INSERT INTO memberships (id, institution_id, person_id, role, status)
       VALUES
         ('${adminContext.membershipId}', '${institutionId}', '${adminPersonId}', 'institution_admin', 'active'),
-        ('${teacherContext.membershipId}', '${institutionId}', '${teacherPersonId}', 'teacher', 'active'),
+        ('${teacherContext.membershipId}', '${institutionId}', '${teacherPersonId}', 'director', 'active'),
         ('00000000-0000-0000-0000-000000000012', '${institutionId}', '${studentPersonId}', 'student', 'active')
       ON CONFLICT (id) DO NOTHING;
     `);
@@ -527,7 +527,7 @@ try {
 
     // Restore role
     await client.query(
-      `UPDATE memberships SET role = 'teacher' WHERE id = $1`,
+      `UPDATE memberships SET role = 'director' WHERE id = $1`,
       [teacherContext.membershipId],
     );
 
