@@ -635,10 +635,37 @@ export function registerDocumentRoutes(
       const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
       if (idempotencyKey === null) return res;
 
+      // Verify document existence and category in tenant
+      const docCheck = await docPool.query<{ id: string; category: string }>(
+        `SELECT id, category FROM documents WHERE institution_id = $1 AND id = $2`,
+        [context.institutionId, documentId],
+      );
+      if (docCheck.rows.length === 0) {
+        return reject(res, 404, 'Documento não encontrado no tenant.');
+      }
+
+      // Controller authorization enforcement: CREATE_ASSOCIATION
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'create_association',
+        documentId,
+        documentCategory: docCheck.rows[0].category,
+        targetDomain,
+        targetResourceType,
+        targetResourceId,
+      });
+
+      if (!authDecision.allowed) {
+        return reject(res, 403, 'Acesso não autorizado.', 'AUTHORIZATION_DENIED');
+      }
+
       const assocRes = await createDocumentAssociationCommand({
         pool: docPool,
         context,
         idempotencyKey,
+        authorizationAuthority: authAuthority,
         input: {
           documentId,
           pinnedVersionId: pinnedVersionId || null,
@@ -675,10 +702,44 @@ export function registerDocumentRoutes(
       const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
       if (idempotencyKey === null) return res;
 
+      // Verify association exists, belongs to tenant, and belongs to expected documentId
+      const assocCheck = await docPool.query<{ id: string; document_id: string; status: string }>(
+        `SELECT id, document_id, status FROM document_associations WHERE institution_id = $1 AND id = $2`,
+        [context.institutionId, assocId],
+      );
+      if (assocCheck.rows.length === 0 || assocCheck.rows[0].document_id !== documentId) {
+        return reject(res, 404, 'Associação não encontrada no tenant para este documento.');
+      }
+
+      // Verify document existence and category in tenant
+      const docCheck = await docPool.query<{ id: string; category: string }>(
+        `SELECT id, category FROM documents WHERE institution_id = $1 AND id = $2`,
+        [context.institutionId, documentId],
+      );
+      if (docCheck.rows.length === 0) {
+        return reject(res, 404, 'Documento não encontrado no tenant.');
+      }
+
+      // Controller authorization enforcement: REMOVE_ASSOCIATION
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'remove_association',
+        documentId,
+        documentCategory: docCheck.rows[0].category,
+      });
+
+      if (!authDecision.allowed) {
+        return reject(res, 403, 'Acesso não autorizado.', 'AUTHORIZATION_DENIED');
+      }
+
       const result = await transitionAssociationStatusCommand({
         pool: docPool,
         context,
         idempotencyKey,
+        expectedDocumentId: documentId,
+        authorizationAuthority: authAuthority,
         input: {
           associationId: assocId,
           targetStatus: 'withdrawn',

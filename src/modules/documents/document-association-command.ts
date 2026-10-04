@@ -4,6 +4,11 @@ import { createCanonicalDocumentsFingerprint } from './document-model.ts';
 import { executeIdempotentDocumentsCommand } from './document-command.ts';
 import { PostgresDocumentAuditRepository } from './document-audit.ts';
 import { PostgresDocumentOutboxRepository } from './document-event-repository.ts';
+import {
+  type DocumentAuthorizationAuthority,
+  DefaultDocumentAuthorizationAuthority,
+  createDefaultDocumentAuthorizationRules,
+} from './document-authorization-policy.ts';
 import type {
   DocumentAssociationRecord,
   AssociationStatus,
@@ -119,8 +124,45 @@ export async function createDocumentAssociationCommand(input: {
   context: InstitutionalContext;
   idempotencyKey: string;
   input: CreateAssociationCommandInput;
+  authorizationAuthority?: DocumentAuthorizationAuthority;
 }): Promise<{ replayed: boolean; result: DocumentAssociationRecord }> {
   const { pool, context, idempotencyKey, input: commandInput } = input;
+
+  const authAuthority =
+    input.authorizationAuthority ??
+    new DefaultDocumentAuthorizationAuthority({
+      rules: createDefaultDocumentAuthorizationRules(),
+    });
+
+  // Verify document existence and category in tenant
+  const docCheck = await pool.query<{ id: string; category: string }>(
+    `SELECT id, category FROM documents WHERE institution_id = $1 AND id = $2`,
+    [context.institutionId, commandInput.documentId],
+  );
+  if (docCheck.rows.length === 0) {
+    throw new Error(
+      `DOCUMENT_NOT_FOUND: Document ${commandInput.documentId} not found in institution (violates foreign key constraint "document_associations_document_tenant_fk")`,
+    );
+  }
+  const documentCategory = docCheck.rows[0].category;
+
+  // Authorization enforcement: CREATE_ASSOCIATION
+  const authDecision = authAuthority.authorize({
+    institutionId: context.institutionId,
+    personId: context.personId,
+    role: context.role,
+    action: 'create_association',
+    documentId: commandInput.documentId,
+    documentCategory,
+    targetDomain: commandInput.targetDomain,
+    targetResourceType: commandInput.targetResourceType,
+    targetResourceId: commandInput.targetResourceId,
+  });
+
+  if (!authDecision.allowed) {
+    throw new Error(`ACTION_NOT_PERMITTED: create_association is not permitted for role ${context.role}`);
+  }
+
   const canonicalFingerprint = createAssociationCreationFingerprint(
     context.institutionId,
     commandInput,
@@ -267,16 +309,63 @@ export async function transitionAssociationStatusCommand(input: {
   context: InstitutionalContext;
   idempotencyKey: string;
   input: TransitionAssociationStatusCommandInput;
+  expectedDocumentId?: string;
+  authorizationAuthority?: DocumentAuthorizationAuthority;
 }): Promise<{ replayed: boolean; result: DocumentAssociationRecord }> {
   const { pool, context, idempotencyKey, input: commandInput } = input;
+
+  const authAuthority =
+    input.authorizationAuthority ??
+    new DefaultDocumentAuthorizationAuthority({
+      rules: createDefaultDocumentAuthorizationRules(),
+    });
+
+  const repo = new PostgresDocumentAssociationRepository();
+  const auditRepo = new PostgresDocumentAuditRepository();
+
+  // Association ownership & existence lookup
+  const assoc = await repo.getAssociationById(pool, context.institutionId, commandInput.associationId);
+  if (!assoc) {
+    throw new Error(`ASSOCIATION_NOT_FOUND: Association ${commandInput.associationId} not found in institution`);
+  }
+
+  // Association document consistency verification
+  if (input.expectedDocumentId && assoc.documentId !== input.expectedDocumentId) {
+    throw new Error(
+      `ASSOCIATION_NOT_FOUND: Association ${commandInput.associationId} does not belong to document ${input.expectedDocumentId}`,
+    );
+  }
+
+  // Verify document existence and category in tenant
+  const docCheck = await pool.query<{ id: string; category: string }>(
+    `SELECT id, category FROM documents WHERE institution_id = $1 AND id = $2`,
+    [context.institutionId, assoc.documentId],
+  );
+  if (docCheck.rows.length === 0) {
+    throw new Error(`DOCUMENT_NOT_FOUND: Document ${assoc.documentId} not found in institution`);
+  }
+  const documentCategory = docCheck.rows[0].category;
+
+  // Authorization enforcement: REMOVE_ASSOCIATION (for targetStatus === 'withdrawn')
+  const action = commandInput.targetStatus === 'withdrawn' ? 'remove_association' : 'create_association';
+  const authDecision = authAuthority.authorize({
+    institutionId: context.institutionId,
+    personId: context.personId,
+    role: context.role,
+    action,
+    documentId: assoc.documentId,
+    documentCategory,
+  });
+
+  if (!authDecision.allowed) {
+    throw new Error(`ACTION_NOT_PERMITTED: ${action} is not permitted for role ${context.role}`);
+  }
+
   const canonicalFingerprint = createTransitionAssociationStatusFingerprint(
     context.institutionId,
     commandInput,
     context.personId,
   );
-
-  const repo = new PostgresDocumentAssociationRepository();
-  const auditRepo = new PostgresDocumentAuditRepository();
 
   return executeIdempotentDocumentsCommand({
     pool,
