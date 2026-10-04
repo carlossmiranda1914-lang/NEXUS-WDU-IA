@@ -521,7 +521,7 @@ try {
           },
         });
       },
-      /POLICY_NO_LONGER_AUTHORIZED/,
+      /(POLICY_NO_LONGER_AUTHORIZED|AUTHORIZATION_DENIED)/,
       'Grant exchange must revalidate current role policy and fail on downgrade',
     );
 

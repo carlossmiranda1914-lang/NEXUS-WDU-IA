@@ -383,6 +383,7 @@ export async function exchangeGrantForContentStreamCommand(params: {
   policyEngine: DocumentAccessPolicyEngine;
   storageProvider: ObjectStorageProvider;
   input: ExchangeGrantForStreamCommandInput;
+  authorizationAuthority?: DocumentAuthorizationAuthority;
 }): Promise<ContentStreamResult> {
   const { pool, context, policyEngine, storageProvider, input } = params;
 
@@ -467,8 +468,69 @@ export async function exchangeGrantForContentStreamCommand(params: {
       throw new Error(`VERSION_NOT_FOUND: Version ${grant.versionId} does not exist`);
     }
 
-    // 7. Real-time Policy Re-evaluation with Current Role (trusted dependency)
+    // 7. Verify Version belongs to Document
+    if (version.documentId !== doc.id) {
+      throw new Error(
+        `VERSION_DOCUMENT_MISMATCH: Version ${version.id} does not belong to document ${doc.id}`,
+      );
+    }
+
+    // 8. Lifecycle & Availability Checks (Document & Version)
+    if (doc.status === 'archived') {
+      throw new Error('DOCUMENT_ARCHIVED: Document is archived and cannot be accessed');
+    }
+
+    if (version.status === 'quarantined') {
+      throw new Error('ACCESS_DENIED_QUARANTINED: Version is quarantined and cannot be accessed');
+    }
+
+    if (version.status !== 'available') {
+      throw new Error(
+        `NOT_AVAILABLE_FOR_ACCESS: Version ${version.id} is in status "${version.status}", content access requires "available"`,
+      );
+    }
+
+    // 9. Central H1 Authorization Authority enforcement with CURRENT role
     const accessAction = grant.action === 'open' ? 'open_content' : 'download_content';
+    const authAuthority =
+      params.authorizationAuthority ??
+      new DefaultDocumentAuthorizationAuthority({
+        rules: createDefaultDocumentAuthorizationRules(),
+      });
+
+    const authDecision = authAuthority.authorize({
+      institutionId: context.institutionId,
+      personId: grant.granteePersonId,
+      role: granteeMembership.role,
+      action: accessAction,
+      documentId: doc.id,
+      documentCategory: doc.category,
+      documentStatus: doc.status,
+      versionStatus: version.status,
+    });
+
+    if (!authDecision.allowed) {
+      await auditRepo.recordAuditEvent(client, {
+        institutionId: context.institutionId,
+        documentId: doc.id,
+        versionId: version.id,
+        actorPersonId: grant.granteePersonId,
+        action: `document.content_stream_denied.${grant.action}`,
+        outcome: 'denied',
+        correlationId: input.correlationId || null,
+        details: {
+          grantId: grant.id,
+          reason: authDecision.reasonCode,
+          currentRole: granteeMembership.role,
+        },
+      });
+
+      throw new Error(
+        `AUTHORIZATION_DENIED: ${accessAction} is not permitted for current role ${granteeMembership.role} (${authDecision.reasonCode})`,
+      );
+    }
+
+    // 10. Real-time Delegated Policy Re-evaluation with Current Role (trusted dependency)
     const evalResult = policyEngine.evaluateAccess({
       institutionId: context.institutionId,
       personId: grant.granteePersonId,
@@ -485,7 +547,7 @@ export async function exchangeGrantForContentStreamCommand(params: {
       );
     }
 
-    // 8. Get Storage Object Reference
+    // 11. Get Storage Object Reference
     const storageRef = await docRepo.getStorageReferenceForVersion(
       client,
       context.institutionId,
@@ -494,18 +556,72 @@ export async function exchangeGrantForContentStreamCommand(params: {
     if (!storageRef) {
       throw new Error(`STORAGE_REFERENCE_NOT_FOUND: Storage reference missing for version ${version.id}`);
     }
+    if (storageRef.contentAvailability !== 'available') {
+      throw new Error(
+        `CONTENT_UNAVAILABLE: Conteúdo indisponível no armazenamento para esta versão (estado: ${storageRef.contentAvailability}).`,
+      );
+    }
 
-    // 9. Record Grant Usage
+    // 12. Open Content Stream (trusted storage provider)
+    let stream: NodeJS.ReadableStream;
+    try {
+      stream = await storageProvider.openReadStream({
+        institutionId: context.institutionId,
+        storageBucket: storageRef.storageBucket,
+        storageKey: storageRef.storageKey,
+      });
+    } catch (storageErr: any) {
+      const errMsg = storageErr instanceof Error ? storageErr.message : String(storageErr);
+      const errCode = storageErr?.code || '';
+      const isMissingObject =
+        errCode === 'ENOENT' ||
+        errCode === 'ERR_OBJECT_NOT_FOUND' ||
+        errCode === 404 ||
+        errMsg.includes('OBJECT_NOT_FOUND') ||
+        errMsg.includes('not found') ||
+        errMsg.includes('ENOENT') ||
+        errMsg.includes('No such object');
+
+      if (isMissingObject) {
+        // Storage object physically missing or confirmed unreadable:
+        // Update projection to 'unavailable' and emit factual audit event
+        await docRepo.updateStorageContentAvailability(
+          client,
+          context.institutionId,
+          version.id,
+          'unavailable',
+          'Physical storage object confirmed missing during access request',
+        );
+        await auditRepo.recordAuditEvent(client, {
+          institutionId: context.institutionId,
+          documentId: doc.id,
+          versionId: version.id,
+          actorPersonId: grant.granteePersonId,
+          action: 'document.storage_object_missing',
+          outcome: 'failed',
+          correlationId: input.correlationId || null,
+          details: {
+            grantId: grant.id,
+            action: grant.action,
+            versionId: version.id,
+            reason: 'Storage provider confirmed missing object',
+          },
+        });
+        await client.query('COMMIT');
+        throw new Error('CONTENT_UNAVAILABLE: Conteúdo indisponível no armazenamento para esta versão.');
+      } else {
+        // Transient provider error: Rollback and do NOT project as permanently unavailable!
+        await client.query('ROLLBACK').catch(() => {});
+        throw new Error(
+          `STORAGE_PROVIDER_TRANSIENT_ERROR: Falha temporária de comunicação com o armazenamento (${errMsg})`,
+        );
+      }
+    }
+
+    // 13. Record Grant Usage ONLY after stream open succeeds! (Defect resolution: usage ordering)
     await accessRepo.recordGrantUsage(client, context.institutionId, grant.id);
 
-    // 10. Open Content Stream (trusted storage provider)
-    const stream = await storageProvider.openReadStream({
-      institutionId: context.institutionId,
-      storageBucket: storageRef.storageBucket,
-      storageKey: storageRef.storageKey,
-    });
-
-    // 11. Record factual content stream opened audit event
+    // 14. Record factual content stream opened audit event
     await auditRepo.recordAuditEvent(client, {
       institutionId: context.institutionId,
       documentId: doc.id,

@@ -162,7 +162,8 @@ export function rejectDomainError(res: Response, error: unknown): Response {
       msg.includes('GRANT_GRANTEE_MISMATCH') ||
       msg.includes('MEMBERSHIP_REVOKED_OR_INACTIVE') ||
       msg.includes('POLICY_NO_LONGER_AUTHORIZED') ||
-      msg.includes('ACCESS_DENIED_QUARANTINED')
+      msg.includes('ACCESS_DENIED_QUARANTINED') ||
+      msg.includes('DOCUMENT_ARCHIVED')
     ) {
       return reject(res, 403, msg, 'AUTHORIZATION_DENIED');
     }
@@ -1418,6 +1419,7 @@ export function registerDocumentRoutes(
         context,
         policyEngine,
         storageProvider,
+        authorizationAuthority: authAuthority,
         input: {
           rawAccessToken,
           displayFilename,
