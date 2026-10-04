@@ -382,22 +382,16 @@ try {
   );
 
   const guestDocRes = await request(`/api/documents/${docAId}`, { token: 'uid-guest-a' });
-  assert.equal(guestDocRes.status, 200);
+  assert.equal(
+    guestDocRes.status,
+    404,
+    'Arbitrary role must NOT receive 200 or access document metadata under H1-02A authorization',
+  );
   const guestDocBody = (await guestDocRes.json()) as any;
   assert.equal(
-    guestDocBody.capabilities.canPlaceHold,
-    false,
-    'Arbitrary role must NOT receive canPlaceHold capability from API layer',
-  );
-  assert.equal(
-    guestDocBody.capabilities.canAuthorizeDeletion,
-    false,
-    'Arbitrary role must NOT receive canAuthorizeDeletion capability from API layer',
-  );
-  assert.equal(
-    guestDocBody.capabilities.canUploadVersion,
-    false,
-    'Arbitrary role must NOT receive canUploadVersion capability from API layer',
+    guestDocBody.capabilities,
+    undefined,
+    'Arbitrary role must NOT receive capabilities from API layer',
   );
 
   console.log('[DOCUMENTS-API-MULTI-TENANT] All multi-tenant negative assertions PASSED.');

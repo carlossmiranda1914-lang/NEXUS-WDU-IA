@@ -10,6 +10,12 @@ import { LocalUatMalwareScanner } from './local-uat-malware-scanner.ts';
 import type { MalwareScanner } from './malware-scanner.ts';
 import type { DocumentAccessPolicyEngine } from './document-access-policy.ts';
 import type { RetentionPolicyEngine } from './document-retention-policy.ts';
+import {
+  type DocumentAuthorizationAuthority,
+  DefaultDocumentAuthorizationAuthority,
+  createDefaultDocumentAuthorizationRules,
+  isManagementRole,
+} from './document-authorization-policy.ts';
 import { PostgresDocumentRepository } from './document-repository.ts';
 import {
   listDocumentsQuery,
@@ -260,6 +266,7 @@ export interface DocumentRouteDependencies {
   uploadPolicyConfig?: DocumentSizePolicyConfig;
   policyEngine?: DocumentAccessPolicyEngine;
   retentionPolicyEngine?: RetentionPolicyEngine;
+  authorizationAuthority?: DocumentAuthorizationAuthority;
   accessGrantTokenKey?: string;
   deletionPseudonymizationKey?: string;
   verificationWorker?: DocumentVerificationWorker | null;
@@ -272,6 +279,17 @@ export function registerDocumentRoutes(
 ): void {
   const docPool = dependencies.pool ?? pool;
   const docAuth = dependencies.requireAuth ?? requireAuth;
+
+  // Canonical central authorization authority
+  const authAuthority: DocumentAuthorizationAuthority =
+    dependencies.authorizationAuthority ||
+    new DefaultDocumentAuthorizationAuthority({
+      rules: createDefaultDocumentAuthorizationRules(),
+      delegates: {
+        accessPolicyEngine: dependencies.policyEngine || undefined,
+        retentionPolicyEngine: dependencies.retentionPolicyEngine || undefined,
+      },
+    });
 
   // Strict operational authority from dependencies or environment; NO synthetic fallbacks in production
   const accessGrantTokenKey =
@@ -388,6 +406,7 @@ export function registerDocumentRoutes(
           updatedTo: req.query.updatedTo as string,
         },
         operationalAvailability,
+        authAuthority,
       );
 
       assertNoInternalSecretsInDto(response.items);
@@ -413,6 +432,21 @@ export function registerDocumentRoutes(
         return reject(res, 404, 'Documento não encontrado no tenant.');
       }
 
+      // Authorization enforcement: VIEW_METADATA
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'view_metadata',
+        documentId: doc.id,
+        documentCategory: doc.category,
+      });
+
+      if (!authDecision.allowed) {
+        // Anti-enumeration: return identical 404
+        return reject(res, 404, 'Documento não encontrado no tenant.');
+      }
+
       assertNoInternalSecretsInDto(doc);
       return res.json(doc);
     } catch (error) {
@@ -433,6 +467,21 @@ export function registerDocumentRoutes(
     try {
       const doc = await getDocumentDetailQuery(docPool, context, documentId);
       if (!doc) {
+        return reject(res, 404, 'Documento não encontrado no tenant.');
+      }
+
+      // Authorization enforcement: VIEW_VERSIONS
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'view_versions',
+        documentId: doc.id,
+        documentCategory: doc.category,
+      });
+
+      if (!authDecision.allowed) {
+        // Anti-enumeration: return identical 404
         return reject(res, 404, 'Documento não encontrado no tenant.');
       }
 
@@ -647,6 +696,31 @@ export function registerDocumentRoutes(
     }
 
     try {
+      // First check document existence and category in tenant for authorization
+      const docCheck = await docPool.query<{ id: string; category: string }>(
+        `SELECT id, category FROM documents WHERE institution_id = $1 AND id = $2`,
+        [context.institutionId, documentId],
+      );
+
+      if (docCheck.rows.length === 0) {
+        return reject(res, 404, 'Documento não encontrado no tenant.');
+      }
+
+      // Authorization enforcement: VIEW_ACTIVITY
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'view_activity',
+        documentId,
+        documentCategory: docCheck.rows[0].category,
+      });
+
+      if (!authDecision.allowed) {
+        // Anti-enumeration: return identical 404
+        return reject(res, 404, 'Documento não encontrado no tenant.');
+      }
+
       const activities = await getDocumentActivityQuery(docPool, context, documentId);
       assertNoInternalSecretsInDto(activities);
       return res.json({ items: activities });

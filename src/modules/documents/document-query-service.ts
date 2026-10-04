@@ -10,6 +10,7 @@ import type {
   FrontendSafeActivityDto,
 } from './document-dto.ts';
 import type { DocumentStatus, DocumentVersionStatus } from './document-model.ts';
+import type { DocumentAuthorizationAuthority } from './document-authorization-policy.ts';
 
 export interface DocumentListQueryParams {
   page?: number | string;
@@ -88,6 +89,7 @@ export async function listDocumentsQuery(
   context: InstitutionalContext,
   params: DocumentListQueryParams,
   operationalAvailability?: DocumentOperationalAvailability,
+  authorizationAuthority?: DocumentAuthorizationAuthority,
 ): Promise<DocumentListResponse> {
   const rawPage = Number(params.page);
   const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
@@ -95,9 +97,55 @@ export async function listDocumentsQuery(
   const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 50) : 20;
   const offset = (page - 1) * limit;
 
+  // Authorization enforcement: restrict query to actor's authorized categories
+  if (authorizationAuthority) {
+    const allowedCategories = authorizationAuthority.getAllowedCategories({
+      institutionId: context.institutionId,
+      personId: context.personId,
+      role: context.role,
+      action: 'list_metadata',
+    });
+
+    if (Array.isArray(allowedCategories) && allowedCategories.length === 0) {
+      return {
+        items: [],
+        total: 0,
+        page,
+        limit,
+        hasMore: false,
+      };
+    }
+  }
+
   const conditions: string[] = ['d.institution_id = $1'];
   const values: unknown[] = [context.institutionId];
   let paramIdx = 2;
+
+  if (authorizationAuthority) {
+    const allowedCategories = authorizationAuthority.getAllowedCategories({
+      institutionId: context.institutionId,
+      personId: context.personId,
+      role: context.role,
+      action: 'list_metadata',
+    });
+
+    if (Array.isArray(allowedCategories)) {
+      if (params.category && params.category.trim() && params.category !== 'all') {
+        if (!allowedCategories.includes(params.category.trim())) {
+          return {
+            items: [],
+            total: 0,
+            page,
+            limit,
+            hasMore: false,
+          };
+        }
+      } else {
+        conditions.push(`d.category = ANY(${paramIdx++})`);
+        values.push(allowedCategories);
+      }
+    }
+  }
 
   if (params.category && params.category.trim() && params.category !== 'all') {
     conditions.push(`d.category = $${paramIdx++}`);
