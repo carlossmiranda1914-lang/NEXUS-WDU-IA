@@ -181,6 +181,7 @@ try {
       idempotencyKey: 'idemp-race-cancel',
       input: {
         sessionId: raceSessRes.result.session.id,
+        rawToken: raceSessRes.result.rawToken,
         reason: 'Raced cancellation',
       },
     }),

@@ -68,6 +68,7 @@ export interface ResumeUploadSessionResult {
 
 export interface CancelUploadSessionCommandInput {
   sessionId: string;
+  rawToken: string;
   reason?: string;
   correlationId?: string | null;
 }
@@ -152,7 +153,7 @@ export function completeUploadSessionFingerprint(
     actorPersonId,
     provenance: {
       originType: input.provenance.originType,
-      actorPersonId: input.provenance.actorPersonId ?? null,
+      actorPersonId,
       sourceDomain: input.provenance.sourceDomain,
       method: input.provenance.method,
       correlationId: input.provenance.correlationId ?? null,
@@ -400,6 +401,7 @@ export async function resumeUploadSessionCommand(input: {
   context: InstitutionalContext;
   idempotencyKey: string;
   input: ResumeUploadSessionCommandInput;
+  authorizationAuthority?: DocumentAuthorizationAuthority;
 }): Promise<{ replayed: boolean; result: ResumeUploadSessionResult }> {
   const { pool, context, idempotencyKey, input: resumeInput } = input;
   const canonicalFingerprint = resumeUploadSessionFingerprint(
@@ -408,6 +410,7 @@ export async function resumeUploadSessionCommand(input: {
     context.personId,
   );
 
+  const docRepo = new PostgresDocumentRepository();
   const uploadRepo = new PostgresDocumentUploadRepository();
   const auditRepo = new PostgresDocumentAuditRepository();
 
@@ -459,6 +462,39 @@ export async function resumeUploadSessionCommand(input: {
 
       const row = lockResult.rows[0];
       const now = new Date();
+
+      // B4: Session ownership binding
+      if (row.created_by_person_id !== context.personId) {
+        throw new Error(`AUTHORIZATION_DENIED: Upload session does not belong to actor ${context.personId}`);
+      }
+
+      // B3: Central H1 Authorization re-evaluation against document
+      const doc = await docRepo.getDocumentById(client, context.institutionId, row.document_id);
+      if (!doc) {
+        throw new Error(`Document ${row.document_id} not found in institution ${context.institutionId}`);
+      }
+
+      const authAuthority =
+        input.authorizationAuthority ??
+        new DefaultDocumentAuthorizationAuthority({
+          rules: createDefaultDocumentAuthorizationRules(),
+        });
+
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'upload_version',
+        documentId: doc.id,
+        documentCategory: doc.category,
+        documentStatus: doc.status,
+      });
+
+      if (!authDecision.allowed) {
+        throw new Error(
+          `AUTHORIZATION_DENIED: Action upload_version is not permitted for role ${context.role} (${authDecision.reasonCode})`,
+        );
+      }
 
       // 2. Terminal state checks
       if (row.status === 'cancelled') {
@@ -525,6 +561,35 @@ export async function resumeUploadSessionCommand(input: {
       const session = await uploadRepo.getSessionById(client, context.institutionId, resultRef);
       if (!session) throw new Error('Persisted upload session missing on replay');
 
+      if (session.createdByPersonId !== context.personId) {
+        throw new Error(`AUTHORIZATION_DENIED: Upload session does not belong to actor ${context.personId}`);
+      }
+
+      const doc = await docRepo.getDocumentById(client, context.institutionId, session.documentId);
+      if (!doc) throw new Error('Document not found on replay');
+
+      const authAuthority =
+        input.authorizationAuthority ??
+        new DefaultDocumentAuthorizationAuthority({
+          rules: createDefaultDocumentAuthorizationRules(),
+        });
+
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'upload_version',
+        documentId: doc.id,
+        documentCategory: doc.category,
+        documentStatus: doc.status,
+      });
+
+      if (!authDecision.allowed) {
+        throw new Error(
+          `AUTHORIZATION_DENIED: Action upload_version is not permitted for role ${context.role} (${authDecision.reasonCode})`,
+        );
+      }
+
       const now = new Date();
       if (
         session.status === 'completed' ||
@@ -568,6 +633,7 @@ export async function cancelUploadSessionCommand(input: {
   context: InstitutionalContext;
   idempotencyKey: string;
   input: CancelUploadSessionCommandInput;
+  authorizationAuthority?: DocumentAuthorizationAuthority;
 }): Promise<{ replayed: boolean; result: DocumentUploadSessionRecord }> {
   const { pool, context, idempotencyKey, input: cancelInput } = input;
   const canonicalFingerprint = cancelUploadSessionFingerprint(
@@ -576,6 +642,7 @@ export async function cancelUploadSessionCommand(input: {
     context.personId,
   );
 
+  const docRepo = new PostgresDocumentRepository();
   const uploadRepo = new PostgresDocumentUploadRepository();
   const auditRepo = new PostgresDocumentAuditRepository();
 
@@ -595,8 +662,10 @@ export async function cancelUploadSessionCommand(input: {
         institution_id: string;
         document_id: string;
         status: string;
+        upload_token_hash: string;
+        created_by_person_id: string;
       }>(
-        `SELECT id, institution_id, document_id, status
+        `SELECT id, institution_id, document_id, status, upload_token_hash, created_by_person_id
            FROM document_upload_sessions
           WHERE institution_id = $1 AND id = $2
           FOR UPDATE`,
@@ -609,7 +678,48 @@ export async function cancelUploadSessionCommand(input: {
         );
       }
 
-      const currentStatus = session.rows[0].status;
+      const row = session.rows[0];
+
+      // B4: Session ownership binding
+      if (row.created_by_person_id !== context.personId) {
+        throw new Error(`AUTHORIZATION_DENIED: Upload session does not belong to actor ${context.personId}`);
+      }
+
+      // B3: Central H1 Authorization re-evaluation against document
+      const doc = await docRepo.getDocumentById(client, context.institutionId, row.document_id);
+      if (!doc) {
+        throw new Error(`Document ${row.document_id} not found in institution ${context.institutionId}`);
+      }
+
+      const authAuthority =
+        input.authorizationAuthority ??
+        new DefaultDocumentAuthorizationAuthority({
+          rules: createDefaultDocumentAuthorizationRules(),
+        });
+
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'upload_version',
+        documentId: doc.id,
+        documentCategory: doc.category,
+        documentStatus: doc.status,
+      });
+
+      if (!authDecision.allowed) {
+        throw new Error(
+          `AUTHORIZATION_DENIED: Action upload_version is not permitted for role ${context.role} (${authDecision.reasonCode})`,
+        );
+      }
+
+      // B8: Stricter fail-closed behavior: require valid token to cancel
+      const isTokenValid = verifyUploadToken(cancelInput.rawToken, row.upload_token_hash);
+      if (!isTokenValid) {
+        throw new Error('INVALID_UPLOAD_TOKEN: Provided upload authorization token does not match session.');
+      }
+
+      const currentStatus = row.status;
       if (currentStatus === 'completed') {
         throw new Error('CANCEL_COMPLETED_DENIED: Completed upload session cannot be cancelled.');
       }
@@ -646,6 +756,36 @@ export async function cancelUploadSessionCommand(input: {
     loadResult: async (client, resultRef) => {
       const session = await uploadRepo.getSessionById(client, context.institutionId, resultRef);
       if (!session) throw new Error('Persisted upload session missing on replay');
+
+      if (session.createdByPersonId !== context.personId) {
+        throw new Error(`AUTHORIZATION_DENIED: Upload session does not belong to actor ${context.personId}`);
+      }
+
+      const doc = await docRepo.getDocumentById(client, context.institutionId, session.documentId);
+      if (!doc) throw new Error('Document not found on replay');
+
+      const authAuthority =
+        input.authorizationAuthority ??
+        new DefaultDocumentAuthorizationAuthority({
+          rules: createDefaultDocumentAuthorizationRules(),
+        });
+
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'upload_version',
+        documentId: doc.id,
+        documentCategory: doc.category,
+        documentStatus: doc.status,
+      });
+
+      if (!authDecision.allowed) {
+        throw new Error(
+          `AUTHORIZATION_DENIED: Action upload_version is not permitted for role ${context.role} (${authDecision.reasonCode})`,
+        );
+      }
+
       return session;
     },
   });
@@ -657,6 +797,7 @@ export async function completeUploadSessionCommand(input: {
   storageProvider: ObjectStorageProvider;
   idempotencyKey: string;
   input: CompleteUploadSessionCommandInput;
+  authorizationAuthority?: DocumentAuthorizationAuthority;
 }): Promise<{ replayed: boolean; result: CompleteUploadSessionResult }> {
   const { pool, context, storageProvider, idempotencyKey, input: completeInput } = input;
   const canonicalFingerprint = completeUploadSessionFingerprint(
@@ -719,7 +860,40 @@ export async function completeUploadSessionCommand(input: {
       const row = sessionResult.rows[0];
       const now = new Date();
 
-      // 2. Handle double completion idempotency under lock
+      // B4: Session ownership binding
+      if (row.created_by_person_id !== context.personId) {
+        throw new Error(`AUTHORIZATION_DENIED: Upload session does not belong to actor ${context.personId}`);
+      }
+
+      // B3: Central H1 Authorization re-evaluation against document
+      const doc = await docRepo.getDocumentById(client, context.institutionId, row.document_id);
+      if (!doc) {
+        throw new Error(`Document ${row.document_id} not found in institution ${context.institutionId}`);
+      }
+
+      const authAuthority =
+        input.authorizationAuthority ??
+        new DefaultDocumentAuthorizationAuthority({
+          rules: createDefaultDocumentAuthorizationRules(),
+        });
+
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'upload_version',
+        documentId: doc.id,
+        documentCategory: doc.category,
+        documentStatus: doc.status,
+      });
+
+      if (!authDecision.allowed) {
+        throw new Error(
+          `AUTHORIZATION_DENIED: Action upload_version is not permitted for role ${context.role} (${authDecision.reasonCode})`,
+        );
+      }
+
+      // 2. Handle double completion idempotency under lock (after verifying ownership and auth)
       if (row.status === 'completed' && row.completed_version_id) {
         const completedSession: DocumentUploadSessionRecord = {
           id: row.id,
@@ -780,7 +954,7 @@ export async function completeUploadSessionCommand(input: {
         throw new Error('INVALID_UPLOAD_TOKEN: Provided upload authorization token does not match session.');
       }
 
-      // 5. Query object storage provider for object presence and authoritative metadata
+      // 5. Query object storage provider for object presence and authoritative metadata ONLY after all auth and validity checks pass
       const head = await storageProvider.headObject({
         storageBucket: row.storage_bucket,
         storageKey: row.storage_key,
@@ -797,6 +971,7 @@ export async function completeUploadSessionCommand(input: {
       const authoritativeMimeType = head.mimeType || row.declared_mime_type;
 
       // 6. Create next DocumentVersion in document repository (status MUST be 'content_received')
+      // B14: ActorPersonId strictly bound to context.personId to prevent spoofing
       const { version, provenance, storageReference } = await docRepo.createNextVersion(client, {
         institutionId: context.institutionId,
         documentId: row.document_id,
@@ -807,7 +982,7 @@ export async function completeUploadSessionCommand(input: {
         createdByPersonId: context.personId,
         provenance: {
           originType: completeInput.provenance.originType,
-          actorPersonId: completeInput.provenance.actorPersonId ?? context.personId,
+          actorPersonId: context.personId, // Strictly authenticated actor identity
           sourceDomain: completeInput.provenance.sourceDomain,
           method: completeInput.provenance.method,
           correlationId: completeInput.provenance.correlationId,
@@ -827,7 +1002,7 @@ export async function completeUploadSessionCommand(input: {
         version.id,
       );
 
-      // 8. Record audit event
+      // 8. Record audit event (Minimization: remove storageProvider, storageBucket, storageKey)
       await auditRepo.recordAuditEvent(client, {
         institutionId: context.institutionId,
         documentId: row.document_id,
@@ -843,13 +1018,10 @@ export async function completeUploadSessionCommand(input: {
           versionStatus: version.status,
           byteSize: version.byteSize,
           sha256Hash: version.sha256Hash,
-          storageProvider: completedSession.storageProvider,
-          storageBucket: completedSession.storageBucket,
-          storageKey: completedSession.storageKey,
         },
       });
 
-      // 9. Record outbox event intent inside same transaction
+      // 9. Record outbox event intent inside same transaction (Minimization: remove storageProvider, storageBucket, storageKey)
       await outboxRepo.insertEvent(client, {
         institutionId: context.institutionId,
         eventType: 'document.upload_completed',
@@ -867,9 +1039,6 @@ export async function completeUploadSessionCommand(input: {
           byteSize: version.byteSize,
           sha256Hash: version.sha256Hash,
           sessionId: completedSession.id,
-          storageProvider: completedSession.storageProvider,
-          storageBucket: completedSession.storageBucket,
-          storageKey: completedSession.storageKey,
         },
       });
 
@@ -887,6 +1056,36 @@ export async function completeUploadSessionCommand(input: {
       const [sessionId, versionId] = resultRef.split(':');
       const session = await uploadRepo.getSessionById(client, context.institutionId, sessionId);
       if (!session) throw new Error('Persisted session missing on replay');
+
+      if (session.createdByPersonId !== context.personId) {
+        throw new Error(`AUTHORIZATION_DENIED: Upload session does not belong to actor ${context.personId}`);
+      }
+
+      const doc = await docRepo.getDocumentById(client, context.institutionId, session.documentId);
+      if (!doc) throw new Error('Document not found on replay');
+
+      const authAuthority =
+        input.authorizationAuthority ??
+        new DefaultDocumentAuthorizationAuthority({
+          rules: createDefaultDocumentAuthorizationRules(),
+        });
+
+      const authDecision = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'upload_version',
+        documentId: doc.id,
+        documentCategory: doc.category,
+        documentStatus: doc.status,
+      });
+
+      if (!authDecision.allowed) {
+        throw new Error(
+          `AUTHORIZATION_DENIED: Action upload_version is not permitted for role ${context.role} (${authDecision.reasonCode})`,
+        );
+      }
+
       const version = await docRepo.getVersionById(client, context.institutionId, versionId);
       if (!version) throw new Error('Persisted version missing on replay');
       const provenance = await docRepo.getProvenanceForVersion(client, context.institutionId, versionId);

@@ -151,6 +151,7 @@ try {
         idempotencyKey: 'idemp-cross-cancel-1',
         input: {
           sessionId: sessionA.id,
+          rawToken: rawTokenA,
         },
       });
     },

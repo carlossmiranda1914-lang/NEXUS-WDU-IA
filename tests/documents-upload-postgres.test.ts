@@ -177,6 +177,7 @@ try {
     idempotencyKey: 'idemp-cancel-1',
     input: {
       sessionId: cancelSessionRes.result.session.id,
+      rawToken: cancelSessionRes.result.rawToken,
       reason: 'User cancelled form',
     },
   });

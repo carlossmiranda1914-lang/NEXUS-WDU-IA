@@ -1151,19 +1151,48 @@ export function registerDocumentRoutes(
         upload_token_hash: string;
         authorized_until: Date;
         expires_at: Date;
+        created_by_person_id: string;
       }>(
         `SELECT id, institution_id, document_id, target_version_number, declared_filename, declared_mime_type, declared_byte_size,
-                storage_provider, storage_bucket, storage_key, status, upload_token_hash, authorized_until, expires_at
+                storage_provider, storage_bucket, storage_key, status, upload_token_hash, authorized_until, expires_at,
+                created_by_person_id
            FROM document_upload_sessions
           WHERE institution_id = $1 AND id = $2`,
         [context.institutionId, sessionId],
       );
 
       if (sessionResult.rows.length === 0) {
-        return reject(res, 404, 'Sessão de upload não encontrada no tenant.');
+        return reject(res, 404, 'Sessão de upload não encontrada no tenant.', 'NOT_FOUND');
       }
 
       const row = sessionResult.rows[0];
+
+      // Session ownership binding
+      if (row.created_by_person_id !== context.personId) {
+        return reject(res, 403, 'Acesso não autorizado para transferir bytes de sessão de outro utilizador.', 'AUTHORIZATION_DENIED');
+      }
+
+      // Controller authorization enforcement: UPLOAD_VERSION
+      const docRepo = new PostgresDocumentRepository();
+      const existingDoc = await docRepo.getDocumentById(docPool, context.institutionId, row.document_id);
+      if (!existingDoc) {
+        return reject(res, 404, 'Documento não encontrado no tenant.', 'NOT_FOUND');
+      }
+
+      const uploadAuth = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'upload_version',
+        documentId: existingDoc.id,
+        documentCategory: existingDoc.category,
+        documentStatus: existingDoc.status,
+      });
+
+      if (!uploadAuth.allowed) {
+        return reject(res, 403, 'Acesso não autorizado para upload de versão.', 'AUTHORIZATION_DENIED');
+      }
+
       const now = new Date();
 
       // 2. Lifecycle checks
@@ -1269,6 +1298,47 @@ export function registerDocumentRoutes(
     }
 
     try {
+      // Controller defense: resolve session in institution
+      const sessionResult = await docPool.query<{
+        id: string;
+        document_id: string;
+        created_by_person_id: string;
+      }>(
+        `SELECT id, document_id, created_by_person_id
+           FROM document_upload_sessions
+          WHERE institution_id = $1 AND id = $2`,
+        [context.institutionId, sessionId],
+      );
+
+      if (sessionResult.rows.length === 0) {
+        return reject(res, 404, 'Sessão de upload não encontrada no tenant.', 'NOT_FOUND');
+      }
+
+      const sessRow = sessionResult.rows[0];
+      if (sessRow.created_by_person_id !== context.personId) {
+        return reject(res, 403, 'Acesso não autorizado para completar sessão de upload de outro utilizador.', 'AUTHORIZATION_DENIED');
+      }
+
+      const docRepo = new PostgresDocumentRepository();
+      const existingDoc = await docRepo.getDocumentById(docPool, context.institutionId, sessRow.document_id);
+      if (!existingDoc) {
+        return reject(res, 404, 'Documento não encontrado no tenant.', 'NOT_FOUND');
+      }
+
+      const uploadAuth = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'upload_version',
+        documentId: existingDoc.id,
+        documentCategory: existingDoc.category,
+        documentStatus: existingDoc.status,
+      });
+
+      if (!uploadAuth.allowed) {
+        return reject(res, 403, 'Acesso não autorizado para completar sessão de upload.', 'AUTHORIZATION_DENIED');
+      }
+
       const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
       if (idempotencyKey === null) return res;
       const completeRes = await completeUploadSessionCommand({
@@ -1276,6 +1346,7 @@ export function registerDocumentRoutes(
         context,
         storageProvider,
         idempotencyKey,
+        authorizationAuthority: authAuthority,
         input: {
           sessionId,
           rawToken,
@@ -1348,12 +1419,54 @@ export function registerDocumentRoutes(
     }
 
     try {
+      // Controller defense: resolve session in institution
+      const sessionResult = await docPool.query<{
+        id: string;
+        document_id: string;
+        created_by_person_id: string;
+      }>(
+        `SELECT id, document_id, created_by_person_id
+           FROM document_upload_sessions
+          WHERE institution_id = $1 AND id = $2`,
+        [context.institutionId, sessionId],
+      );
+
+      if (sessionResult.rows.length === 0) {
+        return reject(res, 404, 'Sessão de upload não encontrada no tenant.', 'NOT_FOUND');
+      }
+
+      const sessRow = sessionResult.rows[0];
+      if (sessRow.created_by_person_id !== context.personId) {
+        return reject(res, 403, 'Acesso não autorizado para retomar sessão de upload de outro utilizador.', 'AUTHORIZATION_DENIED');
+      }
+
+      const docRepo = new PostgresDocumentRepository();
+      const existingDoc = await docRepo.getDocumentById(docPool, context.institutionId, sessRow.document_id);
+      if (!existingDoc) {
+        return reject(res, 404, 'Documento não encontrado no tenant.', 'NOT_FOUND');
+      }
+
+      const uploadAuth = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'upload_version',
+        documentId: existingDoc.id,
+        documentCategory: existingDoc.category,
+        documentStatus: existingDoc.status,
+      });
+
+      if (!uploadAuth.allowed) {
+        return reject(res, 403, 'Acesso não autorizado para retomar sessão de upload.', 'AUTHORIZATION_DENIED');
+      }
+
       const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
       if (idempotencyKey === null) return res;
       const resumeRes = await resumeUploadSessionCommand({
         pool: docPool,
         context,
         idempotencyKey,
+        authorizationAuthority: authAuthority,
         input: {
           sessionId,
           rawToken,
@@ -1384,15 +1497,63 @@ export function registerDocumentRoutes(
     const sessionId = req.params.sessionId;
     if (!validUuid(sessionId)) return reject(res, 400, 'sessionId inválido.');
 
+    const rawToken = req.body?.rawToken ?? req.header('x-upload-token');
+    if (!rawToken || typeof rawToken !== 'string') {
+      return reject(res, 400, 'rawToken é obrigatório.', 'TOKEN_REQUIRED');
+    }
+
     try {
+      // Controller defense: resolve session in institution
+      const sessionResult = await docPool.query<{
+        id: string;
+        document_id: string;
+        created_by_person_id: string;
+      }>(
+        `SELECT id, document_id, created_by_person_id
+           FROM document_upload_sessions
+          WHERE institution_id = $1 AND id = $2`,
+        [context.institutionId, sessionId],
+      );
+
+      if (sessionResult.rows.length === 0) {
+        return reject(res, 404, 'Sessão de upload não encontrada no tenant.', 'NOT_FOUND');
+      }
+
+      const sessRow = sessionResult.rows[0];
+      if (sessRow.created_by_person_id !== context.personId) {
+        return reject(res, 403, 'Acesso não autorizado para cancelar sessão de upload de outro utilizador.', 'AUTHORIZATION_DENIED');
+      }
+
+      const docRepo = new PostgresDocumentRepository();
+      const existingDoc = await docRepo.getDocumentById(docPool, context.institutionId, sessRow.document_id);
+      if (!existingDoc) {
+        return reject(res, 404, 'Documento não encontrado no tenant.', 'NOT_FOUND');
+      }
+
+      const uploadAuth = authAuthority.authorize({
+        institutionId: context.institutionId,
+        personId: context.personId,
+        role: context.role,
+        action: 'upload_version',
+        documentId: existingDoc.id,
+        documentCategory: existingDoc.category,
+        documentStatus: existingDoc.status,
+      });
+
+      if (!uploadAuth.allowed) {
+        return reject(res, 403, 'Acesso não autorizado para cancelar sessão de upload.', 'AUTHORIZATION_DENIED');
+      }
+
       const idempotencyKey = requireIdempotencyKey(req, res, req.body?.idempotencyKey);
       if (idempotencyKey === null) return res;
       const cancelRes = await cancelUploadSessionCommand({
         pool: docPool,
         context,
         idempotencyKey,
+        authorizationAuthority: authAuthority,
         input: {
           sessionId,
+          rawToken,
           reason: req.body?.reason || null,
           correlationId: req.header('x-correlation-id') || null,
         },
