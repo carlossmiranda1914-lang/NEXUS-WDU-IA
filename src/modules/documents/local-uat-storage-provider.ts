@@ -117,16 +117,11 @@ export class LocalUatObjectStorageProvider implements ObjectStorageProvider {
           const uploadedAt = new Date();
 
           const mapKey = this.getStorageKey(params.storageBucket, params.storageKey);
-          this.storage.set(mapKey, {
-            buffer,
-            mimeType,
-            uploadedAt,
-            sha256Hash,
-          });
 
-          // Persist to filesystem for UAT restart durability
+          // Filesystem persistence is the durable authority for LOCAL_UAT.
+          // Never acknowledge upload success when restart durability was not achieved.
+          const { dir, dataPath, metaPath } = this.getFsPaths(params.storageBucket, params.storageKey);
           try {
-            const { dir, dataPath, metaPath } = this.getFsPaths(params.storageBucket, params.storageKey);
             await mkdir(dir, { recursive: true });
             await writeFile(dataPath, buffer);
             const meta: StoredLocalMetadata = {
@@ -137,8 +132,22 @@ export class LocalUatObjectStorageProvider implements ObjectStorageProvider {
             };
             await writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf8');
           } catch (fsErr) {
-            console.warn('[LOCAL-UAT-STORAGE] Warning: failed to persist to filesystem:', fsErr);
+            this.storage.delete(mapKey);
+            await unlink(dataPath).catch(() => undefined);
+            await unlink(metaPath).catch(() => undefined);
+            const message = fsErr instanceof Error ? fsErr.message : String(fsErr);
+            throw new Error(
+              `LOCAL_UAT_DURABILITY_FAILURE: Uploaded bytes could not be durably persisted: ${message}`,
+            );
           }
+
+          // Populate the in-memory cache only after durable persistence succeeds.
+          this.storage.set(mapKey, {
+            buffer,
+            mimeType,
+            uploadedAt,
+            sha256Hash,
+          });
 
           resolve({
             byteSize: totalBytes,
@@ -194,15 +203,40 @@ export class LocalUatObjectStorageProvider implements ObjectStorageProvider {
       const buffer = await readFile(dataPath);
       const metaRaw = await readFile(metaPath, 'utf8');
       const meta: StoredLocalMetadata = JSON.parse(metaRaw);
+      const computedHash = createHash('sha256').update(buffer).digest('hex');
+      if (
+        !Number.isInteger(meta.byteSize) ||
+        meta.byteSize !== buffer.length ||
+        !meta.sha256Hash ||
+        meta.sha256Hash !== computedHash
+      ) {
+        throw new Error(
+          `LOCAL_UAT_STORAGE_INTEGRITY_FAILURE: Durable object metadata does not match stored bytes for ${bucket}/${key}`,
+        );
+      }
+
+      const uploadedAt = new Date(meta.uploadedAt);
+      if (Number.isNaN(uploadedAt.getTime())) {
+        throw new Error(
+          `LOCAL_UAT_STORAGE_INTEGRITY_FAILURE: Invalid durable upload timestamp for ${bucket}/${key}`,
+        );
+      }
+
       const stored: StoredLocalObject = {
         buffer,
         mimeType: meta.mimeType || 'application/octet-stream',
-        uploadedAt: new Date(meta.uploadedAt),
-        sha256Hash: meta.sha256Hash,
+        uploadedAt,
+        sha256Hash: computedHash,
       };
       this.storage.set(this.getStorageKey(bucket, key), stored);
       return stored;
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.startsWith('LOCAL_UAT_STORAGE_INTEGRITY_FAILURE:')
+      ) {
+        throw error;
+      }
       return null;
     }
   }

@@ -447,15 +447,42 @@ export async function exchangeGrantForContentStreamCommand(params: {
       throw new Error(`STORAGE_REFERENCE_NOT_FOUND: Storage reference missing for version ${version.id}`);
     }
 
-    // 9. Record Grant Usage
-    await accessRepo.recordGrantUsage(client, context.institutionId, grant.id);
+    // 9. Reconcile the persisted AVAILABLE fact with the physical storage fact.
+    // AVAILABLE metadata with a missing or divergent object is an integrity incident, never success.
+    const storageHead = await storageProvider.headObject({
+      institutionId: context.institutionId,
+      storageBucket: storageRef.storageBucket,
+      storageKey: storageRef.storageKey,
+    });
+    if (!storageHead.exists) {
+      throw new Error(
+        `STORAGE_INTEGRITY_INCIDENT: Physical object missing for available version ${version.id}`,
+      );
+    }
+    if (storageHead.byteSize !== version.byteSize) {
+      throw new Error(
+        `STORAGE_INTEGRITY_INCIDENT: Physical object size does not match canonical metadata for version ${version.id}`,
+      );
+    }
+    if (
+      storageHead.sha256Hash &&
+      version.sha256Hash &&
+      storageHead.sha256Hash !== version.sha256Hash
+    ) {
+      throw new Error(
+        `STORAGE_INTEGRITY_INCIDENT: Physical object hash does not match canonical metadata for version ${version.id}`,
+      );
+    }
 
-    // 10. Open Content Stream (trusted storage provider)
+    // 10. Open Content Stream only after physical integrity has been proven.
     const stream = await storageProvider.openReadStream({
       institutionId: context.institutionId,
       storageBucket: storageRef.storageBucket,
       storageKey: storageRef.storageKey,
     });
+
+    // Record grant usage only after storage integrity and stream availability succeed.
+    await accessRepo.recordGrantUsage(client, context.institutionId, grant.id);
 
     // 11. Record factual content stream opened audit event
     await auditRepo.recordAuditEvent(client, {

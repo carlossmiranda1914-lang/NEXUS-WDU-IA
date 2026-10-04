@@ -33,8 +33,14 @@ assert.match(systemConfig, /Configurações operacionais indisponíveis/);
 assert.match(systemConfig, /Nenhuma alteração foi aplicada/);
 assert.match(systemConfig, /AcademicYearManagement/, 'the canonical Academic Year view must remain available');
 
+// Documents is now a canonical product workspace and must no longer be represented
+// by the old generic-unavailable placeholder.
+assert.match(app, /const DocumentsWorkspace = lazy/);
+assert.match(app, /activeTab === 'documents'/);
+assert.match(app, /<DocumentsWorkspace theme={theme} \/>/);
+assert.doesNotMatch(app, /Arquivo documental genérico indisponível/);
+
 for (const text of [
-  'Arquivo documental genérico indisponível',
   'Automação e fluxos indisponíveis',
   'Assinaturas digitais indisponíveis',
   'Portal de encarregados indisponível',

@@ -327,6 +327,71 @@ try {
   const streamedBytes = Buffer.from(await exchangeRes.arrayBuffer());
   assert.equal(streamedBytes.toString('utf-8'), fileBytes.toString('utf-8'));
 
+  // HTTP contract: physical storage divergence is a controlled integrity incident, not 404/success.
+  const integrityDocRes = await request('/api/documents/upload-sessions', {
+    method: 'POST',
+    body: {
+      category: 'identification',
+      declaredFilename: 'integrity_probe.pdf',
+      declaredMimeType: 'application/pdf',
+      declaredByteSize: fileBytes.length,
+      idempotencyKey: 'idem-integrity-doc-create-1',
+    },
+  });
+  assert.equal(integrityDocRes.status, 201);
+  const integrityDocBody = (await integrityDocRes.json()) as any;
+  await storageProvider.simulateDirectUpload({
+    storageBucket: 'documents-vault',
+    storageKey: integrityDocBody.session.storageKey,
+    content: fileBytes,
+    mimeType: 'application/pdf',
+  });
+  const integrityCompleteRes = await request(
+    `/api/documents/upload-sessions/${integrityDocBody.sessionId}/complete`,
+    {
+      method: 'POST',
+      body: {
+        rawToken: integrityDocBody.rawToken,
+        idempotencyKey: 'idem-integrity-doc-complete-1',
+      },
+    },
+  );
+  assert.equal(integrityCompleteRes.status, 200);
+  const integrityCompleteBody = (await integrityCompleteRes.json()) as any;
+  const integrityVersionId = integrityCompleteBody.version.id;
+  await pool.query(`UPDATE document_versions SET status = 'available' WHERE id = $1`, [
+    integrityVersionId,
+  ]);
+
+  const integrityAuthRes = await request(
+    `/api/documents/${integrityDocBody.documentId}/access`,
+    {
+      method: 'POST',
+      body: {
+        versionId: integrityVersionId,
+        action: 'open',
+        idempotencyKey: 'idem-integrity-access-1',
+      },
+    },
+  );
+  assert.equal(integrityAuthRes.status, 201);
+  const integrityAuthBody = (await integrityAuthRes.json()) as any;
+  await storageProvider.deleteObject({
+    storageBucket: 'documents-vault',
+    storageKey: integrityDocBody.session.storageKey,
+  });
+  const integrityExchangeRes = await request('/api/documents/access/exchange', {
+    method: 'POST',
+    body: { rawAccessToken: integrityAuthBody.rawAccessToken },
+  });
+  assert.equal(integrityExchangeRes.status, 409);
+  const integrityExchangeBody = (await integrityExchangeRes.json()) as any;
+  assert.equal(
+    integrityExchangeBody.error,
+    'DOCUMENT_STORAGE_INTEGRITY_INCIDENT',
+    'Missing physical bytes for AVAILABLE content must surface as controlled integrity incident',
+  );
+
   // Revoke access grant: POST /api/documents/access/:grantId/revoke
   const revokeRes = await request(`/api/documents/access/${grantId}/revoke`, {
     method: 'POST',

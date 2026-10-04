@@ -184,6 +184,30 @@ export function rejectDomainError(res: Response, error: unknown): Response {
       );
     }
 
+    // 409 Conflict - canonical metadata and physical storage disagree.
+    // Do not expose provider locators or internal storage details to callers.
+    if (
+      msg.includes('STORAGE_INTEGRITY_INCIDENT') ||
+      msg.includes('LOCAL_UAT_STORAGE_INTEGRITY_FAILURE')
+    ) {
+      return reject(
+        res,
+        409,
+        'O conteúdo físico do documento não corresponde ao estado documental registado. O acesso foi bloqueado para proteção da integridade.',
+        'DOCUMENT_STORAGE_INTEGRITY_INCIDENT',
+      );
+    }
+
+    // 503 Service Unavailable - LOCAL_UAT could not achieve durable persistence.
+    if (msg.includes('LOCAL_UAT_DURABILITY_FAILURE')) {
+      return reject(
+        res,
+        503,
+        'O armazenamento documental não conseguiu confirmar persistência durável. A operação foi interrompida em segurança.',
+        'DOCUMENT_STORAGE_DURABILITY_UNAVAILABLE',
+      );
+    }
+
     // 404 Not Found
     if (
       msg.includes('not found in institution') ||
