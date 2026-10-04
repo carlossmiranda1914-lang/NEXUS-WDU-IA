@@ -322,6 +322,7 @@ export async function transitionAssociationStatusCommand(input: {
 
   const repo = new PostgresDocumentAssociationRepository();
   const auditRepo = new PostgresDocumentAuditRepository();
+  const outboxRepo = new PostgresDocumentOutboxRepository();
 
   // Association ownership & existence lookup
   const assoc = await repo.getAssociationById(pool, context.institutionId, commandInput.associationId);
@@ -377,6 +378,15 @@ export async function transitionAssociationStatusCommand(input: {
       canonicalFingerprint,
     },
     execute: async (client) => {
+      const currentRes = await client.query<{ status: AssociationStatus }>(
+        `SELECT status FROM document_associations WHERE institution_id = $1 AND id = $2 FOR UPDATE`,
+        [context.institutionId, commandInput.associationId],
+      );
+      if (currentRes.rows.length === 0) {
+        throw new Error(`Association ${commandInput.associationId} not found in institution`);
+      }
+      const previousStatus = currentRes.rows[0].status;
+
       const association = await repo.transitionStatus(
         client,
         context.institutionId,
@@ -396,6 +406,27 @@ export async function transitionAssociationStatusCommand(input: {
           associationId: association.id,
           targetStatus: commandInput.targetStatus,
           reason: commandInput.reason ?? null,
+        },
+      });
+
+      await outboxRepo.insertEvent(client, {
+        institutionId: context.institutionId,
+        eventType: 'document.association_changed',
+        aggregateType: 'document_association',
+        aggregateId: association.id,
+        actorPersonId: context.personId,
+        actorKind: 'user',
+        correlationId: commandInput.correlationId ?? null,
+        causationId: association.id,
+        payload: {
+          associationId: association.id,
+          documentId: association.documentId,
+          previousStatus,
+          newStatus: association.status,
+          pinnedVersionId: association.pinnedVersionId,
+          targetDomain: association.targetDomain,
+          targetResourceType: association.targetResourceType,
+          purpose: association.purpose,
         },
       });
 

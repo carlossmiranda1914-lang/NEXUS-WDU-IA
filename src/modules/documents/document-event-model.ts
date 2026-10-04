@@ -13,6 +13,7 @@ export const DOCUMENT_EVENT_TYPES = [
   'document.verification_passed',
   'document.quarantined',
   'document.association_created',
+  'document.association_changed',
   'document.access_granted',
   'document.access_revoked',
   'document.retention_assigned',

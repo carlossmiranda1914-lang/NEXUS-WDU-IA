@@ -9,7 +9,7 @@ import {
 } from '../src/modules/documents/document-event-model.ts';
 
 describe('Documents Events Model & Payload Security (I7)', () => {
-  it('should define exactly the 15 canonical document event types', () => {
+  it('should define exactly the 16 canonical document event types', () => {
     const expectedEvents: DocumentEventType[] = [
       'document.created',
       'document.version_created',
@@ -17,6 +17,7 @@ describe('Documents Events Model & Payload Security (I7)', () => {
       'document.verification_passed',
       'document.quarantined',
       'document.association_created',
+      'document.association_changed',
       'document.access_granted',
       'document.access_revoked',
       'document.retention_assigned',
@@ -28,7 +29,7 @@ describe('Documents Events Model & Payload Security (I7)', () => {
       'document.deletion_reconciliation_required',
     ];
 
-    assert.equal(DOCUMENT_EVENT_TYPES.length, 15);
+    assert.equal(DOCUMENT_EVENT_TYPES.length, 16);
     for (const expected of expectedEvents) {
       assert.ok(
         DOCUMENT_EVENT_TYPES.includes(expected),
