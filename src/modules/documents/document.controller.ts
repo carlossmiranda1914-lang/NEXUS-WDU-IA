@@ -2162,8 +2162,15 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    const authDecision = authAuthority.authorize({
+      institutionId: context.institutionId,
+      personId: context.personId,
+      role: context.role,
+      action: 'execute_deletion',
+      documentId: req.params.id,
+    });
     const isManager = ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(context.role);
-    if (!isManager) {
+    if (!authDecision.allowed || !isManager) {
       return reject(res, 403, 'Apenas administradores podem executar a eliminação.', 'AUTHORIZATION_DENIED');
     }
 
@@ -2191,6 +2198,7 @@ export function registerDocumentRoutes(
         idempotencyKey,
         deletionPseudonymizationKey,
         storageProvider,
+        authorizationAuthority: authAuthority,
         input: {
           deletionAuthorizationId,
           correlationId: req.header('x-correlation-id') || null,
@@ -2213,6 +2221,18 @@ export function registerDocumentRoutes(
     const context = req.institutionalContext;
     if (!context) return reject(res, 401, 'Autenticação institucional necessária.');
 
+    const authDecision = authAuthority.authorize({
+      institutionId: context.institutionId,
+      personId: context.personId,
+      role: context.role,
+      action: 'reconcile_deletion',
+      documentId: req.params.id,
+    });
+    const isManager = ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(context.role);
+    if (!authDecision.allowed || !isManager) {
+      return reject(res, 403, 'Apenas administradores podem reconciliar a eliminação.', 'AUTHORIZATION_DENIED');
+    }
+
     if (!deletionPseudonymizationKey) {
       return rejectDomainError(res, new Error('DELETION_PSEUDONYMIZATION_KEY_MISSING'));
     }
@@ -2234,6 +2254,7 @@ export function registerDocumentRoutes(
         context,
         deletionPseudonymizationKey,
         storageProvider,
+        authorizationAuthority: authAuthority,
         input: {
           deletionAuthorizationId,
           correlationId: req.header('x-correlation-id') || null,

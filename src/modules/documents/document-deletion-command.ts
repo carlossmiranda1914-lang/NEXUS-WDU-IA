@@ -41,6 +41,11 @@ import {
 } from './document-retention-repository.ts';
 import { PostgresDocumentAuditRepository } from './document-audit.ts';
 import { PostgresDocumentOutboxRepository } from './document-event-repository.ts';
+import {
+  DefaultDocumentAuthorizationAuthority,
+  createDefaultDocumentAuthorizationRules,
+  type DocumentAuthorizationAuthority,
+} from './document-authorization-policy.ts';
 
 const retentionAssignmentRepo = new PostgresRetentionAssignmentRepository();
 const holdRepo = new PostgresRetentionHoldRepository();
@@ -67,6 +72,7 @@ export async function executeDeletionCommand(params: {
   idempotencyKey: string;
   deletionPseudonymizationKey: string;
   storageProvider: ObjectStorageProvider;
+  authorizationAuthority?: DocumentAuthorizationAuthority;
   input: ExecuteDeletionInput;
 }): Promise<{ replayed: boolean; result: ExecuteDeletionResult }> {
   const {
@@ -85,6 +91,7 @@ export async function executeDeletionCommand(params: {
   // Check idempotency ledger first
   const client0 = await pool.connect();
   let auth: Awaited<ReturnType<typeof deletionAuthRepo.getById>>;
+  let versionByteSize = 0;
   try {
     const existingIdem = await client0.query<{
       request_fingerprint: string;
@@ -119,6 +126,59 @@ export async function executeDeletionCommand(params: {
     auth = await deletionAuthRepo.getById(client0, context.institutionId, input.deletionAuthorizationId);
     if (!auth) {
       throw new Error(`DELETION_AUTHORIZATION_NOT_FOUND: ${input.deletionAuthorizationId}`);
+    }
+
+    // Verify document exists and belongs to institution
+    const docRes = await client0.query<{ id: string; category: string; status: string }>(
+      `SELECT id, category, status FROM documents
+       WHERE institution_id = $1 AND id = $2`,
+      [context.institutionId, auth.documentId],
+    );
+    if (docRes.rows.length === 0) {
+      throw new Error(`DOCUMENT_NOT_FOUND: ${auth.documentId}`);
+    }
+    const docCategory = docRes.rows[0].category;
+
+    // Verify version exists, belongs to institution, and belongs to document
+    const verRes = await client0.query<{ id: string; document_id: string; byte_size: string | number; status: string }>(
+      `SELECT id, document_id, byte_size, status FROM document_versions
+       WHERE institution_id = $1 AND id = $2`,
+      [context.institutionId, auth.versionId],
+    );
+    if (verRes.rows.length === 0 || verRes.rows[0].document_id !== auth.documentId) {
+      throw new Error(`DOCUMENT_VERSION_NOT_FOUND: ${auth.versionId}`);
+    }
+    versionByteSize = Number(verRes.rows[0].byte_size);
+
+    // Verify retention assignment exists and belongs to institution and version
+    const a = await retentionAssignmentRepo.getByVersionId(client0, context.institutionId, auth.versionId);
+    if (!a || a.id !== auth.retentionAssignmentId) {
+      throw new Error(`RETENTION_ASSIGNMENT_MISSING: ${auth.retentionAssignmentId}`);
+    }
+
+    // Central H1 Authorization Authority check (action=execute_deletion)
+    const authAuthority =
+      params.authorizationAuthority ??
+      new DefaultDocumentAuthorizationAuthority({
+        rules: createDefaultDocumentAuthorizationRules(),
+      });
+
+    const authDecision = authAuthority.authorize({
+      institutionId: context.institutionId,
+      personId: context.personId,
+      role: context.role,
+      action: 'execute_deletion',
+      documentId: auth.documentId,
+      versionId: auth.versionId,
+      documentCategory: docCategory,
+      documentStatus: docRes.rows[0].status as any,
+      versionStatus: verRes.rows[0].status as any,
+    });
+
+    if (!authDecision.allowed) {
+      throw new Error(
+        `DELETION_AUTHORITY_DENIED: Role '${context.role}' is not authorized to execute deletion. Reason: ${authDecision.reasonCode}`,
+      );
     }
 
     if (auth.authorizationStatus === 'deleted') {
@@ -286,8 +346,15 @@ export async function executeDeletionCommand(params: {
       failReason = `STORAGE_EXCEPTION: ${storageErr instanceof Error ? storageErr.message : String(storageErr)}`;
     }
   } else {
-    // No storage reference (e.g. metadata-only version)
-    physicalDeleteConfirmed = true;
+    // Audit for no storage reference:
+    // If version has byte_size > 0, missing storage reference is ambiguous/corrupted -> fail closed!
+    if (versionByteSize > 0) {
+      failReason = 'MISSING_STORAGE_REFERENCE_FOR_STORED_CONTENT';
+      physicalDeleteConfirmed = false;
+    } else {
+      // Genuinely 0-byte metadata-only version
+      physicalDeleteConfirmed = true;
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -462,6 +529,7 @@ export async function reconcileDeletionCommand(params: {
   context: InstitutionalContext;
   deletionPseudonymizationKey: string;
   storageProvider: ObjectStorageProvider;
+  authorizationAuthority?: DocumentAuthorizationAuthority;
   input: ReconcileDeletionInput;
 }): Promise<ExecuteDeletionResult> {
   const { pool, context, deletionPseudonymizationKey, storageProvider, input } = params;
@@ -470,6 +538,7 @@ export async function reconcileDeletionCommand(params: {
 
   let auth: Awaited<ReturnType<typeof deletionAuthRepo.getById>>;
   let storageRef: { storageBucket: string; storageKey: string } | null = null;
+  let versionByteSize = 0;
 
   const client = await pool.connect();
   try {
@@ -479,6 +548,70 @@ export async function reconcileDeletionCommand(params: {
     if (!auth) {
       throw new Error(`DELETION_AUTHORIZATION_NOT_FOUND: ${input.deletionAuthorizationId}`);
     }
+
+    // Verify document exists and belongs to institution
+    const docRes = await client.query<{ id: string; category: string; status: string }>(
+      `SELECT id, category, status FROM documents
+       WHERE institution_id = $1 AND id = $2`,
+      [context.institutionId, auth.documentId],
+    );
+    if (docRes.rows.length === 0) {
+      throw new Error(`DOCUMENT_NOT_FOUND: ${auth.documentId}`);
+    }
+    const docCategory = docRes.rows[0].category;
+
+    // Verify version exists, belongs to institution, and belongs to document
+    const verRes = await client.query<{ id: string; document_id: string; byte_size: string | number; status: string }>(
+      `SELECT id, document_id, byte_size, status FROM document_versions
+       WHERE institution_id = $1 AND id = $2`,
+      [context.institutionId, auth.versionId],
+    );
+    if (verRes.rows.length === 0 || verRes.rows[0].document_id !== auth.documentId) {
+      throw new Error(`DOCUMENT_VERSION_NOT_FOUND: ${auth.versionId}`);
+    }
+    versionByteSize = Number(verRes.rows[0].byte_size);
+
+    // Verify retention assignment exists and belongs to institution and version
+    const a = await retentionAssignmentRepo.getByVersionId(client, context.institutionId, auth.versionId);
+    if (!a || a.id !== auth.retentionAssignmentId) {
+      throw new Error(`RETENTION_ASSIGNMENT_MISSING: ${auth.retentionAssignmentId}`);
+    }
+
+    // Check active holds before any storage probing
+    const activeHolds = await holdRepo.countActiveHoldsForVersion(
+      client, context.institutionId, auth.versionId,
+    );
+    if (activeHolds > 0) {
+      throw new Error(
+        `ACTIVE_HOLD_PREVENTS_DELETION: ${activeHolds} active hold(s) block deletion reconciliation.`,
+      );
+    }
+
+    // Central H1 Authorization Authority check (action=reconcile_deletion)
+    const authAuthority =
+      params.authorizationAuthority ??
+      new DefaultDocumentAuthorizationAuthority({
+        rules: createDefaultDocumentAuthorizationRules(),
+      });
+
+    const authDecision = authAuthority.authorize({
+      institutionId: context.institutionId,
+      personId: context.personId,
+      role: context.role,
+      action: 'reconcile_deletion',
+      documentId: auth.documentId,
+      versionId: auth.versionId,
+      documentCategory: docCategory,
+      documentStatus: docRes.rows[0].status as any,
+      versionStatus: verRes.rows[0].status as any,
+    });
+
+    if (!authDecision.allowed) {
+      throw new Error(
+        `DELETION_AUTHORITY_DENIED: Role '${context.role}' is not authorized to reconcile deletion. Reason: ${authDecision.reasonCode}`,
+      );
+    }
+
     if (auth.authorizationStatus === 'deleted') {
       const dr = await deletionRecordRepo.getByAuthorizationId(client, context.institutionId, auth.id);
       if (dr) return { deletionRecord: dr, reconciliationRequired: false };
@@ -513,7 +646,12 @@ export async function reconcileDeletionCommand(params: {
   // Probe storage
   let storageGone = false;
   if (!storageRef) {
-    storageGone = true;
+    if (versionByteSize > 0) {
+      // Unreferenced stored content cannot be confirmed deleted
+      storageGone = false;
+    } else {
+      storageGone = true;
+    }
   } else {
     try {
       const headResult = await storageProvider.headObject({
@@ -529,13 +667,15 @@ export async function reconcileDeletionCommand(params: {
           storageBucket: storageRef.storageBucket,
           storageKey: storageRef.storageKey,
         });
-        if (deleteResult.deleted) {
+        if (deleteResult.deleted || deleteResult.errorCode === 'OBJECT_NOT_FOUND') {
           const confirmHead = await storageProvider.headObject({
             institutionId: context.institutionId,
             storageBucket: storageRef.storageBucket,
             storageKey: storageRef.storageKey,
           });
           storageGone = !confirmHead.exists;
+        } else {
+          storageGone = false;
         }
       }
     } catch {
@@ -547,6 +687,26 @@ export async function reconcileDeletionCommand(params: {
   const client2 = await pool.connect();
   try {
     await client2.query('BEGIN');
+
+    // Acquire row-level lock on document_versions and re-verify holds under lock
+    const verLock = await client2.query<{ id: string; status: string }>(
+      `SELECT id, status FROM document_versions
+        WHERE institution_id = $1 AND id = $2 AND document_id = $3
+        FOR UPDATE`,
+      [context.institutionId, auth.versionId, auth.documentId],
+    );
+    if (verLock.rows.length === 0) {
+      throw new Error(`DOCUMENT_VERSION_NOT_FOUND: version ${auth.versionId}`);
+    }
+
+    const activeHolds = await holdRepo.countActiveHoldsForVersion(
+      client2, context.institutionId, auth.versionId,
+    );
+    if (activeHolds > 0) {
+      throw new Error(
+        `ACTIVE_HOLD_PREVENTS_DELETION: ${activeHolds} active hold(s) block deletion reconciliation.`,
+      );
+    }
 
     if (storageGone) {
       // Finalize deletion
