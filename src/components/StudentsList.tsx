@@ -144,7 +144,6 @@ export default function StudentsList({ students, currentUserRole, onAddStudent, 
   const [editStatus, setEditStatus] = useState<'active' | 'inactive'>('active');
   const [editGuardiansName, setEditGuardiansName] = useState('');
   const [editGuardiansContact, setEditGuardiansContact] = useState('');
-  const [editOutstandingFees, setEditOutstandingFees] = useState(0);
 
   // Form State
   const [isAdding, setIsAdding] = useState(false);
@@ -225,7 +224,7 @@ export default function StudentsList({ students, currentUserRole, onAddStudent, 
       attendanceRate: 100,
       averageGrade: 8.0,
       status: 'active',
-      outstandingFees: Number(newFees),
+      outstandingFees: 0,
       guardiansName: newGuardiansName,
       guardiansContact: newGuardiansContact,
       behaviorDegree: 'Excelente',
@@ -344,8 +343,7 @@ export default function StudentsList({ students, currentUserRole, onAddStudent, 
                           class: editClass,
                           status: editStatus,
                           guardiansName: editGuardiansName,
-                          guardiansContact: editGuardiansContact,
-                          outstandingFees: Number(editOutstandingFees)
+                          guardiansContact: editGuardiansContact
                         });
                         setSelectedStudent({
                           ...selectedStudent,
@@ -353,8 +351,7 @@ export default function StudentsList({ students, currentUserRole, onAddStudent, 
                           class: editClass,
                           status: editStatus,
                           guardiansName: editGuardiansName,
-                          guardiansContact: editGuardiansContact,
-                          outstandingFees: Number(editOutstandingFees)
+                          guardiansContact: editGuardiansContact
                         });
                         setIsEditingProfile(false);
                       } else {
@@ -364,7 +361,6 @@ export default function StudentsList({ students, currentUserRole, onAddStudent, 
                         setEditStatus(selectedStudent.status);
                         setEditGuardiansName(selectedStudent.guardiansName);
                         setEditGuardiansContact(selectedStudent.guardiansContact);
-                        setEditOutstandingFees(selectedStudent.outstandingFees);
                         setIsEditingProfile(true);
                       }
                     }}
@@ -514,12 +510,13 @@ export default function StudentsList({ students, currentUserRole, onAddStudent, 
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] uppercase font-mono text-zinc-500 block">Mensalidade Pendente (€)</label>
+                        <label className="text-[9px] uppercase font-mono text-zinc-500 block">Mensalidade Pendente (€) (Regulado pelo Ledger)</label>
                         <input
                           type="number"
-                          value={editOutstandingFees}
-                          onChange={(e) => setEditOutstandingFees(Number(e.target.value))}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-205 outline-none font-mono"
+                          value={selectedStudent.outstandingFees}
+                          disabled
+                          readOnly
+                          className="w-full bg-zinc-900/50 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-400 outline-none font-mono cursor-not-allowed"
                           placeholder="0"
                         />
                       </div>
@@ -864,13 +861,6 @@ export default function StudentsList({ students, currentUserRole, onAddStudent, 
                                     onClick={async () => {
                                       try {
                                         await upsertLiveInvoice({ ...inv, status: 'paid' });
-                                        // Update state locally
-                                        setSelectedStudent(prev => {
-                                          if (!prev) return prev;
-                                          const rem = Math.max(0, prev.outstandingFees - inv.amount);
-                                          onUpdateStudent(prev.id, { outstandingFees: rem });
-                                          return { ...prev, outstandingFees: rem };
-                                        });
                                       } catch (err: any) {
                                         alert(err.message);
                                       }
@@ -883,13 +873,6 @@ export default function StudentsList({ students, currentUserRole, onAddStudent, 
                                     onClick={async () => {
                                       try {
                                         await cancelLiveInvoice(inv.id);
-                                        // Update state locally
-                                        setSelectedStudent(prev => {
-                                          if (!prev) return prev;
-                                          const rem = Math.max(0, prev.outstandingFees - inv.amount);
-                                          onUpdateStudent(prev.id, { outstandingFees: rem });
-                                          return { ...prev, outstandingFees: rem };
-                                        });
                                       } catch (err: any) {
                                         alert(err.message);
                                       }

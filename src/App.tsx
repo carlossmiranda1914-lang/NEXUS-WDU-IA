@@ -1354,20 +1354,6 @@ export default function App() {
     setInvoices(prev => {
       const nextInvoices = prev.map(i => {
         if (i.id === id) {
-          const amountDiff = status === 'paid' ? -i.amount : i.amount;
-          setStudents(prevStuds => {
-            const nextStuds = prevStuds.map(s => {
-              if (s.id === i.studentId) {
-                const updatedSt = { ...s, outstandingFees: Math.max(0, s.outstandingFees + amountDiff) };
-                if (supabaseConfigured) {
-                  upsertLiveStudent(updatedSt).catch(err => console.error("Error syncing student outstanding fees:", err));
-                }
-                return updatedSt;
-              }
-              return s;
-            });
-            return nextStuds;
-          });
           const updatedIv = { ...i, status };
           if (supabaseConfigured) {
             upsertLiveInvoice(updatedIv).catch(err => console.error("Error updating invoice status:", err));
@@ -1422,19 +1408,6 @@ export default function App() {
     const id = `FAT-${Math.floor(8810 + Math.random() * 1000)}`;
     const invoice: Invoice = { ...newInv, id };
     setInvoices(prev => {
-      setStudents(prevStuds => {
-        const nextStuds = prevStuds.map(s => {
-          if (s.name.toLowerCase() === newInv.studentName.toLowerCase()) {
-            const updatedSt = { ...s, outstandingFees: s.outstandingFees + newInv.amount };
-            if (supabaseConfigured) {
-              upsertLiveStudent(updatedSt).catch(err => console.error("Error updating student outstanding fees for invoice:", err));
-            }
-            return updatedSt;
-          }
-          return s;
-        });
-        return nextStuds;
-      });
       if (supabaseConfigured) {
         upsertLiveInvoice(invoice).catch(err => console.error("Error creating invoice:", err));
       }

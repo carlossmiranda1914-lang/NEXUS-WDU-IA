@@ -18,8 +18,8 @@ export interface FinanceWorkspaceProps {
   initialContextQuery?: { financialAccountId?: string; studentRef?: string; enrollmentId?: string } | null;
 }
 
-const initialPrimaryView = (tab: FinanceTab): FinancePrimaryView => ({ operations: 'FINANCIAL_SITUATION', catalogue: 'FEE_CATALOGUE', obligations: 'COLLECTION_OBLIGATIONS', recebimentos: 'COLLECTION_PAYMENTS', documents: 'COLLECTION_DOCUMENTS', configuration: 'CONFIGURATION' })[tab];
-const activeTabForView = (view: FinancePrimaryView): FinanceTab => ({ FINANCIAL_SITUATION: 'operations', FEE_CATALOGUE: 'catalogue', COLLECTION_OBLIGATIONS: 'obligations', DETAIL_OBLIGATION: 'obligations', COLLECTION_PAYMENTS: 'recebimentos', DETAIL_PAYMENT: 'recebimentos', COLLECTION_DOCUMENTS: 'documents', DETAIL_FINANCIAL_DOCUMENT: 'documents', CONFIGURATION: 'configuration' })[view];
+const initialPrimaryView = (tab: FinanceTab): FinancePrimaryView => ({ operations: 'FINANCIAL_SITUATION', catalogue: 'FEE_CATALOGUE', obligations: 'COLLECTION_OBLIGATIONS', recebimentos: 'COLLECTION_PAYMENTS', documents: 'COLLECTION_DOCUMENTS', configuration: 'CONFIGURATION' } as const)[tab];
+const activeTabForView = (view: FinancePrimaryView): FinanceTab => ({ FINANCIAL_SITUATION: 'operations', FEE_CATALOGUE: 'catalogue', COLLECTION_OBLIGATIONS: 'obligations', DETAIL_OBLIGATION: 'obligations', COLLECTION_PAYMENTS: 'recebimentos', DETAIL_PAYMENT: 'recebimentos', COLLECTION_DOCUMENTS: 'documents', DETAIL_FINANCIAL_DOCUMENT: 'documents', CONFIGURATION: 'configuration' } as const)[view];
 
 export function FinanceWorkspace({ theme = 'light', initialTab = 'operations', initialFinancialAccountId, initialContextQuery }: FinanceWorkspaceProps) {
   const [primaryView, setPrimaryView] = useState<FinancePrimaryView>(() => initialPrimaryView(initialTab));
