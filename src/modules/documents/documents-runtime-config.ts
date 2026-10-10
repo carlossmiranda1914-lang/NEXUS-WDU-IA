@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { ObjectStorageProvider } from './object-storage-provider.ts';
 import {
   type DocumentAccessPolicyEngine,
@@ -76,9 +77,23 @@ function createLocalUatRetentionPolicies(): RetentionPolicyConfig[] {
 // Singleton local UAT storage provider for in-memory persistence during local sessions
 let sharedLocalUatStorageProvider: LocalUatObjectStorageProvider | null = null;
 
-export function getSharedLocalUatStorageProvider(): LocalUatObjectStorageProvider {
+export function getSharedLocalUatStorageProvider(customDir?: string): LocalUatObjectStorageProvider {
   if (!sharedLocalUatStorageProvider) {
-    sharedLocalUatStorageProvider = new LocalUatObjectStorageProvider();
+    const rawDir = customDir || process.env.DOCUMENTS_LOCAL_UAT_STORAGE_DIR;
+    if (!rawDir) {
+      throw new Error(
+        'LOCAL_UAT_STORAGE_DIR_REQUIRED: Local UAT storage requires explicit absolute path configuration (DOCUMENTS_LOCAL_UAT_STORAGE_DIR).',
+      );
+    }
+    if (!path.isAbsolute(rawDir)) {
+      throw new Error(
+        `LOCAL_UAT_STORAGE_DIR_MUST_BE_ABSOLUTE: DOCUMENTS_LOCAL_UAT_STORAGE_DIR must be an absolute path: "${rawDir}".`,
+      );
+    }
+    sharedLocalUatStorageProvider = new LocalUatObjectStorageProvider(rawDir);
+    console.log(
+      `[DOCUMENTS STORAGE] Local UAT Storage Provider initialized with verified absolute directory: ${sharedLocalUatStorageProvider.getEffectiveBaseDir()}`,
+    );
   }
   return sharedLocalUatStorageProvider;
 }

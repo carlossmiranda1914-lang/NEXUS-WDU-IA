@@ -1,6 +1,6 @@
 # NEXUS Project State
 
-Updated: 2026-09-22
+Updated: 2026-10-02
 
 ## Integrated baseline
 
@@ -77,6 +77,39 @@ Canonical baseline: `codex/nexus-integrated-portal-v1 @ 47ad75d549bebfa5aa340996
 
 Existing Finance evidence includes the F7 coherence plan (`docs/superpowers/plans/2026-09-16-finance-f7-coherence-solidification.md`), the Task 9 design/specification, and the Task 7/8 closure references in `docs/operations/NEXUS_EXECUTION_CONTRACT_PILOT.md`.
 
+## Finance manual payment destination — unintegrated worktree checkpoint
+
+This is a bounded correction checkpoint, not an update to the integrated
+baseline or a claim that its working-tree changes are part of `HEAD`.
+
+- Evaluated worktree: `codex/nexus-integrated-portal-v1 @ 7b9bb1fdde01e977a1c0e0304a0dcd37981d6800`, with tracked local changes.
+- Scope: new `manual_offline` confirmations require an active financial
+  account of the active institution before financial writes; the same rule is
+  present in `payment-service.ts` and `confirmPaymentInCommand` in
+  `payment-repository.ts`. Existing idempotent historical replay, nullable
+  historical reads, and provider-origin treatment are preserved.
+- Authorization reconciliation (2026-10-02): the explicit authorization was
+  recorded after the existing correction and now covers those two narrowly
+  scoped backend guards, the associated frontend flow, and directly affected
+  tests. It is not a technical approval, integration approval, or UAT result.
+- UI: the contextual account is retained when entering from an account; the
+  generic receipt flow requires explicit active-account selection and carries
+  the same `financialAccountId` through review and confirmation.
+- Reported focused evidence: payment HTTP/PostgreSQL, operational-context
+  PostgreSQL and UI contracts passed; runtime visual checks covered both entry
+  paths without confirming a payment.
+- Affected unintegrated Finance files include
+  `src/modules/finance/payment-service.ts`,
+  `src/modules/finance/payment-repository.ts`,
+  `src/components/finance/payments/FinancePaymentCreateView.tsx`, and their
+  focused payment/operational-context/UI tests. These names identify the
+  evaluated diff; they do not assign unrelated working-tree changes to it.
+- `INDEPENDENT_REVIEW=PENDING`. The implementer is not the sole integration
+  approver. `HUMAN_UAT_GREEN=BLOCKED`: the current tracked-dirty worktree is
+  not a valid formal-UAT/integration input under the engineering config.
+- This checkpoint does not reopen F1–F8, resolve H2/H3/H4, start Task 9, or
+  change Documents ownership, gates, or scope.
+
 ## Deferred / Planned stages
 
 - **Documents I9**: `NOT AUTHORIZED` / `NOT STARTED`.
@@ -99,6 +132,17 @@ Existing Finance evidence includes the F7 coherence plan (`docs/superpowers/plan
 - Legacy `outstandingFees` remains non-canonical Finance authority.
 - Migration history remains immutable.
 - Finance Foundation Tasks 1–8 are not reopened without concrete regression evidence and explicit authorization.
+- Finance consumes Academic references while preserving Finance historical
+  facts; it does not own or rewrite Academic history.
+- Obligation, financial document, receipt/payment, allocation and
+  reconciliation are distinct authorities. A balance is calculated from
+  authoritative facts per financial account and currency, never directly edited.
+- Exact decimal values, defined rounding and transaction currency are preserved
+  at their respective authority boundaries.
+- Institutional isolation, authorization, audit and exception approval remain
+  server-authoritative and fail closed.
+- Critical commands require atomic persistence, idempotency and concurrency
+  evidence; receipt evidence must remain appropriate to its payment method.
 
 ## Engineering governance
 

@@ -1,7 +1,14 @@
 import { strict as assert } from 'node:assert';
 import { createHash, randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
+import path from 'node:path';
+import dotenv from 'dotenv';
 import express from 'express';
+
+dotenv.config({ path: path.resolve(process.cwd(), '.env.test.local'), override: false });
+if (!process.env.DOCUMENTS_LOCAL_UAT_STORAGE_DIR) {
+  process.env.DOCUMENTS_LOCAL_UAT_STORAGE_DIR = path.resolve(process.cwd(), '.uat-storage');
+}
 import { GoogleCloudStorageObjectProvider } from '../src/modules/documents/google-cloud-storage-provider.ts';
 import { resolveDocumentsOperationalConfig } from '../src/modules/documents/documents-runtime-config.ts';
 import { registerDocumentRoutes } from '../src/modules/documents/document.controller.ts';
@@ -231,17 +238,26 @@ async function run() {
   // TEST 9: CONFIG_RESOLVER & FAIL-CLOSED CHECKS
   console.log('[TEST 9] CONFIG_RESOLVER & FAIL-CLOSED CHECKS...');
 
-  // 9A: Empty environment -> All null
-  const emptyConfig = resolveDocumentsOperationalConfig({ env: {} });
-  assert.equal(emptyConfig.storageProvider, null);
-  assert.equal(emptyConfig.storageBucket, null);
-  assert.equal(emptyConfig.uploadPolicyConfig, null);
-  assert.equal(emptyConfig.accessGrantTokenKey, null);
-  assert.equal(emptyConfig.deletionPseudonymizationKey, null);
+  // 9A: Empty production environment -> All null (fail-closed)
+  const emptyProdConfig = resolveDocumentsOperationalConfig({ env: { NODE_ENV: 'production' } });
+  assert.equal(emptyProdConfig.storageProvider, null);
+  assert.equal(emptyProdConfig.storageBucket, null);
+  assert.equal(emptyProdConfig.uploadPolicyConfig, null);
+  assert.equal(emptyProdConfig.accessGrantTokenKey, null);
+  assert.equal(emptyProdConfig.deletionPseudonymizationKey, null);
 
-  // 9B: Short secret (< 32 chars) -> Rejected fail-closed
+  // 9A-local: Empty local/development environment -> Local UAT defaults provided
+  const emptyLocalConfig = resolveDocumentsOperationalConfig({ env: { NODE_ENV: 'development' } });
+  assert.equal(emptyLocalConfig.storageProvider?.providerName, 'local_uat');
+  assert.equal(emptyLocalConfig.storageBucket, 'nexus-local-uat-documents-bucket');
+  assert.ok(emptyLocalConfig.uploadPolicyConfig);
+  assert.ok(emptyLocalConfig.accessGrantTokenKey);
+  assert.ok(emptyLocalConfig.deletionPseudonymizationKey);
+
+  // 9B: Short secret (< 32 chars) in production -> Rejected fail-closed
   const shortSecretConfig = resolveDocumentsOperationalConfig({
     env: {
+      NODE_ENV: 'production',
       DOCUMENTS_ACCESS_GRANT_TOKEN_KEY: 'too-short',
       DOCUMENTS_DELETION_PSEUDONYMIZATION_KEY: 'also-too-short',
       DOCUMENTS_STORAGE_BUCKET: BUCKET,

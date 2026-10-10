@@ -6,6 +6,7 @@ import type {
   DocumentProvenanceRecord,
   ProvenanceOriginType,
   StorageObjectReferenceRecord,
+  StorageContentAvailability,
 } from './document-model.ts';
 import {
   validateDocumentCategory,
@@ -42,6 +43,8 @@ export interface CreateVersionInput {
     storageProvider: string;
     storageBucket: string;
     storageKey: string;
+    contentAvailability?: StorageContentAvailability;
+    unavailableReason?: string | null;
   };
 }
 
@@ -236,6 +239,9 @@ export class PostgresDocumentRepository {
     // 5. Insert optional storage reference
     let storageRecord: StorageObjectReferenceRecord | undefined;
     if (input.storageReference) {
+      const initialAvailability =
+        input.storageReference.contentAvailability ??
+        (input.status === 'available' ? 'available' : 'unknown');
       const sResult = await client.query<{
         id: string;
         institution_id: string;
@@ -243,18 +249,24 @@ export class PostgresDocumentRepository {
         storage_provider: string;
         storage_bucket: string;
         storage_key: string;
+        content_availability: StorageContentAvailability;
+        last_checked_at: Date | null;
+        unavailable_reason: string | null;
         created_at: Date;
       }>(
         `INSERT INTO document_storage_references (
-          institution_id, version_id, storage_provider, storage_bucket, storage_key
-        ) VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, institution_id, version_id, storage_provider, storage_bucket, storage_key, created_at`,
+          institution_id, version_id, storage_provider, storage_bucket, storage_key, content_availability, last_checked_at, unavailable_reason
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id, institution_id, version_id, storage_provider, storage_bucket, storage_key, content_availability, last_checked_at, unavailable_reason, created_at`,
         [
           input.institutionId,
           versionRecord.id,
           input.storageReference.storageProvider,
           input.storageReference.storageBucket,
           input.storageReference.storageKey,
+          initialAvailability,
+          initialAvailability === 'available' ? new Date() : null,
+          input.storageReference.unavailableReason || null,
         ],
       );
 
@@ -266,6 +278,9 @@ export class PostgresDocumentRepository {
         storageProvider: sRow.storage_provider,
         storageBucket: sRow.storage_bucket,
         storageKey: sRow.storage_key,
+        contentAvailability: sRow.content_availability,
+        lastCheckedAt: sRow.last_checked_at,
+        unavailableReason: sRow.unavailable_reason,
         createdAt: sRow.created_at,
       };
     }
@@ -444,9 +459,13 @@ export class PostgresDocumentRepository {
       storage_provider: string;
       storage_bucket: string;
       storage_key: string;
+      content_availability: StorageContentAvailability;
+      last_checked_at: Date | null;
+      unavailable_reason: string | null;
       created_at: Date;
     }>(
-      `SELECT id, institution_id, version_id, storage_provider, storage_bucket, storage_key, created_at
+      `SELECT id, institution_id, version_id, storage_provider, storage_bucket, storage_key,
+              content_availability, last_checked_at, unavailable_reason, created_at
          FROM document_storage_references
         WHERE institution_id = $1 AND version_id = $2`,
       [institutionId, versionId],
@@ -461,7 +480,27 @@ export class PostgresDocumentRepository {
       storageProvider: row.storage_provider,
       storageBucket: row.storage_bucket,
       storageKey: row.storage_key,
+      contentAvailability: row.content_availability,
+      lastCheckedAt: row.last_checked_at,
+      unavailableReason: row.unavailable_reason,
       createdAt: row.created_at,
     };
+  }
+
+  async updateStorageContentAvailability(
+    client: QueryClient,
+    institutionId: string,
+    versionId: string,
+    contentAvailability: StorageContentAvailability,
+    unavailableReason?: string | null,
+  ): Promise<void> {
+    await client.query(
+      `UPDATE document_storage_references
+          SET content_availability = $1,
+              last_checked_at = now(),
+              unavailable_reason = $2
+        WHERE institution_id = $3 AND version_id = $4`,
+      [contentAvailability, unavailableReason || null, institutionId, versionId],
+    );
   }
 }

@@ -268,15 +268,33 @@ export default function DocumentTable({
 
                   {/* Size and Version */}
                   <td className="py-3.5 px-4">
-                    <div className="flex items-center gap-1.5">
-                      {doc.currentVersion && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold bg-zinc-200/60 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
-                          v{doc.currentVersion.versionNumber}
+                    <div className="flex flex-col gap-1 items-start">
+                      <div className="flex items-center gap-1.5">
+                        {doc.currentVersion && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold bg-zinc-200/60 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                            v{doc.currentVersion.versionNumber}
+                          </span>
+                        )}
+                        <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                          {formatByteSize(doc.currentVersion?.byteSize)}
+                        </span>
+                      </div>
+                      {doc.currentVersion?.contentAvailability === 'unavailable' && (
+                        <span
+                          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
+                          title="Conteúdo indisponível no armazenamento para esta versão"
+                        >
+                          Ficheiro ausente
                         </span>
                       )}
-                      <span className="text-xs text-zinc-600 dark:text-zinc-400">
-                        {formatByteSize(doc.currentVersion?.byteSize)}
-                      </span>
+                      {doc.currentVersion?.contentAvailability === 'unknown' && (
+                        <span
+                          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20"
+                          title="Disponibilidade de armazenamento pendente de verificação"
+                        >
+                          Disponibilidade por verificar
+                        </span>
+                      )}
                     </div>
                   </td>
 
@@ -300,6 +318,10 @@ export default function DocumentTable({
                         title={
                           operationalAvailability?.canAccess === false
                             ? 'Acesso/visualização ainda não configurado nesta instalação'
+                            : doc.currentVersion?.contentAvailability === 'unavailable'
+                            ? 'Conteúdo indisponível no armazenamento para esta versão'
+                            : doc.currentVersion?.contentAvailability === 'unknown'
+                            ? 'Disponibilidade de armazenamento pendente de verificação'
                             : !doc.capabilities.canOpen
                             ? 'Acesso não autorizado pela política'
                             : 'Visualizar Documento (Leitor Institucional)'
@@ -321,6 +343,10 @@ export default function DocumentTable({
                         title={
                           operationalAvailability?.canAccess === false
                             ? 'Download ainda não configurado nesta instalação'
+                            : doc.currentVersion?.contentAvailability === 'unavailable'
+                            ? 'Conteúdo indisponível no armazenamento para esta versão'
+                            : doc.currentVersion?.contentAvailability === 'unknown'
+                            ? 'Disponibilidade de armazenamento pendente de verificação'
                             : !doc.capabilities.canDownload
                             ? 'Download não autorizado pela política'
                             : 'Descarregar Documento'

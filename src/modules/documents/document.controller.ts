@@ -143,7 +143,12 @@ export function rejectDomainError(res: Response, error: unknown): Response {
       msg.includes('declaredByteSize must be greater than 0') ||
       msg.includes('TOKEN_REQUIRED') ||
       msg.includes('REASON_REQUIRED') ||
-      msg.includes('INVALID_UPLOAD_TOKEN')
+      msg.includes('INVALID_UPLOAD_TOKEN') ||
+      msg.includes('targetDomain') ||
+      msg.includes('targetResourceType') ||
+      msg.includes('targetResourceId') ||
+      msg.includes('Invalid purpose') ||
+      msg.includes('Unrecognized target')
     ) {
       return reject(res, 400, msg, 'INVALID_REQUEST');
     }
@@ -225,7 +230,8 @@ export function rejectDomainError(res: Response, error: unknown): Response {
       msg.includes('GRANT_EXPIRED') ||
       msg.includes('GRANT_INACTIVE') ||
       msg.includes('HOLD_DOCUMENT_MISMATCH') ||
-      msg.includes('VERSION_DOCUMENT_MISMATCH')
+      msg.includes('VERSION_DOCUMENT_MISMATCH') ||
+      msg.includes('CONTENT_UNAVAILABLE')
     ) {
       return reject(res, 409, msg, 'CONFLICT');
     }
@@ -245,6 +251,7 @@ export function rejectDomainError(res: Response, error: unknown): Response {
 
     // 503 Service Unavailable
     if (
+      msg.includes('STORAGE_PROVIDER_TRANSIENT_ERROR') ||
       msg.includes('POLICY_ENGINE_MISSING') ||
       msg.includes('RETENTION_POLICY_ENGINE_MISSING') ||
       msg.includes('UPLOAD_POLICY_MISSING') ||
@@ -1720,6 +1727,14 @@ export function registerDocumentRoutes(
       res.setHeader('Content-Length', streamResult.byteSize);
       res.setHeader('Content-Disposition', streamResult.contentDisposition);
       res.setHeader('X-Content-Type-Options', 'nosniff');
+
+      streamResult.stream.on('error', (err) => {
+        if (!res.headersSent) {
+          rejectDomainError(res, err);
+        } else {
+          res.destroy(err);
+        }
+      });
 
       streamResult.stream.pipe(res);
     } catch (error) {

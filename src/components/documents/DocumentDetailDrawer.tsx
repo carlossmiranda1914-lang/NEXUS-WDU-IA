@@ -313,6 +313,17 @@ export default function DocumentDetailDrawer({
                   <Lock className="w-2.5 h-2.5" /> Bloqueio Ativo
                 </span>
               )}
+
+              {docDetail.currentVersion?.contentAvailability === 'unavailable' && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                  Ficheiro ausente
+                </span>
+              )}
+              {docDetail.currentVersion?.contentAvailability === 'unknown' && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border border-zinc-500/20">
+                  Disponibilidade por verificar
+                </span>
+              )}
             </div>
 
             <button
@@ -378,7 +389,17 @@ export default function DocumentDetailDrawer({
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 shadow-sm'
                   : 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25'
               } disabled:opacity-40 disabled:cursor-not-allowed`}
-              title="Abrir documento no leitor institucional"
+              title={
+                operationalAvailability?.canAccess === false
+                  ? 'Acesso/visualização ainda não configurado nesta instalação'
+                  : docDetail.currentVersion?.contentAvailability === 'unavailable'
+                  ? 'Conteúdo indisponível no armazenamento para esta versão'
+                  : docDetail.currentVersion?.contentAvailability === 'unknown'
+                  ? 'Disponibilidade de armazenamento pendente de verificação'
+                  : !docDetail.capabilities.canOpen
+                  ? 'Acesso não autorizado pela política'
+                  : 'Abrir documento no leitor institucional'
+              }
             >
               <Eye className="w-3.5 h-3.5" /> Abrir
             </button>
@@ -397,7 +418,17 @@ export default function DocumentDetailDrawer({
                   ? 'border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-800 shadow-sm'
                   : 'border-white/10 bg-zinc-800 hover:bg-zinc-700 text-zinc-200'
               } disabled:opacity-40 disabled:cursor-not-allowed`}
-              title="Descarregar ficheiro original"
+              title={
+                operationalAvailability?.canAccess === false
+                  ? 'Download ainda não configurado nesta instalação'
+                  : docDetail.currentVersion?.contentAvailability === 'unavailable'
+                  ? 'Conteúdo indisponível no armazenamento para esta versão'
+                  : docDetail.currentVersion?.contentAvailability === 'unknown'
+                  ? 'Disponibilidade de armazenamento pendente de verificação'
+                  : !docDetail.capabilities.canDownload
+                  ? 'Download não autorizado pela política'
+                  : 'Descarregar ficheiro original'
+              }
             >
               <Download className="w-3.5 h-3.5 text-emerald-600" /> Baixar
             </button>
@@ -546,6 +577,17 @@ export default function DocumentDetailDrawer({
                   <div className="flex justify-between py-1 border-b border-zinc-200/50 dark:border-white/5">
                     <span className={isLight ? 'text-zinc-500' : 'text-zinc-400'}>Estado Técnico:</span>
                     <span className="font-bold">{techStatus.label}</span>
+                  </div>
+
+                  <div className="flex justify-between py-1 border-b border-zinc-200/50 dark:border-white/5">
+                    <span className={isLight ? 'text-zinc-500' : 'text-zinc-400'}>Armazenamento:</span>
+                    <span className="font-bold">
+                      {docDetail.currentVersion?.contentAvailability === 'available'
+                        ? 'Armazenado'
+                        : docDetail.currentVersion?.contentAvailability === 'unavailable'
+                        ? 'Ficheiro ausente'
+                        : 'Disponibilidade por verificar'}
+                    </span>
                   </div>
 
                   <div className="flex justify-between py-1 border-b border-zinc-200/50 dark:border-white/5">
@@ -732,15 +774,37 @@ export default function DocumentDetailDrawer({
                             >
                               {vTechStatus.label}
                             </span>
+                            {v.contentAvailability === 'unavailable' && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20">
+                                Ficheiro ausente
+                              </span>
+                            )}
+                            {v.contentAvailability === 'unknown' && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/20">
+                                Disponibilidade por verificar
+                              </span>
+                            )}
+                            {v.contentAvailability === 'available' && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20">
+                                Armazenado
+                              </span>
+                            )}
                           </div>
 
                           <button
                             type="button"
+                            disabled={v.contentAvailability === 'unavailable' || v.contentAvailability === 'unknown' || isDeleted || isQuarantined}
                             onClick={() => onOpenAccessViewer(docDetail, 'download', v.id)}
                             className={`p-1.5 rounded-lg border text-xs font-semibold cursor-pointer ${
                               isLight ? 'border-zinc-300 hover:bg-zinc-100' : 'border-white/10 hover:bg-white/10'
-                            }`}
-                            title="Descarregar esta versão específica"
+                            } disabled:opacity-30 disabled:cursor-not-allowed`}
+                            title={
+                              v.contentAvailability === 'unavailable'
+                                ? 'Conteúdo indisponível no armazenamento para esta versão'
+                                : v.contentAvailability === 'unknown'
+                                ? 'Disponibilidade de armazenamento pendente de verificação'
+                                : 'Descarregar esta versão específica'
+                            }
                           >
                             <Download className="w-3.5 h-3.5" />
                           </button>
@@ -952,9 +1016,25 @@ export default function DocumentDetailDrawer({
                           </button>
                         </div>
 
-                        <div className="text-xs text-zinc-300">
-                          <span className="text-zinc-500">Finalidade: </span>
-                          <span className="font-medium">{a.purpose}</span>
+                        <div className="flex items-center justify-between text-xs text-zinc-300">
+                          <div>
+                            <span className="text-zinc-500">Finalidade: </span>
+                            <span className="font-medium">{a.purpose}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[11px]">
+                            <span className="text-zinc-500">Versão:</span>
+                            {a.pinnedVersionId ? (
+                              <span className="font-mono font-semibold px-1.5 py-0.5 rounded bg-zinc-200/70 dark:bg-white/10 text-zinc-700 dark:text-zinc-300">
+                                {versions.find((v) => v.id === a.pinnedVersionId)
+                                  ? `v${versions.find((v) => v.id === a.pinnedVersionId)!.versionNumber}`
+                                  : docDetail.currentVersion?.id === a.pinnedVersionId
+                                  ? `v${docDetail.currentVersion.versionNumber}`
+                                  : `v#${a.pinnedVersionId.slice(0, 6)}`}
+                              </span>
+                            ) : (
+                              <span className="italic text-zinc-500">Global</span>
+                            )}
+                          </div>
                         </div>
 
                         <div className="text-[11px] text-zinc-500 flex justify-between">

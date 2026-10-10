@@ -180,13 +180,14 @@ try {
       notes: 'Entrada de pagamento',
     }, 'idemp-pay-001');
 
-    // Another payment in Inst A NOT attached to accountA
-    const unlinkedPaymentRes = await paymentRepo.confirmPaymentInCommand(contextA, {
+    // Another payment in Inst A attached to accountA
+    const secondPaymentRes = await paymentRepo.confirmPaymentInCommand(contextA, {
       sourceType: 'manual_offline',
       method: 'bank_transfer',
       amount: '100.00',
       currency: 'EUR',
-      notes: 'Pagamento avulso sem conta',
+      financialAccountId: accountA.id,
+      notes: 'Pagamento adicional na conta',
     }, 'idemp-pay-002');
 
     // Test Operational Context Repository
@@ -218,16 +219,15 @@ try {
     assert.equal(ctxA.openObligations[0].status, 'open');
     assert.equal(ctxA.openObligations[0].feeItemCode, feeItem.code);
 
-    assert.equal(ctxA.confirmedUnallocatedPayments.length, 1);
-    assert.equal(ctxA.confirmedUnallocatedPayments[0].id, paymentRes.payment.id);
-    assert.equal(ctxA.confirmedUnallocatedPayments[0].paymentReference, paymentRes.payment.paymentReference);
-    assert.equal(ctxA.confirmedUnallocatedPayments[0].amount.amount, '50');
-    assert.equal(ctxA.confirmedUnallocatedPayments[0].amount.currency, 'EUR');
-    assert.equal(ctxA.confirmedUnallocatedPayments[0].method, 'cash');
-    assert.equal(ctxA.confirmedUnallocatedPayments[0].allocationStatus, 'unapplied');
+    assert.equal(ctxA.confirmedUnallocatedPayments.length, 2);
+    const firstPayment = ctxA.confirmedUnallocatedPayments.find(payment => payment.id === paymentRes.payment.id)!;
+    assert.equal(firstPayment.paymentReference, paymentRes.payment.paymentReference);
+    assert.equal(firstPayment.amount.amount, '50');
+    assert.equal(firstPayment.amount.currency, 'EUR');
+    assert.equal(firstPayment.method, 'cash');
+    assert.equal(firstPayment.allocationStatus, 'unapplied');
 
-    // Verify unlinked payment was NOT included in accountA context
-    assert.ok(!ctxA.confirmedUnallocatedPayments.some(p => p.id === unlinkedPaymentRes.payment.id));
+    assert.ok(ctxA.confirmedUnallocatedPayments.some(p => p.id === secondPaymentRes.payment.id));
 
     // Verify history contains both obligation and payment
     assert.ok(ctxA.history.length >= 2);

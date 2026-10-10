@@ -207,6 +207,17 @@ export async function authorizeContentAccessCommand(params: {
         );
       }
 
+      const storageRef = await docRepo.getStorageReferenceForVersion(
+        client,
+        context.institutionId,
+        version.id,
+      );
+      if (storageRef && storageRef.contentAvailability !== 'available') {
+        throw new Error(
+          `CONTENT_UNAVAILABLE: Conteúdo indisponível no armazenamento para esta versão (estado: ${storageRef.contentAvailability}).`,
+        );
+      }
+
       // 2. Central H1 Authorization Authority enforcement (Defense in depth at command boundary)
       const accessAction = input.action === 'open' ? 'open_content' : 'download_content';
       const authAuthority =

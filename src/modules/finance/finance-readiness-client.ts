@@ -13,6 +13,11 @@ export type FinanceReadinessDto = {
   paymentCurrency?: { functionalCurrency: string; enabledCurrencies: string[] };
 };
 
+export type FinanceOperationalReadinessState =
+  | { kind: 'READINESS_LOADING' }
+  | { kind: 'READINESS_READY'; value: FinanceReadinessDto }
+  | { kind: 'READINESS_ERROR'; error: FinanceReadinessError };
+
 export type LegalProfileConfiguration = { legalName: string; taxIdentifier: string | null; registeredAddress: { line1: string }; effectiveFrom: string };
 export type FinancialProfileConfiguration = { primaryJurisdiction: string; functionalCurrency: string; financialTimezone: string; enabledCurrencies: string[]; effectiveFrom: string };
 export type FiscalConfiguration = { id: string; version: number; adapter_key: string; effective_from: string; effective_to: string | null };

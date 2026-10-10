@@ -40,24 +40,26 @@ export interface DocumentOperationalAvailability {
   canDelete?: boolean;
 }
 
-function computeCapabilities(
+export function computeCapabilities(
   docStatus: DocumentStatus,
   currentVersionStatus: DocumentVersionStatus | null,
   activeHoldsCount: number,
   retentionStatus?: string | null,
   operationalAvailability?: DocumentOperationalAvailability,
   role?: string,
+  currentVersionContentAvailability?: 'unknown' | 'available' | 'unavailable' | null,
 ): FrontendSafeDocumentCapabilities {
   const isArchived = docStatus === 'archived';
   const isVersionAvailable = currentVersionStatus === 'available';
+  const isContentAvailable = currentVersionContentAvailability === 'available';
 
   // Management roles
   const isManager = !role || ['admin', 'institution_admin', 'director', 'superadmin', 'system'].includes(role);
 
   // Read actions are safe advisory flags based strictly on factual availability and operational dependencies; backend remains authoritative.
   const isAccessAvailable = operationalAvailability?.canAccess !== false;
-  const canOpen = !isArchived && isVersionAvailable && isAccessAvailable;
-  const canDownload = !isArchived && isVersionAvailable && isAccessAvailable;
+  const canOpen = !isArchived && isVersionAvailable && isContentAvailable && isAccessAvailable;
+  const canDownload = !isArchived && isVersionAvailable && isContentAvailable && isAccessAvailable;
 
   // Management actions: advisory capability flags strictly aligned with factual operational availability, retention governance, and document state
   const isUploadAvailable = operationalAvailability?.canUpload !== false && isManager;
@@ -141,7 +143,7 @@ export async function listDocumentsQuery(
           };
         }
       } else {
-        conditions.push(`d.category = ANY(${paramIdx++})`);
+        conditions.push(`d.category = ANY($${paramIdx++})`);
         values.push(allowedCategories);
       }
     }
@@ -285,10 +287,12 @@ export async function listDocumentsQuery(
   const versionsQuery = `
     SELECT v.id, v.document_id, v.version_number, v.mime_type, v.byte_size, v.sha256_hash, v.status, v.created_at,
            p.name AS created_by_person_name,
-           s.declared_filename AS original_filename
+           s.declared_filename AS original_filename,
+           COALESCE(sr.content_availability, 'unknown') AS content_availability
     FROM document_versions v
     LEFT JOIN people p ON p.id = v.created_by_person_id
     LEFT JOIN document_upload_sessions s ON s.institution_id = v.institution_id AND s.completed_version_id = v.id
+    LEFT JOIN document_storage_references sr ON sr.institution_id = v.institution_id AND sr.version_id = v.id
     WHERE v.institution_id = $1 AND v.document_id = ANY($2::uuid[])
     ORDER BY v.document_id, v.version_number DESC
   `;
@@ -300,6 +304,7 @@ export async function listDocumentsQuery(
     byte_size: string;
     sha256_hash: string;
     status: DocumentVersionStatus;
+    content_availability: 'unknown' | 'available' | 'unavailable';
     created_by_person_name: string | null;
     original_filename: string | null;
     created_at: Date;
@@ -417,6 +422,7 @@ export async function listDocumentsQuery(
           byteSize: Number(latestVersionRow.byte_size),
           sha256Hash: latestVersionRow.sha256_hash,
           status: latestVersionRow.status,
+          contentAvailability: latestVersionRow.content_availability || 'unknown',
           originalFilename: latestVersionRow.original_filename || undefined,
           declaredFilename: latestVersionRow.original_filename || undefined,
           createdByPersonName: latestVersionRow.created_by_person_name,
@@ -471,6 +477,7 @@ export async function listDocumentsQuery(
       docRetention?.retention_status ?? null,
       operationalAvailability,
       context.role,
+      currentVersion?.contentAvailability ?? null,
     );
 
     const originalFilename = currentVersion?.originalFilename || undefined;
@@ -482,6 +489,7 @@ export async function listDocumentsQuery(
       category: docRow.category,
       classification: docRow.classification,
       status: docRow.status,
+      contentAvailability: currentVersion?.contentAvailability,
       originalFilename,
       declaredFilename: originalFilename,
       title,
@@ -539,16 +547,19 @@ export async function getDocumentDetailQuery(
     byte_size: string;
     sha256_hash: string;
     status: DocumentVersionStatus;
+    content_availability: 'unknown' | 'available' | 'unavailable';
     created_by_person_name: string | null;
     original_filename: string | null;
     created_at: Date;
   }>(
     `SELECT v.id, v.version_number, v.mime_type, v.byte_size, v.sha256_hash, v.status, v.created_at,
             p.name AS created_by_person_name,
-            s.declared_filename AS original_filename
+            s.declared_filename AS original_filename,
+            COALESCE(sr.content_availability, 'unknown') AS content_availability
      FROM document_versions v
      LEFT JOIN people p ON p.id = v.created_by_person_id
      LEFT JOIN document_upload_sessions s ON s.institution_id = v.institution_id AND s.completed_version_id = v.id
+     LEFT JOIN document_storage_references sr ON sr.institution_id = v.institution_id AND sr.version_id = v.id
      WHERE v.institution_id = $1 AND v.document_id = $2
      ORDER BY v.version_number DESC`,
     [context.institutionId, documentId],
@@ -627,6 +638,7 @@ export async function getDocumentDetailQuery(
         byteSize: Number(latestVersionRow.byte_size),
         sha256Hash: latestVersionRow.sha256_hash,
         status: latestVersionRow.status,
+        contentAvailability: latestVersionRow.content_availability || 'unknown',
         originalFilename: latestVersionRow.original_filename || undefined,
         declaredFilename: latestVersionRow.original_filename || undefined,
         createdByPersonName: latestVersionRow.created_by_person_name,
@@ -682,6 +694,7 @@ export async function getDocumentDetailQuery(
     docRetention?.retention_status ?? null,
     operationalAvailability,
     context.role,
+    currentVersion?.contentAvailability ?? null,
   );
 
   const originalFilename = currentVersion?.originalFilename || undefined;
@@ -693,6 +706,7 @@ export async function getDocumentDetailQuery(
     category: docRow.category,
     classification: docRow.classification,
     status: docRow.status,
+    contentAvailability: currentVersion?.contentAvailability,
     originalFilename,
     declaredFilename: originalFilename,
     title,

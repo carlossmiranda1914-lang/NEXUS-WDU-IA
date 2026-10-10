@@ -12,6 +12,7 @@ import { allocationClient } from '../../../modules/finance/allocation-client.ts'
 import { obligationAdjustmentClient } from '../../../modules/finance/obligation-adjustment-client.ts';
 import { financialDocumentClient } from '../../../modules/finance/financial-document-client.ts';
 import { obligationDiscountClient } from '../../../modules/finance/obligation-discount-client.ts';
+import type { FinanceOperationalReadinessState } from '../../../modules/finance/finance-readiness-client.ts';
 import { FinanceObligationAdjustmentView } from './FinanceObligationAdjustmentView.tsx';
 import { FinanceObligationDiscountView } from './FinanceObligationDiscountView.tsx';
 import { AuroraPageHeader } from '../../aurora/AuroraPageHeader.tsx';
@@ -23,6 +24,7 @@ export interface FinanceOperationalContextWorkspaceProps {
   onOpenFinancialDocument?: (documentId: string) => void;
   onOpenObligation?: (obligationId: string, financialAccount: { id: string; label: string }) => void;
   onOpenPayment?: (paymentId: string, financialAccount: { id: string; label: string }) => void;
+  readinessState?: FinanceOperationalReadinessState;
 }
 
 const client = new FinanceOperationalContextClient();
@@ -34,6 +36,7 @@ export function FinanceOperationalContextWorkspace({
   onOpenFinancialDocument,
   onOpenObligation,
   onOpenPayment,
+  readinessState,
 }: FinanceOperationalContextWorkspaceProps) {
   const isLight = theme === 'light';
 
@@ -45,6 +48,7 @@ export function FinanceOperationalContextWorkspace({
     initialFinancialAccountId || initialContextQuery?.financialAccountId || ''
   );
   const [context, setContext] = useState<FinanceOperationalContext | null>(null);
+  const readiness = readinessState?.kind === 'READINESS_READY' ? readinessState.value : null;
 
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [loadingContext, setLoadingContext] = useState(
@@ -276,6 +280,8 @@ export function FinanceOperationalContextWorkspace({
                 }
               : null
           }
+          defaultCurrency={readiness?.paymentCurrency?.functionalCurrency}
+          currencyOptions={readiness?.paymentCurrency?.enabledCurrencies}
           onSuccess={handlePaymentSuccess}
           onCancel={() => setIsRegisteringPayment(false)}
         />

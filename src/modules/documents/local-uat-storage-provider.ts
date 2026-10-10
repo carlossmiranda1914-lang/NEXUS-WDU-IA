@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Readable, PassThrough } from 'node:stream';
-import { mkdir, writeFile, readFile, stat, unlink } from 'node:fs/promises';
-import { existsSync, createReadStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import { mkdir, writeFile, readFile, stat, unlink, rename } from 'node:fs/promises';
+import { existsSync, createReadStream, createWriteStream } from 'node:fs';
 import path from 'node:path';
 import type {
   ObjectStorageProvider,
@@ -22,14 +23,7 @@ import type {
   WriteObjectResult,
 } from './object-storage-provider.ts';
 
-interface StoredLocalObject {
-  buffer: Buffer;
-  mimeType: string;
-  uploadedAt: Date;
-  sha256Hash: string;
-}
-
-interface StoredLocalMetadata {
+export interface StoredLocalMetadata {
   mimeType: string;
   uploadedAt: string;
   sha256Hash: string;
@@ -40,20 +34,36 @@ interface StoredLocalMetadata {
  * Local UAT Object Storage Provider.
  * Explicitly classified for LOCAL_UAT visual verification and isolated local test executions.
  * Filesystem-backed for durability across server restarts.
+ * Streams directly to/from disk with unique temp files to prevent OOM / Buffer.concat accumulation.
  * Fail-closed: Never active in production environments.
  */
 export class LocalUatObjectStorageProvider implements ObjectStorageProvider {
   public readonly providerName = 'local_uat';
 
-  // In-memory cache: `${storageBucket}/${storageKey}`
-  private readonly storage = new Map<string, StoredLocalObject>();
+  // In-memory cache stores ONLY lightweight metadata, NEVER whole file byte buffers
+  private readonly metadataCache = new Map<string, StoredLocalMetadata>();
   private readonly baseDir: string;
 
   constructor(baseDir?: string) {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('LocalUatObjectStorageProvider is strictly forbidden in production.');
     }
-    this.baseDir = baseDir || process.env.DOCUMENTS_LOCAL_UAT_STORAGE_DIR || path.resolve(process.cwd(), '.uat-storage');
+    const rawDir = baseDir || process.env.DOCUMENTS_LOCAL_UAT_STORAGE_DIR;
+    if (!rawDir) {
+      throw new Error(
+        'LOCAL_UAT_STORAGE_DIR_REQUIRED: Local UAT storage requires explicit absolute path configuration (baseDir parameter or DOCUMENTS_LOCAL_UAT_STORAGE_DIR).',
+      );
+    }
+    if (!path.isAbsolute(rawDir)) {
+      throw new Error(
+        `LOCAL_UAT_STORAGE_DIR_MUST_BE_ABSOLUTE: DOCUMENTS_LOCAL_UAT_STORAGE_DIR must be an absolute path: "${rawDir}". Fallbacks based on process.cwd() or import.meta.url are prohibited.`,
+      );
+    }
+    this.baseDir = path.normalize(rawDir);
+  }
+
+  public getEffectiveBaseDir(): string {
+    return this.baseDir;
   }
 
   private getStorageKey(bucket: string, key: string): string {
@@ -84,91 +94,95 @@ export class LocalUatObjectStorageProvider implements ObjectStorageProvider {
   public async writeObjectStream(
     params: WriteObjectStreamParams,
   ): Promise<WriteObjectResult> {
+    const mapKey = this.getStorageKey(params.storageBucket, params.storageKey);
+    const { dir, dataPath, metaPath } = this.getFsPaths(params.storageBucket, params.storageKey);
+
+    // Unique per-attempt temporary file to avoid overwriting or clashing with concurrent uploads
+    const tempFileId = randomUUID();
+    const tempFilePath = path.join(dir, `${path.basename(dataPath)}.${tempFileId}.tmp`);
+    const tempMetaPath = path.join(dir, `${path.basename(metaPath)}.${tempFileId}.tmp`);
+
+    await mkdir(dir, { recursive: true });
+
     const hash = createHash('sha256');
-    const chunks: Buffer[] = [];
     let totalBytes = 0;
 
     const passThrough = new PassThrough();
-
-    return new Promise<WriteObjectResult>((resolve, reject) => {
-      passThrough.on('data', (chunk: Buffer) => {
-        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-        chunks.push(buf);
-        totalBytes += buf.length;
-        hash.update(buf);
-      });
-
-      passThrough.on('end', async () => {
-        try {
-          if (
-            params.declaredByteSize !== undefined &&
-            params.declaredByteSize !== totalBytes
-          ) {
-            return reject(
-              new Error(
-                `SIZE_MISMATCH: Uploaded stream size (${totalBytes} bytes) does not match declared size (${params.declaredByteSize} bytes).`,
-              ),
-            );
-          }
-
-          const sha256Hash = hash.digest('hex');
-          const buffer = Buffer.concat(chunks);
-          const mimeType = params.mimeType || 'application/octet-stream';
-          const uploadedAt = new Date();
-
-          const mapKey = this.getStorageKey(params.storageBucket, params.storageKey);
-          this.storage.set(mapKey, {
-            buffer,
-            mimeType,
-            uploadedAt,
-            sha256Hash,
-          });
-
-          // Persist to filesystem for UAT restart durability
-          try {
-            const { dir, dataPath, metaPath } = this.getFsPaths(params.storageBucket, params.storageKey);
-            await mkdir(dir, { recursive: true });
-            await writeFile(dataPath, buffer);
-            const meta: StoredLocalMetadata = {
-              mimeType,
-              uploadedAt: uploadedAt.toISOString(),
-              sha256Hash,
-              byteSize: totalBytes,
-            };
-            await writeFile(metaPath, JSON.stringify(meta, null, 2), 'utf8');
-          } catch (fsErr) {
-            console.warn('[LOCAL-UAT-STORAGE] Warning: failed to persist to filesystem:', fsErr);
-          }
-
-          resolve({
-            byteSize: totalBytes,
-            sha256Hash,
-            mimeType,
-          });
-        } catch (error) {
-          reject(error);
-        }
-      });
-
-      passThrough.on('error', (err) => {
-        reject(new Error(`LOCAL_UAT_STREAM_READ_ERROR: ${err.message}`));
-      });
-
-      params.stream.pipe(passThrough);
+    passThrough.on('data', (chunk: Buffer) => {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalBytes += buf.length;
+      hash.update(buf);
     });
+
+    const fileWriteStream = createWriteStream(tempFilePath);
+
+    try {
+      // Pipe stream directly to disk without storing chunks in memory
+      await pipeline(params.stream, passThrough, fileWriteStream);
+
+      if (
+        params.declaredByteSize !== undefined &&
+        params.declaredByteSize !== totalBytes
+      ) {
+        throw new Error(
+          `SIZE_MISMATCH: Uploaded stream size (${totalBytes} bytes) does not match declared size (${params.declaredByteSize} bytes).`,
+        );
+      }
+
+      const sha256Hash = hash.digest('hex');
+      const mimeType = params.mimeType || 'application/octet-stream';
+      const uploadedAt = new Date().toISOString();
+
+      const meta: StoredLocalMetadata = {
+        mimeType,
+        uploadedAt,
+        sha256Hash,
+        byteSize: totalBytes,
+      };
+
+      // Write temp metadata
+      await writeFile(tempMetaPath, JSON.stringify(meta, null, 2), 'utf8');
+
+      // Atomic commit: rename temp files to canonical destination
+      await rename(tempFilePath, dataPath);
+      await rename(tempMetaPath, metaPath);
+
+      // Cache metadata only
+      this.metadataCache.set(mapKey, meta);
+
+      return {
+        byteSize: totalBytes,
+        sha256Hash,
+        mimeType,
+      };
+    } catch (fsErr) {
+      // Clean up ONLY this attempt's temporary files, preserving existing valid files
+      try {
+        if (existsSync(tempFilePath)) await unlink(tempFilePath);
+        if (existsSync(tempMetaPath)) await unlink(tempMetaPath);
+      } catch {
+        // Ignore secondary cleanup error
+      }
+      if (!existsSync(dataPath)) {
+        this.metadataCache.delete(mapKey);
+      }
+      throw new Error(
+        `LOCAL_UAT_STORAGE_PERSISTENCE_FAILED: Failed to write object to filesystem: ${fsErr instanceof Error ? fsErr.message : String(fsErr)}`,
+      );
+    }
   }
 
   public async completeUpload(
     params: CompleteUploadParams,
   ): Promise<StorageObjectMetadata> {
     const mapKey = this.getStorageKey(params.storageBucket, params.storageKey);
-    let stored = this.storage.get(mapKey);
+    let meta = this.metadataCache.get(mapKey);
 
-    if (!stored) {
-      stored = await this.readFromFs(params.storageBucket, params.storageKey);
+    if (!meta) {
+      meta = await this.readMetadataFromFs(params.storageBucket, params.storageKey);
     }
 
-    if (!stored) {
+    if (!meta) {
       throw new Error(
         `OBJECT_NOT_FOUND: Object not found in local UAT storage: ${mapKey}`,
       );
@@ -178,30 +192,23 @@ export class LocalUatObjectStorageProvider implements ObjectStorageProvider {
       storageProvider: this.providerName,
       storageBucket: params.storageBucket,
       storageKey: params.storageKey,
-      byteSize: stored.buffer.length,
-      sha256Hash: stored.sha256Hash,
-      mimeType: stored.mimeType,
-      uploadedAt: stored.uploadedAt,
+      byteSize: meta.byteSize,
+      sha256Hash: meta.sha256Hash,
+      mimeType: meta.mimeType,
+      uploadedAt: new Date(meta.uploadedAt),
     };
   }
 
-  private async readFromFs(bucket: string, key: string): Promise<StoredLocalObject | null> {
+  private async readMetadataFromFs(bucket: string, key: string): Promise<StoredLocalMetadata | null> {
     const { dataPath, metaPath } = this.getFsPaths(bucket, key);
     if (!existsSync(dataPath) || !existsSync(metaPath)) {
       return null;
     }
     try {
-      const buffer = await readFile(dataPath);
       const metaRaw = await readFile(metaPath, 'utf8');
       const meta: StoredLocalMetadata = JSON.parse(metaRaw);
-      const stored: StoredLocalObject = {
-        buffer,
-        mimeType: meta.mimeType || 'application/octet-stream',
-        uploadedAt: new Date(meta.uploadedAt),
-        sha256Hash: meta.sha256Hash,
-      };
-      this.storage.set(this.getStorageKey(bucket, key), stored);
-      return stored;
+      this.metadataCache.set(this.getStorageKey(bucket, key), meta);
+      return meta;
     } catch {
       return null;
     }
@@ -209,7 +216,7 @@ export class LocalUatObjectStorageProvider implements ObjectStorageProvider {
 
   public async abortUpload(params: AbortUploadParams): Promise<void> {
     const mapKey = this.getStorageKey(params.storageBucket, params.storageKey);
-    this.storage.delete(mapKey);
+    this.metadataCache.delete(mapKey);
     const { dataPath, metaPath } = this.getFsPaths(params.storageBucket, params.storageKey);
     try {
       if (existsSync(dataPath)) await unlink(dataPath);
@@ -221,13 +228,13 @@ export class LocalUatObjectStorageProvider implements ObjectStorageProvider {
 
   public async headObject(params: HeadObjectParams): Promise<HeadObjectResult> {
     const mapKey = this.getStorageKey(params.storageBucket, params.storageKey);
-    let stored = this.storage.get(mapKey);
+    let meta = this.metadataCache.get(mapKey);
 
-    if (!stored) {
-      stored = await this.readFromFs(params.storageBucket, params.storageKey);
+    if (!meta) {
+      meta = await this.readMetadataFromFs(params.storageBucket, params.storageKey);
     }
 
-    if (!stored) {
+    if (!meta) {
       return {
         exists: false,
         storageProvider: this.providerName,
@@ -244,10 +251,10 @@ export class LocalUatObjectStorageProvider implements ObjectStorageProvider {
       storageProvider: this.providerName,
       storageBucket: params.storageBucket,
       storageKey: params.storageKey,
-      byteSize: stored.buffer.length,
-      sha256Hash: stored.sha256Hash,
-      mimeType: stored.mimeType,
-      uploadedAt: stored.uploadedAt,
+      byteSize: meta.byteSize,
+      sha256Hash: meta.sha256Hash,
+      mimeType: meta.mimeType,
+      uploadedAt: new Date(meta.uploadedAt),
     };
   }
 
@@ -255,8 +262,8 @@ export class LocalUatObjectStorageProvider implements ObjectStorageProvider {
     params: DeleteObjectParams,
   ): Promise<boolean> {
     const mapKey = this.getStorageKey(params.storageBucket, params.storageKey);
-    const existed = this.storage.has(mapKey);
-    this.storage.delete(mapKey);
+    const existed = this.metadataCache.has(mapKey);
+    this.metadataCache.delete(mapKey);
     const { dataPath, metaPath } = this.getFsPaths(params.storageBucket, params.storageKey);
     try {
       if (existsSync(dataPath)) await unlink(dataPath);
@@ -271,38 +278,38 @@ export class LocalUatObjectStorageProvider implements ObjectStorageProvider {
     params: OpenReadStreamParams,
   ): Promise<NodeJS.ReadableStream> {
     const mapKey = this.getStorageKey(params.storageBucket, params.storageKey);
-    let stored = this.storage.get(mapKey);
+    const { dataPath } = this.getFsPaths(params.storageBucket, params.storageKey);
 
-    if (!stored) {
-      stored = await this.readFromFs(params.storageBucket, params.storageKey);
-    }
-
-    if (!stored) {
+    if (!existsSync(dataPath)) {
+      this.metadataCache.delete(mapKey);
       throw new Error(
         `OBJECT_NOT_FOUND: Local UAT storage object not found: ${mapKey}`,
       );
     }
 
-    return Readable.from(stored.buffer);
+    const stream = createReadStream(dataPath);
+    return stream;
   }
 
   public async readRange(params: ReadRangeParams): Promise<Buffer> {
     const mapKey = this.getStorageKey(params.storageBucket, params.storageKey);
-    let stored = this.storage.get(mapKey);
+    const { dataPath } = this.getFsPaths(params.storageBucket, params.storageKey);
 
-    if (!stored) {
-      stored = await this.readFromFs(params.storageBucket, params.storageKey);
-    }
-
-    if (!stored) {
+    if (!existsSync(dataPath)) {
+      this.metadataCache.delete(mapKey);
       throw new Error(
         `OBJECT_NOT_FOUND: Local UAT storage object not found: ${mapKey}`,
       );
     }
 
     const start = Math.max(0, params.startByte);
-    const end = Math.min(stored.buffer.length, params.endByte + 1);
-    return stored.buffer.subarray(start, end);
+    const end = params.endByte;
+    const stream = createReadStream(dataPath, { start, end });
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
   }
 
   public async createReadAuthorization(
@@ -322,7 +329,7 @@ export class LocalUatObjectStorageProvider implements ObjectStorageProvider {
     params: DeleteObjectParams,
   ): Promise<DeleteObjectResult> {
     const mapKey = this.getStorageKey(params.storageBucket, params.storageKey);
-    const inMem = this.storage.delete(mapKey);
+    const inMem = this.metadataCache.delete(mapKey);
     let fsDeleted = false;
     const { dataPath, metaPath } = this.getFsPaths(params.storageBucket, params.storageKey);
     try {

@@ -7,10 +7,12 @@ import { FinancePaymentsListView } from '../src/components/finance/payments/Fina
 import { FinancePaymentCreateView } from '../src/components/finance/payments/FinancePaymentCreateView.tsx';
 import { FinancePaymentProvidersView } from '../src/components/finance/payments/FinancePaymentProvidersView.tsx';
 import { FinanceWorkspace } from '../src/components/finance/FinanceWorkspace.tsx';
+import { FinanceOperationalContextWorkspace } from '../src/components/finance/operational/FinanceOperationalContextWorkspace.tsx';
 import { paymentClient } from '../src/modules/finance/payment-client.ts';
 import { allocationClient } from '../src/modules/finance/allocation-client.ts';
 import { financialDocumentClient } from '../src/modules/finance/financial-document-client.ts';
 import { financeReadinessClient } from '../src/modules/finance/finance-readiness-client.ts';
+import { FinanceOperationalContextClient } from '../src/modules/finance/finance-operational-context-client.ts';
 import type { Payment } from '../src/modules/finance/payment-model.ts';
 import type { PaymentProviderConfigPublicProjection } from '../src/modules/finance/payment-provider-model.ts';
 
@@ -159,6 +161,7 @@ test('FinancePaymentCreateView allows validating input and reviewing before subm
           theme: 'light',
           defaultCurrency: 'AOA',
           currencyOptions: ['AOA', 'USD'],
+          financialAccount: { id: 'account-contextual', accountNumber: 'CTA-000001', name: 'Conta contextual' },
           onSuccess: (p) => { createdPayment = p; },
           onCancel: () => {},
         })
@@ -192,6 +195,75 @@ test('FinancePaymentCreateView allows validating input and reviewing before subm
   }
 });
 
+test('FinancePaymentCreateView requires an explicit active account from the menu flow', async () => {
+  const originalList = FinanceOperationalContextClient.prototype.listFinancialAccounts;
+  const originalConfirm = paymentClient.confirmManualPayment;
+  let submittedAccountId: string | undefined;
+  FinanceOperationalContextClient.prototype.listFinancialAccounts = async () => [
+    { id: 'account-active', institutionId: 'inst-001', accountNumber: 'CTA-000010', name: 'Conta ativa', status: 'active', createdAt: '', updatedAt: '' },
+    { id: 'account-inactive', institutionId: 'inst-001', accountNumber: 'CTA-000011', name: 'Conta inativa', status: 'inactive', createdAt: '', updatedAt: '' },
+  ];
+  paymentClient.confirmManualPayment = async (input) => {
+    submittedAccountId = input.financialAccountId;
+    return { payment: samplePayments[0], replayed: false };
+  };
+
+  try {
+    let renderer: any;
+    await act(async () => {
+      renderer = create(React.createElement(FinancePaymentCreateView, {
+        defaultCurrency: 'EUR', currencyOptions: ['EUR'], onSuccess: () => {}, onCancel: () => {},
+      }));
+      await Promise.resolve();
+    });
+    const root = renderer.root;
+    const accountSelect = root.findByProps({ 'data-testid': 'finance-payment-account-select' });
+    assert.equal(accountSelect.props.value, '', 'The menu flow must not select the first account automatically');
+    assert.equal(accountSelect.props.children.length, 2, 'Only the active account is offered');
+    await act(async () => { root.findByProps({ 'data-testid': 'finance-payment-amount-input' }).props.onChange({ target: { value: '25.00' } }); });
+    await act(async () => { root.findByType('form').props.onSubmit({ preventDefault: () => {} }); });
+    assert.match(JSON.stringify(renderer.toJSON()), /Selecione a conta financeira de destino/);
+    await act(async () => { accountSelect.props.onChange({ target: { value: 'account-active' } }); });
+    await act(async () => { root.findByType('form').props.onSubmit({ preventDefault: () => {} }); });
+    assert.match(JSON.stringify(renderer.toJSON()), /CTA-000010.*Conta ativa/);
+    await act(async () => { root.findByProps({ 'data-testid': 'finance-payment-confirm-btn' }).props.onClick(); });
+    assert.equal(submittedAccountId, 'account-active');
+  } finally {
+    FinanceOperationalContextClient.prototype.listFinancialAccounts = originalList;
+    paymentClient.confirmManualPayment = originalConfirm;
+  }
+});
+
+test('FinancePaymentCreateView blocks review when active accounts cannot be loaded', async () => {
+  const originalList = FinanceOperationalContextClient.prototype.listFinancialAccounts;
+  const originalConfirm = paymentClient.confirmManualPayment;
+  let confirmations = 0;
+  FinanceOperationalContextClient.prototype.listFinancialAccounts = async () => { throw new Error('network unavailable'); };
+  paymentClient.confirmManualPayment = async () => {
+    confirmations += 1;
+    return { payment: samplePayments[0], replayed: false };
+  };
+
+  try {
+    let renderer: any;
+    await act(async () => {
+      renderer = create(React.createElement(FinancePaymentCreateView, {
+        defaultCurrency: 'EUR', currencyOptions: ['EUR'], onSuccess: () => {}, onCancel: () => {},
+      }));
+      await Promise.resolve();
+    });
+    const root = renderer.root;
+    assert.ok(root.findByProps({ 'data-testid': 'finance-payment-account-load-error' }));
+    await act(async () => { root.findByProps({ 'data-testid': 'finance-payment-amount-input' }).props.onChange({ target: { value: '25.00' } }); });
+    await act(async () => { root.findByType('form').props.onSubmit({ preventDefault: () => {} }); });
+    assert.match(JSON.stringify(renderer.toJSON()), /Não é possível avançar enquanto as contas financeiras ativas não estiverem disponíveis/);
+    assert.equal(confirmations, 0);
+  } finally {
+    FinanceOperationalContextClient.prototype.listFinancialAccounts = originalList;
+    paymentClient.confirmManualPayment = originalConfirm;
+  }
+});
+
 test('FinancePaymentsListView shows the current authoritative allocation position and localized exact money', async () => {
   let component: any;
   await act(async () => {
@@ -214,6 +286,34 @@ test('FinancePaymentCreateView does not silently choose EUR when no institutiona
   const currency = renderer.root.findByProps({ 'data-testid': 'finance-payment-currency-select' });
   assert.equal(currency.props.value, '');
   assert.match(JSON.stringify(renderer.toJSON()), /Selecione a moeda configurada/);
+});
+
+test('FinancePaymentCreateView applies a late authoritative default without replacing a valid user choice', async () => {
+  let renderer: any;
+  await act(async () => {
+    renderer = create(React.createElement(FinancePaymentCreateView, {
+      currencyOptions: ['USD'],
+      onSuccess: () => {},
+      onCancel: () => {},
+    }));
+  });
+
+  const currency = () => renderer.root.findByProps({ 'data-testid': 'finance-payment-currency-select' });
+  await act(async () => {
+    currency().props.onChange({ target: { value: 'USD' } });
+  });
+  assert.equal(currency().props.value, 'USD');
+
+  await act(async () => {
+    renderer.update(React.createElement(FinancePaymentCreateView, {
+      defaultCurrency: 'EUR',
+      currencyOptions: ['EUR', 'USD'],
+      onSuccess: () => {},
+      onCancel: () => {},
+    }));
+  });
+
+  assert.equal(currency().props.value, 'USD', 'Late readiness must preserve a valid explicit currency selection');
 });
 
 test('FinancePaymentProvidersView displays Adyen and EMIS with contract status badges without exposing secrets', async () => {
@@ -276,6 +376,51 @@ test('FinanceWorkspace switches to Recebimentos tab and renders FinancePaymentsW
   }
 });
 
+test('FinanceWorkspace owns one readiness result for Payments and Financial Situation, preserving errors as errors', async () => {
+  const originalReadiness = financeReadinessClient.get;
+  const originalList = paymentClient.listPayments;
+  let calls = 0;
+  const ready = { ...readinessFor([], true), status: 'READY', paymentCurrency: { functionalCurrency: 'EUR', enabledCurrencies: ['EUR'] } };
+  paymentClient.listPayments = async () => samplePayments;
+  financeReadinessClient.get = async () => { calls += 1; return ready; };
+
+  try {
+    let renderer: any;
+    await act(async () => {
+      renderer = create(React.createElement(FinanceWorkspace, { initialTab: 'recebimentos' }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    assert.equal(calls, 1);
+    assert.equal(renderer.root.findByType(FinancePaymentsWorkspace).props.readinessState.kind, 'READINESS_READY');
+
+    await act(async () => {
+      renderer.root.findByProps({ 'data-testid': 'finance-tab-operations' }).props.onClick();
+      await Promise.resolve();
+    });
+    assert.equal(renderer.root.findByType(FinanceOperationalContextWorkspace).props.readinessState.kind, 'READINESS_READY');
+    assert.deepEqual(renderer.root.findByType(FinanceOperationalContextWorkspace).props.readinessState.value.paymentCurrency.enabledCurrencies, ['EUR']);
+  } finally {
+    financeReadinessClient.get = originalReadiness;
+    paymentClient.listPayments = originalList;
+  }
+
+  financeReadinessClient.get = async () => { throw new Error('temporary readiness failure'); };
+  try {
+    let renderer: any;
+    await act(async () => {
+      renderer = create(React.createElement(FinanceWorkspace, { initialTab: 'recebimentos' }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const state = renderer.root.findByType(FinancePaymentsWorkspace).props.readinessState;
+    assert.equal(state.kind, 'READINESS_ERROR');
+    assert.equal('value' in state, false, 'A readiness failure must not masquerade as an empty configured-currency result');
+  } finally {
+    financeReadinessClient.get = originalReadiness;
+  }
+});
+
 test('an enabled Factura-Recibo action invokes the canonical client with the selected payment, allocation, series and persistent intent', async () => {
   const originalListPayments = paymentClient.listPayments;
   const originalGetPayment = paymentClient.getPayment;
@@ -301,7 +446,7 @@ test('an enabled Factura-Recibo action invokes the canonical client with the sel
   try {
     let renderer: any;
     await act(async () => {
-      renderer = create(React.createElement(FinancePaymentsWorkspace, { mode: 'detail', initialPaymentId: 'pay-001' }));
+      renderer = create(React.createElement(FinancePaymentsWorkspace, { mode: 'detail', initialPaymentId: 'pay-001', readinessState: { kind: 'READINESS_READY', value: { ...readinessFor([], true), status: 'READY' } } }));
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();

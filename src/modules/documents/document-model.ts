@@ -59,6 +59,8 @@ export interface DocumentProvenanceRecord {
   correlationId: string | null;
 }
 
+export type StorageContentAvailability = 'unknown' | 'available' | 'unavailable';
+
 export interface StorageObjectReferenceRecord {
   id: string;
   institutionId: string;
@@ -66,6 +68,9 @@ export interface StorageObjectReferenceRecord {
   storageProvider: string;
   storageBucket: string;
   storageKey: string;
+  contentAvailability?: StorageContentAvailability;
+  lastCheckedAt?: Date | null;
+  unavailableReason?: string | null;
   createdAt: Date;
 }
 

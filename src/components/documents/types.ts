@@ -9,6 +9,7 @@ export interface DocumentVersionDto {
   byteSize: number;
   sha256Hash: string;
   status: DocumentVersionStatus;
+  contentAvailability?: 'unknown' | 'available' | 'unavailable';
   originalFilename?: string;
   declaredFilename?: string;
   createdByPersonName?: string | null;

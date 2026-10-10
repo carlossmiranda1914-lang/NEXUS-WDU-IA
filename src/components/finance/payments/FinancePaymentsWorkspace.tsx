@@ -7,7 +7,7 @@ import { FinancePaymentProvidersView } from './FinancePaymentProvidersView.tsx';
 import { financialDocumentClient, type FinancialDocumentReadinessProjection, type InvoiceReceiptPreissuePreview, type ReceiptPreissuePreview } from '../../../modules/finance/financial-document-client.ts';
 import { allocationClient } from '../../../modules/finance/allocation-client.ts';
 import { browserDocumentIntentStorage, resolvePersistentDocumentIntentKey } from '../../../modules/finance/financial-document-intent.ts';
-import { financeReadinessClient, type FinanceReadinessDto } from '../../../modules/finance/finance-readiness-client.ts';
+import type { FinanceOperationalReadinessState, FinanceReadinessDto } from '../../../modules/finance/finance-readiness-client.ts';
 import { ReceiptDocumentSurface } from '../documents/ReceiptDocumentSurface.tsx';
 import { InvoiceReceiptDocumentSurface } from '../documents/InvoiceReceiptDocumentSurface.tsx';
 import { formatFinanceMoney } from '../../../modules/finance/money-presentation.ts';
@@ -24,6 +24,7 @@ export interface FinancePaymentsWorkspaceProps {
   onOpenFinancialDocuments?: (documentId: string) => void;
   initialPaymentId?: string | null;
   initialPaymentReference?: string | null;
+  readinessState?: FinanceOperationalReadinessState;
 }
 
 const receiptEligibilityMessage = (reason?: string, canIssueDocument = false) => {
@@ -110,14 +111,14 @@ export function receiptReadinessPresentation(
   };
 }
 
-export function FinancePaymentsWorkspace({ theme = 'light', mode = 'collection', onSelectPayment, onReturn, onOpenFinanceConfiguration, onOpenFinancialDocuments, initialPaymentId, initialPaymentReference }: FinancePaymentsWorkspaceProps) {
+export function FinancePaymentsWorkspace({ theme = 'light', mode = 'collection', onSelectPayment, onReturn, onOpenFinanceConfiguration, onOpenFinancialDocuments, initialPaymentId, initialPaymentReference, readinessState }: FinancePaymentsWorkspaceProps) {
   const [view, setView] = useState<PaymentSubView>('list');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [issuanceNotice, setIssuanceNotice] = useState<string | null>(null);
   const [canIssueDocument, setCanIssueDocument] = useState(false);
-  const [readiness, setReadiness] = useState<FinanceReadinessDto | null>(null);
+  const readiness: FinanceReadinessDto | null = readinessState?.kind === 'READINESS_READY' ? readinessState.value : null;
   const [receiptDocumentReadiness, setReceiptDocumentReadiness] = useState<FinancialDocumentReadinessProjection | null>(null);
   const [invoiceReceiptDocumentReadiness, setInvoiceReceiptDocumentReadiness] = useState<FinancialDocumentReadinessProjection | null>(null);
   const [receiptEligibility, setReceiptEligibility] = useState<Record<string, { eligible: boolean; reason?: string }>>({});
@@ -152,7 +153,6 @@ export function FinancePaymentsWorkspace({ theme = 'light', mode = 'collection',
     if (payment) setDetailPayment(payment);
   }, [initialPaymentId, initialPaymentReference, mode, payments]);
   useEffect(() => { financialDocumentClient.capabilities().then(capabilities => setCanIssueDocument(capabilities.issue)).catch(() => setCanIssueDocument(false)); }, []);
-  useEffect(() => { financeReadinessClient.get().then(setReadiness).catch(() => setReadiness(null)); }, []);
   useEffect(() => { financialDocumentClient.documentReadiness('receipt').then(setReceiptDocumentReadiness).catch(() => setReceiptDocumentReadiness(null)); }, []);
   useEffect(() => { financialDocumentClient.documentReadiness('invoice_receipt').then(setInvoiceReceiptDocumentReadiness).catch(() => setInvoiceReceiptDocumentReadiness(null)); }, []);
   useEffect(() => { if (!previewPayment) return void setPreviewReadiness(null); financialDocumentClient.receiptPreview(previewPayment.id).then(setPreviewReadiness).catch(() => setPreviewReadiness(null)); }, [previewPayment]);

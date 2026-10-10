@@ -4,6 +4,10 @@ import React from 'react';
 import { create, act } from 'react-test-renderer';
 import { FinanceOperationalContextWorkspace } from '../src/components/finance/operational/FinanceOperationalContextWorkspace.tsx';
 import { FinanceOperationalContextClient } from '../src/modules/finance/finance-operational-context-client.ts';
+import { FinancePaymentCreateView } from '../src/components/finance/payments/FinancePaymentCreateView.tsx';
+import { FinanceWorkspace } from '../src/components/finance/FinanceWorkspace.tsx';
+import { FinancePaymentsWorkspace } from '../src/components/finance/payments/FinancePaymentsWorkspace.tsx';
+import { financeReadinessClient } from '../src/modules/finance/finance-readiness-client.ts';
 import type { FinanceOperationalContext } from '../src/modules/finance/finance-operational-context-model.ts';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -186,6 +190,7 @@ test('STALE_A_AFTER_B_BLOCKED: Race condition where Account A resolves after Acc
       renderer = create(
         React.createElement(FinanceOperationalContextWorkspace, {
           theme: 'light',
+          readinessState: { kind: 'READINESS_READY', value: { module: 'FINANCE', status: 'READY', canManageConfiguration: false, requirements: [], receiptIssuance: { status: 'READY' }, localPrerequisitesComplete: true, jurisdictionPolicyAvailable: true, fiscalConfigurationAvailable: true, seriesConfigurationAvailable: true, paymentCurrency: { functionalCurrency: 'EUR', enabledCurrencies: ['EUR'] } } },
         })
       );
       await flush();
@@ -285,6 +290,11 @@ test('STALE_A_AFTER_B_BLOCKED: Race condition where Account A resolves after Acc
     assert.ok(paymentViewText.includes('Responsável B'), 'Payment view must bind to Responsável B');
     assert.ok(!paymentViewText.includes('CTA-000001'), 'Payment view must NOT bind to Account A');
     assert.ok(!paymentViewText.includes('Responsável A'), 'Payment view must NOT bind to Responsável A');
+    const paymentCreate = root.findByType(FinancePaymentCreateView);
+    assert.deepEqual(paymentCreate.props.currencyOptions, ['EUR'], 'Financial Situation payment flow must receive the institutional enabled currencies');
+    assert.equal(paymentCreate.props.defaultCurrency, 'EUR', 'Financial Situation payment flow must receive the institutional functional currency');
+    const currencySelect = root.findByProps({ 'data-testid': 'finance-payment-currency-select' });
+    assert.deepEqual(currencySelect.findAllByType('option').map(option => option.props.value), ['', 'EUR'], 'Financial Situation payment currency selector must render EUR as an option');
   } finally {
     FinanceOperationalContextClient.prototype.getByFinancialAccountId = origGetById;
     FinanceOperationalContextClient.prototype.searchFinancialAccounts = origSearch;
@@ -337,5 +347,119 @@ test('DIRECT_CONTEXT_BYPASSES_GENERIC_SEARCH: Direct studentRef context resoluti
   } finally {
     FinanceOperationalContextClient.prototype.getOperationalContext = origGetContext;
     FinanceOperationalContextClient.prototype.searchFinancialAccounts = origSearch;
+  }
+});
+
+test('CONTEXTUAL_PAYMENT_LATE_READINESS: EUR is selected after readiness resolves without remounting the payment flow', async () => {
+  const origGetById = FinanceOperationalContextClient.prototype.getByFinancialAccountId;
+  const origSearch = FinanceOperationalContextClient.prototype.searchFinancialAccounts;
+
+  FinanceOperationalContextClient.prototype.getByFinancialAccountId = async () => contextA;
+  FinanceOperationalContextClient.prototype.searchFinancialAccounts = async () => [contextA.financialAccount as any];
+
+  try {
+    let renderer: any;
+    await act(async () => {
+      renderer = create(React.createElement(FinanceOperationalContextWorkspace, { theme: 'light', readinessState: { kind: 'READINESS_LOADING' } }));
+      await flush();
+    });
+
+    const root = renderer.root;
+    await act(async () => {
+      root.findByType('form').props.onSubmit({ preventDefault: () => {} });
+      await flush();
+    });
+    await act(async () => {
+      root.findByProps({ 'data-testid': `finance-select-account-btn-${contextA.financialAccount.id}` }).props.onClick();
+      await flush();
+    });
+    await act(async () => {
+      root.findByProps({ 'data-testid': 'finance-register-payment-button' }).props.onClick();
+      await flush();
+    });
+
+    const currency = () => root.findByProps({ 'data-testid': 'finance-payment-currency-select' });
+    assert.equal(currency().props.value, '', 'The form must begin without a currency while readiness is pending');
+    assert.deepEqual(currency().findAllByType('option').map(option => option.props.value), ['']);
+
+    await act(async () => {
+      renderer.update(React.createElement(FinanceOperationalContextWorkspace, { theme: 'light', readinessState: { kind: 'READINESS_READY', value: { module: 'FINANCE', status: 'READY', canManageConfiguration: false, requirements: [], receiptIssuance: { status: 'READY' }, localPrerequisitesComplete: true, jurisdictionPolicyAvailable: true, fiscalConfigurationAvailable: true, seriesConfigurationAvailable: true, paymentCurrency: { functionalCurrency: 'EUR', enabledCurrencies: ['EUR'] } } } }));
+      await flush();
+    });
+
+    assert.equal(currency().props.value, 'EUR');
+    assert.deepEqual(currency().findAllByType('option').map(option => option.props.value), ['', 'EUR']);
+  } finally {
+    FinanceOperationalContextClient.prototype.getByFinancialAccountId = origGetById;
+    FinanceOperationalContextClient.prototype.searchFinancialAccounts = origSearch;
+  }
+});
+
+test('FINANCE_WORKSPACE_CONTEXTUAL_PAYMENT_LATE_READINESS: parent-owned EUR reaches the mounted Financial Situation payment selector', async () => {
+  const origGetById = FinanceOperationalContextClient.prototype.getByFinancialAccountId;
+  const origSearch = FinanceOperationalContextClient.prototype.searchFinancialAccounts;
+  const origReadiness = financeReadinessClient.get;
+  let resolveReadiness!: (value: any) => void;
+  let readinessRequests = 0;
+
+  FinanceOperationalContextClient.prototype.getByFinancialAccountId = async () => contextA;
+  FinanceOperationalContextClient.prototype.searchFinancialAccounts = async () => [contextA.financialAccount as any];
+  financeReadinessClient.get = () => {
+    readinessRequests += 1;
+    return new Promise(resolve => { resolveReadiness = resolve; });
+  };
+
+  try {
+    let renderer: any;
+    await act(async () => {
+      renderer = create(React.createElement(FinanceWorkspace, { theme: 'light' }));
+      await flush();
+    });
+
+    const root = renderer.root;
+    await act(async () => {
+      root.findByType('form').props.onSubmit({ preventDefault: () => {} });
+      await flush();
+    });
+    await act(async () => {
+      root.findByProps({ 'data-testid': `finance-select-account-btn-${contextA.financialAccount.id}` }).props.onClick();
+      await flush();
+    });
+    await act(async () => {
+      root.findByProps({ 'data-testid': 'finance-register-payment-button' }).props.onClick();
+      await flush();
+    });
+
+    const currency = () => root.findByProps({ 'data-testid': 'finance-payment-currency-select' });
+    assert.deepEqual(currency().findAllByType('option').map(option => option.props.value), ['']);
+    assert.match(JSON.stringify(renderer.toJSON()), /CTA-000001/);
+    assert.equal(readinessRequests, 1, 'Financial Situation must not create an independent readiness request');
+
+    await act(async () => {
+      resolveReadiness({
+        module: 'FINANCE', status: 'READY', canManageConfiguration: false, requirements: [], receiptIssuance: { status: 'READY' },
+        localPrerequisitesComplete: true, jurisdictionPolicyAvailable: true, fiscalConfigurationAvailable: true, seriesConfigurationAvailable: true,
+        paymentCurrency: { functionalCurrency: 'EUR', enabledCurrencies: ['EUR'] },
+      });
+      await flush();
+    });
+
+    assert.equal(currency().props.value, 'EUR');
+    assert.deepEqual(currency().findAllByType('option').map(option => option.props.value), ['', 'EUR']);
+    assert.match(JSON.stringify(renderer.toJSON()), /CTA-000001/, 'Readiness updates must preserve the contextual account');
+    assert.equal(readinessRequests, 1);
+
+    await act(async () => {
+      root.findByProps({ 'data-testid': 'finance-tab-recebimentos' }).props.onClick();
+      await flush();
+    });
+    const payments = root.findByType(FinancePaymentsWorkspace);
+    assert.equal(payments.props.readinessState.kind, 'READINESS_READY');
+    assert.deepEqual(payments.props.readinessState.value.paymentCurrency.enabledCurrencies, ['EUR']);
+    assert.equal(readinessRequests, 1);
+  } finally {
+    FinanceOperationalContextClient.prototype.getByFinancialAccountId = origGetById;
+    FinanceOperationalContextClient.prototype.searchFinancialAccounts = origSearch;
+    financeReadinessClient.get = origReadiness;
   }
 });

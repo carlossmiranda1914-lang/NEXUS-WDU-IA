@@ -155,14 +155,35 @@ try {
       /conflito|conflict|fingerprint/i
     );
 
-    // 4. Second payment creates PAG-000002
-    const input2 = {
+    // 4. A new manual receipt without an account leaves no financial or
+    // idempotency effect.
+    const missingAccountInput = {
       sourceType: 'manual_offline',
       method: 'bank_transfer',
       amount: '500.00',
       currency: 'EUR',
       manualEvidenceRef: 'TRF-998811',
     };
+    const beforeMissingAccount = await client.query(`
+      SELECT
+        (SELECT count(*)::int FROM finance_payments WHERE institution_id=$1) AS payments,
+        (SELECT count(*)::int FROM finance_journal_transactions WHERE institution_id=$1) AS journals,
+        (SELECT count(*)::int FROM finance_command_results WHERE institution_id=$1) AS commands
+    `, [institutionA]);
+    await assert.rejects(
+      () => confirmIncomingPayment(pool, profileStore, contextA, missingAccountInput, 'idemp-pay-missing-account'),
+      (err: any) => err instanceof PaymentValidationError && /selecionar uma conta financeira ativa/i.test(err.message)
+    );
+    const afterMissingAccount = await client.query(`
+      SELECT
+        (SELECT count(*)::int FROM finance_payments WHERE institution_id=$1) AS payments,
+        (SELECT count(*)::int FROM finance_journal_transactions WHERE institution_id=$1) AS journals,
+        (SELECT count(*)::int FROM finance_command_results WHERE institution_id=$1) AS commands
+    `, [institutionA]);
+    assert.deepEqual(afterMissingAccount.rows[0], beforeMissingAccount.rows[0]);
+
+    // 5. Second valid payment creates PAG-000002.
+    const input2 = { ...missingAccountInput, financialAccountId: accountA };
 
     const confirmRes2 = await confirmIncomingPayment(
       pool,
@@ -173,7 +194,90 @@ try {
     );
     assert.equal(confirmRes2.payment.paymentReference, 'PAG-000002');
 
-    // 5. Tenant isolation check: Inst B cannot read Inst A payment
+    // 6. A historical manual receipt without an account remains replayable.
+    // This simulates a pre-rule command record without mutating UAT data.
+    const legacyKey = 'idemp-pay-historical-no-account';
+    const legacyIntent = {
+      institutionId: institutionA,
+      sourceType: 'manual_offline' as const,
+      method: 'cash',
+      money: Money.parse('20.00', 'EUR'),
+      effectiveAt: new Date('2026-01-01T12:00:00.000Z'),
+      actorKind: 'human' as const,
+      actorPersonId: actorA,
+      financialProfileVersion: 1,
+    };
+    await client.query('BEGIN');
+    try {
+      const legacyPayment = await paymentRepo.confirmInTransaction(client, legacyIntent, legacyKey);
+      await client.query(
+        `INSERT INTO finance_command_results (institution_id, operation_namespace, idempotency_key, request_fingerprint, result_ref)
+         VALUES ($1, 'finance.payment.confirmation', $2, $3, $4)`,
+        [institutionA, legacyKey, createPaymentConfirmationFingerprint(legacyIntent), legacyPayment.id]
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+    const legacyReplay = await confirmIncomingPayment(
+      pool,
+      profileStore,
+      contextA,
+      { sourceType: 'manual_offline', method: 'cash', amount: '20.00', currency: 'EUR', effectiveAt: '2026-01-01T12:00:00.000Z' },
+      legacyKey
+    );
+    assert.equal(legacyReplay.replayed, true);
+    assert.equal(legacyReplay.payment.financialAccountId, undefined);
+    const legacyAlternateReplay = await paymentRepo.confirmPaymentInCommand(
+      contextA,
+      { sourceType: 'manual_offline', method: 'cash', amount: '20.00', currency: 'EUR', effectiveAt: '2026-01-01T12:00:00.000Z' },
+      legacyKey,
+      profileStore,
+    );
+    assert.equal(legacyAlternateReplay.replayed, true);
+    assert.equal(legacyAlternateReplay.payment.financialAccountId, undefined);
+
+    // 7. The alternate confirmation path enforces the same new-manual rule
+    // without writing payment, journal, or idempotency records.
+    const alternateBefore = await client.query(`
+      SELECT
+        (SELECT count(*)::int FROM finance_payments WHERE institution_id=$1) AS payments,
+        (SELECT count(*)::int FROM finance_journal_transactions WHERE institution_id=$1) AS journals,
+        (SELECT count(*)::int FROM finance_command_results WHERE institution_id=$1) AS commands
+    `, [institutionA]);
+    await assert.rejects(
+      () => paymentRepo.confirmPaymentInCommand(contextA, missingAccountInput, 'idemp-alternate-missing-account', profileStore),
+      (err: any) => err instanceof PaymentValidationError && /selecionar uma conta financeira ativa/i.test(err.message),
+    );
+    const alternateAfter = await client.query(`
+      SELECT
+        (SELECT count(*)::int FROM finance_payments WHERE institution_id=$1) AS payments,
+        (SELECT count(*)::int FROM finance_journal_transactions WHERE institution_id=$1) AS journals,
+        (SELECT count(*)::int FROM finance_command_results WHERE institution_id=$1) AS commands
+    `, [institutionA]);
+    assert.deepEqual(alternateAfter.rows[0], alternateBefore.rows[0]);
+
+    const alternateValid = await paymentRepo.confirmPaymentInCommand(
+      contextA,
+      { ...input1, amount: '126.00' },
+      'idemp-alternate-valid-account',
+      profileStore,
+    );
+    assert.equal(alternateValid.replayed, false);
+    assert.equal(alternateValid.payment.financialAccountId, accountA);
+
+    await assert.rejects(
+      () => paymentRepo.confirmPaymentInCommand(
+        contextA,
+        { ...input1, amount: '127.00', financialAccountId: accountB },
+        'idemp-alternate-cross-tenant',
+        profileStore,
+      ),
+      (err: any) => err instanceof PaymentValidationError && /conta financeira/i.test(err.message),
+    );
+
+    // 8. Tenant isolation check: Inst B cannot read Inst A payment
     await assert.rejects(
       () => paymentRepo.getById(contextB, confirmRes1.payment.id),
       (err: any) => err instanceof PaymentNotFoundError
@@ -183,7 +287,7 @@ try {
     assert.equal(listInstB.length, 0);
 
     const listInstA = await paymentRepo.list(contextA);
-    assert.equal(listInstA.length, 2);
+    assert.equal(listInstA.length, 4);
 
     // Cross-tenant account rejection: Inst A trying to use Account of Inst B
     await assert.rejects(
@@ -209,7 +313,30 @@ try {
       (err: any) => err instanceof PaymentValidationError && /pessoa pagadora/i.test(err.message)
     );
 
-    // 6. Rollback injection proof
+    // Inactive accounts continue to be rejected.
+    await client.query(`UPDATE finance_financial_accounts SET status='inactive' WHERE id=$1`, [accountA]);
+    await assert.rejects(
+      () => confirmIncomingPayment(
+        pool,
+        profileStore,
+        contextA,
+        { ...input1, amount: '130.00' },
+        'idemp-pay-inactive-account'
+      ),
+      (err: any) => err instanceof PaymentValidationError && /inativa/i.test(err.message)
+    );
+    await assert.rejects(
+      () => paymentRepo.confirmPaymentInCommand(
+        contextA,
+        { ...input1, amount: '131.00' },
+        'idemp-alternate-inactive-account',
+        profileStore,
+      ),
+      (err: any) => err instanceof PaymentValidationError && /inativa/i.test(err.message),
+    );
+
+    // 9. Rollback injection proof
+    await client.query(`UPDATE finance_financial_accounts SET status='active' WHERE id=$1`, [accountA]);
     for (const point of ['after_counter', 'after_journal', 'after_payment'] as PaymentFailurePoint[]) {
       const failIdemp = `idemp-fail-${point}`;
       const failRepo = new PostgresPaymentRepository(pool, point);

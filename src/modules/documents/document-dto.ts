@@ -1,4 +1,4 @@
-import type { DocumentStatus, DocumentVersionStatus } from './document-model.ts';
+import type { DocumentStatus, DocumentVersionStatus, StorageContentAvailability } from './document-model.ts';
 
 export interface FrontendSafeDocumentVersionDto {
   id: string;
@@ -7,6 +7,7 @@ export interface FrontendSafeDocumentVersionDto {
   byteSize: number;
   sha256Hash: string;
   status: DocumentVersionStatus;
+  contentAvailability?: 'unknown' | 'available' | 'unavailable';
   originalFilename?: string;
   declaredFilename?: string;
   createdByPersonName?: string | null;
@@ -67,6 +68,7 @@ export interface FrontendSafeDocumentDto {
   category: string;
   classification: string | null;
   status: DocumentStatus;
+  contentAvailability?: StorageContentAvailability;
   originalFilename?: string;
   declaredFilename?: string;
   title?: string;

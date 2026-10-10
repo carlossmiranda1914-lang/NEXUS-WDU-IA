@@ -12,6 +12,46 @@
 
 **Canonical parent plan:** `docs/superpowers/plans/2026-09-12-finance-f7-g02-angola-production-jurisdiction.md`
 
+## Current plan reconciliation (2026-10-02)
+
+This is the current Finance planning note for the already-proven F7 corridor.
+It reconciles the applicable INST-FIN-2026-V1 directions with repository
+evidence; the original task checklist below remains historical execution
+evidence and is not reopened by this note.
+
+| Criterion | Current classification | Priority | Closure criterion |
+| --- | --- | --- | --- |
+| Finance consumes Academic authority while preserving historical Finance facts | `COMPROVADO` — account context reads Academic references under institutional predicates | AGORA: preserve | Focused tenant/history regression if an integration boundary changes |
+| Obligation, document, payment/receipt, allocation and reconciliation are distinct | `COMPROVADO` — allocation is an explicit payment-to-obligation authority; payment confirmation does not create/mutate obligations | AGORA: preserve | No collapsed authority or automatic allocation without a separately authorized contract |
+| Exact values, defined rounding and currency per transaction | `COMPROVADO` — existing `Money`, currency registry and persisted transaction currency | AGORA: preserve | Affected Money/currency persistence and regression proof |
+| Calculated balance per account/currency, without direct editing | `COMPROVADO` — confirmed facts and allocation/coverage projections derive positions | AGORA: preserve | Projection/read-model proof after relevant changes |
+| Institution isolation, authorization, audit and exception approval | `COMPROVADO` for server-side institutional authority, audit/outbox and tenant tests; `PARCIAL` for any future exception-approval policy not already modelled | AGORA: preserve; DEPOIS: policy only if a concrete exception is required | A bounded approved policy plus negative tenant and audit evidence |
+| Atomic command, idempotency and concurrency | `COMPROVADO` — PostgreSQL command/result, rollback and concurrency evidence | AGORA: preserve | Focused persisted/concurrent proof whenever a command changes |
+| Payment proof appropriate to the method | `PARCIAL` — external/manual evidence is preserved and no bank/provider proof is fabricated | DEPOIS | Canonical method-to-evidence policy, only if product requires stricter proof |
+| Reliable asynchronous heavy processing | `PARCIAL` — durable outbox/recovery is proven; no general heavy-job capability is asserted | DEPOIS | Separate workload, delivery and recovery contract; do not prescribe a queue technology first |
+| Institutional configuration and fiscal boundary | `COMPROVADO` within existing profile/readiness, adapter and series authorities | AGORA: preserve | Server-gated normal-flow proof for any changed configuration surface |
+| Internationalization and multi-region deployment | `NÃO VERIFICADO` | META FUTURA | Separate product and deployment decisions; neither is implied by the other |
+| Capacity of 5,000 users | `NÃO VERIFICADO` | META FUTURA | Approved workload profile, target SLOs, measurement method and observed results |
+| H2/H3/H4 relationship/read-model debt | `PARCIAL` / `DEFERRED_DEBT` by canonical project state | DEPOIS | Narrow canonical adjudication; existing relationships alone do not close the debt |
+| Task 9 debit-note work | `PARCIAL` / `PAUSED_PENDING_HUMAN_UAT` | DEPOIS | Its separate approved plan, issuance/artifact evidence and Human UAT |
+
+Technology posture: the existing architecture remains TypeScript, React,
+Node.js/Express and PostgreSQL with existing Finance command, audit/outbox and
+HTTP/client patterns. This plan does not prescribe Drizzle, Zod, BullMQ, Redis
+or replicas. Any Problem Details work should use RFC 9457 as the current
+reference while preserving compatible existing error contracts, and requires a
+separate authorized delta.
+
+The manual-payment destination correction is a narrow, unintegrated worktree
+checkpoint governed by `docs/operations/PROJECT_STATE.md` and
+`docs/operations/NEXUS_ENGINEERING_CONFIG.yaml`: on 2026-10-02, authorization
+was reconciled after the existing correction to cover only the
+`payment-service.ts` new-manual guard, the equivalent
+`confirmPaymentInCommand` guard, frontend contextual/explicit selection, and
+directly affected tests. Independent review remains pending and formal UAT is
+blocked by the dirty worktree. This is not technical approval or integration,
+and it does not alter this plan's frozen-authority boundaries.
+
 ## Global Constraints
 
 - `PRODUCT_MODE=SOLIDIFICATION`.

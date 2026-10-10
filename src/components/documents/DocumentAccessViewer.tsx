@@ -84,6 +84,13 @@ export default function DocumentAccessViewer({
           throw new Error('O documento não possui versão disponível para consulta.');
         }
 
+        if (document.currentVersion.contentAvailability === 'unavailable') {
+          throw new Error('Conteúdo indisponível no armazenamento para esta versão.');
+        }
+        if (document.currentVersion.contentAvailability === 'unknown') {
+          throw new Error('Disponibilidade de armazenamento pendente de verificação para esta versão.');
+        }
+
         if (document.currentVersion.status === 'quarantined') {
           throw new Error('Acesso recusado: o documento está retido em quarentena.');
         }
@@ -131,7 +138,17 @@ export default function DocumentAccessViewer({
         }
       } catch (err) {
         if (!active) return;
-        setErrorMessage(err instanceof Error ? err.message : 'Falha ao aceder ao documento.');
+        let msg = err instanceof Error ? err.message : 'Falha ao aceder ao documento.';
+        if (
+          msg.includes('CONTENT_UNAVAILABLE') ||
+          msg.includes('OBJECT_NOT_FOUND') ||
+          msg.includes('ENOENT') ||
+          msg.includes('storage') ||
+          msg.includes('.uat-storage')
+        ) {
+          msg = 'Conteúdo indisponível no armazenamento para esta versão.';
+        }
+        setErrorMessage(msg);
         setLoading(false);
       }
     }

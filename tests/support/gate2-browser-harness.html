@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <title>Nexus Documents - Gate 2 Real Association UI Harness</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #090d0b; color: #f4f4f5; margin: 0; padding: 24px; }
+    h1 { font-size: 18px; margin-bottom: 4px; color: #10b981; }
+    p.sub { font-size: 12px; color: #a1a1aa; margin-top: 0; margin-bottom: 20px; }
+    .table-container { border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; background: #121815; overflow: hidden; margin-bottom: 24px; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
+    th { background: rgba(255,255,255,0.03); padding: 12px 16px; font-weight: 600; color: #a1a1aa; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 11px; text-transform: uppercase; }
+    td { padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    tr.clickable:hover { background: rgba(16,185,129,0.05); cursor: pointer; }
+    .badge { display: inline-block; font-size: 10px; font-weight: bold; text-transform: uppercase; padding: 3px 8px; border-radius: 9999px; }
+    .badge-green { background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }
+    .badge-gray { background: rgba(255,255,255,0.1); color: #d4d4d8; }
+    .badge-blue { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.3); }
+    .drawer { position: fixed; top: 0; right: 0; width: 480px; height: 100vh; background: #0e1411; border-left: 1px solid rgba(16,185,129,0.2); box-shadow: -10px 0 30px rgba(0,0,0,0.5); display: none; flex-direction: column; z-index: 50; }
+    .drawer.open { display: flex; }
+    .drawer-header { padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center; }
+    .drawer-nav { display: flex; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .drawer-nav button { flex: 1; padding: 12px; background: none; border: none; border-bottom: 2px solid transparent; color: #a1a1aa; font-size: 12px; font-weight: bold; cursor: pointer; }
+    .drawer-nav button.active { border-bottom-color: #10b981; color: #34d399; }
+    .drawer-content { flex: 1; overflow-y: auto; padding: 20px; }
+    .btn { background: #059669; color: white; border: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer; }
+    .btn:hover { background: #10b981; }
+    .btn-secondary { background: rgba(255,255,255,0.1); color: #d4d4d8; }
+    .card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+    .search-input { width: 100%; box-sizing: border-box; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 8px 12px; color: white; font-size: 12px; margin-bottom: 8px; }
+    .target-item { padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 6px; cursor: pointer; font-size: 12px; }
+    .target-item:hover, .target-item.selected { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.4); }
+  </style>
+</head>
+<body>
+  <h1>Nexus Documents — Adjudicação de Associação Real (Gate 2)</h1>
+  <p class="sub">Interface Real com ligação à API e PostgreSQL de Teste</p>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Documento</th>
+          <th>Categoria</th>
+          <th>Estado Técnico</th>
+          <th>Disponibilidade</th>
+          <th>Associações</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="documents-tbody">
+        <tr><td colspan="6" style="text-align:center; padding: 20px; color: #71717a;">A carregar documentos...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="drawer" class="drawer">
+    <div class="drawer-header">
+      <div>
+        <h2 id="drawer-title" style="margin: 0; font-size: 15px; font-weight: bold;">Detalhe do Documento</h2>
+        <span id="drawer-subtitle" style="font-size: 11px; color: #a1a1aa;"></span>
+      </div>
+      <button id="close-drawer-btn" class="btn btn-secondary" onclick="closeDrawer()">✕</button>
+    </div>
+
+    <div class="drawer-nav">
+      <button id="tab-info" onclick="switchTab('info')">Informações</button>
+      <button id="tab-associations" class="active" onclick="switchTab('associations')">Associações (<span id="assoc-count">0</span>)</button>
+    </div>
+
+    <div id="tab-content-info" class="drawer-content" style="display: none;">
+      <div class="card" id="info-card"></div>
+    </div>
+
+    <div id="tab-content-associations" class="drawer-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <span style="font-size: 12px; font-weight: bold; color: #a1a1aa; text-transform: uppercase;">Entidades Associadas</span>
+        <button id="add-assoc-btn" class="btn" onclick="openAddAssocForm()">+ Adicionar Associação</button>
+      </div>
+
+      <!-- Add Association Form -->
+      <div id="add-assoc-form" class="card" style="display: none; border-color: rgba(16,185,129,0.4); background: rgba(16,185,129,0.03);">
+        <div style="font-size: 13px; font-weight: bold; margin-bottom: 12px; color: #34d399;">Ligar a Entidade Escolar</div>
+        
+        <input type="text" id="target-search-input" class="search-input" placeholder="Pesquisar por nome (ex: Silva)..." oninput="debounceSearch()">
+        
+        <div id="target-search-results" style="max-height: 140px; overflow-y: auto; margin-bottom: 12px;"></div>
+
+        <label style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 4px; color: #a1a1aa;">Finalidade:</label>
+        <input type="text" id="assoc-purpose-input" class="search-input" value="Comprovativo de Matrícula 2026/2027">
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px;">
+          <button class="btn btn-secondary" onclick="closeAddAssocForm()">Cancelar</button>
+          <button id="submit-assoc-btn" class="btn" onclick="submitAssociation()" disabled>Confirmar Associação</button>
+        </div>
+      </div>
+
+      <!-- Association List -->
+      <div id="associations-list"></div>
+    </div>
+  </div>
+
+  <script>
+    let currentDoc = null;
+    let selectedTarget = null;
+    let searchTimeout = null;
+
+    async function loadDocuments() {
+      try {
+        const res = await fetch('/api/documents');
+        const data = await res.json();
+        const tbody = document.getElementById('documents-tbody');
+        tbody.innerHTML = '';
+
+        if (!data.items || data.items.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 20px;">Nenhum documento encontrado.</td></tr>';
+          return;
+        }
+
+        data.items.forEach(doc => {
+          const tr = document.createElement('tr');
+          tr.className = 'clickable';
+          tr.id = `doc-row-${doc.id}`;
+          tr.onclick = () => openDrawer(doc.id);
+          tr.innerHTML = `
+            <td>
+              <strong style="color: #34d399;">${doc.declaredFilename || doc.title}</strong>
+              <div style="font-size: 11px; color: #71717a;">ID: ${doc.id.slice(0,8)}...</div>
+            </td>
+            <td><span class="badge badge-gray">${doc.category}</span></td>
+            <td><span class="badge badge-green">${doc.status}</span></td>
+            <td><span class="badge badge-green">${doc.contentAvailability || 'available'}</span></td>
+            <td><span id="list-assoc-count-${doc.id}" class="badge badge-blue">${doc.associations.length} ligação(ões)</span></td>
+            <td><button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="event.stopPropagation(); openDrawer('${doc.id}')">Ver Detalhe</button></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        document.getElementById('documents-tbody').innerHTML = `<tr><td colspan="6" style="color: #ef4444; padding: 20px;">Erro ao carregar: ${err.message}</td></tr>`;
+      }
+    }
+
+    async function openDrawer(docId) {
+      const res = await fetch(`/api/documents/${docId}`);
+      currentDoc = await res.json();
+      
+      document.getElementById('drawer-title').textContent = currentDoc.declaredFilename || currentDoc.title;
+      document.getElementById('drawer-subtitle').textContent = `Categoria: ${currentDoc.category} • v${currentDoc.currentVersion?.versionNumber || 1}`;
+      document.getElementById('assoc-count').textContent = currentDoc.associations.length;
+      
+      renderInfoTab();
+      renderAssociationsTab();
+      
+      document.getElementById('drawer').classList.add('open');
+    }
+
+    function closeDrawer() {
+      document.getElementById('drawer').classList.remove('open');
+      closeAddAssocForm();
+    }
+
+    function switchTab(tab) {
+      document.getElementById('tab-info').classList.toggle('active', tab === 'info');
+      document.getElementById('tab-associations').classList.toggle('active', tab === 'associations');
+      document.getElementById('tab-content-info').style.display = tab === 'info' ? 'block' : 'none';
+      document.getElementById('tab-content-associations').style.display = tab === 'associations' ? 'block' : 'none';
+    }
+
+    function renderInfoTab() {
+      document.getElementById('info-card').innerHTML = `
+        <div style="margin-bottom: 8px;"><strong>ID:</strong> ${currentDoc.id}</div>
+        <div style="margin-bottom: 8px;"><strong>Categoria:</strong> ${currentDoc.category}</div>
+        <div style="margin-bottom: 8px;"><strong>Estado:</strong> ${currentDoc.status}</div>
+        <div style="margin-bottom: 8px;"><strong>Disponibilidade:</strong> ${currentDoc.contentAvailability}</div>
+        <div><strong>Versão Atual:</strong> v${currentDoc.currentVersion?.versionNumber} (${currentDoc.currentVersion?.byteSize} bytes)</div>
+      `;
+    }
+
+    function renderAssociationsTab() {
+      const listDiv = document.getElementById('associations-list');
+      listDiv.innerHTML = '';
+
+      if (!currentDoc.associations || currentDoc.associations.length === 0) {
+        listDiv.innerHTML = '<div style="text-align: center; color: #71717a; padding: 30px; font-size: 12px;">Nenhuma associação escolar vinculada a este documento.</div>';
+        return;
+      }
+
+      currentDoc.associations.forEach(a => {
+        const item = document.createElement('div');
+        item.className = 'card';
+        item.id = `assoc-item-${a.id}`;
+        item.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+            <div>
+              <div style="font-weight: bold; font-size: 13px; color: #34d399;" id="assoc-target-name">${a.targetEntityName || 'Entidade #' + a.targetResourceId.slice(0,8)}</div>
+              <div style="font-size: 10px; color: #a1a1aa; text-transform: uppercase;">Domínio: ${a.targetDomain} • ${a.targetResourceType}</div>
+            </div>
+            <span class="badge badge-green">${a.status}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #d4d4d8; margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
+            <div><span style="color: #71717a;">Finalidade:</span> <strong>${a.purpose}</strong></div>
+            <div id="assoc-version-badge"><span style="color: #71717a;">Versão:</span> <span class="badge badge-gray font-mono">v${currentDoc.currentVersion?.versionNumber || 1}</span></div>
+          </div>
+        `;
+        listDiv.appendChild(item);
+      });
+    }
+
+    function openAddAssocForm() {
+      document.getElementById('add-assoc-form').style.display = 'block';
+      document.getElementById('add-assoc-btn').style.display = 'none';
+      selectedTarget = null;
+      document.getElementById('submit-assoc-btn').disabled = true;
+      searchTargets('');
+    }
+
+    function closeAddAssocForm() {
+      document.getElementById('add-assoc-form').style.display = 'none';
+      document.getElementById('add-assoc-btn').style.display = 'inline-block';
+      selectedTarget = null;
+    }
+
+    function debounceSearch() {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        const q = document.getElementById('target-search-input').value;
+        searchTargets(q);
+      }, 250);
+    }
+
+    async function searchTargets(query) {
+      const resultsDiv = document.getElementById('target-search-results');
+      resultsDiv.innerHTML = '<div style="font-size: 11px; color: #71717a; padding: 6px;">A pesquisar...</div>';
+      try {
+        const res = await fetch(`/api/documents/association-targets/search?domain=enrollment&q=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        resultsDiv.innerHTML = '';
+        if (!data.targets || data.targets.length === 0) {
+          resultsDiv.innerHTML = '<div style="font-size: 11px; color: #71717a; padding: 6px;">Nenhuma entidade encontrada.</div>';
+          return;
+        }
+
+        data.targets.forEach(t => {
+          const div = document.createElement('div');
+          div.className = 'target-item';
+          div.id = `target-${t.id}`;
+          div.innerHTML = `<strong>${t.name}</strong><div style="font-size: 10px; color: #a1a1aa;">${t.detail || t.resourceType}</div>`;
+          div.onclick = () => {
+            document.querySelectorAll('.target-item').forEach(el => el.classList.remove('selected'));
+            div.classList.add('selected');
+            selectedTarget = t;
+            document.getElementById('submit-assoc-btn').disabled = false;
+          };
+          resultsDiv.appendChild(div);
+        });
+      } catch (err) {
+        resultsDiv.innerHTML = `<div style="font-size: 11px; color: #ef4444; padding: 6px;">Erro: ${err.message}</div>`;
+      }
+    }
+
+    async function submitAssociation() {
+      if (!currentDoc || !selectedTarget) return;
+      const submitBtn = document.getElementById('submit-assoc-btn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'A guardar...';
+
+      const purpose = document.getElementById('assoc-purpose-input').value;
+      const idempotencyKey = `ui-browser-assoc-${Date.now()}`;
+
+      try {
+        const res = await fetch(`/api/documents/${currentDoc.id}/associations`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Idempotency-Key': idempotencyKey,
+          },
+          body: JSON.stringify({
+            targetDomain: selectedTarget.domain,
+            targetResourceType: selectedTarget.resourceType,
+            targetResourceId: selectedTarget.id,
+            purpose: purpose || 'Associação criada via navegador',
+            pinnedVersionId: currentDoc.currentVersion?.id || null,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Erro ao associar');
+        }
+
+        closeAddAssocForm();
+        await openDrawer(currentDoc.id);
+        await loadDocuments();
+      } catch (err) {
+        alert('Erro ao criar associação: ' + err.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Confirmar Associação';
+      }
+    }
+
+    window.onload = loadDocuments;
+  </script>
+</body>
+</html>

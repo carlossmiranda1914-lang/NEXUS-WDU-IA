@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { ManualPaymentMethod, Payment } from '../../../modules/finance/payment-model.ts';
 import { paymentClient } from '../../../modules/finance/payment-client.ts';
 import { Money } from '../../../modules/finance/money.ts';
+import type { FinancialAccount } from '../../../modules/finance/financial-account-model.ts';
+import { FinanceOperationalContextClient } from '../../../modules/finance/finance-operational-context-client.ts';
 
 export interface FinancePaymentCreateViewProps {
   theme?: string;
@@ -12,6 +14,8 @@ export interface FinancePaymentCreateViewProps {
   onSuccess: (payment: Payment) => void;
   onCancel: () => void;
 }
+
+const financialAccountClient = new FinanceOperationalContextClient();
 
 export function FinancePaymentCreateView({
   theme = 'light',
@@ -35,11 +39,55 @@ export function FinancePaymentCreateView({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showReview, setShowReview] = useState(false);
+  const [activeAccounts, setActiveAccounts] = useState<FinancialAccount[]>([]);
+  const [selectedFinancialAccountId, setSelectedFinancialAccountId] = useState('');
+  const [accountsLoading, setAccountsLoading] = useState(!financialAccount);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
+
+  const selectedFinancialAccount = financialAccount ?? activeAccounts.find(account => account.id === selectedFinancialAccountId);
+  const loadActiveAccounts = async () => {
+    if (financialAccount) return;
+    setAccountsLoading(true);
+    setAccountsError(null);
+    try {
+      const accounts = await financialAccountClient.listFinancialAccounts('active');
+      setActiveAccounts(accounts.filter(account => account.status === 'active'));
+    } catch (err: any) {
+      setActiveAccounts([]);
+      setAccountsError(err?.message || 'Não foi possível carregar as contas financeiras ativas.');
+    } finally {
+      setAccountsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadActiveAccounts();
+  }, [financialAccount]);
+
+  useEffect(() => {
+    const hasValidSelection = Boolean(currency) && supportedCurrencies.includes(currency);
+    const authoritativeDefault = defaultCurrency && supportedCurrencies.includes(defaultCurrency)
+      ? defaultCurrency
+      : '';
+
+    // Readiness may resolve after the contextual payment form mounts. Only fill
+    // an invalid selection so late institutional configuration never overwrites
+    // a valid currency explicitly chosen by the user.
+    if (!hasValidSelection && authoritativeDefault) {
+      setCurrency(authoritativeDefault);
+    }
+  }, [currency, currencyOptions, defaultCurrency]);
 
   const handleValidate = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
+    if (!selectedFinancialAccount) {
+      setError(accountsError
+        ? 'Não é possível avançar enquanto as contas financeiras ativas não estiverem disponíveis.'
+        : 'Selecione a conta financeira de destino para confirmar o recebimento.');
+      return;
+    }
     if (!currency) {
       setError('Selecione a moeda configurada para esta instituição.');
       return;
@@ -60,6 +108,11 @@ export function FinancePaymentCreateView({
   };
 
   const handleConfirm = async () => {
+    if (!selectedFinancialAccount) {
+      setError('Selecione a conta financeira de destino para confirmar o recebimento.');
+      setShowReview(false);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -67,7 +120,7 @@ export function FinancePaymentCreateView({
         method,
         amount: amount.trim(),
         currency: currency.trim(),
-        financialAccountId: financialAccount?.id,
+        financialAccountId: selectedFinancialAccount.id,
         payerPersonId: payerPerson?.personId,
         manualEvidenceRef: manualEvidenceRef.trim() || undefined,
         notes: notes.trim() || undefined,
@@ -107,7 +160,7 @@ export function FinancePaymentCreateView({
       </div>
 
       {/* Context Banner: Selected Financial Account and Payer */}
-      {financialAccount && (
+      {selectedFinancialAccount && (
         <div
           data-testid="finance-payment-account-context"
           className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
@@ -119,7 +172,7 @@ export function FinancePaymentCreateView({
               Conta financeira de destino
             </span>
             <p className={`text-sm font-bold ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>
-              {financialAccount.accountNumber} — {financialAccount.name}
+              {selectedFinancialAccount.accountNumber} — {selectedFinancialAccount.name}
             </p>
           </div>
           {payerPerson && (
@@ -154,6 +207,38 @@ export function FinancePaymentCreateView({
       {/* Form */}
       {!showReview ? (
         <form onSubmit={handleValidate} className={`p-6 rounded-xl border space-y-5 ${isLight ? 'bg-white border-zinc-200' : 'bg-zinc-900 border-zinc-800'}`}>
+          <div>
+            {!financialAccount && (
+              <>
+                <label className="block text-sm font-semibold mb-1 text-zinc-900 dark:text-zinc-100">
+                  Conta financeira de destino
+                </label>
+                {accountsLoading ? (
+                  <p data-testid="finance-payment-account-loading" className="text-sm text-zinc-500">A carregar contas financeiras ativas…</p>
+                ) : accountsError ? (
+                  <div data-testid="finance-payment-account-load-error" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                    <p>Não foi possível carregar as contas financeiras ativas.</p>
+                    <button type="button" onClick={() => void loadActiveAccounts()} className="mt-2 rounded border border-rose-300 bg-white px-3 py-1 font-medium">Tentar novamente</button>
+                  </div>
+                ) : activeAccounts.length === 0 ? (
+                  <p data-testid="finance-payment-account-empty" className="text-sm text-amber-700">Não existem contas financeiras ativas disponíveis para receber este valor.</p>
+                ) : (
+                  <select
+                    value={selectedFinancialAccountId}
+                    onChange={(e) => setSelectedFinancialAccountId(e.target.value)}
+                    data-testid="finance-payment-account-select"
+                    className={`w-full px-3 py-2 rounded-lg border text-sm focus:ring-2 focus:ring-emerald-500 ${
+                      isLight ? 'bg-white border-zinc-300 text-zinc-900' : 'bg-zinc-800 border-zinc-700 text-zinc-100'
+                    }`}
+                  >
+                    <option value="">Selecione a conta financeira de destino</option>
+                    {activeAccounts.map(account => <option key={account.id} value={account.id}>{account.accountNumber} — {account.name}</option>)}
+                  </select>
+                )}
+              </>
+            )}
+          </div>
+
           <div>
             <label className="block text-sm font-semibold mb-1 text-zinc-900 dark:text-zinc-100">
               Método de Pagamento
@@ -284,10 +369,10 @@ export function FinancePaymentCreateView({
           </h3>
 
           <div className={`p-4 rounded-lg divide-y ${isLight ? 'bg-zinc-50 divide-zinc-200' : 'bg-zinc-800 divide-zinc-700'}`}>
-            {financialAccount && (
+            {selectedFinancialAccount && (
               <div className="py-2 flex justify-between">
                 <span className="text-zinc-500 text-sm">Conta financeira:</span>
-                <span className="font-semibold text-sm">{financialAccount.accountNumber} — {financialAccount.name}</span>
+                <span className="font-semibold text-sm">{selectedFinancialAccount.accountNumber} — {selectedFinancialAccount.name}</span>
               </div>
             )}
             {payerPerson && (
@@ -326,7 +411,7 @@ export function FinancePaymentCreateView({
             <button
               type="button"
               onClick={() => setShowReview(false)}
-              disabled={submitting}
+              disabled={submitting || !selectedFinancialAccount}
               className={`px-4 py-2 text-sm font-medium rounded-lg border ${
                 isLight ? 'border-zinc-300 text-zinc-700 hover:bg-zinc-50' : 'border-zinc-700 text-zinc-200 hover:bg-zinc-800'
               }`}
